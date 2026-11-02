@@ -1,12 +1,15 @@
 import { View, div, svg, image } from 'gpui-kit';
 import { h_flex, v_flex } from 'gpui-base';
-import { agents, panes, spaces, terminals, focused, props, theme, run, shared, setShared, setAgentOrder, nextCommand, exec, window, readTextFile, writeTextFile, appHome } from 'herdr';
-import { WORDS, counts, title, cycle, priority } from './model.js';
+import { agents, panes, spaces, terminals, focused, props, theme, run, shared, setShared, setAgentOrder, nextCommand, exec, window, layout, readTextFile, writeTextFile, appHome } from 'herdr';
+import { WORDS, counts, title, cycle, priority, readThrough, unreadCount } from './model.js';
 
 import { freshMessages, recentRoutes, simultaneousRoutes } from './flow.js';
 import { pipeline } from './pipeline.js';
 import { workflowNodes, delegationEvents, workflowStatus } from './workflow.js';
+import { watchDocs, currentDocs, docsSection } from './docs.js';
 import { watchAlerts, alertSection, visibleAlerts } from './alerts.js';
+
+const hasPanel=node=>node?.id==='panel'||(node?.children||[]).some(hasPanel);
 
 const marks = { blocked: '!', done: '✓', working: '●', idle: '○' };
 
@@ -25,8 +28,10 @@ export default class SixfoldDesk extends View {
     this.queuedRoutes = [];
     this.routeScript = null;
     this.routeBusy = false;
-    this.seenMessages = new Set();
+    this.readMessages = {};
     if (props()?.role !== 'sidebar') return;
+    this.projectDocs=null;
+    watchDocs(this,cx);
     this.alerts = [];
     watchAlerts(this, cx);
     // File notifications start a small number of finite native transitions.
@@ -79,6 +84,24 @@ export default class SixfoldDesk extends View {
     // File watchers are shared by mod copies. Reconcile independently of focus
     // and watcher wakeups; redraw only when the persisted snapshot changes.
     cx.timer.every(250, refresh);
+    // Kept on disk so a restart does not count the whole message log as unread.
+    let readBusy=false;
+    cx.timer.every(1000,cx=>{
+      if(readBusy)return;
+      readBusy=true;
+      cx.spawn(async cx=>{
+        try{
+          const path=`${appHome()}/data/sixfold/messages-read.json`;
+          const old=await readTextFile(path).catch(()=>null);
+          const saved=old?JSON.parse(old):{};
+          const next=readThrough(this.messageEvents??[],agents(),focused()?.terminal,{...this.readMessages,...saved},Date.now());
+          const text=JSON.stringify(next);
+          if(text!==old)await writeTextFile(path,text,old);
+          if(text!==JSON.stringify(this.readMessages)){this.readMessages=next;cx.notify();}
+        }catch{ /* Retry a partial or conflicting write on the next tick. */ }
+        finally{readBusy=false;}
+      });
+    });
     cx.timer.every(2000, cx => {
       if (this.routeBusy || !this.routeScript || !this.queuedRoutes.some(item=>!item.hold)) return;
       this.routeBusy = true;
@@ -204,8 +227,7 @@ export default class SixfoldDesk extends View {
     const total = counts(list);
     const nodeIds = new Set([...facts.map(x=>x.address),...this.workflowNodes.map(x=>x.id)]);
     const events = [...(this.messageEvents ?? []),...this.workflowEvents].filter(e=>nodeIds.has(e.source)&&nodeIds.has(e.target));
-    for (const event of events) if (event.target===f?.terminal) this.seenMessages.add(event.id);
-    const unseen = address => this.messageEvents.filter(e=>e.target===address&&!this.seenMessages.has(e.id)).length;
+    const unseen = address => unreadCount(this.messageEvents,address,this.readMessages);
     const last = events.at(-1);
     const palette = [t.accent, t.ansi6, t.ansi5, t.ansi3, t.ansi2, t.ansi4];
     const flows = this.activeFlows;
@@ -250,8 +272,8 @@ export default class SixfoldDesk extends View {
         .child(this.button('sf-done', `✓ ${w.done}`, () => run('sixfold-desk.next-done'), t))
         .child(this.button('sf-zoom', w.zoom, () => run('pane.zoom'), t))
         .child(this.button('sf-motion', shared('sixfold.motion')===false?'Motion off':'Motion on',()=>setShared('sixfold.motion',shared('sixfold.motion')===false),t))
-        .child(this.button('sf-review', w.review, () => { run('layout.select', {stack:'panel-body',child:'changes'}); run('layout.toggle',{id:'panel'}); }, t))
-        .child(this.button('sf-files', w.files, () => { run('layout.select', {stack:'panel-body',child:'files'}); run('layout.toggle',{id:'panel'}); }, t));
+        .when(hasPanel(layout()),e=>e.child(this.button('sf-review', w.review, () => { run('layout.select', {stack:'panel-body',child:'changes'}); run('layout.toggle',{id:'panel'}); }, t)))
+        .when(hasPanel(layout()),e=>e.child(this.button('sf-files', w.files, () => { run('layout.select', {stack:'panel-body',child:'files'}); run('layout.toggle',{id:'panel'}); }, t)));
     }
     // Reading a background workspace must never change another client's focus.
     setAgentOrder(list.map(a => a.address));
@@ -365,6 +387,7 @@ export default class SixfoldDesk extends View {
       .child(v_flex().id('sf-scroll').flex_1().min_h(0).overflow_y_scrollbar().mode('always')
         .child(section(w.spaces)).child(workspaceTree)
         )
+      .when(Boolean(currentDocs(this.projectDocs)),e=>e.child(docsSection(this,t)))
       .when(visibleAlerts(this.alerts).length>0, e=>e.child(alertSection(this,t)))
       .when(Boolean(last) || this.queuedRoutes.length > 0, e => e.child(v_flex().flex_none().px(10).py(9).gap(6).bg(t.surface).border_t(1).border_color(t.border)
         .child(h_flex().gap(5).items_center()

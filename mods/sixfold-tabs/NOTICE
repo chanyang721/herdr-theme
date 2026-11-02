@@ -1,0 +1,3 @@
+sixfold-tabs is derived from the Herdr app 0.1.11 built-in Tabs module.
+Herdr is distributed under Apache License 2.0; see the repository LICENSE.
+Changes: optional panels prop for layout-local panel controls.

@@ -11,6 +11,23 @@ export function attention(list) {
   // Stable source order within each status; no timers or focus-stealing sorting.
   return [...list.filter(a => a.status === 'blocked'), ...list.filter(a => a.status === 'done')];
 }
+// Sending wakes an idle agent about a second later; wait before calling it done.
+export const HANDLED_AFTER_MS = 5000;
+// The newest message each agent has dealt with: everything once it is focused,
+// or once it sits idle past the wake-up. Working or blocked agents still owe theirs.
+export function readThrough(events, agentList, focusedAddress, seen, now) {
+  const next = {...seen};
+  const pending = new Set(agentList.filter(a => a.status === 'working' || a.status === 'blocked').map(a => a.address));
+  for (const event of events) {
+    const handled = event.target === focusedAddress
+      || (!pending.has(event.target) && now - event.at >= HANDLED_AFTER_MS);
+    if (handled && event.at > (next[event.target] ?? 0)) next[event.target] = event.at;
+  }
+  return next;
+}
+export function unreadCount(events, address, seen) {
+  return events.filter(event => event.target === address && event.at > (seen[address] ?? 0)).length;
+}
 export function title(p) {
   return p?.title?.trim() || p?.program?.name || p?.terminal || 'Terminal';
 }

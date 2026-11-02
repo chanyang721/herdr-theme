@@ -18,3 +18,15 @@ class PreviewInstallTests(unittest.TestCase):
         before=repr(tree)
         self.assertFalse(replace_files(tree,{'id':'files','type':'stack'}))
         self.assertEqual(repr(tree),before)
+
+    def test_layout_without_a_files_panel_installs_nothing(self):
+        import json,os,tempfile
+        from unittest.mock import patch
+        from install_preview import main
+        with tempfile.TemporaryDirectory() as root:
+            home=Path(root);(home/'layouts').mkdir()
+            (home/'layouts/sixfold.json').write_text(json.dumps({'id':'main','content':{'tab':'active'}}))
+            with patch.dict(os.environ,{'HERDR_APP_HOME':root}),patch.object(sys,'argv',['install_preview.py','--markdown-only']),patch('install_preview.subprocess.run') as execute:
+                with self.assertRaisesRegex(SystemExit,'Files panel'):main()
+                execute.assert_not_called()
+            self.assertFalse((home/'mods').exists());self.assertFalse((home/'data').exists())

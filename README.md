@@ -17,7 +17,7 @@ Coordinate coding agents across projects from one live sidebar. See every worksp
 | Project icons, colors and group borders | Recognize each project's agents at a glance. |
 | Focus that stays yours | Messages and status changes keep your current input target in place. |
 
-Message tracing and subagent collection are optional local integrations described below. The layout also provides Korean/English labels, light/dark palettes, keyboard navigation, drag ordering and optional Files/Changes panels. It preserves the active tab's existing split tree; the default six-pane arrangement is one way to use it.
+Message tracing and subagent collection are optional local integrations described below. The layout also provides Korean/English labels, light/dark palettes, keyboard navigation and drag ordering. It preserves the active tab's existing split tree; the default six-pane arrangement is one way to use it.
 
 The public preview uses labelled demo programs, not real projects, conversations or usage metrics.
 
@@ -49,7 +49,6 @@ These bindings apply only while Herdr Theme is selected. Other native Herdr bind
 | Ctrl+Shift+arrows | Focus a neighbour |
 | Cmd+Shift+Enter | Zoom the focused pane |
 | Cmd+Shift+J / U | Next blocked / completed agent |
-| Cmd+Shift+R | Toggle the side panel |
 | Cmd+R | Rename tab |
 | Cmd+X | Close the app pane; a bridged TUI agent remains in its source server |
 | Cmd+W / Cmd+Shift+W | Intentionally do nothing, to avoid accidental closure |
@@ -148,6 +147,8 @@ Set a local project icon with `python3 scripts/set_workspace_icon.py 'workspace 
 
 ## Optional document and usage tools
 
-The right activity rail opens Documents and Changes. [Project Document Viewer](extras/preview/README.md) adds saved-file Markdown preview and local HTML snapshots. [System Metrics](extras/system-metrics/RECIPE.md) adds a separate CPU/memory strip. Token history is available from [Insights](https://github.com/GaganSD/coding-agent-toolkit/tree/main/herdr-insights); subscription quotas come from [Usage Bar](https://github.com/berkeatac/herdr-usage-bar). These are optional, separate installs; account quotas are not per-agent token totals.
+Separate mod recipes let you place document and usage tools in a personal layout. [Project Document Viewer](extras/preview/README.md) adds saved-file Markdown preview and local HTML snapshots. [System Metrics](extras/system-metrics/RECIPE.md) adds a separate CPU/memory strip. Token history is available from [Insights](https://github.com/GaganSD/coding-agent-toolkit/tree/main/herdr-insights); subscription quotas come from [Usage Bar](https://github.com/berkeatac/herdr-usage-bar). These are optional, separate installs; account quotas are not per-agent token totals.
 
 Independent mod releases: [System Metrics](https://github.com/chanyang721/herdr-workspace-mods/tree/main/system-metrics) · [Project Document Viewer](https://github.com/chanyang721/herdr-workspace-mods/tree/main/document-viewer).
+
+Project document tracking: see [configuration and collector](docs/project-documents.md). The base theme uses full-width terminals; configured latest documents live in the left sidebar.

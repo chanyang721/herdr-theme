@@ -1,0 +1,122 @@
+#!/usr/bin/env python3
+"""Index configured project documents and maintain only explicitly owned symlinks."""
+import argparse
+import fcntl
+import hashlib
+import json
+import os
+from pathlib import Path
+import tempfile
+
+EXTENSIONS={'.md','.pdf','.docx','.xlsx'}
+OWNER='herdr-project-docs-v1'
+
+
+def atomic_json(path,value):
+    text=json.dumps(value,ensure_ascii=False,indent=2)+'\n'
+    try:
+        if path.read_text()==text:return False
+    except FileNotFoundError:pass
+    path.parent.mkdir(parents=True,exist_ok=True)
+    fd,name=tempfile.mkstemp(prefix='.'+path.name+'-',dir=path.parent)
+    try:
+        with os.fdopen(fd,'w') as file:file.write(text)
+        os.replace(name,path)
+    finally:
+        if os.path.exists(name):os.unlink(name)
+    return True
+
+
+def documents(folders,warnings=None):
+    warnings=warnings if warnings is not None else []
+    found={}
+    for entry in folders:
+        if isinstance(entry,str):entry={'path':entry}
+        root=Path(entry['path']).expanduser()
+        filters=entry.get('match',[])
+        if isinstance(filters,str):filters=[filters]
+        try:
+            if not root.is_dir():warnings.append('source_unavailable');continue
+        except OSError:warnings.append('source_unavailable');continue
+        for directory,subdirs,files in os.walk(root,followlinks=False,onerror=lambda error:warnings.append('source_unavailable')):
+            subdirs[:]=[name for name in subdirs if not name.startswith('.')]
+            for name in files:
+                path=Path(directory)/name
+                if path.is_symlink() or path.suffix.lower() not in EXTENSIONS or '.before-' in name or name.lower()=='latest.md':continue
+                if filters and not any(term.casefold() in name.casefold() for term in filters):continue
+                try:
+                    if not path.is_file():continue
+                    info=path.stat();source=str(path.resolve())
+                except OSError:continue
+                found[source]={'path':source,'name':name,'mtime':info.st_mtime_ns//1000000}
+    return sorted(found.values(),key=lambda item:(-item['mtime'],item['path']))
+
+
+def owned_links(folder,items):
+    folder.mkdir(parents=True,exist_ok=True)
+    manifest=folder/'.herdr-document-links.json'
+    try:
+        previous=json.loads(manifest.read_text())
+        if previous.get('owner')!=OWNER or not isinstance(previous.get('links'),dict):return 'manifest_conflict'
+        managed=previous['links']
+    except FileNotFoundError:managed={}
+    except (OSError,ValueError,AttributeError):return 'manifest_conflict'
+    # Only our recorded symlinks whose source has disappeared may be removed.
+    retained={}
+    for name,source in managed.items():
+        if not isinstance(name,str) or Path(name).name!=name or not isinstance(source,str):continue
+        link=folder/name
+        try:
+            if not link.is_symlink() or os.readlink(link)!=source:continue
+            if not Path(source).exists():link.unlink()
+            else:retained[name]=source
+        except OSError:continue
+    for item in items:
+        source=item['path'];base=item['name'];existing=[name for name,value in retained.items() if value==source]
+        if existing:continue
+        name=base
+        link=folder/name
+        if os.path.lexists(link):
+            digest=hashlib.sha256(source.encode()).hexdigest()[:12]
+            name=f'{digest}-{base[:180]}';link=folder/name
+        try:
+            # symlink creation refuses any pre-existing path, including actual files.
+            link.symlink_to(source);retained[name]=source
+        except FileExistsError:pass
+    atomic_json(manifest,{'owner':OWNER,'links':dict(sorted(retained.items()))})
+    return None
+
+
+def collect(config,index):
+    data=json.loads(config.read_text())
+    if data.get('version')!=1 or not isinstance(data.get('spaces'),dict):raise ValueError('Expected version:1 and spaces mapping')
+    output={'version':1,'spaces':{}}
+    for space,settings in data['spaces'].items():
+        folders=settings.get('folders',[])
+        if not isinstance(folders,list):raise ValueError('folders must be an array')
+        target=Path(settings.get('target',str(Path.home()/'Documents/LukukuProjects'/space))).expanduser()
+        warnings=[]
+        items=documents(folders,warnings)
+        problem=owned_links(target,items)
+        if problem:warnings.append(problem)
+        output['spaces'][space]={'folder':str(target.resolve()),'files':items}
+        if warnings:output['spaces'][space]['warning']=','.join(sorted(set(warnings)))
+    atomic_json(index,output)
+    return output
+
+
+def main():
+    home=Path(os.environ.get('HERDR_APP_HOME',Path.home()/'.config/herdr-app'))/'data/sixfold'
+    parser=argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--config',type=Path,default=home/'project-docs.json')
+    parser.add_argument('--output',type=Path,default=home/'project-docs-index.json')
+    args=parser.parse_args()
+    if not args.config.exists():return
+    args.output.parent.mkdir(parents=True,exist_ok=True)
+    with args.output.with_suffix('.lock').open('a') as lock:
+        fcntl.flock(lock,fcntl.LOCK_EX)
+        result=collect(args.config,args.output)
+    print(json.dumps({'spaces':len(result['spaces']),'documents':sum(len(x['files']) for x in result['spaces'].values())}))
+
+
+if __name__=='__main__':main()

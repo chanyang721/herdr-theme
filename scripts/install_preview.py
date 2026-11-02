@@ -28,6 +28,10 @@ def compile_html(repo,output):
     raise RuntimeError('A compatible macOS Swift SDK is required for HTML preview.\n'+'\n'.join(errors)[-2000:])
 
 
+def has_files(node):
+    return node.get('id')=='files' or any(has_files(child) for child in node.get('children',[]))
+
+
 def replace_files(node,stack):
     if node.get('id')=='files':
         for key in ('content','type','children','active'):node.pop(key,None)
@@ -47,6 +51,7 @@ def main():
     if Path(args.layout).name!=args.layout or args.layout in ('.','..'):parser.error('use a personal layout name')
     layout=app/'layouts'/f'{args.layout}.json'
     doc=json.loads(layout.read_text())
+    if not has_files(doc):raise SystemExit("Choose a personal layout with a Files panel before installing. No files were changed.")
     for name in NAMES:
         if (app/'mods'/name).exists():raise SystemExit(f'Preserving existing mod; inspect it before updating: {name}')
     upstream=args.source or Path.home()/'.local/share/herdr-sixfold/vendor/herdr-mods'

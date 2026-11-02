@@ -4,7 +4,6 @@
     "cmd-[": "sixfold-desk.prev-pane",
     "cmd-shift-j": "sixfold-desk.next-blocked",
     "cmd-shift-u": "sixfold-desk.next-done",
-    "cmd-shift-r": "layout.toggle:panel",
     "ctrl-shift-left": "pane.go:left",
     "ctrl-shift-right": "pane.go:right",
     "ctrl-shift-up": "pane.go:up",

@@ -20,7 +20,7 @@ Left: a 224 px sidebar with the Herdr Theme title, language toggle, blocked/done
 workspace navigation and agent rows under every workspace, even when inactive. Each group has a rounded border, more space between groups and a stable colored header marker.
 Workspace headers drag to reorder; incoming message badges update without changing focus. The center shows the active tab's actual terminals.
 Each pane has a 27 px title/status header, 5 px gaps and a 2 px accent border while focused.
-A 30 px footer names the actual input target. The optional Files/Changes panel starts hidden at 480 px, opened by a 40 px right activity rail. Optional usage integration adds its own rail button.
+A 30 px footer names the actual input target. Terminals use the full work area. The default layout has no right panel or activity rail. Configured project documents appear in a compact left-sidebar section.
 The toolbar is 32 px and native tabs 34 px. Terminal fonts inherit personal settings.
 Night colors use #111821 terminals, #151f2a chrome, #79d1dc focus, #f5b56c blockers and #91cfaa completion.
 Day uses #f8fafb terminals and #176878 focus. Layout theme selection follows system appearance.
@@ -41,7 +41,7 @@ The toolbar can disable motion. A logged send is not a read receipt or a verifie
 ## Built from
 
 `layouts/sixfold.json` is a root row with a sidebar block and work column. The work column contains a toolbar,
-native tabs, active-tab block with custom pane headers, optional Files/Changes stack and input-target footer.
+layout-local tabs, active-tab block with custom pane headers and input-target footer.
 `mods/sixfold-desk` renders sidebar/toolbar/pane/footer through `props.role`, using `spaces`, `panes`,
 `agents`, `terminals`, `focused`, `theme`, `shared`, `setShared`, `setAgentOrder`, `run` and `nextCommand`.
 The optional TUI attachment is a Python PTY relay. `balance_grid.py` uses `doc.get` / `doc.set` over `hc connect`.
@@ -62,9 +62,11 @@ The package must not contain private project folders or session IDs. Demo fixtur
 - `herdr-app check` passes for the installed mod, and live `status` has no errors.
 - Six real panes retain their IDs through balancing and theme changes.
 - Both appearances and label languages render correctly.
-- Keyboard pane navigation and optional side panel controls work.
+- Keyboard pane navigation works; right-panel entry buttons stay hidden when no panel exists.
 - The gallery preview comes from actual rendered, clearly labelled demo terminals.
 
 Message counts reconcile every 250 ms independently of focus and file watcher consumers. Partial writes retain the previous snapshot. Optional routing files may be absent. Common-to-project routing uses an atomic idle guard and protects drafts, recording and pending questions; queue drain runs every two seconds while configured. Common alerts are a separate compact section above message flow and show only items needing the user. Subagent trees expand under each parent from local workflow metadata, including explicit status sources and labelled activity estimates. Parent agents remain visible without children. Workspace headers show agent totals but no message sum.
 
 Independent document-viewer and system-metrics packages, each with its own recipe and native demo, are published at https://github.com/chanyang721/herdr-workspace-mods. These optional mods are separate from the base layout.
+
+Configured project documents are collected by scripts/collect_docs.py from local folders. docs.js reads the index every two seconds and displays the latest five documents for the active workspace. Explicit file/folder clicks invoke VS Code with --reuse-window; nonzero exits stay visibly failed. Sources are never moved; only collector-owned links to vanished sources are removed. No schedule or project-specific settings are installed automatically.
