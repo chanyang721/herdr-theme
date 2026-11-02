@@ -177,8 +177,12 @@ export default class SixfoldDesk extends View {
   }
 
   badge(status, text, t) {
+    // Working uses the stock Herdr spinner (same asset, color and speed as the default agents list).
+    const mark = status === 'working'
+      ? svg('mods/workspace-chrome/spinner.svg').size(12).flex_none().text_color(t.working).spin(900)
+      : div().font_bold().child(marks[status] ?? '·');
     return h_flex().gap(5).items_center().text_size(11).text_color(t[status] ?? t.muted)
-      .child(div().font_bold().child(marks[status] ?? '·')).child(text);
+      .child(mark).child(text);
   }
 
   startFlows(cx) {
