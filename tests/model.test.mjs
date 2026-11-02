@@ -48,3 +48,14 @@ test('a later message counts again after the earlier ones were read',()=>{
   const seen={a:2000};
   assert.equal(unreadCount([...messages,{target:'a',at:3000}],'a',seen),1);
 });
+
+test('unreported and reconnecting targets keep unread messages until confirmed or focused',()=>{
+  const events=[{target:'missing',at:1000},{target:'unknown',at:1000}];
+  const agents=[{address:'unknown',status:null}];
+  const waiting=readThrough(events,agents,null,{},7000);
+  assert.equal(unreadCount(events,'missing',waiting),1);
+  assert.equal(unreadCount(events,'unknown',waiting),1);
+  const focused=readThrough(events,agents,'missing',waiting,7000);
+  assert.equal(unreadCount(events,'missing',focused),0);
+  assert.equal(unreadCount(events,'unknown',focused),1);
+});
