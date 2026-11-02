@@ -105,7 +105,7 @@
               "type": "column",
               "hidden": true,
               "size": {
-                "px": 340
+                "px": 480
               },
               "min": 280,
               "max": 600,
@@ -132,6 +132,16 @@
                   ]
                 }
               ]
+            },
+            {
+              "id": "tools",
+              "type": "block",
+              "size": {
+                "px": 40
+              },
+              "content": {
+                "mod": "sixfold-tools"
+              }
             }
           ]
         },
