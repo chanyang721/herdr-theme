@@ -1,0 +1,26 @@
+{
+  "layout:sixfold": {
+    "cmd-]": "sixfold-desk.next-pane",
+    "cmd-[": "sixfold-desk.prev-pane",
+    "cmd-shift-j": "sixfold-desk.next-blocked",
+    "cmd-shift-u": "sixfold-desk.next-done",
+    "cmd-shift-r": "layout.toggle:panel",
+    "ctrl-shift-left": "pane.go:left",
+    "ctrl-shift-right": "pane.go:right",
+    "ctrl-shift-up": "pane.go:up",
+    "ctrl-shift-down": "pane.go:down",
+    "cmd-r": "tab.rename",
+    "cmd-j": "mod.open:picker",
+    "cmd-shift-up": "space.prev",
+    "cmd-shift-down": "space.next",
+    "cmd-w": "sixfold-desk.noop",
+    "cmd-shift-w": "sixfold-desk.noop",
+    "cmd-x": "pane.close",
+    "cmd-alt-1": "sixfold-desk.pane-1",
+    "cmd-alt-2": "sixfold-desk.pane-2",
+    "cmd-alt-3": "sixfold-desk.pane-3",
+    "cmd-alt-4": "sixfold-desk.pane-4",
+    "cmd-alt-5": "sixfold-desk.pane-5",
+    "cmd-alt-6": "sixfold-desk.pane-6"
+  }
+}

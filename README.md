@@ -1,0 +1,101 @@
+# Sixfold
+
+A compact Herdr layout for people who keep several coding agents visible at once.
+Workspace navigation, agent attention, numbered panes and a clear input target share one calm frame.
+
+![Sixfold](preview.png)
+
+[한국어](README.ko.md)
+
+## What it does
+
+- Keeps the active tab's real split tree; six terminals work particularly well as a 3 × 2 grid.
+- Shows workspaces, pane titles and agent status in a compact 224 px sidebar.
+- Makes keyboard focus visible with a 2 px cyan border and an input-target footer.
+- Keeps blockers and unseen completions visible; navigation is explicit, never triggered by a new status.
+- Offers Korean/English labels and matching light/dark palettes.
+- Keeps Files and Changes behind an optional panel instead of consuming terminal space by default.
+- Optionally displays existing Herdr TUI terminals through a live bridge without restarting their agents.
+
+The preview uses explicitly labelled demo programs. It contains no real projects, conversations or usage metrics.
+
+## Install
+
+Requires Herdr app 0.1.11 or newer and Python 3.
+
+```sh
+git clone https://github.com/chanyang721/herdr-sixfold.git
+cd herdr-sixfold
+python3 scripts/install.py
+herdr-app check ~/.config/herdr-app/mods/sixfold-desk
+herdr-app do layout.switch --name sixfold
+```
+
+The installer refuses to replace existing Sixfold files or an existing `layout:sixfold` key section.
+It preserves all other layouts, settings and key bindings. Switch back with the layout picker.
+To update an existing installation, review the Git diff and copy only this repository's installed files;
+`scripts/install.py` is deliberately an initial installer, not an overwriting updater.
+
+## Keys
+
+These bindings apply only while Sixfold is selected. Other native Herdr bindings stay available.
+
+| Key (macOS) | Action |
+| --- | --- |
+| Cmd+[ / Cmd+] | Previous / next pane in the current tab |
+| Cmd+Option+1…6 | Focus a numbered pane |
+| Ctrl+Shift+arrows | Focus a neighbour |
+| Cmd+Shift+Enter | Zoom the focused pane |
+| Cmd+Shift+J / U | Next blocked / completed agent |
+| Cmd+Shift+R | Toggle the side panel |
+| Cmd+R | Rename tab |
+| Cmd+X | Close the app pane; a bridged TUI agent remains in its source server |
+| Cmd+W / Cmd+Shift+W | Intentionally do nothing, to avoid accidental closure |
+
+Non-macOS users can edit the layout-scoped fragment in `keys.json` to suit their keyboard.
+
+## Equal grids and new workspaces
+
+```sh
+python3 scripts/balance_grid.py
+python3 scripts/workspace.py "Example" /path/to/your/project --agents
+```
+
+`balance_grid.py` uses the core's version-checked document API. It changes six-terminal tabs to equal
+rows and columns while retaining every existing pane ID and terminal address. It never restarts a program.
+The workspace helper starts four Claude and two Codex sessions when `--agents` is requested.
+Agent authentication and workspace trust use the agents' own interfaces.
+
+## Optional live TUI bridge (macOS/Linux)
+
+Herdr TUI and Herdr app have separate runtimes. A bridge is a live attachment, not a native import:
+the source TUI server must keep running. Its existing agent process, conversation, permissions and
+voice connection stay where they are.
+
+Inside an available app terminal:
+
+```sh
+python3 /path/to/herdr-sixfold/scripts/tui_bridge.py --session default --pane YOUR_SOURCE_PANE
+```
+
+The bridge reports source status once per second, forwards input and resize, and uses a per-source lock.
+It never sends an agent prompt. Closing the attachment leaves the source agent alive.
+Microphone routing and automatic dictation submission are separate integrations, not features guaranteed
+by a color theme. No microphone permission is granted by installing Sixfold.
+
+## What it runs
+
+The UI uses Herdr's live workspace/agent APIs and navigation commands, with no network requests.
+The optional bridge runs the installed `herdr` CLI. Helpers use `hc` / `herdr-app` locally.
+No private configuration, account data or session mapping belongs in this repository.
+
+## Development
+
+```sh
+npm test
+node --check mods/sixfold-desk/main.js
+herdr-app check ~/.config/herdr-app/mods/sixfold-desk
+```
+
+Model tests are not a native UI test. Verify a changed layout with `herdr-app status` and an actual screenshot.
+See [RECIPE.md](RECIPE.md) for the reproducible design brief. Apache-2.0.

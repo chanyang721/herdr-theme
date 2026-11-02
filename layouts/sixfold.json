@@ -1,0 +1,154 @@
+{
+  "id": "root",
+  "type": "row",
+  "titlebar": "none",
+  "traffic_lights": [
+    12,
+    16
+  ],
+  "background": "canvas",
+  "terminal_padding": [
+    8,
+    7
+  ],
+  "theme": {
+    "dark": "sixfold-night",
+    "light": "sixfold-day"
+  },
+  "preview": "layouts/sixfold.svg",
+  "children": [
+    {
+      "id": "sidebar",
+      "type": "block",
+      "size": {
+        "px": 224
+      },
+      "min": 180,
+      "max": 380,
+      "window_drag": true,
+      "content": {
+        "mod": "sixfold-desk",
+        "props": {
+          "role": "sidebar"
+        }
+      }
+    },
+    {
+      "id": "work",
+      "type": "column",
+      "children": [
+        {
+          "id": "toolbar",
+          "type": "block",
+          "size": {
+            "px": 32
+          },
+          "window_drag": true,
+          "content": {
+            "mod": "sixfold-desk",
+            "props": {
+              "role": "toolbar"
+            }
+          }
+        },
+        {
+          "id": "tabs",
+          "type": "block",
+          "size": {
+            "px": 34
+          },
+          "window_drag": true,
+          "content": {
+            "mod": "tabs"
+          }
+        },
+        {
+          "id": "body",
+          "type": "row",
+          "padding": 5,
+          "gap": 5,
+          "children": [
+            {
+              "id": "main",
+              "type": "block",
+              "content": {
+                "tab": "active",
+                "pane": {
+                  "gap": 5,
+                  "radius": 6,
+                  "background": "background",
+                  "border": {
+                    "width": 1,
+                    "color": "border"
+                  },
+                  "focus": {
+                    "width": 2,
+                    "color": "accent"
+                  },
+                  "lone": true,
+                  "header": {
+                    "content": {
+                      "mod": "sixfold-desk",
+                      "props": {
+                        "role": "pane"
+                      }
+                    },
+                    "height": 27,
+                    "position": "top",
+                    "reveal": "always"
+                  }
+                }
+              }
+            },
+            {
+              "id": "panel",
+              "type": "column",
+              "hidden": true,
+              "size": {
+                "px": 340
+              },
+              "min": 280,
+              "max": 600,
+              "children": [
+                {
+                  "id": "panel-body",
+                  "type": "stack",
+                  "active": "changes",
+                  "children": [
+                    {
+                      "id": "changes",
+                      "type": "block",
+                      "content": {
+                        "mod": "changes"
+                      }
+                    },
+                    {
+                      "id": "files",
+                      "type": "block",
+                      "content": {
+                        "mod": "files"
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "status",
+          "type": "block",
+          "size": {
+            "px": 30
+          },
+          "content": {
+            "mod": "sixfold-desk",
+            "props": {
+              "role": "footer"
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
