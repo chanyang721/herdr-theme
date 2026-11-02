@@ -83,13 +83,10 @@ def bridged_session(address, kind):
 
 
 def identify(terminal, cache):
-    """Map a terminal to its session once per process; a restart changes the pid."""
+    """Resolve the live session every pass: PTY and agent PIDs can outlive /new."""
     address = terminal['address']
     facts = hc('get', address)
     pid = facts.get('pid')
-    known = cache.get(address)
-    if known and known['pid'] == pid and known['session']:
-        return known
     pids = process_tree(pid) if pid else []
     kind = family(terminal.get('agent'))
     session = claude_session(pids) if kind == 'claude' else codex_thread(pids) if kind == 'codex' else None
