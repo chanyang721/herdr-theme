@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Install the hc send observer, optionally replacing the known core launcher."""
 import argparse
+import os
+import sys
 from pathlib import Path
 import shlex
 import shutil
@@ -19,6 +21,14 @@ temporary=target/'hc_trace.py.next'
 shutil.copy2(root/'scripts/hc_trace.py',temporary)
 temporary.replace(target/'hc_trace.py')
 launcher=target/'bin/hc'
+if os.name=='nt':
+    # cmd and PowerShell find hc.cmd; Git Bash finds the extensionless sh script.
+    python=Path(sys.executable)
+    (target/'bin/hc.cmd').write_text(f'@"{python}" "{target/"hc_trace.py"}" %*\r\n')
+    launcher.write_text('#!/bin/sh\nexec '+shlex.quote(python.as_posix())+' '+shlex.quote((target/'hc_trace.py').as_posix())+' "$@"\n',newline='\n')
+    if args.default_launcher:raise SystemExit('On Windows, put the printed folder before herdr-core in your user PATH instead.')
+    print(f'Add this folder before herdr-core in your user PATH: {target/"bin"}')
+    raise SystemExit(0)
 launcher.write_text('#!/bin/sh\nexec python3 '+shlex.quote(str(target/'hc_trace.py'))+' "$@"\n')
 launcher.chmod(0o755)
 if args.default_launcher:
