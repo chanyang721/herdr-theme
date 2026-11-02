@@ -6,6 +6,7 @@ import { WORDS, counts, title, cycle, priority } from './model.js';
 import { freshMessages, recentRoutes, simultaneousRoutes } from './flow.js';
 import { pipeline } from './pipeline.js';
 import { workflowNodes, delegationEvents, workflowStatus } from './workflow.js';
+import { watchDocs, currentDocs, docsSection } from './docs.js';
 import { watchAlerts, alertSection, visibleAlerts } from './alerts.js';
 
 const hasPanel=node=>node?.id==='panel'||(node?.children||[]).some(hasPanel);
@@ -29,6 +30,8 @@ export default class SixfoldDesk extends View {
     this.routeBusy = false;
     this.seenMessages = new Set();
     if (props()?.role !== 'sidebar') return;
+    this.projectDocs=null;
+    watchDocs(this,cx);
     this.alerts = [];
     watchAlerts(this, cx);
     // File notifications start a small number of finite native transitions.
@@ -367,6 +370,7 @@ export default class SixfoldDesk extends View {
       .child(v_flex().id('sf-scroll').flex_1().min_h(0).overflow_y_scrollbar().mode('always')
         .child(section(w.spaces)).child(workspaceTree)
         )
+      .when(Boolean(currentDocs(this.projectDocs)),e=>e.child(docsSection(this,t)))
       .when(visibleAlerts(this.alerts).length>0, e=>e.child(alertSection(this,t)))
       .when(Boolean(last) || this.queuedRoutes.length > 0, e => e.child(v_flex().flex_none().px(10).py(9).gap(6).bg(t.surface).border_t(1).border_color(t.border)
         .child(h_flex().gap(5).items_center()
