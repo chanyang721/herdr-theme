@@ -182,6 +182,10 @@ export default class SixfoldDesk extends View {
     // Working uses the stock Herdr spinner (same asset, color and speed as the default agents list).
     const mark = status === 'working'
       ? svg('mods/workspace-chrome/spinner.svg').size(12).flex_none().text_color(t.working).spin(900)
+      // Idle: the same ring at rest, breathing slowly instead of turning.
+      : status === 'idle'
+      ? svg('mods/sixfold-desk/icons/idle.svg').size(12).flex_none().text_color(t.idle ?? t.dim)
+          .loop('opacity', { from: 0.35, to: 1, period: 2400 })
       : div().font_bold().child(marks[status] ?? '·');
     return h_flex().gap(5).items_center().text_size(11).text_color(t[status] ?? t.muted)
       .child(mark).child(text);
