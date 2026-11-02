@@ -1,5 +1,6 @@
 import { View, div, svg, image } from 'gpui-kit';
 import { h_flex, v_flex } from 'gpui-base';
+import * as herdrNative from 'herdr';
 import { agents, panes, spaces, terminals, focused, props, theme, run, shared, setShared, setAgentOrder, nextCommand, exec, window, layout, readTextFile, writeTextFile, appHome, openOverlay } from 'herdr';
 import { WORDS, counts, title, cycle, priority, readThrough, unreadCount } from './model.js';
 
@@ -44,7 +45,9 @@ export default class SixfoldDesk extends View {
       this.refreshBusy = true;
       cx.spawn(async cx => {
         try {
-          const text = await readTextFile(`${appHome()}/data/sixfold/messages.json`).catch(()=>null) || '{"events":[]}';
+          const text = typeof herdrNative.messageEvents === 'function'
+            ? JSON.stringify({events:herdrNative.messageEvents()})
+            : await readTextFile(`${appHome()}/data/sixfold/messages.json`).catch(()=>null) || '{"events":[]}';
           const routing = await readTextFile(`${appHome()}/data/sixfold/routing.json`).catch(()=>null) || 'null';
           const queue = await readTextFile(`${appHome()}/data/sixfold/routing-queue.json`).catch(()=>null) || '{"requests":[]}';
           const workflowText = await readTextFile(`${appHome()}/data/sixfold/workflow.json`).catch(()=>null) || '{"nodes":[],"events":[]}';

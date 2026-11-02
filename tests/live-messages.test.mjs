@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises';
 
 // Exercise the real sidebar lifecycle without a GUI. No filesystem change or
 // focus event is emitted: only its reconciliation timer may update the badge.
-test('background messages refresh without focus or watcher events, with no routing files', async () => {
+for (const native of [false,true]) test(`background messages refresh through ${native?'native events':'legacy trace'} without focus or watcher events`, async () => {
   let log = JSON.stringify({events:[]});
   let notifications = 0;
   let malformedAuxiliary=false;
@@ -16,10 +16,14 @@ test('background messages refresh without focus or watcher events, with no routi
     timer: { every(ms, callback) { timers.push({ms,callback}); }, after() {} },
   };
   const runtime = {
+    ...(native?{messageEvents:()=>JSON.parse(log).events}:{}),
     props:()=>({role:'sidebar'}), appHome:()=>'/app',
     terminals:()=>[{address:'source'},{address:'target'}],
     readTextFile:async path=>{
-      if(path.endsWith('/messages.json')) return log;
+      if(path.endsWith('/messages.json')) {
+        assert.equal(native,false,'native event mode must not poll the legacy message file');
+        return log;
+      }
       if(malformedAuxiliary && (path.endsWith('/workflow.json') || path.endsWith('/routing-queue.json')))return '{partial';
       throw new Error('file does not exist');
     },
@@ -29,13 +33,14 @@ test('background messages refresh without focus or watcher events, with no routi
   let source = await readFile(new URL('../mods/sixfold-desk/main.js', import.meta.url),'utf8');
   source = source.replace(/import \{ View, div, svg, image \} from 'gpui-kit';/, 'class View {}');
   source = source.replace(/import \{ h_flex, v_flex \} from 'gpui-base';/, '');
+  source = source.replace(/import \* as herdrNative from 'herdr';/, 'const herdrNative = globalThis.__sixfoldTest;');
   source = source.replace(/import \{([^}]+)\} from 'herdr';/, 'const {$1} = globalThis.__sixfoldTest;');
   for (const name of ['model','flow','workflow']) source = source.replace(`'./${name}.js'`,JSON.stringify(new URL(`../mods/sixfold-desk/${name}.js`,import.meta.url).href));
   source = source.replace(/import \{ watchDocs, currentDocs, docsSection \} from '.\/docs.js';/, 'const watchDocs=()=>{};');
   source = source.replace(/import \{ pipeline \} from '.\/pipeline.js';/, '');
   source = source.replace(/import \{ watchAlerts, alertSection, visibleAlerts \} from '.\/alerts.js';/,
     'const watchAlerts=()=>{};');
-  const {default: Sidebar} = await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
+  const {default: Sidebar} = await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64')+`#native=${native}`);
   const view = new Sidebar();
   view.init({},cx);
   // Ignore the forever-pending command listener; settle the finite reload task.

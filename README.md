@@ -86,7 +86,20 @@ It never sends an agent prompt. Closing the attachment leaves the source agent a
 Microphone routing and automatic dictation submission are separate integrations, not features guaranteed
 by a color theme. No microphone permission is granted by installing Herdr Theme.
 
-## Optional message flow
+## Message flow
+
+With a Herdr app exposing `messageEvents()` and a core emitting `message_sent`,
+the sidebar reads successful sends from the app's bounded in-memory event list.
+Direct `hc send` and RPC sends use the same path; no Python launcher or per-message
+log write is needed. Events include sender, recipient, time and the observed
+`started` result, never message text. An unknown `started` result does not confirm
+that the recipient began processing the message.
+
+Install both matching app and core builds to use this mode. Older apps fall back
+to the optional local trace below. When the native API is available, the sidebar
+does not also read the legacy log, so one send cannot animate twice.
+
+### Legacy local trace
 
 ```sh
 python3 scripts/install_trace.py
