@@ -142,3 +142,5 @@ Model tests are not a native UI test. Verify a changed layout with `herdr-app st
 See [RECIPE.md](RECIPE.md) for the reproducible design brief. Apache-2.0.
 
 Incoming message badges reconcile every 500 ms without changing workspace or focus; unchanged snapshots do not redraw. See [COMMON_ROUTING.md](COMMON_ROUTING.md) for Common-to-project slot routing, protected composers and idle fallback. Run `python3 scripts/route.py --enable` to connect this checkout to the sidebar queue drain. The optional common alerts section reads `data/sixfold/alerts.json`; its collector is separate.
+
+Subagents expand under their parent agent with `▸ N`; parents without children remain visible. New observed delegations expand the corresponding tree and animate a native Bezier pipeline. Counts remain on agent rows, not workspace headers. `scripts/collect_workflow.py` reads Claude metadata, the read-only Codex database and hc parent links to publish `data/sixfold/workflow.json`. It supports `--once`; otherwise it reconciles every three seconds, writing only changes. Estimated activity is labelled. Startup history does not animate, and persistent collector registration is separate.
