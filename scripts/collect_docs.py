@@ -7,6 +7,7 @@ import json
 import os
 from pathlib import Path
 import tempfile
+import unicodedata
 
 EXTENSIONS={'.md','.pdf','.docx','.xlsx'}
 OWNER='herdr-project-docs-v1'
@@ -35,6 +36,7 @@ def documents(folders,warnings=None):
         root=Path(entry['path']).expanduser()
         filters=entry.get('match',[])
         if isinstance(filters,str):filters=[filters]
+        filters=[unicodedata.normalize('NFC',term).casefold() for term in filters]
         try:
             if not root.is_dir():warnings.append('source_unavailable');continue
         except OSError:warnings.append('source_unavailable');continue
@@ -43,7 +45,7 @@ def documents(folders,warnings=None):
             for name in files:
                 path=Path(directory)/name
                 if path.is_symlink() or path.suffix.lower() not in EXTENSIONS or '.before-' in name or name.lower()=='latest.md':continue
-                if filters and not any(term.casefold() in name.casefold() for term in filters):continue
+                if filters and not any(term in unicodedata.normalize('NFC',name).casefold() for term in filters):continue
                 try:
                     if not path.is_file():continue
                     info=path.stat();source=str(path.resolve())
