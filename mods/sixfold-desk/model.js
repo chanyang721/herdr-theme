@@ -19,3 +19,8 @@ export function cycle(list, current, step = 1) {
   const at = list.findIndex(p => p.pane === current);
   return list[(at + step + list.length) % list.length];
 }
+
+export function priority(list) {
+  const rank = { blocked: 0, done: 1, working: 2, idle: 3 };
+  return list.map((item,index)=>({item,index})).sort((a,b)=>(rank[a.item.status]??4)-(rank[b.item.status]??4)||a.index-b.index).map(x=>x.item);
+}

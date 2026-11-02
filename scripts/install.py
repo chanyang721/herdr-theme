@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Install Sixfold without replacing another layout or existing key bindings."""
+"""Install Herdr Theme without replacing another layout or existing key bindings."""
 import argparse
 import json
 import os
@@ -33,7 +33,7 @@ def main():
         if not backup.exists():
             backup.write_text(original)
     keyfile.write_text(json.dumps(existing,ensure_ascii=False,indent=2)+'\n')
-    print(f'Installed Sixfold in {args.home}')
+    print(f'Installed Herdr Theme in {args.home}')
     print('herdr-app check '+str(args.home/'mods/sixfold-desk'))
     print('herdr-app do layout.switch --name sixfold')
 

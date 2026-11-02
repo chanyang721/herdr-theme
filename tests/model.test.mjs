@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { attention, counts, cycle, title } from '../mods/sixfold-desk/model.js';
+import { attention, counts, cycle, title, priority } from '../mods/sixfold-desk/model.js';
 
 test('blockers remain visible ahead of completions without shuffling source order',()=>{
   const input=[{address:'a',status:'done'},{address:'b',status:'blocked'},{address:'c',status:'working'},{address:'d',status:'blocked'}];
@@ -20,4 +20,10 @@ test('pane navigation wraps and supports a missing focused pane',()=>{
 test('long and Korean terminal names are retained as titles',()=>{
   const name='백엔드 주문 동기화 검토 '.repeat(8);
   assert.equal(title({title:name}),name.trim());
+});
+
+test('workspace agent priority is stable and does not renumber or mutate panes',()=>{
+  const panes=[{pane:'1',status:'idle'},{pane:'2',status:'done'},{pane:'3',status:'blocked'},{pane:'4',status:'working'},{pane:'5',status:'done'}];
+  assert.deepEqual(priority(panes).map(p=>p.pane),['3','2','5','4','1']);
+  assert.deepEqual(panes.map(p=>p.pane),['1','2','3','4','5']);
 });

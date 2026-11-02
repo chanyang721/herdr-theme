@@ -1,9 +1,9 @@
-# Sixfold
+# Herdr Theme
 
 A compact Herdr layout for people who keep several coding agents visible at once.
 Workspace navigation, agent attention, numbered panes and a clear input target share one calm frame.
 
-![Sixfold](preview.png)
+![Herdr Theme](preview.png)
 
 [한국어](README.ko.md)
 
@@ -11,6 +11,7 @@ Workspace navigation, agent attention, numbered panes and a clear input target s
 
 - Keeps the active tab's real split tree; six terminals work particularly well as a 3 × 2 grid.
 - Shows every workspace and its agents together, independent of the selected workspace.
+- Prioritizes blocked, done, working and idle agents within each workspace. Custom monochrome Claude/Codex icons gain color and move subtly while active; sidebar rows have no numbers.
 - Reorders workspace headers by drag and drop using the app’s persisted space order.
 - Sends an explicit Ping to an agent; ↑ means sent, not a verified reply.
 - Makes keyboard focus visible with a 2 px cyan border and an input-target footer.
@@ -33,14 +34,14 @@ herdr-app check ~/.config/herdr-app/mods/sixfold-desk
 herdr-app do layout.switch --name sixfold
 ```
 
-The installer refuses to replace existing Sixfold files or an existing `layout:sixfold` key section.
+The installer refuses to replace existing Herdr Theme files or an existing `layout:sixfold` key section.
 It preserves all other layouts, settings and key bindings. Switch back with the layout picker.
 To update an existing installation, review the Git diff and copy only this repository's installed files;
 `scripts/install.py` is deliberately an initial installer, not an overwriting updater.
 
 ## Keys
 
-These bindings apply only while Sixfold is selected. Other native Herdr bindings stay available.
+These bindings apply only while Herdr Theme is selected. Other native Herdr bindings stay available.
 
 | Key (macOS) | Action |
 | --- | --- |
@@ -83,7 +84,7 @@ python3 /path/to/herdr-theme/scripts/tui_bridge.py --session default --pane YOUR
 The bridge reports source status once per second, forwards input and resize, and uses a per-source lock.
 It never sends an agent prompt. Closing the attachment leaves the source agent alive.
 Microphone routing and automatic dictation submission are separate integrations, not features guaranteed
-by a color theme. No microphone permission is granted by installing Sixfold.
+by a color theme. No microphone permission is granted by installing Herdr Theme.
 
 ## Optional message flow
 
@@ -94,7 +95,7 @@ python3 scripts/install_trace.py
 
 The optional `hc` launcher forwards commands to `herdr-core`. Successful `hc send` calls append
 only sender, recipient and time to a local bounded log (32 events); message text is never stored.
-Sixfold displays the latest agent-to-agent route as a short animated pipe, highlights its endpoints,
+Herdr Theme connects the actual sender and recipient rows with an elbow pipe, moves a dot along it, highlights its endpoints,
 and shows unread counters until the target is focused. Motion can be disabled in the toolbar.
 Native senders use `HC_TERMINAL_ID`; bridging older TUI senders requires your own private
 `~/.local/state/herdr-sixfold/migration-map.local.json` mapping. Keep that file out of Git.
