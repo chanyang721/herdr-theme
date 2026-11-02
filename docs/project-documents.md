@@ -1,28 +1,19 @@
 # Project document tracking
 
-Configure local folders in `~/.config/herdr-app/data/sixfold/project-docs.json`. Project owners maintain this file; installation never overwrites it. Keys are actual workspace IDs or exact workspace names.
+Existing project settings are read from `~/.config/herdr-app/data/sixfold/project-docs.json`; this feature does not change them. Keys are actual workspace IDs or exact workspace names. Each workspace configures `folders` (source paths, optionally filename `match` OR terms) and a `target` for collector-owned links.
 
-```json
-{
-  "version": 1,
-  "spaces": {
-    "Example": {
-      "target": "~/Documents/LukukuProjects/Example",
-      "folders": [
-        {"path": "~/work/projects/example/docs"},
-        {"path": "~/Documents/Reports", "match": ["example"]}
-      ]
-    }
-  }
-}
-```
+Run `python3 scripts/collect_docs.py` after adding or changing documents. The sidebar rereads the index every two seconds. No new daemon or LaunchAgent is installed. Collection indexes Markdown/PDF/Word/Excel files by modification time. Original files and project settings are preserved. Only explicitly owned links and the generated index are managed. Existing files and unowned links are never replaced; existing archive links are preserved.
 
-Run `python3 scripts/collect_docs.py`. No configuration means no collection and no sidebar section. No daemon or LaunchAgent is installed; an existing watcher can call the collector periodically.
+In the **left panel**, click the arrow beside a workspace name to expand that project's documents. Open a folder to see its newest documents first; “더 보기” adds twenty more. The input inside the expanded workspace filters filenames, automatically expands matching folders, and Enter opens the first result. **⌘⌥F** expands the active workspace and focuses this same input. NFC and NFD Korean filenames and search terms work. A workspace without configured document folders shows that status; no project settings are created automatically.
 
-The collector indexes Markdown/PDF/Word/Excel files by modification time, excluding `.before-*`, `latest.md` and source symlinks. Filename matches are case-insensitive OR terms per folder. The index is replaced atomically only when content changes. Unavailable folders and ownership conflicts remain visible as warnings.
+Paths containing `archive`, `아카이브`, `보관`, or `.before-` are archived (case-insensitive, NFC-normalized), and hidden by default. “아카이브 포함” reveals them; this filter applies across the sidebar. `latest.md`, hidden directories and original symlinks remain excluded. Files retain original paths and folder metadata; grouping uses original folders, not the flattened link directory.
 
-The target folder contains links to original files. Existing actual files and unowned links are preserved. A colliding filename receives a hash prefix. The hidden `.herdr-document-links.json` records only links this collector created. Only recorded links whose originals disappeared are removed; originals are never moved or deleted. Do not edit the ownership manifest to claim existing user files.
+Click any document to run macOS `open` with its original absolute path. This includes Markdown, PDF, DOCX and XLSX and uses the registered default application. The small **↗** control explicitly retries in VS Code with `code --reuse-window`. Process launch failures appear below that workspace and a successful retry clears the error. Background indexing and rendering never open an editor or change focus. Opening documents does not select another Herdr workspace.
 
-The active workspace’s latest five files appear in the left sidebar, refreshed every two seconds. File and folder controls explicitly open VS Code with `--reuse-window`; a failed process shows an error, and a successful retry clears it. Collecting and refreshing do not launch editors or move focus. The current theme does not create a right panel. Independent document-viewer mods can be installed in another compatible personal layout.
+The separate document dialog and its preview/search modules were removed in favor of this single sidebar flow. Files/Preview Plus already provide file exploration and native Markdown rendering, but their richer preview requires a separate view. This implementation uses external default apps to keep the requested sidebar flow simple. Content search and cross-project search are omitted; the input searches the expanded workspace's configured index without reading every original file.
 
-Verification uses temporary folders, synthetic documents, native checks and stubbed launch handlers. Real pointer clicks or external editor launches are not part of automated verification.
+The installed Sixfold layout declares a **224px** sidebar, minimum **180px**, maximum **380px**. Workspace cards also reserve horizontal space for message-flow paths, so document rows have less usable width. Folder labels show the last two path components; long filenames are truncated and tooltips show complete original paths. Short dates keep rows compact. The document sections live inside the existing vertical workspace scroll area, rather than a fixed footer that could displace the terminal list. Header, counters, alerts/message flow and footer share the window height; the scroll area takes the remaining height. No fixed document viewport height or layout-setting change is introduced. Expanded document heights are measured to keep later workspace message-flow paths aligned.
+
+For an existing installation, copy this repository's `mods/sixfold-desk/docs.js` and `main.js`, then merge only `cmd-alt-f: sixfold-desk.find-docs` into `layout:sixfold` in the existing keys file. Use the updated collector in this checkout. Do not replace personal layouts, other bindings or project settings.
+
+Automated verification uses temporary documents, native mod checks and stubbed input/read/launch handlers. It checks archive inclusion, folder pagination, Unicode search, Enter after index replacement, workspace-specific queries and launch error recovery. Real pointer/keyboard automation and external app launches are excluded. Native checks establish module/API compatibility, not actual visual quality. Actual shortcut delivery, click/scroll appearance, OS default-app associations and editor windows remain unverified.

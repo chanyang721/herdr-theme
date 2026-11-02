@@ -28,7 +28,13 @@ def atomic_json(path,value):
     return True
 
 
-def documents(folders,warnings=None):
+def is_archived(path):
+    """Classify the original path without changing its spelling on disk."""
+    normalized=unicodedata.normalize('NFC',str(path)).casefold()
+    return any(term in normalized for term in ('archive','아카이브','보관','.before-'))
+
+
+def documents(folders,warnings=None,include_archived=False):
     warnings=warnings if warnings is not None else []
     found={}
     for entry in folders:
@@ -44,13 +50,17 @@ def documents(folders,warnings=None):
             subdirs[:]=[name for name in subdirs if not name.startswith('.')]
             for name in files:
                 path=Path(directory)/name
-                if path.is_symlink() or path.suffix.lower() not in EXTENSIONS or '.before-' in name or name.lower()=='latest.md':continue
+                if path.is_symlink() or path.suffix.lower() not in EXTENSIONS or name.lower()=='latest.md':continue
+                archived=is_archived(path)
+                if archived and not include_archived:continue
                 if filters and not any(term in unicodedata.normalize('NFC',name).casefold() for term in filters):continue
                 try:
                     if not path.is_file():continue
                     info=path.stat();source=str(path.resolve())
                 except OSError:continue
-                found[source]={'path':source,'name':name,'mtime':info.st_mtime_ns//1000000}
+                found[source]={'path':source,'name':name,'mtime':info.st_mtime_ns//1000000,
+                               'archived':archived,'folder':str(Path(source).parent),
+                               'sourceRoot':str(root.resolve()),'relativePath':str(path.relative_to(root))}
     return sorted(found.values(),key=lambda item:(-item['mtime'],item['path']))
 
 
@@ -98,8 +108,8 @@ def collect(config,index):
         if not isinstance(folders,list):raise ValueError('folders must be an array')
         target=Path(settings.get('target',str(Path.home()/'Documents/LukukuProjects'/space))).expanduser()
         warnings=[]
-        items=documents(folders,warnings)
-        problem=owned_links(target,items)
+        items=documents(folders,warnings,include_archived=True)
+        problem=owned_links(target,[item for item in items if not item['archived']])
         if problem:warnings.append(problem)
         output['spaces'][space]={'folder':str(target.resolve()),'files':items}
         if warnings:output['spaces'][space]['warning']=','.join(sorted(set(warnings)))

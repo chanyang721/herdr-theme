@@ -1,7 +1,7 @@
 import { View, div, svg, image } from 'gpui-kit';
 import { h_flex, v_flex } from 'gpui-base';
 import * as herdrNative from 'herdr';
-import { agents, panes, spaces, terminals, focused, props, theme, run, shared, setShared, setAgentOrder, nextCommand, exec, window, layout, readTextFile, writeTextFile, appHome, openOverlay } from 'herdr';
+import { agents, panes, spaces, terminals, focused, props, theme, run, shared, setShared, setAgentOrder, nextCommand, exec, window, layout, readTextFile, writeTextFile, appHome, openOverlay, settings } from 'herdr';
 import { WORDS, counts, title, cycle, priority, readThrough, unreadCount } from './model.js';
 
 import { freshMessages, recentRoutes, simultaneousRoutes } from './flow.js';
@@ -33,6 +33,7 @@ export default class SixfoldDesk extends View {
     this.readMessages = {};
     if (props()?.role !== 'sidebar') return;
     this.projectDocs=null;
+    this.docsSpaces=new Set();this.docsHeights={};
     watchDocs(this,cx);
     this.alerts = [];
     watchAlerts(this, cx);
@@ -175,6 +176,9 @@ export default class SixfoldDesk extends View {
           const index = list.findIndex(a => a.address === f?.terminal);
           const a = list[(index + 1) % list.length];
           if (a) run('agent.focus', { terminal: a.address });
+        } else if (command === 'find-docs') {
+          const space=spaces().find(s=>s.active);
+          if(space){this.docsSpaces.add(space.id);cx.notify();cx.timer.after(30,()=>this.docsInputs?.[space.id]?.focus());}
         } else if (command === 'language') {
           setShared('sixfold.language', this.lang() === 'ko' ? 'en' : 'ko');
         }
@@ -353,7 +357,7 @@ export default class SixfoldDesk extends View {
     });
     const groups=workspaceList.map(s=>({s,members:priority(s.tabs.flatMap(tab=>all.filter(p=>p.tab===tab.id)))}));
     const positions={};let offset=0;
-    for(const {members} of groups){
+    for(const {s,members} of groups){
       let row=offset+53;
       for (const p of members) {
         positions[p.terminal]=row;row+=30;
@@ -363,7 +367,7 @@ export default class SixfoldDesk extends View {
           }
         }
       }
-      offset=row-3;
+      offset=row-3+(this.docsHeights?.[s.id]||0);
     }
     const workspaceColor = s => s.name==='공통' ? t.accent : s.name==='PeaceMinusOne' ? t.ansi5 : s.name==='Medihomes' ? t.ansi6
       : [t.accent,t.ansi5,t.ansi6,t.ansi3,t.ansi2,t.ansi4][[...s.id].reduce((hash,c)=>(hash*31+c.charCodeAt(0))>>>0,0)%6];
@@ -403,6 +407,10 @@ export default class SixfoldDesk extends View {
           this.dragSpace=s.id;this.overSpace=s.id;
           cx.notify();
         })
+        .child(div().id(`sf-docs-toggle-${s.id}`).text_size(11).text_color(t.accent).tooltip('프로젝트 문서 펼치기')
+          .on_mouse_down('left',(_e,cx)=>cx.stop_propagation()).on_mouse_up('left',(_e,cx)=>cx.stop_propagation())
+          .on_click((_e,cx)=>{cx.stop_propagation();this.docsSpaces??=new Set();this.docsSpaces.has(s.id)?this.docsSpaces.delete(s.id):this.docsSpaces.add(s.id);cx.notify();})
+          .child(this.docsSpaces?.has(s.id)?'▾':'▸'))
         .child(workspaceMark(s))
         .child(div().flex_1().min_w(0).truncate().text_color(s.active?t.foreground:t.muted).child(s.name))
         .child(div().text_size(10).text_color(t.muted).child(String(members.length))))
@@ -436,7 +444,9 @@ export default class SixfoldDesk extends View {
             .child(div().flex_1().min_w(0).truncate().text_size(10).text_color(t.muted).child(node.label||node.id))
             .child(div().text_size(9).text_color(t.dim).child(workflowStatus(node,this.lang()))))));
 
-      })));
+      })).child(div().id(`sf-docs-height-${s.id}`).min_w(0)
+        .on_size_change((size,cx)=>{const height=size.height/(settings().zoom||1);this.docsHeights??={};if(Math.abs((this.docsHeights[s.id]||0)-height)>1){this.docsHeights[s.id]=height;cx.notify();}})
+        .child(docsSection(this,t,s))));
     const workspaceTree=v_flex().relative().flex_none().children(spaceRows)
       .children(paths.filter(flow => positions[flow.source] !== undefined && positions[flow.target] !== undefined).map(flow => {
         const from=positions[flow.source], to=positions[flow.target];
@@ -456,7 +466,6 @@ export default class SixfoldDesk extends View {
         .child(v_flex().flex_none().px(7).pb(6).gap(3).children(computerRows))
         .child(section(`${this.computerLabel(selectedMachine)} · ${w.spaces}`)).child(workspaceTree)
         )
-      .when(Boolean(currentDocs(this.projectDocs)),e=>e.child(docsSection(this,t)))
       .when(visibleAlerts(this.alerts).length>0, e=>e.child(alertSection(this,t)))
       .when(Boolean(last) || this.queuedRoutes.length > 0, e => e.child(v_flex().flex_none().px(10).py(9).gap(6).bg(t.surface).border_t(1).border_color(t.border)
         .child(h_flex().gap(5).items_center()

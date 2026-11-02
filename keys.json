@@ -21,6 +21,7 @@
     "cmd-alt-3": "sixfold-desk.pane-3",
     "cmd-alt-4": "sixfold-desk.pane-4",
     "cmd-alt-5": "sixfold-desk.pane-5",
-    "cmd-alt-6": "sixfold-desk.pane-6"
+    "cmd-alt-6": "sixfold-desk.pane-6",
+    "cmd-alt-f": "sixfold-desk.find-docs"
   }
 }
