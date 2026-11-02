@@ -3,7 +3,7 @@ import { h_flex, v_flex } from 'gpui-base';
 import { agents, panes, spaces, terminals, focused, props, theme, run, shared, setShared, setAgentOrder, nextCommand, exec, window, readTextFile, writeTextFile, appHome } from 'herdr';
 import { WORDS, counts, title, cycle, priority } from './model.js';
 
-import { freshMessages, recentRoutes } from './flow.js';
+import { freshMessages, recentRoutes, simultaneousRoutes } from './flow.js';
 import { pipeline } from './pipeline.js';
 import { workflowNodes, delegationEvents, workflowStatus } from './workflow.js';
 import { watchAlerts, alertSection, visibleAlerts } from './alerts.js';
@@ -39,7 +39,7 @@ export default class SixfoldDesk extends View {
       this.refreshBusy = true;
       cx.spawn(async cx => {
         try {
-          const text = await readTextFile(`${appHome()}/data/sixfold/messages.json`) || '{"events":[]}';
+          const text = await readTextFile(`${appHome()}/data/sixfold/messages.json`).catch(()=>null) || '{"events":[]}';
           const routing = await readTextFile(`${appHome()}/data/sixfold/routing.json`).catch(()=>null) || 'null';
           const queue = await readTextFile(`${appHome()}/data/sixfold/routing-queue.json`).catch(()=>null) || '{"requests":[]}';
           const workflowText = await readTextFile(`${appHome()}/data/sixfold/workflow.json`).catch(()=>null) || '{"nodes":[],"events":[]}';
@@ -48,10 +48,11 @@ export default class SixfoldDesk extends View {
           if (snapshot === this.messageSnapshot) return;
           const events = JSON.parse(text).events ?? [];
           try { this.workspaceIcons = JSON.parse(iconText); } catch { /* Keep the last valid icons. */ }
-          const config = JSON.parse(routing);
-          const requests = JSON.parse(queue).requests ?? [];
+          const optional=(text,fallback)=>{try{return JSON.parse(text);}catch{return fallback;}};
+          const config = optional(routing,{script:this.routeScript});
+          const requests = optional(queue,{requests:this.queuedRoutes}).requests ?? [];
           const addresses = new Set(terminals().map(item => item.address));
-          const workflow = JSON.parse(workflowText);
+          const workflow = optional(workflowText,{nodes:this.workflowNodes,events:this.workflowEvents});
           this.workflowNodes = workflowNodes(workflow.nodes,[...addresses]);
           this.workflowEvents = delegationEvents(workflow.events,this.workflowNodes);
           this.workflowNodes.forEach(node=>addresses.add(node.id));
@@ -77,7 +78,7 @@ export default class SixfoldDesk extends View {
     refresh(cx);
     // File watchers are shared by mod copies. Reconcile independently of focus
     // and watcher wakeups; redraw only when the persisted snapshot changes.
-    cx.timer.every(500, refresh);
+    cx.timer.every(250, refresh);
     cx.timer.every(2000, cx => {
       if (this.routeBusy || !this.routeScript || !this.queuedRoutes.some(item=>!item.hold)) return;
       this.routeBusy = true;
@@ -158,7 +159,7 @@ export default class SixfoldDesk extends View {
   }
 
   startFlows(cx) {
-    while (this.activeFlows.length < 4 && this.pendingFlows.length) {
+    while (this.pendingFlows.length) {
       const event = this.pendingFlows.shift();
       // Freshness was checked on ingestion. A real burst must not expire
       // merely because earlier packets occupied the four visible lanes.
@@ -166,19 +167,21 @@ export default class SixfoldDesk extends View {
         const node=this.workflowNodes.find(node=>node.id===address);
         if(node)this.expandedAgents.add(node.terminal);
       }
+      const same=this.activeFlows.filter(flow=>flow.source===event.source&&flow.target===event.target);
       const occupied = new Set(this.activeFlows.map(flow => flow.lane));
-      const lane = [0, 1, 2, 3].find(value => !occupied.has(value));
-      const flow = { ...event, lane, phase: 'start' };
+      const lane = same[0]?.lane ?? [0,1,2,3,4,5].find(value=>!occupied.has(value)) ?? this.activeFlows.length%6;
+      const travelMs=1600+(same.length%6)*180;
+      const flow = { ...event, lane, travelMs, phase: 'start' };
       this.activeFlows.push(flow);
       cx.timer.after(60, cx => {
         flow.phase = 'travel';
         cx.notify();
       });
-      cx.timer.after(1660, cx => {
+      cx.timer.after(travelMs+60, cx => {
         flow.phase = 'arrived';
         cx.notify();
       });
-      cx.timer.after(3800, cx => {
+      cx.timer.after(travelMs+2200, cx => {
         this.activeFlows = this.activeFlows.filter(item => item.id !== flow.id);
         this.startFlows(cx);
         cx.notify();
@@ -204,8 +207,9 @@ export default class SixfoldDesk extends View {
     for (const event of events) if (event.target===f?.terminal) this.seenMessages.add(event.id);
     const unseen = address => this.messageEvents.filter(e=>e.target===address&&!this.seenMessages.has(e.id)).length;
     const last = events.at(-1);
-    const palette = [t.accent, t.ansi6, t.ansi5, t.ansi3];
-    const flows = this.activeFlows.filter(flow => flow.replay || events.some(event => event.id === flow.id));
+    const palette = [t.accent, t.ansi6, t.ansi5, t.ansi3, t.ansi2, t.ansi4];
+    const flows = this.activeFlows;
+    const routes = simultaneousRoutes(flows);
     const motion = shared('sixfold.motion') !== false;
     const endpoint = address => flows.some(flow => flow.source === address || flow.target === address);
     const routeColor = address => palette[flows.find(flow => flow.target === address || flow.source === address)?.lane ?? 0];
@@ -217,7 +221,7 @@ export default class SixfoldDesk extends View {
       return p ? `${s?.name ?? ''} · ${title(p)}` : address === 'external' ? (this.lang() === 'ko' ? '외부' : 'External') : address;
     };
     const history = recentRoutes(events);
-    const paths = flows.length ? flows : history.map((event, lane) => ({ ...event, lane, phase: 'history' }));
+    const paths = flows.length ? routes : history.map((event, lane) => ({ ...event, lane, phase: 'history' }));
     if (role === 'pane') {
       const p = all.find(p => p.pane === props()?.pane);
       if (!p) return div();
@@ -347,8 +351,8 @@ export default class SixfoldDesk extends View {
     const workspaceTree=v_flex().relative().flex_none().children(spaceRows)
       .children(paths.filter(flow => positions[flow.source] !== undefined && positions[flow.target] !== undefined).map(flow => {
         const from=positions[flow.source], to=positions[flow.target];
-        return pipeline({id:flow.id,width:33-flow.lane*8,from,to,color:palette[flow.lane],phase:flow.phase,motion})
-          .right(7+flow.lane*8);
+        return pipeline({id:flow.id,width:37-flow.lane*5,from,to,color:palette[flow.lane],phase:flow.phase,packets:flow.packets,motion})
+          .right(3+flow.lane*5);
       }));
     return v_flex().id('sixfold-sidebar').size_full().bg(t.chrome).text_color(t.foreground)
       .on_mouse_up('left',(_e,cx)=>{
@@ -365,14 +369,14 @@ export default class SixfoldDesk extends View {
       .when(Boolean(last) || this.queuedRoutes.length > 0, e => e.child(v_flex().flex_none().px(10).py(9).gap(6).bg(t.surface).border_t(1).border_color(t.border)
         .child(h_flex().gap(5).items_center()
           .child(div().flex_1().text_size(10).font_bold().text_color(t.muted).child(this.lang()==='ko'?'메시지 흐름':'MESSAGE FLOW'))
-          .child(div().text_size(10).text_color(t.accent).child(flows.length ? `${flows.length}${this.lang()==='ko'?'개 연결':' active'}` : (this.lang()==='ko'?'최근 전송':'Recent')))
+          .child(div().text_size(10).text_color(t.accent).child(flows.length ? this.lang()==='ko'?`${flows.length}개 전송 · ${routes.length}경로`:`${flows.length} messages · ${routes.length} routes` : (this.lang()==='ko'?'최근 전송':'Recent')))
           .when(this.pendingFlows.length>0, el=>el.child(div().text_size(10).text_color(t.muted).child(`+${this.pendingFlows.length}`))))
         .children(this.queuedRoutes.slice(0,3).map(item=>h_flex().gap(5).text_size(10).text_color(item.hold?t.blocked:t.muted)
           .tooltip(item.error || (this.lang()==='ko'?'사용 가능한 프로젝트 pane이 생기면 전달합니다':'Waiting for an available project pane'))
           .child(div().child(item.hold?'!':'◷'))
           .child(div().flex_1().truncate().child(`${item.project} · ${this.lang()==='ko'?'수신 pane 대기':'Waiting for a pane'}`))))
-        .children((flows.length ? flows : history).map(flow => {
-          const active=flows.some(item=>item.id===flow.id), color=palette[flow.lane??0];
+        .children((flows.length ? routes : history).map(flow => {
+          const active=Boolean(flow.packets?.length), color=palette[flow.lane??0];
           const arrived=!active || flow.phase==='arrived';
           const position=flow.phase==='start' && motion ? 0 : 156;
           return v_flex().id(`sf-flow-card-${flow.id}`).gap(3).px(6).py(5).rounded(4).bg(t.chrome)
