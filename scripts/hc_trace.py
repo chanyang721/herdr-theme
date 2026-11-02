@@ -27,12 +27,14 @@ def append_event(path, source, target, now=None):
     path=Path(path);path.parent.mkdir(parents=True,exist_ok=True)
     with path.with_suffix('.lock').open('a') as lock:
         fcntl.flock(lock,fcntl.LOCK_EX)
-        try:events=json.loads(path.read_text()).get('events',[])
-        except (OSError,ValueError):events=[]
-        event={'id':uuid.uuid4().hex,'source':source or 'external','target':target,'at':now or int(time.time()*1000)}
-        events=(events+[event])[-32:]
+        try:data=json.loads(path.read_text())
+        except (OSError,ValueError):data={}
+        events=data.get('events',[])
+        sequence=max(data.get('sequence',0),max((event.get('seq',0) for event in events),default=0))+1
+        event={'id':uuid.uuid4().hex,'source':source or 'external','target':target,'at':now or int(time.time()*1000),'seq':sequence}
+        events=(events+[event])[-1024:]
         tmp=path.with_name(path.name+'.tmp')
-        tmp.write_text(json.dumps({'events':events}));os.replace(tmp,path)
+        tmp.write_text(json.dumps({'sequence':sequence,'events':events}));os.replace(tmp,path)
     return event
 
 

@@ -15,7 +15,9 @@ core=shutil.which('herdr-core')
 if args.default_launcher and (not default.is_symlink() or default.resolve() not in (Path(core).resolve() if core else None,(target/'bin/hc').resolve())):
     raise SystemExit('Refusing to replace an unknown hc launcher; use the printed PATH hook instead.')
 (target/'bin').mkdir(parents=True,exist_ok=True)
-shutil.copy2(root/'scripts/hc_trace.py',target/'hc_trace.py')
+temporary=target/'hc_trace.py.next'
+shutil.copy2(root/'scripts/hc_trace.py',temporary)
+temporary.replace(target/'hc_trace.py')
 launcher=target/'bin/hc'
 launcher.write_text('#!/bin/sh\nexec python3 '+shlex.quote(str(target/'hc_trace.py'))+' "$@"\n')
 launcher.chmod(0o755)
