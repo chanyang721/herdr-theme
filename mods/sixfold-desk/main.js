@@ -1,7 +1,9 @@
 import { View, div, svg, image } from 'gpui-kit';
 import { h_flex, v_flex } from 'gpui-base';
-import { agents, panes, spaces, terminals, focused, props, theme, run, shared, setShared, setAgentOrder, nextCommand, exec, hc, window, readTextFile, writeTextFile, appHome } from 'herdr';
-import { WORDS, counts, attention, title, cycle, priority } from './model.js';
+import { agents, panes, spaces, terminals, focused, props, theme, run, shared, setShared, setAgentOrder, nextCommand, exec, window, readTextFile, writeTextFile, appHome } from 'herdr';
+import { WORDS, counts, title, cycle, priority } from './model.js';
+
+import { freshMessages, recentRoutes } from './flow.js';
 
 const marks = { blocked: '!', done: '✓', working: '●', idle: '○' };
 
@@ -9,23 +11,27 @@ export default class SixfoldDesk extends View {
   init(_props, cx) {
     this.dragSpace = null;
     this.overSpace = null;
-    this.pings = {};
     this.messageEvents = [];
+    this.activeFlows = [];
+    this.pendingFlows = [];
     this.seenMessages = new Set();
-    this.flashUntil = 0;
     if (props()?.role !== 'sidebar') return;
+    // File notifications start a small number of finite native transitions.
+    // No frame-by-frame JavaScript animation or old-message replay on reload.
+    let previous = null;
     const refresh = cx => cx.spawn(async cx => {
       try {
         const text = await readTextFile(`${appHome()}/data/sixfold/messages.json`);
         const events = text ? JSON.parse(text).events ?? [] : [];
-        if (events.at(-1)?.id !== this.messageEvents.at(-1)?.id) {
+        if (previous === null || events.at(-1)?.id !== this.messageEvents.at(-1)?.id) {
+          const addresses = new Set(terminals().map(item => item.address));
+          this.pendingFlows.push(...freshMessages(previous, events).filter(event=>addresses.has(event.source)&&addresses.has(event.target)));
+          previous = events;
           this.messageEvents = events;
-          this.flashUntil = Date.now()+2400;
+          this.startFlows(cx);
           cx.notify();
-        } else if (this.flashUntil && Date.now()>this.flashUntil) {
-          this.flashUntil=0;cx.notify();
         }
-      } catch { /* A partial or absent optional log does not affect terminals. */ }
+      } catch { /* Optional tracing must not disrupt terminals. */ }
     });
     refresh(cx);
     cx.timer.every(1000, refresh);
@@ -100,18 +106,28 @@ export default class SixfoldDesk extends View {
       .child(div().font_bold().child(marks[status] ?? '·')).child(text);
   }
 
-  ping(address, cx) {
-    if (this.pings[address] === '…') return;
-    this.pings[address] = '…';
-    cx.notify();
-    cx.spawn(async cx => {
-      try {
-        const result = await hc(['send', address,
-          '[Herdr Theme ping] 연결 확인입니다. 다른 작업은 하지 말고 PONG이라고만 답하세요.']);
-        this.pings[address] = result.code === 0 ? '↑' : '!';
-      } catch { this.pings[address] = '!'; }
-      cx.notify();
-    });
+  startFlows(cx) {
+    while (this.activeFlows.length < 4 && this.pendingFlows.length) {
+      const event = this.pendingFlows.shift();
+      if (Date.now() - event.at > 15000) continue;
+      const occupied = new Set(this.activeFlows.map(flow => flow.lane));
+      const lane = [0, 1, 2, 3].find(value => !occupied.has(value));
+      const flow = { ...event, lane, phase: 'start' };
+      this.activeFlows.push(flow);
+      cx.timer.after(60, cx => {
+        flow.phase = 'travel';
+        cx.notify();
+      });
+      cx.timer.after(1660, cx => {
+        flow.phase = 'arrived';
+        cx.notify();
+      });
+      cx.timer.after(3800, cx => {
+        this.activeFlows = this.activeFlows.filter(item => item.id !== flow.id);
+        this.startFlows(cx);
+        cx.notify();
+      });
+    }
   }
 
   render(cx) {
@@ -131,8 +147,18 @@ export default class SixfoldDesk extends View {
     for (const event of events) if (event.target===f?.terminal) this.seenMessages.add(event.id);
     const unseen = address => events.filter(e=>e.target===address&&!this.seenMessages.has(e.id)).length;
     const last = events.at(-1);
-    const moving = Boolean(last && last.at+2400>Date.now() && shared('sixfold.motion')!==false);
-    const endpoint = address => moving && (last.source===address || last.target===address);
+    const palette = [t.accent, t.ansi6, t.ansi5, t.ansi3];
+    const flows = this.activeFlows.filter(flow => flow.replay || events.some(event => event.id === flow.id));
+    const motion = shared('sixfold.motion') !== false;
+    const endpoint = address => flows.some(flow => flow.source === address || flow.target === address);
+    const routeColor = address => palette[flows.find(flow => flow.target === address || flow.source === address)?.lane ?? 0];
+    const label = address => {
+      const p = panes().find(p => p.terminal === address);
+      const s = spaces().find(s => s.tabs.some(tab => tab.id === p?.tab));
+      return p ? `${s?.name ?? ''} · ${title(p)}` : address === 'external' ? (this.lang() === 'ko' ? '외부' : 'External') : address;
+    };
+    const history = recentRoutes(events);
+    const paths = flows.length ? flows : history.map((event, lane) => ({ ...event, lane, phase: 'history' }));
     if (role === 'pane') {
       const p = all.find(p => p.pane === props()?.pane);
       if (!p) return div();
@@ -184,7 +210,7 @@ export default class SixfoldDesk extends View {
       members.forEach((p,i)=>{positions[p.terminal]=offset+50+i*30;});
       offset+=43+members.length*30;
     }
-    const spaceRows=groups.map(({s,members})=>v_flex().id(`sf-space-${s.id}`).ml(7).mr(29).mb(9).gap(2).flex_none()
+    const spaceRows=groups.map(({s,members})=>v_flex().id(`sf-space-${s.id}`).ml(7).mr(41).mb(9).gap(2).flex_none()
       .when(this.dragSpace && this.overSpace===s.id && this.dragSpace!==s.id,e=>e.border_t(2).border_color(t.accent))
       .on_mouse_move((_event,cx)=>{
         const source=spaces().find(x=>x.id===this.dragSpace);
@@ -210,7 +236,7 @@ export default class SixfoldDesk extends View {
       .children(members.map(p=>{
         const tab=s.tabs.find(tab=>tab.id===p.tab);
         return h_flex().id(`sf-member-${p.pane}`).h(28).flex_none().px(7).gap(6).items_center().rounded(4).bg(p.focused?t.selected:t.chrome)
-          .when(endpoint(p.terminal),e=>e.border(1).border_color(t.accent))
+          .when(endpoint(p.terminal),e=>e.border(1).border_color(routeColor(p.terminal)))
           .tooltip(`${s.name} / ${tab.name} / ${title(p)}`)
           .hover(h=>h.bg(t.hover)).on_click(()=>{
             if((this.suppressClickUntil??0)>Date.now() || (this.dragSpace && this.overSpace!==this.dragSpace))return;
@@ -219,33 +245,23 @@ export default class SixfoldDesk extends View {
           .child(icon(p,list.find(a=>a.address===p.terminal)?.program ?? p.program))
           .child(div().flex_1().min_w(0).truncate().text_size(11).child(title(p)))
           .when(unseen(p.terminal)>0,e=>e.child(div().px(4).rounded(3).bg(t.accent).text_color(t.background).text_size(10).child(String(unseen(p.terminal)))))
-          .child(this.badge(p.status,'',t))
-          .child(div().id(`sf-ping-${p.terminal}`).px(4).py(2).rounded(3).text_size(10).text_color(t.accent)
-            .hover(h=>h.bg(t.hover))
-            .tooltip(this.lang()==='ko'?'핑 보내기 · ↑ 전송됨, ! 실패 (응답 확인과 별개)':'Send ping · ↑ sent, ! failed (not an acknowledgment)')
-            .on_mouse_down('left',(_e,cx)=>cx.stop_propagation())
-            .on_mouse_up('left',(_e,cx)=>cx.stop_propagation())
-            .on_click((_e,cx)=>{cx.stop_propagation();this.ping(p.terminal,cx);})
-            .child(this.pings[p.terminal]??'Ping'));
+          .child(this.badge(p.status,'',t));
       })));
     const workspaceTree=v_flex().relative().flex_none().children(spaceRows)
-      .when(Boolean(last && positions[last.source]!==undefined && positions[last.target]!==undefined && last.source!==last.target),el=>{
-        const from=positions[last.source],to=positions[last.target],top=Math.min(from,to),height=Math.abs(to-from);
-        return el.child(div().absolute().right(8).top(top).w(19).h(height+1)
-          .child(div().absolute().right(0).top(0).w(2).h(height).bg(moving?t.accent:t.border))
-          .child(div().absolute().right(0).top(0).w(19).h(2).bg(moving?t.accent:t.border))
-          .child(div().absolute().right(0).bottom(0).w(19).h(2).bg(moving?t.accent:t.border))
-          .child(div().absolute().left(-3).top(to===top?-6:height-6).text_size(13).text_color(t.accent).child('‹'))
-          .when(moving,p=>p.child(div().absolute().right(-2).top(from-top-2).size(6).rounded(3).bg(t.accent)
-            .loop('top',{from:from-top-2,to:to-top-2,period:1100}))));
-      });
-    const rows = attention(list).map(a =>
-      v_flex().id(`sf-attention-${a.address}`).mx(7).mb(5).p(9).gap(4).rounded(6)
-        .bg(t.surface).border(1).border_color(a.status === 'blocked' ? t.blocked : t.border)
-        .hover(s => s.bg(t.hover)).on_click(() => run('agent.focus', {terminal:a.address}))
-        .child(this.badge(a.status, `${w[a.status]} · ${a.program.name}`, t))
-        .child(div().text_size(12).text_color(t.foreground).child(a.title || a.tab_name))
-        .child(div().truncate().text_size(10).text_color(t.muted).child(`${a.space_name} / ${a.tab_name}`)));
+      .children(paths.filter(flow => positions[flow.source] !== undefined && positions[flow.target] !== undefined).map(flow => {
+        const from=positions[flow.source], to=positions[flow.target];
+        const top=Math.min(from,to), height=Math.abs(to-from), color=palette[flow.lane];
+        const progress=flow.phase === 'start' && motion ? from-top : to-top;
+        const opacity=flow.phase === 'history' ? 0.2 : flow.phase === 'arrived' ? 0.45 : 0.95;
+        return div().id(`sf-route-${flow.id}`).absolute().right(7+flow.lane*8).top(top).w(33-flow.lane*8).h(height+1)
+          .opacity(opacity).transition('opacity',350)
+          .child(div().absolute().right(0).top(0).w(flow.phase==='history'?1:3).h(height).rounded(2).bg(color))
+          .child(div().absolute().right(0).top(from-top).w(33-flow.lane*8).h(1).bg(color))
+          .child(div().absolute().right(0).top(to-top).w(33-flow.lane*8).h(1).bg(color))
+          .child(div().absolute().left(-4).top(to-top-8).text_size(13).text_color(color).child('‹'))
+          .when(flow.phase !== 'history', el => el.child(div().id(`sf-packet-${flow.id}`).absolute().right(-2).top(progress-5).size(10).rounded(5).bg(color)
+            .when(motion, el => el.transition('top',{duration:1600,easing:'ease-in-out'}))));
+      }));
     return v_flex().id('sixfold-sidebar').size_full().bg(t.chrome).text_color(t.foreground)
       .on_mouse_up('left',(_e,cx)=>{
         if(this.dragSpace){this.dragSpace=null;this.overSpace=null;cx.notify();}
@@ -256,24 +272,41 @@ export default class SixfoldDesk extends View {
       .child(h_flex().px(12).py(9).gap(12).flex_none().children(['blocked','done','working'].map(s => this.badge(s,String(total[s]),t))))
       .child(v_flex().id('sf-scroll').flex_1().min_h(0).overflow_y_scrollbar().mode('always')
         .child(section(w.spaces)).child(workspaceTree)
-        .child(section(w.attention))
-        .children(rows.length ? rows : [div().px(12).pb(8).text_size(11).text_color(t.muted).child(w.empty)])
         )
-      .when(Boolean(last), e=>{
-        const label=address=>{
-          const p=all.find(p=>p.terminal===address);
-          const s=workspaceList.find(s=>s.tabs.some(tab=>tab.id===p?.tab));
-          return p?`${s?.name??''} / ${title(p)}`:address;
-        };
-        return e.child(v_flex().h(94).flex_none().px(12).py(8).gap(5).bg(t.surface).border_t(1).border_color(t.border)
-          .child(div().text_size(9).text_color(t.dim).child('MESSAGE FLOW'))
-          .child(div().truncate().text_size(10).text_color(t.foreground).child(label(last.source)))
-          .child(div().relative().h(8).w(180)
-            .child(div().absolute().left(0).top(3).h(2).w(180).bg(t.border))
-            .child(div().absolute().left(174).top(0).text_size(9).text_color(t.accent).child('›'))
-            .when(moving,h=>h.child(div().absolute().top(1).left(0).size(6).rounded(3).bg(t.accent).loop('left',{from:0,to:170,period:700}))))
-          .child(div().truncate().text_size(10).text_color(t.accent).child(label(last.target))));
-      })
+      .when(Boolean(last), e => e.child(v_flex().flex_none().px(10).py(9).gap(6).bg(t.surface).border_t(1).border_color(t.border)
+        .child(h_flex().gap(5).items_center()
+          .child(div().flex_1().text_size(10).font_bold().text_color(t.muted).child(this.lang()==='ko'?'메시지 흐름':'MESSAGE FLOW'))
+          .child(div().text_size(10).text_color(t.accent).child(flows.length ? `${flows.length}${this.lang()==='ko'?'개 연결':' active'}` : (this.lang()==='ko'?'최근 전송':'Recent')))
+          .when(this.pendingFlows.length>0, el=>el.child(div().text_size(10).text_color(t.muted).child(`+${this.pendingFlows.length}`))))
+        .children((flows.length ? flows : history).map(flow => {
+          const active=flows.some(item=>item.id===flow.id), color=palette[flow.lane??0];
+          const arrived=!active || flow.phase==='arrived';
+          const position=flow.phase==='start' && motion ? 0 : 156;
+          return v_flex().id(`sf-flow-card-${flow.id}`).gap(3).px(6).py(5).rounded(4).bg(t.chrome)
+            .tooltip(`${label(flow.source)} → ${label(flow.target)} · ${this.lang()==='ko'?'전송됨 · 읽음 여부 아님':'Sent, not a read receipt'}`)
+            .on_click(()=>run('agent.focus',{terminal:flow.target}))
+            .child(h_flex().gap(5).items_center()
+              .child(div().size(4).rounded(2).bg(color))
+              .child(div().flex_1().min_w(0).truncate().text_size(10).text_color(t.muted).child(label(flow.source)))
+              .when((flow.count??0)>1,el=>el.child(div().text_size(9).text_color(color).child(`×${flow.count}`)))
+              .when(!active, el=>el.child(div().id(`sf-replay-${flow.id}`).px(3).text_size(11).text_color(t.muted)
+                .tooltip(this.lang()==='ko'?'기록된 경로 다시 보기 · 메시지를 재전송하지 않습니다':'Replay this route without sending a message')
+                .on_mouse_down('left',(_event,cx)=>cx.stop_propagation())
+                .on_mouse_up('left',(_event,cx)=>cx.stop_propagation())
+                .on_click((_event,cx)=>{
+                  cx.stop_propagation();
+                  this.pendingFlows.push({...flow,id:`${flow.id}-replay-${Date.now()}`,at:Date.now(),replay:true});
+                  this.startFlows(cx);cx.notify();
+                }).child('↻'))))
+            .when(active, el=>el.child(div().relative().h(9).w(170).ml(9)
+              .child(div().absolute().left(0).top(2).h(1).w(161).bg(t.border))
+              .child(div().id(`sf-flow-dot-${flow.id}`).absolute().left(position).top(0).size(8).rounded(4).bg(color)
+                .when(motion, dot=>dot.transition('left',{duration:1600,easing:'ease-in-out'})))))
+            .child(h_flex().gap(5).items_center()
+              .child(div().text_size(10).text_color(color).child(arrived?'✓':'↓'))
+              .child(div().flex_1().min_w(0).truncate().text_size(10).text_color(t.foreground).child(label(flow.target)))
+              .when(arrived,el=>el.child(div().text_size(9).text_color(t.dim).child(flow.replay?(this.lang()==='ko'?'경로 재생':'Replay'):(this.lang()==='ko'?'전송됨':'Sent')))));
+        }))))
       .child(h_flex().h(38).flex_none().px(7).items_center()
         .child(this.button('sf-settings',w.settings,()=>run('app.settings'),t))
         .child(div().flex_1())
