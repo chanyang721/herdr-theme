@@ -1,12 +1,14 @@
 import { View, div, svg, image } from 'gpui-kit';
 import { h_flex, v_flex } from 'gpui-base';
-import { agents, panes, spaces, terminals, focused, props, theme, run, shared, setShared, setAgentOrder, nextCommand, exec, window, readTextFile, writeTextFile, appHome } from 'herdr';
+import { agents, panes, spaces, terminals, focused, props, theme, run, shared, setShared, setAgentOrder, nextCommand, exec, window, layout, readTextFile, writeTextFile, appHome } from 'herdr';
 import { WORDS, counts, title, cycle, priority } from './model.js';
 
 import { freshMessages, recentRoutes, simultaneousRoutes } from './flow.js';
 import { pipeline } from './pipeline.js';
 import { workflowNodes, delegationEvents, workflowStatus } from './workflow.js';
 import { watchAlerts, alertSection, visibleAlerts } from './alerts.js';
+
+const hasPanel=node=>node?.id==='panel'||(node?.children||[]).some(hasPanel);
 
 const marks = { blocked: '!', done: '✓', working: '●', idle: '○' };
 
@@ -250,8 +252,8 @@ export default class SixfoldDesk extends View {
         .child(this.button('sf-done', `✓ ${w.done}`, () => run('sixfold-desk.next-done'), t))
         .child(this.button('sf-zoom', w.zoom, () => run('pane.zoom'), t))
         .child(this.button('sf-motion', shared('sixfold.motion')===false?'Motion off':'Motion on',()=>setShared('sixfold.motion',shared('sixfold.motion')===false),t))
-        .child(this.button('sf-review', w.review, () => { run('layout.select', {stack:'panel-body',child:'changes'}); run('layout.toggle',{id:'panel'}); }, t))
-        .child(this.button('sf-files', w.files, () => { run('layout.select', {stack:'panel-body',child:'files'}); run('layout.toggle',{id:'panel'}); }, t));
+        .when(hasPanel(layout()),e=>e.child(this.button('sf-review', w.review, () => { run('layout.select', {stack:'panel-body',child:'changes'}); run('layout.toggle',{id:'panel'}); }, t)))
+        .when(hasPanel(layout()),e=>e.child(this.button('sf-files', w.files, () => { run('layout.select', {stack:'panel-body',child:'files'}); run('layout.toggle',{id:'panel'}); }, t)));
     }
     // Reading a background workspace must never change another client's focus.
     setAgentOrder(list.map(a => a.address));

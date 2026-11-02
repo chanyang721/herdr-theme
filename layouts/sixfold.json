@@ -59,7 +59,10 @@
           },
           "window_drag": true,
           "content": {
-            "mod": "tabs"
+            "mod": "sixfold-tabs",
+            "props": {
+              "panels": []
+            }
           }
         },
         {
@@ -98,49 +101,6 @@
                     "reveal": "always"
                   }
                 }
-              }
-            },
-            {
-              "id": "panel",
-              "type": "column",
-              "hidden": true,
-              "size": {
-                "px": 480
-              },
-              "min": 280,
-              "max": 600,
-              "children": [
-                {
-                  "id": "panel-body",
-                  "type": "stack",
-                  "active": "changes",
-                  "children": [
-                    {
-                      "id": "changes",
-                      "type": "block",
-                      "content": {
-                        "mod": "changes"
-                      }
-                    },
-                    {
-                      "id": "files",
-                      "type": "block",
-                      "content": {
-                        "mod": "files"
-                      }
-                    }
-                  ]
-                }
-              ]
-            },
-            {
-              "id": "tools",
-              "type": "block",
-              "size": {
-                "px": 40
-              },
-              "content": {
-                "mod": "sixfold-tools"
               }
             }
           ]
