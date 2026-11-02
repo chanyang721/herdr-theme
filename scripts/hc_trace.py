@@ -20,7 +20,7 @@ def source_address(env):
     try:
         data=json.loads((Path.home()/'.local/state/herdr-sixfold/migration-map.local.json').read_text())
         return next(p['terminal'] for p in data.get('panes',[]) if p['source']==source)
-    except (OSError,ValueError,KeyError,StopIteration):return None
+    except (OSError,ValueError,KeyError,StopIteration,TypeError,AttributeError):return None
 
 
 def append_event(path, source, target, now=None):
@@ -29,8 +29,11 @@ def append_event(path, source, target, now=None):
         fcntl.flock(lock,fcntl.LOCK_EX)
         try:data=json.loads(path.read_text())
         except (OSError,ValueError):data={}
-        events=data.get('events',[])
-        sequence=max(data.get('sequence',0),max((event.get('seq',0) for event in events),default=0))+1
+        if not isinstance(data,dict):data={}
+        raw=data.get('events',[])
+        events=[event for event in raw if isinstance(event,dict)] if isinstance(raw,list) else []
+        def counter(value):return value if type(value) is int and value>=0 else 0
+        sequence=max(counter(data.get('sequence')),max((counter(event.get('seq')) for event in events),default=0))+1
         event={'id':uuid.uuid4().hex,'source':source or 'external','target':target,'at':now or int(time.time()*1000),'seq':sequence}
         events=(events+[event])[-1024:]
         tmp=path.with_name(path.name+'.tmp')
@@ -65,7 +68,7 @@ def main():
         except (OSError,ValueError,subprocess.SubprocessError):pass
         app_home=Path(os.environ.get('HERDR_APP_HOME',Path.home()/'.config/herdr-app'))
         try:append_event(app_home/'data/sixfold/messages.json',source,target)
-        except OSError as e:print(f'Sixfold: message was sent, but flow logging failed: {e}',file=sys.stderr)
+        except Exception as e:print(f'Sixfold: message was sent, but flow logging failed: {e}',file=sys.stderr)
     raise SystemExit(result.returncode)
 
 
