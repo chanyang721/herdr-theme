@@ -101,6 +101,7 @@ def receiver_available(text):
     # response means the user still owns the next turn, even if core says idle.
     content = [line.strip() for line in lines[:index] if line.strip()
                and not re.match(r'^[─━│┌└]+', line.strip())
+               and not re.match(r'^[✻✽✶✳✢·]\s+.*\bfor\s+\d', line.strip())
                and not any(word in line for word in ('Worked for ', 'Brewed for ', 'Sautéed for ', 'voice ', 'mic ▁'))]
     return not content or not re.search(r'[?？]\s*$', content[-1])
 
@@ -160,6 +161,26 @@ def save_queue(requests):
     temporary.replace(QUEUE)
 
 
+def deliver_pending(request, pending, spaces, live):
+    """Persist an at-most-once hold before any possibly successful send."""
+    request['hold'] = True
+    request['error'] = '전달 시도 중 종료되면 결과를 직접 확인하세요. 자동 재전송하지 않습니다.'
+    save_queue(pending)
+    try:
+        result = dispatch(request, spaces, live)
+    except (ValueError, OSError, subprocess.SubprocessError) as error:
+        request['error'] = str(error)
+        save_queue(pending)
+        raise
+    if result['state'] == 'queued':
+        request.pop('hold', None)
+        request.pop('error', None)
+    else:
+        pending.remove(request)
+    save_queue(pending)
+    return result
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('project', nargs='?')
@@ -189,35 +210,24 @@ def main():
             return
         spaces, live = snapshot()
         if args.drain:
-            remaining = []
-            for stored in pending:
-                request = dict(stored)
+            for request in list(pending):
                 if request.get('hold'):
-                    remaining.append(request)
                     continue
                 try:
-                    result = dispatch(request, spaces, live)
-                except (ValueError, subprocess.TimeoutExpired) as error:
-                    request['error'] = str(error)
-                    request['hold'] = True
-                    remaining.append(request)
+                    result = deliver_pending(request, pending, spaces, live)
+                except (ValueError, OSError, subprocess.SubprocessError):
                     continue
-                if result['state'] == 'queued':
-                    remaining.append(request)
-                else:
-                    spaces, live = snapshot()
                 print(json.dumps(result, ensure_ascii=False), flush=True)
-            if remaining != pending:
-                save_queue(remaining)
+                if result['state'] == 'sent':
+                    # The sent request is already removed on disk, even if this fails.
+                    spaces, live = snapshot()
         else:
             request = {'id': uuid.uuid4().hex[:10], 'source': source_address(args.source),
                        'project': args.project, 'text': args.text, 'reply': args.reply, 'at': int(time.time()*1000)}
-            result = dispatch(request, spaces, live)
-            if result['state'] == 'queued':
-                if len(pending) >= 64:
-                    raise ValueError('대기 요청 64건이 차 있어 새 요청을 넣지 않았습니다.')
-                pending.append(request)
-                save_queue(pending)
+            if len(pending) >= 64:
+                raise ValueError('대기 요청 64건이 차 있어 새 요청을 넣지 않았습니다.')
+            pending.append(request)
+            result = deliver_pending(request, pending, spaces, live)
             print(json.dumps(result, ensure_ascii=False))
 
 
