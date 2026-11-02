@@ -1,8 +1,18 @@
 # Herdr Theme
 
-A compact workspace for several coding agents, designed around equal six-pane grids and an unmistakable input target.
+Coordinate coding agents across projects from one sidebar: see every workspace, follow live status and concurrent message routes, and expand subagent trees without leaving your current terminal.
 
 ![Herdr Theme](preview.png)
+
+## Why use it
+
+| Capability | What it helps you do |
+| --- | --- |
+| All projects in one sidebar | Find the right workspace and agent without switching through tabs. |
+| Live agent state | See working, waiting, completed and blocked agents beside their names. |
+| Concurrent message routes | Follow who is sending work to whom, with multiple moving signals and per-agent unread counts. |
+| Expandable subagent trees | Trace delegated work to its parent and distinguish reported state from activity estimates. |
+| Project identity and deliberate focus | Recognize projects by icons and colored group borders while keeping keyboard and voice input on the intended pane. |
 
 ## What you see
 

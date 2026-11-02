@@ -1,7 +1,6 @@
 # Herdr Theme
 
-A compact Herdr layout for people who keep several coding agents visible at once.
-Workspace navigation, agent attention, numbered panes and a clear input target share one calm frame.
+Coordinate coding agents across projects from one live sidebar. See every workspace and agent, follow concurrent messages, and expand subagent trees while keeping your current terminal in view.
 
 ![Herdr Theme](preview.png)
 
@@ -9,18 +8,18 @@ Workspace navigation, agent attention, numbered panes and a clear input target s
 
 ## What it does
 
-- Keeps the active tab's real split tree; six terminals work particularly well as a 3 × 2 grid.
-- Shows every workspace and its agents together, independent of the selected workspace.
-- Prioritizes blocked, done, working and idle agents within each workspace. Custom monochrome Claude/Codex icons gain color and move subtly while active; sidebar rows have no numbers.
-- Reorders workspace headers by drag and drop using the app’s persisted space order.
-- Shows incoming message counts live, without switching workspaces.
-- Makes keyboard focus visible with a 2 px cyan border and an input-target footer.
-- Keeps blockers and unseen completions visible; navigation is explicit, never triggered by a new status.
-- Offers Korean/English labels and matching light/dark palettes.
-- Keeps Files and Changes behind an optional panel instead of consuming terminal space by default.
-- Optionally displays existing Herdr TUI terminals through a live bridge without restarting their agents.
+| Feature | Benefit |
+| --- | --- |
+| Every workspace and agent in one sidebar | Track several projects without hunting through tabs. |
+| Live status and per-agent unread messages | See which agent is working, waiting or needs your decision. |
+| Concurrent animated message routes | Follow real successful sends, including several agents and repeated messages on one route. |
+| Expandable subagent trees | See delegation relationships and status provenance; estimated activity is labelled. |
+| Project icons, colors and group borders | Recognize each project's agents at a glance. |
+| Focus that stays yours | Messages and status changes keep your current input target in place. |
 
-The preview uses explicitly labelled demo programs. It contains no real projects, conversations or usage metrics.
+Message tracing and subagent collection are optional local integrations described below. The layout also provides Korean/English labels, light/dark palettes, keyboard navigation, drag ordering and optional Files/Changes panels. It preserves the active tab's existing split tree; the default six-pane arrangement is one way to use it.
+
+The public preview uses labelled demo programs, not real projects, conversations or usage metrics.
 
 ## Install
 
@@ -95,7 +94,7 @@ python3 scripts/install_trace.py
 
 The optional `hc` launcher forwards commands to `herdr-core`. Successful `hc send` calls append
 only sender, recipient and time to a local bounded log (1024 events); message text is never stored.
-Herdr Theme connects the actual sender and recipient rows with an elbow pipe, moves a dot along it, highlights its endpoints,
+Herdr Theme connects actual sender and recipient rows with native Bezier curves, animates each message independently, highlights its endpoints,
 and shows unread counters until the target is focused. Motion can be disabled in the toolbar.
 Native senders use `HC_TERMINAL_ID`; bridging older TUI senders requires your own private
 `~/.local/state/herdr-sixfold/migration-map.local.json` mapping. Keep that file out of Git.
@@ -146,3 +145,7 @@ Incoming message badges reconcile every 250 ms without changing workspace or foc
 Subagents expand under their parent agent with `▸ N`; parents without children remain visible. New observed delegations expand the corresponding tree and animate a native Bezier pipeline. Counts remain on agent rows, not workspace headers. `scripts/collect_workflow.py` reads Claude metadata, the read-only Codex database and hc parent links to publish `data/sixfold/workflow.json`. It supports `--once`; otherwise it reconciles every three seconds, writing only changes. Estimated activity is labelled. Startup history does not animate, and persistent collector registration is separate.
 
 Set a local project icon with `python3 scripts/set_workspace_icon.py 'workspace ID or exact name' /path/to/icon.png`. SVG, PNG, JPEG and WebP are supported, with optional `--background '#ffffff'` and `--tint` for monochrome SVGs. Assets are copied under local `data/sixfold/icons/`, mapped in `workspace-icons.json`, and refreshed without a theme restart. Customer logos are not bundled in the public repository.
+
+## Optional document and usage tools
+
+The right activity rail opens Documents and Changes. [Project Document Viewer](extras/preview/README.md) adds saved-file Markdown preview and local HTML snapshots. [System Metrics](extras/system-metrics/RECIPE.md) adds a separate CPU/memory strip. Token history is available from [Insights](https://github.com/GaganSD/coding-agent-toolkit/tree/main/herdr-insights); subscription quotas come from [Usage Bar](https://github.com/berkeatac/herdr-usage-bar). These are optional, separate installs; account quotas are not per-agent token totals.
