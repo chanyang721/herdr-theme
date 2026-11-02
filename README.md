@@ -94,7 +94,7 @@ python3 scripts/install_trace.py
 The optional `hc` launcher forwards commands to `herdr-core`. Successful `hc send` calls append
 only sender, recipient and time to a local bounded log (1024 events); message text is never stored.
 Herdr Theme connects actual sender and recipient rows with native Bezier curves, animates each message independently, highlights its endpoints,
-and shows unread counters until the target is focused. Motion can be disabled in the toolbar.
+and shows unread counters until the target finishes working or is focused. Read positions are kept in `data/sixfold/messages-read.json`, so a restart does not recount the log. Motion can be disabled in the toolbar.
 Native senders use `HC_TERMINAL_ID`; bridging older TUI senders requires your own private
 `~/.local/state/herdr-sixfold/migration-map.local.json` mapping. Keep that file out of Git.
 `python3 scripts/install_trace.py --default-launcher` also routes the known `~/.local/bin/hc` core
