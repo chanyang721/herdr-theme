@@ -4,6 +4,7 @@ import { agents, panes, spaces, terminals, focused, props, theme, run, shared, s
 import { WORDS, counts, title, cycle, priority } from './model.js';
 
 import { freshMessages, recentRoutes } from './flow.js';
+import { watchAlerts, alertSection, visibleAlerts } from './alerts.js';
 
 const marks = { blocked: '!', done: '✓', working: '●', idle: '○' };
 
@@ -16,6 +17,8 @@ export default class SixfoldDesk extends View {
     this.pendingFlows = [];
     this.seenMessages = new Set();
     if (props()?.role !== 'sidebar') return;
+    this.alerts = [];
+    watchAlerts(this, cx);
     // File notifications start a small number of finite native transitions.
     // No frame-by-frame JavaScript animation or old-message replay on reload.
     this.previousEvents = null;
@@ -285,6 +288,7 @@ export default class SixfoldDesk extends View {
       .child(v_flex().id('sf-scroll').flex_1().min_h(0).overflow_y_scrollbar().mode('always')
         .child(section(w.spaces)).child(workspaceTree)
         )
+      .when(visibleAlerts(this.alerts).length>0, e=>e.child(alertSection(this,t)))
       .when(Boolean(last), e => e.child(v_flex().flex_none().px(10).py(9).gap(6).bg(t.surface).border_t(1).border_color(t.border)
         .child(h_flex().gap(5).items_center()
           .child(div().flex_1().text_size(10).font_bold().text_color(t.muted).child(this.lang()==='ko'?'메시지 흐름':'MESSAGE FLOW'))
