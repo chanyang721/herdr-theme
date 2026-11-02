@@ -5,6 +5,7 @@ import { WORDS, counts, title, cycle, priority } from './model.js';
 
 import { freshMessages, recentRoutes } from './flow.js';
 import { pipeline } from './pipeline.js';
+import { workflowNodes, delegationEvents, workflowStatus } from './workflow.js';
 import { watchAlerts, alertSection, visibleAlerts } from './alerts.js';
 
 const marks = { blocked: '!', done: '✓', working: '●', idle: '○' };
@@ -14,6 +15,10 @@ export default class SixfoldDesk extends View {
     this.dragSpace = null;
     this.overSpace = null;
     this.messageEvents = [];
+    this.workflowNodes = [];
+    this.workflowEvents = [];
+    this.previousDelegations = null;
+    this.expandedAgents = new Set();
     this.activeFlows = [];
     this.pendingFlows = [];
     this.queuedRoutes = [];
@@ -36,12 +41,24 @@ export default class SixfoldDesk extends View {
           const text = await readTextFile(`${appHome()}/data/sixfold/messages.json`) || '{"events":[]}';
           const routing = await readTextFile(`${appHome()}/data/sixfold/routing.json`).catch(()=>null) || 'null';
           const queue = await readTextFile(`${appHome()}/data/sixfold/routing-queue.json`).catch(()=>null) || '{"requests":[]}';
-          const snapshot = JSON.stringify([text, routing, queue]);
+          const workflowText = await readTextFile(`${appHome()}/data/sixfold/workflow.json`).catch(()=>null) || '{"nodes":[],"events":[]}';
+          const snapshot = JSON.stringify([text, routing, queue, workflowText]);
           if (snapshot === this.messageSnapshot) return;
           const events = JSON.parse(text).events ?? [];
           const config = JSON.parse(routing);
           const requests = JSON.parse(queue).requests ?? [];
           const addresses = new Set(terminals().map(item => item.address));
+          const workflow = JSON.parse(workflowText);
+          this.workflowNodes = workflowNodes(workflow.nodes,[...addresses]);
+          this.workflowEvents = delegationEvents(workflow.events,this.workflowNodes);
+          this.workflowNodes.forEach(node=>addresses.add(node.id));
+          const delegations = freshMessages(this.previousDelegations,this.workflowEvents);
+          for (const event of delegations) {
+            const target = this.workflowNodes.find(node=>node.id===event.target);
+            if (target) this.expandedAgents.add(target.terminal);
+          }
+          this.pendingFlows.push(...delegations);
+          this.previousDelegations = this.workflowEvents;
           this.pendingFlows.push(...freshMessages(this.previousEvents, events).filter(event => addresses.has(event.source) && addresses.has(event.target)));
           this.previousEvents = events;
           this.messageEvents = events;
@@ -174,9 +191,10 @@ export default class SixfoldDesk extends View {
     const list = agents().filter(a=>!onlySpace || a.space===onlySpace);
     const local = all.filter(p => p.tab === f?.tab);
     const total = counts(list);
-    const events = (this.messageEvents ?? []).filter(e=>facts.some(x=>x.address===e.source)&&facts.some(x=>x.address===e.target));
+    const nodeIds = new Set([...facts.map(x=>x.address),...this.workflowNodes.map(x=>x.id)]);
+    const events = [...(this.messageEvents ?? []),...this.workflowEvents].filter(e=>nodeIds.has(e.source)&&nodeIds.has(e.target));
     for (const event of events) if (event.target===f?.terminal) this.seenMessages.add(event.id);
-    const unseen = address => events.filter(e=>e.target===address&&!this.seenMessages.has(e.id)).length;
+    const unseen = address => this.messageEvents.filter(e=>e.target===address&&!this.seenMessages.has(e.id)).length;
     const last = events.at(-1);
     const palette = [t.accent, t.ansi6, t.ansi5, t.ansi3];
     const flows = this.activeFlows.filter(flow => flow.replay || events.some(event => event.id === flow.id));
@@ -184,6 +202,8 @@ export default class SixfoldDesk extends View {
     const endpoint = address => flows.some(flow => flow.source === address || flow.target === address);
     const routeColor = address => palette[flows.find(flow => flow.target === address || flow.source === address)?.lane ?? 0];
     const label = address => {
+      const child=this.workflowNodes.find(node=>node.id===address);
+      if(child)return child.label || child.id;
       const p = panes().find(p => p.terminal === address);
       const s = spaces().find(s => s.tabs.some(tab => tab.id === p?.tab));
       return p ? `${s?.name ?? ''} · ${title(p)}` : address === 'external' ? (this.lang() === 'ko' ? '외부' : 'External') : address;
@@ -238,8 +258,16 @@ export default class SixfoldDesk extends View {
     const groups=workspaceList.map(s=>({s,members:priority(s.tabs.flatMap(tab=>all.filter(p=>p.tab===tab.id)))}));
     const positions={};let offset=0;
     for(const {members} of groups){
-      members.forEach((p,i)=>{positions[p.terminal]=offset+50+i*30;});
-      offset+=43+members.length*30;
+      let row=offset+50;
+      for (const p of members) {
+        positions[p.terminal]=row;row+=30;
+        if(this.expandedAgents.has(p.terminal)) {
+          for(const node of this.workflowNodes.filter(node=>node.terminal===p.terminal).slice(0,12)) {
+            positions[node.id]=row;row+=24;
+          }
+        }
+      }
+      offset=row-7;
     }
     const spaceRows=groups.map(({s,members})=>v_flex().id(`sf-space-${s.id}`).ml(7).mr(41).mb(9).gap(2).flex_none()
       .when(this.dragSpace && this.overSpace===s.id && this.dragSpace!==s.id,e=>e.border_t(2).border_color(t.accent))
@@ -268,7 +296,8 @@ export default class SixfoldDesk extends View {
         .child(div().text_size(10).text_color(t.muted).child(String(members.length))))
       .children(members.map(p=>{
         const tab=s.tabs.find(tab=>tab.id===p.tab);
-        return h_flex().id(`sf-member-${p.pane}`).h(28).flex_none().px(7).gap(6).items_center().rounded(4).bg(p.focused?t.selected:t.chrome)
+        const children=this.workflowNodes.filter(node=>node.terminal===p.terminal);
+        return v_flex().gap(2).flex_none().child(h_flex().id(`sf-member-${p.pane}`).h(28).flex_none().px(7).gap(6).items_center().rounded(4).bg(p.focused?t.selected:t.chrome)
           .when(endpoint(p.terminal),e=>e.border(1).border_color(routeColor(p.terminal)))
           .tooltip(`${s.name} / ${tab.name} / ${title(p)}`)
           .hover(h=>h.bg(t.hover)).on_click(()=>{
@@ -278,7 +307,23 @@ export default class SixfoldDesk extends View {
           .child(icon(p,list.find(a=>a.address===p.terminal)?.program ?? p.program))
           .child(div().flex_1().min_w(0).truncate().text_size(11).child(title(p)))
           .when(unseen(p.terminal)>0,e=>e.child(div().px(4).rounded(3).bg(t.accent).text_color(t.background).text_size(10).child(String(unseen(p.terminal)))))
-          .child(this.badge(p.status,'',t));
+          .when(children.length>0,el=>el.child(div().id(`sf-children-${p.terminal}`).px(3).rounded(3).text_size(10).text_color(t.accent)
+            .tooltip(this.lang()==='ko'?'서브에이전트 기록 펼치기':'Expand subagents')
+            .on_mouse_down('left',(_event,cx)=>cx.stop_propagation())
+            .on_mouse_up('left',(_event,cx)=>cx.stop_propagation())
+            .on_click((_event,cx)=>{cx.stop_propagation();
+              if(this.expandedAgents.has(p.terminal))this.expandedAgents.delete(p.terminal);else this.expandedAgents.add(p.terminal);
+              cx.notify();
+            }).child(`${this.expandedAgents.has(p.terminal)?'▾':'▸'} ${children.length}`)))
+          .child(this.badge(p.status,'',t)))
+          .when(this.expandedAgents.has(p.terminal),el=>el.children(children.slice(0,12).map(node=>h_flex().id(`sf-node-${node.id}`).h(22).flex_none().pl(12+Math.min(node.depth,4)*5).pr(5).gap(4).items_center().rounded(3)
+            .when(endpoint(node.id),el=>el.border(1).border_color(routeColor(node.id)))
+            .tooltip(`${node.label||node.id} · ${workflowStatus(node,this.lang())} · ${node.statusSource||'상태 출처 미확인'}`)
+            .on_click(()=>run('agent.focus',{terminal:p.terminal}))
+            .child(div().text_size(10).text_color(t.dim).child('↳'))
+            .child(div().flex_1().min_w(0).truncate().text_size(10).text_color(t.muted).child(node.label||node.id))
+            .child(div().text_size(9).text_color(t.dim).child(workflowStatus(node,this.lang()))))));
+
       })));
     const workspaceTree=v_flex().relative().flex_none().children(spaceRows)
       .children(paths.filter(flow => positions[flow.source] !== undefined && positions[flow.target] !== undefined).map(flow => {
@@ -312,8 +357,8 @@ export default class SixfoldDesk extends View {
           const arrived=!active || flow.phase==='arrived';
           const position=flow.phase==='start' && motion ? 0 : 156;
           return v_flex().id(`sf-flow-card-${flow.id}`).gap(3).px(6).py(5).rounded(4).bg(t.chrome)
-            .tooltip(`${label(flow.source)} → ${label(flow.target)} · ${this.lang()==='ko'?'전송됨 · 읽음 여부 아님':'Sent, not a read receipt'}`)
-            .on_click(()=>run('agent.focus',{terminal:flow.target}))
+            .tooltip(`${label(flow.source)} → ${label(flow.target)} · ${flow.kind==='delegate'?'실제 서브에이전트 위임 기록':this.lang()==='ko'?'전송됨 · 읽음 여부 아님':'Sent, not a read receipt'}`)
+            .on_click(()=>run('agent.focus',{terminal:this.workflowNodes.find(node=>node.id===flow.target)?.terminal||flow.target}))
             .child(h_flex().gap(5).items_center()
               .child(div().size(4).rounded(2).bg(color))
               .child(div().flex_1().min_w(0).truncate().text_size(10).text_color(t.muted).child(label(flow.source)))
@@ -334,7 +379,7 @@ export default class SixfoldDesk extends View {
             .child(h_flex().gap(5).items_center()
               .child(div().text_size(10).text_color(color).child(arrived?'✓':'↓'))
               .child(div().flex_1().min_w(0).truncate().text_size(10).text_color(t.foreground).child(label(flow.target)))
-              .when(arrived,el=>el.child(div().text_size(9).text_color(t.dim).child(flow.replay?(this.lang()==='ko'?'경로 재생':'Replay'):(this.lang()==='ko'?'전송됨':'Sent')))));
+              .when(arrived,el=>el.child(div().text_size(9).text_color(t.dim).child(flow.replay?(this.lang()==='ko'?'경로 재생':'Replay'):(flow.kind==='delegate'?'위임 기록':this.lang()==='ko'?'전송됨':'Sent')))));
         }))))
       .child(h_flex().h(38).flex_none().px(7).items_center()
         .child(this.button('sf-settings',w.settings,()=>run('app.settings'),t))
