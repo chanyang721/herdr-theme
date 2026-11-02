@@ -2,7 +2,7 @@ import { div } from 'gpui-kit';
 import { h_flex, v_flex } from 'gpui-base';
 import { run, readTextFile, writeTextFile, watchFolder, appHome } from 'herdr';
 
-const SHOWN = new Set(['needs-you', 'info', 'processing']);
+const SHOWN = new Set(['needs-you']);  // Only what a person must decide; the rest stays in the project.
 const MARKS = { 'needs-you': '!', info: '✓', processing: '●' };
 
 // Tracked Slack, GitHub and pane requests, ordered by the watcher: needs-you first.

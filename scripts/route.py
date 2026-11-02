@@ -118,10 +118,12 @@ def dispatch(request, spaces, live):
         if screen_code or not receiver_available(screen.get('text', '')):
             continue
         source = request['source']
+        report = (f'이 작업의 결과 또는 막힌 점을 hc send {source} 명령으로 한 번 회신하세요.'
+                  if request.get('reply') else
+                  f'여러 갈래 작업은 이 세션의 서브에이전트로 처리하고, 사용자가 직접 결정해야 할 일이 생겼을 때만 hc send {source}로 알리세요. 진행·완료 보고는 보내지 마세요.')
         text = (f'[공통 작업 전달 {request["id"]}] {source} → {project} / {target}\n'
-                f'{request["text"]}\n\n'
-                f'이 작업의 결과 또는 막힌 점을 hc send {source} 명령으로 한 번 회신하세요. '
-                '이 전달을 다른 에이전트에 다시 배분하지 말고, 실제 결과만 보고하세요.')
+                f'{request["text"]}\n\n{report}\n'
+                '다른 pane으로 재배분하지 마세요.')
         argv = [HC, 'send', target, '--json', '--if', 'idle']
         argv.append(text)
         code, result = call(argv, env={**os.environ, 'HC_TERMINAL_ID': source})
@@ -164,6 +166,7 @@ def main():
     parser.add_argument('text', nargs='?')
     parser.add_argument('--from', dest='source')
     parser.add_argument('--drain', action='store_true')
+    parser.add_argument('--reply', action='store_true', help='request one explicit result reply')
     parser.add_argument('--enable', action='store_true', help='enable the sidebar queue drain for this checkout')
     args = parser.parse_args()
     if args.enable:
@@ -208,7 +211,7 @@ def main():
                 save_queue(remaining)
         else:
             request = {'id': uuid.uuid4().hex[:10], 'source': source_address(args.source),
-                       'project': args.project, 'text': args.text, 'at': int(time.time()*1000)}
+                       'project': args.project, 'text': args.text, 'reply': args.reply, 'at': int(time.time()*1000)}
             result = dispatch(request, spaces, live)
             if result['state'] == 'queued':
                 if len(pending) >= 64:
