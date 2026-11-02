@@ -4,7 +4,7 @@ Open project Markdown, images, PDFs and local HTML from the Files tree in a side
 
 ## Install
 
-Requires Herdr 0.1.11+, Python 3 and a personal layout with `files` and `panel-body` nodes. Herdr Theme supplies these. The installer preserves existing mod names and the current pane tree.
+Requires Herdr 0.1.11+, Python 3 and a personal layout with `files` and `panel-body` nodes. Choose a compatible personal layout before installation. The installer preserves existing mod names and the current pane tree.
 
 ```sh
 python3 scripts/install_preview.py --layout sixfold
