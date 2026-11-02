@@ -15,6 +15,7 @@ export default class SixfoldDesk extends View {
     this.dragSpace = null;
     this.overSpace = null;
     this.messageEvents = [];
+    this.workspaceIcons = {};
     this.workflowNodes = [];
     this.workflowEvents = [];
     this.previousDelegations = null;
@@ -42,9 +43,11 @@ export default class SixfoldDesk extends View {
           const routing = await readTextFile(`${appHome()}/data/sixfold/routing.json`).catch(()=>null) || 'null';
           const queue = await readTextFile(`${appHome()}/data/sixfold/routing-queue.json`).catch(()=>null) || '{"requests":[]}';
           const workflowText = await readTextFile(`${appHome()}/data/sixfold/workflow.json`).catch(()=>null) || '{"nodes":[],"events":[]}';
-          const snapshot = JSON.stringify([text, routing, queue, workflowText]);
+          const iconText = await readTextFile(`${appHome()}/data/sixfold/workspace-icons.json`).catch(()=>null) || '{}';
+          const snapshot = JSON.stringify([text, routing, queue, workflowText, iconText]);
           if (snapshot === this.messageSnapshot) return;
           const events = JSON.parse(text).events ?? [];
+          try { this.workspaceIcons = JSON.parse(iconText); } catch { /* Keep the last valid icons. */ }
           const config = JSON.parse(routing);
           const requests = JSON.parse(queue).requests ?? [];
           const addresses = new Set(terminals().map(item => item.address));
@@ -276,6 +279,16 @@ export default class SixfoldDesk extends View {
     }
     const workspaceColor = s => s.name==='공통' ? t.accent : s.name==='PeaceMinusOne' ? t.ansi5 : s.name==='Medihomes' ? t.ansi6
       : [t.accent,t.ansi5,t.ansi6,t.ansi3,t.ansi2,t.ansi4][[...s.id].reduce((hash,c)=>(hash*31+c.charCodeAt(0))>>>0,0)%6];
+    const workspaceMark = s => {
+      const configured=this.workspaceIcons[s.id] || this.workspaceIcons[s.name];
+      const icon=typeof configured==='string'?{path:configured}:configured;
+      const box=div().size(20).flex_none().rounded(4).items_center().justify_center();
+      if(icon?.path)return box.bg(icon.background||t.surface).child(
+        icon.path.toLowerCase().endsWith('.svg') && icon.tint
+          ? svg(icon.path).size(16).text_color(workspaceColor(s)) : image(icon.path).w(16).h(16));
+      return box.bg(workspaceColor(s)).text_color(t.background).text_size(10).font_bold()
+        .child(s.name==='공통'?'공':s.name.slice(0,1).toUpperCase());
+    };
     const spaceRows=groups.map(({s,members})=>v_flex().id(`sf-space-${s.id}`).ml(7).mr(41).mb(12).gap(2).flex_none().rounded(6).border(1).border_color(t.border)
       .when(this.dragSpace && this.overSpace===s.id && this.dragSpace!==s.id,e=>e.border_t(2).border_color(t.accent))
       .on_mouse_move((_event,cx)=>{
@@ -297,7 +310,7 @@ export default class SixfoldDesk extends View {
         .when(this.dragSpace && this.overSpace===s.id && this.dragSpace!==s.id,e=>e.border(1).border_color(t.accent))
         .tooltip(this.lang()==='ko'?'드래그하여 순서 변경':'Drag to reorder')
         .on_mouse_down('left',()=>{this.dragSpace=s.id;this.overSpace=s.id;})
-        .child(div().size(18).flex_none().rounded(4).bg(workspaceColor(s)).text_color(t.background).text_size(10).font_bold().items_center().justify_center().child(s.name==='공통'?'공':s.name.slice(0,1).toUpperCase()))
+        .child(workspaceMark(s))
         .child(div().flex_1().min_w(0).truncate().text_color(s.active?t.foreground:t.muted).child(s.name))
         .child(div().text_size(10).text_color(t.muted).child(String(members.length))))
       .children(members.map(p=>{
