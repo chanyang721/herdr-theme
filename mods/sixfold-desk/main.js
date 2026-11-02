@@ -185,22 +185,26 @@ export default class SixfoldDesk extends View {
       offset+=43+members.length*30;
     }
     const spaceRows=groups.map(({s,members})=>v_flex().id(`sf-space-${s.id}`).ml(7).mr(29).mb(9).gap(2).flex_none()
+      .when(this.dragSpace && this.overSpace===s.id && this.dragSpace!==s.id,e=>e.border_t(2).border_color(t.accent))
+      .on_mouse_move((_event,cx)=>{
+        const source=spaces().find(x=>x.id===this.dragSpace);
+        if(source && (source.machine??null)===(s.machine??null) && this.overSpace!==s.id){this.overSpace=s.id;cx.notify();}
+      })
+      .on_mouse_up('left',(_event,cx)=>{
+        const source=spaces().find(x=>x.id===this.dragSpace);
+        if(!source)return;
+        this.dragSpace=null;this.overSpace=null;
+        if(source.id!==s.id && (source.machine??null)===(s.machine??null)){
+          this.suppressClickUntil=Date.now()+250;
+          run('space.move',{id:source.id,index:spaces().findIndex(x=>x.id===s.id)+1});
+        } else if(source.id===s.id)run('space.select',{id:s.id});
+        cx.stop_propagation();cx.notify();
+      })
       .child(h_flex().h(34).flex_none().px(8).items_center().gap(5).rounded(5).bg(s.active?t.selected:t.surface).text_size(12).font_bold()
         .when(this.dragSpace===s.id && this.overSpace!==s.id,e=>e.opacity(0.5))
         .when(this.dragSpace && this.overSpace===s.id && this.dragSpace!==s.id,e=>e.border(1).border_color(t.accent))
         .tooltip(this.lang()==='ko'?'드래그하여 순서 변경':'Drag to reorder')
         .on_mouse_down('left',()=>{this.dragSpace=s.id;this.overSpace=s.id;})
-        .on_mouse_move((_event,cx)=>{
-          const source=spaces().find(x=>x.id===this.dragSpace);
-          if(source && (source.machine??null)===(s.machine??null) && this.overSpace!==s.id){this.overSpace=s.id;cx.notify();}
-        })
-        .on_mouse_up('left',(_event,cx)=>{
-          const source=this.dragSpace, over=this.overSpace;
-          this.dragSpace=null;this.overSpace=null;
-          if(source && source!==s.id && over===s.id)run('space.move',{id:source,index:spaces().findIndex(x=>x.id===s.id)+1});
-          else if(source===s.id)run('space.select',{id:s.id});
-          cx.notify();
-        })
         .child(div().flex_1().min_w(0).truncate().child(s.name))
         .child(div().text_size(10).text_color(t.muted).child(String(members.length))))
       .children(members.map(p=>{
@@ -208,7 +212,10 @@ export default class SixfoldDesk extends View {
         return h_flex().id(`sf-member-${p.pane}`).h(28).flex_none().px(7).gap(6).items_center().rounded(4).bg(p.focused?t.selected:t.chrome)
           .when(endpoint(p.terminal),e=>e.border(1).border_color(t.accent))
           .tooltip(`${s.name} / ${tab.name} / ${title(p)}`)
-          .hover(h=>h.bg(t.hover)).on_click(()=>{run('tab.select',{id:tab.id});run('pane.focus',{pane:p.pane});})
+          .hover(h=>h.bg(t.hover)).on_click(()=>{
+            if((this.suppressClickUntil??0)>Date.now() || (this.dragSpace && this.overSpace!==this.dragSpace))return;
+            run('tab.select',{id:tab.id});run('pane.focus',{pane:p.pane});
+          })
           .child(icon(p,list.find(a=>a.address===p.terminal)?.program ?? p.program))
           .child(div().flex_1().min_w(0).truncate().text_size(11).child(title(p)))
           .when(unseen(p.terminal)>0,e=>e.child(div().px(4).rounded(3).bg(t.accent).text_color(t.background).text_size(10).child(String(unseen(p.terminal)))))
