@@ -43,8 +43,8 @@ async function sidebar(){
   const view={docsSpaces:new Set(['Demo','Other']),projectDocs:{spaces:{Demo:{folder:'/project',files:[doc('/docs/guide.md',20),doc('/docs/report.pdf',10)]},Other:{folder:'/other',files:[doc('/other/other.md',30)]}}}};
   const cx={notify(){},spawn(fn){const promise=fn(cx);tasks.push(promise);return promise;}};
   for(const id of ['Demo','Other'])prepareDocsInput(view,{id});
-  const render=(id='Demo')=>{handlers.clear();labels.length=0;rendering=true;try{docsSection(view,{}, {id,name:id});}finally{rendering=false;}};render();
-  return {view,cx,handlers,calls,labels,render,setActive:value=>{active=value;},setRun:fn=>{run=fn;},flush:async()=>{await Promise.all(tasks);}};
+  const render=(id='Demo',name=id)=>{handlers.clear();labels.length=0;rendering=true;try{docsSection(view,{}, {id,name});}finally{rendering=false;}};render();
+  return {view,cx,handlers,calls,labels,render,prepare:id=>prepareDocsInput(view,{id}),setActive:value=>{active=value;},setRun:fn=>{run=fn;},flush:async()=>{await Promise.all(tasks);}};
 }
 
 test('workspace document sections stay collapsed until requested and folders open with twenty-item pagination',async()=>{
@@ -107,4 +107,29 @@ test('Enter uses the refreshed index rather than the first rendered document sna
   const h=await sidebar();
   h.view.projectDocs={spaces:{Demo:{folder:'/project',files:[doc('/docs/fresh.md',100)]}}};h.render();
   h.view.docsInputs.Demo.events.submit({},h.cx);await h.flush();assert.equal(h.calls.at(-1).args[0],'/docs/fresh.md');
+});
+
+
+test('native search state survives collapse and reopen without being created during render',async()=>{
+  const h=await sidebar(),input=h.view.docsInputs.Demo;
+  input.text='guide';input.events.change({},h.cx);
+  h.view.docsSpaces.delete('Demo');h.render();assert.equal(h.handlers.size,0);
+  h.prepare('Demo');h.view.docsSpaces.add('Demo');h.render();
+  assert.equal(h.view.docsInputs.Demo,input);
+  assert.equal(h.view.docsQueries.Demo,'guide');
+  assert.equal([...h.handlers.keys()].filter(k=>k.startsWith('sf-doc-Demo')).length,1);
+});
+
+test('workspace IDs resolve exact project names, empty indexes and ID overrides',async()=>{
+  const h=await sidebar();
+  for(const [id,name,files] of [['sp-med','Medihomes',[]],['sp-pmo','PeaceMinusOne',[doc('/pmo/docs/guide.md')]]]){
+    h.view.projectDocs.spaces[name]={folder:'/project',files,warning:'source_unavailable'};
+    h.prepare(id);h.view.docsSpaces.add(id);h.render(id,name);
+    assert.ok(h.labels.includes('문서 폴더 조회 확인 필요'));
+    assert.equal(h.labels.includes('문서가 없습니다.'),files.length===0);
+    assert.equal(h.handlers.has(`sf-docs-folder-${id}-0`),files.length>0);
+  }
+  h.view.projectDocs.spaces['sp-med']={folder:'/id-specific',files:[doc('/id-specific/guide.md')]};
+  h.render('sp-med','Medihomes');assert.ok(h.handlers.has('sf-docs-folder-sp-med-0'));
+  assert.equal(h.labels.includes('문서가 없습니다.'),false);
 });
