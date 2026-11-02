@@ -10,7 +10,7 @@ Coordinate coding agents across projects from one live sidebar. See every worksp
 
 | Feature | Benefit |
 | --- | --- |
-| Every workspace and agent in one sidebar | Track several projects without hunting through tabs. |
+| Computer selector with independent workspace lists | Pick a computer, then see its projects and agents. |
 | Live status and per-agent unread messages | See which agent is working, waiting or needs your decision. |
 | Concurrent animated message routes | Follow real successful sends, including several agents and repeated messages on one route. |
 | Expandable subagent trees | See delegation relationships and status provenance; estimated activity is labelled. |
@@ -68,6 +68,41 @@ The sidebar's **+ Space** and **Ctrl+Shift+N** open a name/folder dialog and cre
 
 For an existing installation, update `mods/sixfold-new-space`, `mods/sixfold-desk/main.js`, and the theme key bindings together. Copy `scripts/workspace.py`, `scripts/core_api.py`, and `scripts/balance_grid.py` to `~/.config/herdr-app/scripts/sixfold/`. The installer places these files there for new installations. Other layouts and explicit `space.new` commands retain Herdr's own behavior.
 Agent authentication and workspace trust use the agents' own interfaces.
+
+## Computers and remote agents
+
+The sidebar lists this computer and persistent `hc machine` connections. Selecting a computer shows
+only its workspaces and agents, including attention counts and next-blocked/next-done navigation.
+Switching back returns to its last selected workspace. A computer with no workspaces opens the
+new-workspace dialog; an unavailable one opens machine settings. Existing processes stay running.
+
+**+ Space** and **Ctrl+Shift+N** target the selected computer. Local workspaces retain the six-agent
+default. Remote workspaces start with one terminal on that computer; an empty folder uses its home.
+The folder picker is local only. Run authenticated agent CLIs inside remote terminals as needed.
+Remote selection and creation require Herdr app/core with machine-layout support (verified on 0.1.17).
+
+From the main computer, `hc send worker/t7 "your message"` sends to that computer's terminal;
+use its actual qualified address from `hc ls`. Selecting an agent's row lets you type directly.
+`hc send --wait` can observe the agent's next turn, but a successful send alone is not a read receipt.
+The connection must be reachable, and the agent must already be running and authenticated.
+This theme does not configure SSH, Tailscale, firewall rules or agent credentials.
+
+Optional friendly names and default folders live only in
+`~/.config/herdr-app/data/sixfold/computers.local.json`:
+
+```json
+{
+  "local": { "label": "Home" },
+  "machines": {
+    "worker": { "label": "Build computer", "folder": "/home/user/projects" }
+  }
+}
+```
+
+Machine keys match `hc machine ls`. Without this file, native machine names are shown. Labels reload
+live; the optional folder applies to new workspaces. Keep private addresses, paths and credentials
+out of Git. For an existing installation, update both `mods/sixfold-desk/main.js` and
+`mods/sixfold-new-space/main.js` together, then run `herdr-app check` on each folder.
 
 ## Optional live TUI bridge (macOS/Linux)
 

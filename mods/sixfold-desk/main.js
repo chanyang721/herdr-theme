@@ -20,6 +20,7 @@ export default class SixfoldDesk extends View {
     this.overSpace = null;
     this.messageEvents = [];
     this.workspaceIcons = {};
+    this.computers = {};
     this.workflowNodes = [];
     this.workflowEvents = [];
     this.previousDelegations = null;
@@ -52,10 +53,15 @@ export default class SixfoldDesk extends View {
           const queue = await readTextFile(`${appHome()}/data/sixfold/routing-queue.json`).catch(()=>null) || '{"requests":[]}';
           const workflowText = await readTextFile(`${appHome()}/data/sixfold/workflow.json`).catch(()=>null) || '{"nodes":[],"events":[]}';
           const iconText = await readTextFile(`${appHome()}/data/sixfold/workspace-icons.json`).catch(()=>null) || '{}';
-          const snapshot = JSON.stringify([text, routing, queue, workflowText, iconText]);
+          const computerText = await readTextFile(`${appHome()}/data/sixfold/computers.local.json`).catch(()=>null) || '{}';
+          const snapshot = JSON.stringify([text, routing, queue, workflowText, iconText, computerText]);
           if (snapshot === this.messageSnapshot) return;
           const events = JSON.parse(text).events ?? [];
           try { this.workspaceIcons = JSON.parse(iconText); } catch { /* Keep the last valid icons. */ }
+          try {
+            const computers = JSON.parse(computerText);
+            if (computers && typeof computers === 'object' && !Array.isArray(computers)) this.computers = computers;
+          } catch { /* Keep computer labels through partial writes. */ }
           const optional=(text,fallback)=>{try{return JSON.parse(text);}catch{return fallback;}};
           const config = optional(routing,{script:this.routeScript});
           const requests = optional(queue,{requests:this.queuedRoutes}).requests ?? [];
@@ -153,7 +159,8 @@ export default class SixfoldDesk extends View {
         const f = focused();
         const current = panes().filter(p => p.tab === f?.tab);
         if (command === 'new-workspace') {
-          openOverlay({mod:'sixfold-new-space',kind:'dialog',width:440,modal:true});
+          const machine = spaces().find(space => space.id === f?.space)?.machine ?? null;
+          this.newWorkspace(machine);
         } else if (command === 'next-pane' || command === 'prev-pane') {
           const p = cycle(current, f?.pane, command === 'next-pane' ? 1 : -1);
           if (p) run('pane.focus', { pane: p.pane });
@@ -162,7 +169,9 @@ export default class SixfoldDesk extends View {
           if (p) run('pane.focus', { pane: p.pane });
         } else if (command === 'next-blocked' || command === 'next-done') {
           const state = command === 'next-blocked' ? 'blocked' : 'done';
-          const list = agents().filter(a => a.status === state);
+          const machine = spaces().find(space => space.id === f?.space)?.machine ?? null;
+          const scope = new Set(spaces().filter(space => (space.machine ?? null) === machine).map(space => space.id));
+          const list = agents().filter(a => a.status === state && scope.has(a.space));
           const index = list.findIndex(a => a.address === f?.terminal);
           const a = list[(index + 1) % list.length];
           if (a) run('agent.focus', { terminal: a.address });
@@ -175,6 +184,16 @@ export default class SixfoldDesk extends View {
   }
 
   lang() { return shared('sixfold.language') === 'en' ? 'en' : 'ko'; }
+
+  computerLabel(machine) {
+    const config = machine === null ? this.computers?.local : this.computers?.machines?.[machine];
+    return config?.label || (machine === null ? (this.lang() === 'ko' ? '이 컴퓨터' : 'This computer') : machine);
+  }
+
+  newWorkspace(machine) {
+    const config = machine === null ? this.computers?.local : this.computers?.machines?.[machine];
+    openOverlay({mod:'sixfold-new-space',props:{machine, machineLabel:this.computerLabel(machine), folder:config?.folder},kind:'dialog',width:440,modal:true});
+  }
 
   button(id, text, action, t) {
     return div().id(id).px(8).py(4).rounded(5).text_size(11).text_color(t.muted)
@@ -232,10 +251,12 @@ export default class SixfoldDesk extends View {
     const f = focused();
     const facts = terminals();
     const onlySpace = props()?.onlySpace;
-    const workspaceList = spaces().filter(s=>!onlySpace || s.id===onlySpace);
+    const selectedMachine = spaces().find(space => space.id === f?.space)?.machine ?? null;
+    const workspaceList = spaces().filter(s => onlySpace ? s.id === onlySpace : (s.machine ?? null) === selectedMachine);
+    const workspaceIds = new Set(workspaceList.map(space => space.id));
     const tabIds = new Set(workspaceList.flatMap(s=>s.tabs.map(tab=>tab.id)));
-    const all = panes().filter(p=>!onlySpace || tabIds.has(p.tab)).map(p => ({...p, title: facts.find(x=>x.address===p.terminal)?.labels?.['sixfold.title'] || p.title}));
-    const list = agents().filter(a=>!onlySpace || a.space===onlySpace);
+    const all = panes().filter(p=>tabIds.has(p.tab)).map(p => ({...p, title: facts.find(x=>x.address===p.terminal)?.labels?.['sixfold.title'] || p.title}));
+    const list = agents().filter(a => workspaceIds.has(a.space));
     const local = all.filter(p => p.tab === f?.tab);
     const total = counts(list);
     const nodeIds = new Set([...facts.map(x=>x.address),...this.workflowNodes.map(x=>x.id)]);
@@ -253,7 +274,7 @@ export default class SixfoldDesk extends View {
       if(child)return child.label || child.id;
       const p = panes().find(p => p.terminal === address);
       const s = spaces().find(s => s.tabs.some(tab => tab.id === p?.tab));
-      return p ? `${s?.name ?? ''} · ${title(p)}` : address === 'external' ? (this.lang() === 'ko' ? '외부' : 'External') : address;
+      return p ? `${s?.machine ? `${this.computerLabel(s.machine)} / ` : ''}${s?.name ?? ''} · ${title(p)}` : address === 'external' ? (this.lang() === 'ko' ? '외부' : 'External') : address;
     };
     const history = recentRoutes(events);
     const paths = flows.length ? routes : history.map((event, lane) => ({ ...event, lane, phase: 'history' }));
@@ -302,6 +323,34 @@ export default class SixfoldDesk extends View {
           .when(active && shared('sixfold.motion')!==false,e=>e.loop('top',{from:0,to:2,period:900})));
     };
     const section = text => div().px(12).pt(13).pb(6).text_size(10).font_bold().text_color(t.dim).child(text);
+    const computerRows = (typeof herdrNative.machines === 'function' ? herdrNative.machines() : [{name:null,layout:'ready'}]).map(machine => {
+      const name = machine.name;
+      const displayName = this.computerLabel(name);
+      const machineSpaces = spaces().filter(space => (space.machine ?? null) === name);
+      const selected = selectedMachine === name;
+      const ready = machine.layout === 'ready';
+      const state = this.lang() === 'ko'
+        ? (ready ? '연결됨' : machine.layout === 'loading' ? '연결 중' : '연결 끊김')
+        : (ready ? 'Connected' : machine.layout === 'loading' ? 'Connecting' : 'Offline');
+      const key = name === null ? 'local' : `remote:${name}`;
+      return h_flex().id(`sf-computer-${key}`).h(29).px(7).gap(6).items_center().rounded(4)
+        .bg(selected ? t.selected : t.surface).hover(style => style.bg(t.hover))
+        .tooltip(name === null ? displayName : `${displayName} · ${name}`)
+        .on_mouse_down('left', (_event, cx) => cx.stop_propagation())
+        .on_click(() => {
+          const remembered = {...shared('sixfold.computing.last-spaces')};
+          if (f?.space) remembered[selectedMachine === null ? 'local' : `remote:${selectedMachine}`] = f.space;
+          setShared('sixfold.computing.last-spaces', remembered);
+          const existing = machineSpaces.find(space => space.id === remembered[key]) || machineSpaces[0];
+          if (!ready) run('app.settings', { section: 'machines' });
+          else if (existing) run('space.select', { id: existing.id });
+          else this.newWorkspace(name);
+        })
+        .child(div().text_size(10).text_color(ready ? t.done : t.blocked).child(ready ? '●' : '○'))
+        .child(div().flex_1().min_w(0).truncate().text_size(11).font_bold().child(displayName))
+        .child(div().text_size(9).text_color(t.dim).child(String(machineSpaces.length)))
+        .child(div().text_size(9).text_color(t.muted).child(state));
+    });
     const groups=workspaceList.map(s=>({s,members:priority(s.tabs.flatMap(tab=>all.filter(p=>p.tab===tab.id)))}));
     const positions={};let offset=0;
     for(const {members} of groups){
@@ -403,7 +452,9 @@ export default class SixfoldDesk extends View {
         .child(this.button('sf-language',w.language,()=>run('sixfold-desk.language'),t)))
       .child(h_flex().px(12).py(9).gap(12).flex_none().children(['blocked','done','working'].map(s => this.badge(s,String(total[s]),t))))
       .child(v_flex().id('sf-scroll').flex_1().min_h(0).overflow_y_scrollbar().mode('always')
-        .child(section(w.spaces)).child(workspaceTree)
+        .child(section(this.lang() === 'ko' ? '컴퓨팅' : 'COMPUTERS'))
+        .child(v_flex().flex_none().px(7).pb(6).gap(3).children(computerRows))
+        .child(section(`${this.computerLabel(selectedMachine)} · ${w.spaces}`)).child(workspaceTree)
         )
       .when(Boolean(currentDocs(this.projectDocs)),e=>e.child(docsSection(this,t)))
       .when(visibleAlerts(this.alerts).length>0, e=>e.child(alertSection(this,t)))
@@ -448,6 +499,6 @@ export default class SixfoldDesk extends View {
       .child(h_flex().h(38).flex_none().px(7).items_center()
         .child(this.button('sf-settings',w.settings,()=>run('app.settings'),t))
         .child(div().flex_1())
-        .child(this.button('sf-new-space','+ Space',()=>openOverlay({mod:'sixfold-new-space',kind:'dialog',width:440,modal:true}),t)));
+        .child(this.button('sf-new-space','+ Space',()=>this.newWorkspace(selectedMachine),t)));
   }
 }

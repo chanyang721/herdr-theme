@@ -1,0 +1,100 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {readFile} from 'node:fs/promises';
+
+// Exercise the sidebar's rendered rows and their callbacks, with two machines
+// whose terminal IDs overlap. Remote IDs must stay qualified through navigation.
+test('computer selection scopes workspaces and agents and restores each selection', async()=>{
+  const rows=new Map(),calls=[],state={};
+  function element(){
+    let proxy;
+    proxy=new Proxy({}, {get(_target,key){
+      if(key==='then')return undefined;
+      if(key==='when')return (condition,fn)=>{if(condition)fn(proxy);return proxy;};
+      if(key==='id')return id=>{rows.set(id,proxy);return proxy;};
+      if(key==='on_click')return fn=>{proxy.click=fn;return proxy;};
+      if(key==='click')return _target.click;
+      return ()=>proxy;
+    },set(target,key,value){target[key]=value;return true;}});
+    return proxy;
+  }
+  const spaces=[
+    {id:'home-a',machine:null,name:'Home A',tabs:[{id:'ha'}]},
+    {id:'home-b',machine:null,name:'Home B',tabs:[{id:'hb'}]},
+    {id:'worker/a',machine:'worker',name:'Remote A',tabs:[{id:'worker/ta'}]},
+    {id:'worker/b',machine:'worker',name:'Remote B',tabs:[{id:'worker/tb'}]},
+  ];
+  let focus={space:'home-b',tab:'hb'},order;
+  const agents=[{address:'t1',space:'home-b',status:'blocked'}, {address:'worker/t1',space:'worker/a',status:'working'}];
+  const runtime={
+    View:class {},div:element,svg:element,image:element,h_flex:element,v_flex:element,
+    props:()=>({role:'sidebar'}),theme:()=>({}),focused:()=>focus,spaces:()=>spaces,
+    agents:()=>agents,panes:()=>[],terminals:()=>[],window:()=>({}),layout:()=>({}),
+    machines:()=>[{name:null,layout:'ready'},{name:'worker',layout:'ready'},{name:'empty',layout:'ready'},{name:'offline',layout:'unavailable'}],
+    shared:key=>state[key],setShared:(key,value)=>{state[key]=value;},setAgentOrder:list=>{order=list;},
+    run:(command,args)=>calls.push({command,args}),openOverlay:args=>calls.push({overlay:args}),
+  };
+  globalThis.__computersRuntime=runtime;
+  let source=await readFile(new URL('../mods/sixfold-desk/main.js',import.meta.url),'utf8');
+  source=source.replace(/import \{ View, div, svg, image \} from 'gpui-kit';/,'const {View,div,svg,image}=globalThis.__computersRuntime;')
+    .replace(/import \{ h_flex, v_flex \} from 'gpui-base';/,'const {h_flex,v_flex}=globalThis.__computersRuntime;')
+    .replace(/import \* as herdrNative from 'herdr';/,'const herdrNative=globalThis.__computersRuntime;')
+    .replace(/import \{([^}]+)\} from 'herdr';/,'const {$1}=globalThis.__computersRuntime;')
+    .replace(/import \{ watchDocs, currentDocs, docsSection \} from '.\/docs.js';/,'const currentDocs=()=>null;')
+    .replace(/import \{ watchAlerts, alertSection, visibleAlerts \} from '.\/alerts.js';/,'const visibleAlerts=()=>[];');
+  for(const name of ['model','flow','workflow','pipeline'])source=source.replace(`'./${name}.js'`,JSON.stringify(new URL(`../mods/sixfold-desk/${name}.js`,import.meta.url).href));
+  // A path is never painted in this test; avoid loading the native path builder.
+  source=source.replace(/import \{ pipeline \} from [^;]+;/,'const pipeline=()=>{throw Error("unexpected path");};');
+  try{
+    const {default:Sidebar}=await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
+    const view=new Sidebar();
+    Object.assign(view,{workflowNodes:[],workflowEvents:[],messageEvents:[],activeFlows:[],pendingFlows:[],queuedRoutes:[],workspaceIcons:{},expandedAgents:new Set(),readMessages:{},computers:{}});
+    const render=()=>{rows.clear();view.render();};
+    render();
+    assert(rows.has('sf-space-home-a'));assert(rows.has('sf-space-home-b'));
+    assert(!rows.has('sf-space-worker/a'));assert.deepEqual(order,['t1']);
+    rows.get('sf-computer-remote:worker').click();
+    assert.deepEqual(calls.at(-1),{command:'space.select',args:{id:'worker/a'}});
+    focus={space:'worker/b',tab:'worker/tb'};render();
+    assert(rows.has('sf-space-worker/b'));assert(!rows.has('sf-space-home-b'));
+    assert.deepEqual(order,['worker/t1']);
+    rows.get('sf-computer-local').click();
+    assert.deepEqual(calls.at(-1),{command:'space.select',args:{id:'home-b'}});
+    focus={space:'home-b',tab:'hb'};render();
+    rows.get('sf-computer-remote:worker').click();
+    assert.equal(calls.at(-1).args.id,'worker/b');
+    rows.get('sf-computer-remote:empty').click();
+    assert.equal(calls.at(-1).overlay.props.machine,'empty');
+    assert.equal(calls.at(-1).overlay.mod,'sixfold-new-space');
+    rows.get('sf-computer-remote:offline').click();
+    assert.deepEqual(calls.at(-1),{command:'app.settings',args:{section:'machines'}});
+    view.computers={local:{label:'My PC'},machines:{worker:{label:'Build',folder:'/projects'}}};
+    view.newWorkspace('worker');
+    assert.deepEqual(calls.at(-1).overlay.props,{machine:'worker',machineLabel:'Build',folder:'/projects'});
+  }finally{delete globalThis.__computersRuntime;}
+});
+
+test('remote creation stays on its original machine and uses remote home for a blank folder', async()=>{
+  let inputs={machine:'worker',machineLabel:'Build'},called,task,closed=false;
+  const runtime={
+    props:()=>inputs,home:()=>'/LOCAL-HOME',run:(command,args)=>{called={command,args};},
+    closeOverlay:()=>{closed=true;},
+    knownAgents:()=>{throw Error('must not inspect local agent installation for a remote terminal');},
+  };
+  globalThis.__remoteCreateRuntime=runtime;
+  let source=await readFile(new URL('../mods/sixfold-new-space/main.js',import.meta.url),'utf8');
+  source=source.replace(/import \{ View, div \} from 'gpui-kit';/,'class View {}')
+    .replace(/import \{[^}]+\} from 'gpui-base';/,'const InputState={new:({value=""})=>({value:()=>value,on(){},focus(){}})};')
+    .replace(/import \{([^}]+)\} from 'herdr';/,'const {$1}=globalThis.__remoteCreateRuntime;');
+  try{
+    const {default:Dialog}=await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
+    const view=new Dialog();view.init({},{});view.name={value:()=> 'Remote project'};
+    const cx={notify(){},spawn(fn){task=()=>fn(cx);}};
+    view.create(cx);
+    // A focus change cannot retarget an already opened creation dialog.
+    inputs={machine:'another',overlay:'dialog'};
+    await task();
+    assert.deepEqual(called,{command:'space.new',args:{name:'Remote project',machine:'worker',tab:'터미널'}});
+    assert.equal(closed,true);assert.equal(view.error,'');
+  }finally{delete globalThis.__remoteCreateRuntime;}
+});

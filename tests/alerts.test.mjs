@@ -21,6 +21,7 @@ test('alerts recover after cold install and partial writes without a folder watc
     },
   };
   let source = await readFile(new URL('../mods/sixfold-desk/alerts.js', import.meta.url), 'utf8');
+  source = source.replace(/\r\n/g, '\n');
   source = source.replace(/^import .* from 'gpui-kit';\n/m, '');
   source = source.replace(/^import .* from 'gpui-base';\n/m, '');
   source = source.replace(/^import .* from 'herdr';/m,

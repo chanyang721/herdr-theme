@@ -7,6 +7,7 @@ test('project document index recovers after cold install and partial writes and 
   const cx={notify(){notifications++;},spawn(task){const p=task(cx);tasks.push(p);return p;},timer:{every(ms,fn){assert.equal(ms,2000);refresh=fn;}}};
   globalThis.__docsRuntime={appHome:()=>'/app',spaces:()=>[{id:active,name:active,active:true}],readTextFile:async()=>{if(text===undefined)throw Error('missing');return text;}};
   let source=await readFile(new URL('../mods/sixfold-desk/docs.js',import.meta.url),'utf8');
+  source=source.replace(/\r\n/g,'\n');
   source=source.replace(/^import .* from 'gpui-kit';\n/m,'').replace(/^import .* from 'gpui-base';\n/m,'').replace(/^import .* from 'herdr';/m,'const {appHome,readTextFile,spaces}=globalThis.__docsRuntime;');
   try{
     const {watchDocs,currentDocs}=await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
@@ -30,6 +31,7 @@ test('all document open actions report nonzero exits and clear errors after a su
   const runtime={div:element,h_flex:element,v_flex:element,spaces:()=>[{id:active,name:active,active:true}],exec:async(command,args)=>{calls.push({command,args});return {code,stderr:'not opened'};}};
   globalThis.__docsActions=runtime;
   let source=await readFile(new URL('../mods/sixfold-desk/docs.js',import.meta.url),'utf8');
+  source=source.replace(/\r\n/g,'\n');
   source=source.replace(/^import .* from 'gpui-kit';\n/m,'').replace(/^import .* from 'gpui-base';\n/m,'').replace(/^import .* from 'herdr';/m,'const {div,h_flex,v_flex,spaces,exec}=globalThis.__docsActions;');
   const view={projectDocs:{spaces:{Demo:{folder:'/docs with spaces',files:[{name:'guide.md',path:'/source/guide.md',mtime:12}]}}}};
   const cx={notify(){notifications++;},spawn(task){const promise=task(cx);tasks.push(promise);return promise;}};
