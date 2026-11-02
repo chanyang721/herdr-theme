@@ -20,7 +20,7 @@ Left: a 224 px sidebar with the Herdr Theme title, language toggle, blocked/done
 workspace navigation and agent rows under every workspace, even when inactive. Each group has a rounded border, more space between groups and a stable colored header marker.
 Workspace headers drag to reorder; incoming message badges update without changing focus. The center shows the active tab's actual terminals.
 Each pane has a 27 px title/status header, 5 px gaps and a 2 px accent border while focused.
-A 30 px footer names the actual input target. The optional Files/Changes panel starts hidden at 340 px.
+A 30 px footer names the actual input target. The optional Files/Changes panel starts hidden at 480 px, opened by a 40 px right activity rail. Optional usage integration adds its own rail button.
 The toolbar is 32 px and native tabs 34 px. Terminal fonts inherit personal settings.
 Night colors use #111821 terminals, #151f2a chrome, #79d1dc focus, #f5b56c blockers and #91cfaa completion.
 Day uses #f8fafb terminals and #176878 focus. Layout theme selection follows system appearance.
@@ -66,3 +66,5 @@ The package must not contain private project folders or session IDs. Demo fixtur
 - The gallery preview comes from actual rendered, clearly labelled demo terminals.
 
 Message counts reconcile every 250 ms independently of focus and file watcher consumers. Partial writes retain the previous snapshot. Optional routing files may be absent. Common-to-project routing uses an atomic idle guard and protects drafts, recording and pending questions; queue drain runs every two seconds while configured. Common alerts are a separate compact section above message flow and show only items needing the user. Subagent trees expand under each parent from local workflow metadata, including explicit status sources and labelled activity estimates. Parent agents remain visible without children. Workspace headers show agent totals but no message sum.
+
+Independent document-viewer and system-metrics packages, each with its own recipe and native demo, are published at https://github.com/chanyang721/herdr-workspace-mods. These optional mods are separate from the base layout.
