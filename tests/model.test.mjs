@@ -71,3 +71,10 @@ test('native sends without an observed start stay unread even when the target is
   const events=[{target:'a',at:1000,started:true}];
   assert.equal(unreadCount(events,'a',readThrough(events,[{address:'a',status:'idle'}],null,{},7000)),0);
 });
+
+test('a later confirmed send cannot mark an earlier unconfirmed send read',()=>{
+  const events=[{target:'a',at:1000,started:null},{target:'a',at:2000,started:true}];
+  const agents=[{address:'a',status:'done'}];
+  assert.equal(unreadCount(events,'a',readThrough(events,agents,null,{},8000)),2);
+  assert.equal(unreadCount(events,'a',readThrough(events,agents,null,{a:1000},8000)),0);
+});
