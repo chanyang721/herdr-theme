@@ -1,4 +1,4 @@
-import json,os,sys,tempfile,unittest
+import json,os,sys,tempfile,unittest,unicodedata
 from pathlib import Path
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'scripts'))
 from collect_docs import collect,documents,owned_links
@@ -51,3 +51,19 @@ class DocumentTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as root:
             warnings=[];self.assertEqual(documents([str(Path(root)/'missing')],warnings),[])
             self.assertEqual(warnings,['source_unavailable'])
+
+    def test_korean_filename_and_match_accept_both_nfc_and_nfd_without_renaming(self):
+        for filename_form in ('NFC','NFD'):
+            for match_form in ('NFC','NFD'):
+                with self.subTest(filename=filename_form,match=match_form),tempfile.TemporaryDirectory() as root:
+                    folder=Path(root)
+                    name=unicodedata.normalize(filename_form,'메디홈즈-보고서-PMO.md')
+                    original=folder/name;original.write_text('original document')
+                    original_names=os.listdir(folder)
+                    term=unicodedata.normalize(match_form,'메디홈즈')
+                    rows=documents([{'path':str(folder),'match':[term]}])
+                    self.assertEqual(len(rows),1)
+                    self.assertEqual(unicodedata.normalize('NFC',rows[0]['name']),'메디홈즈-보고서-PMO.md')
+                    self.assertEqual(Path(rows[0]['path']).read_text(),'original document')
+                    self.assertEqual(os.listdir(folder),original_names)
+                    self.assertEqual(documents([{'path':str(folder),'match':'다른프로젝트'}]),[])
