@@ -35,7 +35,7 @@ native tabs, active-tab block with custom pane headers, optional Files/Changes s
 `mods/sixfold-desk` renders sidebar/toolbar/pane/footer through `props.role`, using `spaces`, `panes`,
 `agents`, `terminals`, `focused`, `theme`, `shared`, `setShared`, `setAgentOrder`, `run` and `nextCommand`.
 The optional TUI attachment is a Python PTY relay. `balance_grid.py` uses `doc.get` / `doc.set` over `hc connect`.
-Claude and Codex glyphs are original monochrome SVGs. Active glyphs gain color and move subtly; Motion off disables movement. A native Bezier curve connects the actual sender and recipient rows inside the scrolling workspace tree; a moving clip reveals its bright transmission segment once. There are no external art assets. The preview in Settings is an original SVG schematic; `preview.png` is a real native capture.
+Claude and Codex glyphs are original monochrome SVGs. Active glyphs gain color and move subtly; Motion off disables movement. Workspace headers support local project icons configured by workspace ID or exact name; unconfigured projects retain the colored letter mark. A native Bezier curve connects the actual sender and recipient rows inside the scrolling workspace tree; a moving clip reveals its bright transmission segment once. There are no external art assets. The preview in Settings is an original SVG schematic; `preview.png` is a real native capture.
 
 ## Watch out
 
