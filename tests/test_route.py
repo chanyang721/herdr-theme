@@ -67,6 +67,23 @@ class RouteTests(unittest.TestCase):
         live[-1]['status'] = 'done'
         self.assertNotIn('p2', route.candidates(spaces, live, 's2', 'Medihomes')[2])
 
+    def test_only_explicit_reply_requests_add_a_completion_report(self):
+        spaces, live = fixture()
+        for reply in (False, True):
+            sent = []
+            def call(argv, env=None):
+                if argv[1] == 'get':
+                    return 0, {'state': 'live', 'status': {'state': 'idle'}}
+                if argv[1] == 'read':
+                    return 0, {'text': '• completed\n\n› Ask Codex to do anything'}
+                sent.append(argv[-1])
+                return 0, {'started': True}
+            with patch.object(route, 'call', side_effect=call):
+                route.dispatch({'id': 'test', 'source': 's2', 'project': 'Medihomes',
+                                'text': 'hi', 'reply': reply}, spaces, live)
+            self.assertEqual('한 번 회신하세요' in sent[0], reply)
+            self.assertEqual('진행·완료 보고는 보내지 마세요' in sent[0], not reply)
+
     def test_unknown_project_or_non_common_source_is_not_guessed(self):
         spaces, live = fixture()
         with self.assertRaises(ValueError):
