@@ -263,7 +263,7 @@ export default class SixfoldDesk extends View {
     const groups=workspaceList.map(s=>({s,members:priority(s.tabs.flatMap(tab=>all.filter(p=>p.tab===tab.id)))}));
     const positions={};let offset=0;
     for(const {members} of groups){
-      let row=offset+50;
+      let row=offset+53;
       for (const p of members) {
         positions[p.terminal]=row;row+=30;
         if(this.expandedAgents.has(p.terminal)) {
@@ -272,9 +272,11 @@ export default class SixfoldDesk extends View {
           }
         }
       }
-      offset=row-7;
+      offset=row-3;
     }
-    const spaceRows=groups.map(({s,members})=>v_flex().id(`sf-space-${s.id}`).ml(7).mr(41).mb(9).gap(2).flex_none()
+    const workspaceColor = s => s.name==='공통' ? t.accent : s.name==='PeaceMinusOne' ? t.ansi5 : s.name==='Medihomes' ? t.ansi6
+      : [t.accent,t.ansi5,t.ansi6,t.ansi3,t.ansi2,t.ansi4][[...s.id].reduce((hash,c)=>(hash*31+c.charCodeAt(0))>>>0,0)%6];
+    const spaceRows=groups.map(({s,members})=>v_flex().id(`sf-space-${s.id}`).ml(7).mr(41).mb(12).gap(2).flex_none().rounded(6).border(1).border_color(t.border)
       .when(this.dragSpace && this.overSpace===s.id && this.dragSpace!==s.id,e=>e.border_t(2).border_color(t.accent))
       .on_mouse_move((_event,cx)=>{
         const source=spaces().find(x=>x.id===this.dragSpace);
@@ -290,12 +292,13 @@ export default class SixfoldDesk extends View {
         } else if(source.id===s.id)run('space.select',{id:s.id});
         cx.stop_propagation();cx.notify();
       })
-      .child(h_flex().h(34).flex_none().px(8).items_center().gap(5).rounded(5).bg(s.active?t.selected:t.surface).text_size(12).font_bold()
+      .child(h_flex().h(36).flex_none().pl(6).pr(8).items_center().gap(6).rounded(5).border_l(3).border_color(workspaceColor(s)).bg(s.active?t.selected:t.surface).text_size(12).font_bold()
         .when(this.dragSpace===s.id && this.overSpace!==s.id,e=>e.opacity(0.5))
         .when(this.dragSpace && this.overSpace===s.id && this.dragSpace!==s.id,e=>e.border(1).border_color(t.accent))
         .tooltip(this.lang()==='ko'?'드래그하여 순서 변경':'Drag to reorder')
         .on_mouse_down('left',()=>{this.dragSpace=s.id;this.overSpace=s.id;})
-        .child(div().flex_1().min_w(0).truncate().child(s.name))
+        .child(div().size(18).flex_none().rounded(4).bg(workspaceColor(s)).text_color(t.background).text_size(10).font_bold().items_center().justify_center().child(s.name==='공통'?'공':s.name.slice(0,1).toUpperCase()))
+        .child(div().flex_1().min_w(0).truncate().text_color(s.active?t.foreground:t.muted).child(s.name))
         .child(div().text_size(10).text_color(t.muted).child(String(members.length))))
       .children(members.map(p=>{
         const tab=s.tabs.find(tab=>tab.id===p.tab);
