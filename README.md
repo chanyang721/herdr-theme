@@ -17,7 +17,7 @@ Coordinate coding agents across projects from one live sidebar. See every worksp
 | Project icons, colors and group borders | Recognize each project's agents at a glance. |
 | Focus that stays yours | Messages and status changes keep your current input target in place. |
 
-Message tracing and subagent collection are optional local integrations described below. The layout also provides Korean/English labels, light/dark palettes, keyboard navigation and drag ordering. It preserves the active tab's existing split tree; the default six-pane arrangement is one way to use it.
+Native message events and optional subagent collection are described below. The layout also provides Korean/English labels, light/dark palettes, keyboard navigation and drag ordering. It preserves the active tab's existing split tree; the default six-pane arrangement is one way to use it.
 
 The public preview uses labelled demo programs, not real projects, conversations or usage metrics.
 
@@ -130,30 +130,30 @@ log write is needed. Events include sender, recipient, time and the observed
 `started` result, never message text. An unknown `started` result does not confirm
 that the recipient began processing the message.
 
-Install both matching app and core builds to use this mode. Older apps fall back
-to the optional local trace below. When the native API is available, the sidebar
-does not also read the legacy log, so one send cannot animate twice.
-
-### Legacy local trace
+Use the installed core CLI directly:
 
 ```sh
-python3 scripts/install_trace.py
-# Add the printed PATH export to your shell startup file, then start a new shell.
+hc send TARGET "message"
 ```
 
-The optional `hc` launcher forwards commands to `herdr-core`. Successful `hc send` calls append
-only sender, recipient and time to a local bounded log (1024 events); message text is never stored.
-Herdr Theme connects actual sender and recipient rows with native Bezier curves, animates each message independently, highlights its endpoints,
-and shows unread counters until the target finishes working or is focused. Read positions are kept in `data/sixfold/messages-read.json`, so a restart does not recount the log. Motion can be disabled in the toolbar.
-Native senders use `HC_TERMINAL_ID`; bridging older TUI senders requires your own private
-`~/.local/state/herdr-sixfold/migration-map.local.json` mapping. Keep that file out of Git.
-`python3 scripts/install_trace.py --default-launcher` also routes the known `~/.local/bin/hc` core
-symlink through this observer, so existing shells do not need a PATH refresh. Unknown launchers
-are left untouched. Direct RPC calls bypassing the launcher are not observed.
-Up to four colored routes animate concurrently, each making one trip and then stopping. Recent
-routes retain directional counts, and their replay control never re-sends a message. Per-row Ping
-buttons and the duplicate attention panel are removed. The animation reports a successful send,
-not a read receipt; inspect the agent’s actual reply for PONG. It never forces a blocked prompt.
+Install both matching app and core builds for native message animations. The
+Python tracing launcher has been removed. Older apps can still display an existing
+`data/sixfold/messages.json` history, but direct sends do not append to that file.
+When the native API is available, the sidebar does not read the legacy log.
+An animation indicates a send event, not a read receipt or confirmed submission.
+
+### Updating an installation that used the tracing launcher
+
+Remove `~/.local/share/herdr-sixfold/bin` from your PATH and shell startup files,
+and stop calling `hc_trace.py` explicitly. Verify that `hc` resolves to the installed
+core CLI (`Get-Command hc -All` on PowerShell, `command -v hc` on POSIX shells).
+If `~/.local/bin/hc` is a symlink to the tracing launcher, restore its previous core
+CLI target; leave unrelated launchers untouched. After checking their contents,
+remove the old `hc_trace.py`, `bin/hc`, and `bin/hc.cmd` under
+`~/.local/share/herdr-sixfold/`. Existing message history and read positions can stay.
+Update installed copies of `scripts/route.py` and `scripts/collect_workflow.py` too:
+they now call `hc` directly instead of the tracing launcher. Existing shells may
+retain their old PATH until refreshed.
 
 ## Optional app voice routing
 

@@ -13,7 +13,7 @@ import uuid
 APP_HOME = Path(os.environ.get('HERDR_APP_HOME', Path.home() / '.config/herdr-app'))
 DATA = APP_HOME / 'data/sixfold'
 QUEUE = DATA / 'routing-queue.json'
-HC = Path.home() / '.local/share/herdr-sixfold/bin/hc'
+HC = 'hc'
 ALIASES = {'pmo': 'peaceminusone', '피마원': 'peaceminusone', '메디홈즈': 'medihomes'}
 # Only idle has an atomic hc send guard. Done may be awaiting a user answer.
 READY = {'idle'}

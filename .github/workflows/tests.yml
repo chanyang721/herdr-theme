@@ -23,7 +23,7 @@ jobs:
       - run: node --check mods/sixfold-new-space/main.js
 
   python:
-    # The optional collectors and legacy trace use POSIX fcntl and executable fixtures.
+    # The optional collectors use POSIX fcntl and executable fixtures.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

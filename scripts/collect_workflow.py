@@ -16,7 +16,7 @@ import uuid
 BASE = Path.home() / 'Library' / 'Application Support' / 'LukukuWatch'
 DATA = Path(os.environ.get('HERDR_APP_HOME', Path.home() / '.config' / 'herdr-app')) / 'data' / 'sixfold'
 OUTPUT = DATA / 'workflow.json'
-HC = str(Path.home() / '.local/share/herdr-sixfold/bin/hc')
+HC = 'hc'
 HERDR = shutil.which('herdr') or '/opt/homebrew/bin/herdr'
 BRIDGES = Path.home() / '.local' / 'state' / 'herdr-sixfold' / 'migration-map.local.json'
 CLAUDE = Path.home() / '.claude'
