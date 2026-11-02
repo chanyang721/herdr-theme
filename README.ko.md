@@ -15,8 +15,8 @@
 ## 설치
 
 ```sh
-git clone https://github.com/chanyang721/herdr-sixfold.git
-cd herdr-sixfold
+git clone https://github.com/chanyang721/herdr-theme.git
+cd herdr-theme
 python3 scripts/install.py
 herdr-app check ~/.config/herdr-app/mods/sixfold-desk
 herdr-app do layout.switch --name sixfold

@@ -26,8 +26,8 @@ The preview uses explicitly labelled demo programs. It contains no real projects
 Requires Herdr app 0.1.11 or newer and Python 3.
 
 ```sh
-git clone https://github.com/chanyang721/herdr-sixfold.git
-cd herdr-sixfold
+git clone https://github.com/chanyang721/herdr-theme.git
+cd herdr-theme
 python3 scripts/install.py
 herdr-app check ~/.config/herdr-app/mods/sixfold-desk
 herdr-app do layout.switch --name sixfold
@@ -77,7 +77,7 @@ voice connection stay where they are.
 Inside an available app terminal:
 
 ```sh
-python3 /path/to/herdr-sixfold/scripts/tui_bridge.py --session default --pane YOUR_SOURCE_PANE
+python3 /path/to/herdr-theme/scripts/tui_bridge.py --session default --pane YOUR_SOURCE_PANE
 ```
 
 The bridge reports source status once per second, forwards input and resize, and uses a per-source lock.
