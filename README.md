@@ -10,7 +10,9 @@ Workspace navigation, agent attention, numbered panes and a clear input target s
 ## What it does
 
 - Keeps the active tab's real split tree; six terminals work particularly well as a 3 × 2 grid.
-- Shows workspaces, pane titles and agent status in a compact 224 px sidebar.
+- Shows every workspace and its agents together, independent of the selected workspace.
+- Reorders workspace headers by drag and drop using the app’s persisted space order.
+- Sends an explicit Ping to an agent; ↑ means sent, not a verified reply.
 - Makes keyboard focus visible with a 2 px cyan border and an input-target footer.
 - Keeps blockers and unseen completions visible; navigation is explicit, never triggered by a new status.
 - Offers Korean/English labels and matching light/dark palettes.
@@ -83,6 +85,23 @@ It never sends an agent prompt. Closing the attachment leaves the source agent a
 Microphone routing and automatic dictation submission are separate integrations, not features guaranteed
 by a color theme. No microphone permission is granted by installing Sixfold.
 
+## Optional message flow
+
+```sh
+python3 scripts/install_trace.py
+# Add the printed PATH export to your shell startup file, then start a new shell.
+```
+
+The optional `hc` launcher forwards commands to `herdr-core`. Successful `hc send` calls append
+only sender, recipient and time to a local bounded log (32 events); message text is never stored.
+Sixfold displays the latest agent-to-agent route as a short animated pipe, highlights its endpoints,
+and shows unread counters until the target is focused. Motion can be disabled in the toolbar.
+Native senders use `HC_TERMINAL_ID`; bridging older TUI senders requires your own private
+`~/.local/state/herdr-sixfold/migration-map.local.json` mapping. Keep that file out of Git.
+Direct RPC calls or send paths bypassing this launcher are not observed. The animation reports a
+successful send, not a read receipt. Ping likewise reports sending or failure; inspect the agent’s
+actual reply for PONG. It never forces a blocked permission prompt.
+
 ## What it runs
 
 The UI uses Herdr's live workspace/agent APIs and navigation commands, with no network requests.
@@ -93,6 +112,7 @@ No private configuration, account data or session mapping belongs in this reposi
 
 ```sh
 npm test
+python3 -m unittest discover -s tests -p 'test_*.py'
 node --check mods/sixfold-desk/main.js
 herdr-app check ~/.config/herdr-app/mods/sixfold-desk
 ```

@@ -1,15 +1,34 @@
 import { View, div } from 'gpui-kit';
 import { h_flex, v_flex } from 'gpui-base';
-import { agents, panes, spaces, terminals, focused, props, theme, run, shared, setShared, setAgentOrder, nextCommand, exec, window } from 'herdr';
+import { agents, panes, spaces, terminals, focused, props, theme, run, shared, setShared, setAgentOrder, nextCommand, exec, hc, window, readTextFile, appHome } from 'herdr';
 import { WORDS, counts, attention, title, cycle } from './model.js';
 
 const marks = { blocked: '!', done: '✓', working: '●', idle: '○' };
 
 export default class SixfoldDesk extends View {
   init(_props, cx) {
-    this.focusKey = null;
-    this.bridgeError = false;
+    this.dragSpace = null;
+    this.overSpace = null;
+    this.pings = {};
+    this.messageEvents = [];
+    this.seenMessages = new Set();
+    this.flashUntil = 0;
     if (props()?.role !== 'sidebar') return;
+    const refresh = cx => cx.spawn(async cx => {
+      try {
+        const text = await readTextFile(`${appHome()}/data/sixfold/messages.json`);
+        const events = text ? JSON.parse(text).events ?? [] : [];
+        if (events.at(-1)?.id !== this.messageEvents.at(-1)?.id) {
+          this.messageEvents = events;
+          this.flashUntil = Date.now()+2400;
+          cx.notify();
+        } else if (this.flashUntil && Date.now()>this.flashUntil) {
+          this.flashUntil=0;cx.notify();
+        }
+      } catch { /* A partial or absent optional log does not affect terminals. */ }
+    });
+    refresh(cx);
+    cx.timer.every(1000, refresh);
     cx.spawn(async (cx) => {
       for (;;) {
         const command = await nextCommand();
@@ -47,21 +66,16 @@ export default class SixfoldDesk extends View {
       .child(div().font_bold().child(marks[status] ?? '·')).child(text);
   }
 
-  bridgeFocus(cx) {
-    const f = focused();
-    if (!f?.terminal) return;
-    const terminal = terminals().find(p => p.address === f.terminal);
-    const source = terminal?.labels?.['sixfold.source-pane'];
-    const session = terminal?.labels?.['sixfold.source-session'];
-    if (!source || !session) { this.focusKey = null; return; }
-    const key = `${f.terminal}/${source}`;
-    if (this.focusKey === key) return;
-    this.focusKey = key;
+  ping(address, cx) {
+    if (this.pings[address] === '…') return;
+    this.pings[address] = '…';
+    cx.notify();
     cx.spawn(async cx => {
       try {
-        const r = await exec('herdr', ['--session', session, 'agent', 'focus', source]);
-        this.bridgeError = r.code !== 0;
-      } catch { this.bridgeError = true; }
+        const result = await hc(['send', address,
+          '[Sixfold ping] 연결 확인입니다. 다른 작업은 하지 말고 PONG이라고만 답하세요.']);
+        this.pings[address] = result.code === 0 ? '↑' : '!';
+      } catch { this.pings[address] = '!'; }
       cx.notify();
     });
   }
@@ -79,6 +93,12 @@ export default class SixfoldDesk extends View {
     const list = agents().filter(a=>!onlySpace || a.space===onlySpace);
     const local = all.filter(p => p.tab === f?.tab);
     const total = counts(list);
+    const events = (this.messageEvents ?? []).filter(e=>facts.some(x=>x.address===e.source)&&facts.some(x=>x.address===e.target));
+    for (const event of events) if (event.target===f?.terminal) this.seenMessages.add(event.id);
+    const unseen = address => events.filter(e=>e.target===address&&!this.seenMessages.has(e.id)).length;
+    const last = events.at(-1);
+    const moving = Boolean(last && last.at+2400>Date.now() && shared('sixfold.motion')!==false);
+    const endpoint = address => moving && (last.source===address || last.target===address);
     if (role === 'pane') {
       const p = all.find(p => p.pane === props()?.pane);
       if (!p) return div();
@@ -106,25 +126,54 @@ export default class SixfoldDesk extends View {
         .child(this.button('sf-blocked', `! ${w.blocked}`, () => run('sixfold-desk.next-blocked'), t))
         .child(this.button('sf-done', `✓ ${w.done}`, () => run('sixfold-desk.next-done'), t))
         .child(this.button('sf-zoom', w.zoom, () => run('pane.zoom'), t))
+        .child(this.button('sf-motion', shared('sixfold.motion')===false?'Motion off':'Motion on',()=>setShared('sixfold.motion',shared('sixfold.motion')===false),t))
         .child(this.button('sf-review', w.review, () => { run('layout.select', {stack:'panel-body',child:'changes'}); run('layout.toggle',{id:'panel'}); }, t))
         .child(this.button('sf-files', w.files, () => { run('layout.select', {stack:'panel-body',child:'files'}); run('layout.toggle',{id:'panel'}); }, t));
     }
-    // Live TUI connections route actual terminal focus in the bridge process.
-    // Rendering a background layout must never move another client's focus.
+    // Reading a background workspace must never change another client's focus.
     setAgentOrder(list.map(a => a.address));
     const section = text => div().px(12).pt(13).pb(6).text_size(10).font_bold().text_color(t.dim).child(text);
-    const spaceRows = workspaceList.map(s=>v_flex().id(`sf-space-${s.id}`).mx(7).mb(9).gap(2)
+    const spaceRows = workspaceList.map((s,i)=>v_flex().id(`sf-space-${s.id}`).mx(7).mb(9).gap(2)
       .child(h_flex().p(8).gap(5).rounded(5).bg(s.active?t.selected:t.surface).text_size(12).font_bold()
-        .on_click(()=>run('space.select',{id:s.id}))
+         .when(this.dragSpace === s.id && this.overSpace !== s.id, e=>e.opacity(0.5))
+        .when(this.dragSpace && this.overSpace === s.id && this.dragSpace !== s.id,
+          e=>e.border(1).border_color(t.accent))
+        .tooltip(this.lang()==='ko'?'드래그하여 순서 변경':'Drag to reorder')
+        .on_mouse_down('left',()=>{this.dragSpace=s.id;this.overSpace=s.id;})
+        .on_mouse_move((_event,cx)=>{
+          const source=spaces().find(x=>x.id===this.dragSpace);
+          if (source && (source.machine??null)===(s.machine??null) && this.overSpace!==s.id) {
+            this.overSpace=s.id;cx.notify();
+          }
+        })
+        .on_mouse_up('left',(_event,cx)=>{
+          const source=this.dragSpace;
+          const over=this.overSpace;
+          this.dragSpace=null;this.overSpace=null;
+          if(source && source!==s.id && over===s.id) {
+            const index=spaces().findIndex(x=>x.id===s.id)+1;
+            run('space.move',{id:source,index});
+          } else if(source===s.id) run('space.select',{id:s.id});
+          cx.notify();
+        })
         .child(div().flex_1().min_w(0).truncate().child(s.name))
         .child(div().text_size(10).text_color(t.muted).child(String(s.tabs.reduce((n,tab)=>n+tab.panes,0)))))
       .children(s.tabs.flatMap(tab=>all.filter(p=>p.tab===tab.id).map((p,i)=>h_flex().id(`sf-member-${p.pane}`)
         .px(7).py(6).gap(6).items_center().rounded(4).bg(p.focused?t.selected:t.chrome)
+        .when(endpoint(p.terminal),e=>e.border(1).border_color(t.accent))
         .tooltip(`${s.name} / ${tab.name} / ${title(p)}`)
         .hover(h=>h.bg(t.hover)).on_click(()=>{run('tab.select',{id:tab.id});run('pane.focus',{pane:p.pane});})
         .child(div().w(16).flex_none().text_size(10).font_bold().text_color(p.focused?t.accent:t.dim).child(String(i+1).padStart(2,'0')))
         .child(div().flex_1().min_w(0).truncate().text_size(11).child(title(p)))
-        .child(this.badge(p.status,'',t))))));
+        .when(unseen(p.terminal)>0,e=>e.child(div().px(4).rounded(3).bg(t.accent).text_color(t.background).text_size(10).child(String(unseen(p.terminal)))))
+        .child(this.badge(p.status,'',t))
+        .child(div().id(`sf-ping-${p.terminal}`).px(4).py(2).rounded(3).text_size(10).text_color(t.accent)
+          .hover(h=>h.bg(t.hover))
+          .tooltip(this.lang()==='ko'?'핑 보내기 · ↑ 전송됨, ! 실패 (응답 확인과 별개)':'Send ping · ↑ sent, ! failed (not an acknowledgment)')
+          .on_mouse_down('left',(_e,cx)=>cx.stop_propagation())
+          .on_mouse_up('left',(_e,cx)=>cx.stop_propagation())
+          .on_click((_e,cx)=>{cx.stop_propagation();this.ping(p.terminal,cx);})
+          .child(this.pings[p.terminal]??'Ping'))))));
     const rows = attention(list).map(a =>
       v_flex().id(`sf-attention-${a.address}`).mx(7).mb(5).p(9).gap(4).rounded(6)
         .bg(t.surface).border(1).border_color(a.status === 'blocked' ? t.blocked : t.border)
@@ -133,6 +182,9 @@ export default class SixfoldDesk extends View {
         .child(div().text_size(12).text_color(t.foreground).child(a.title || a.tab_name))
         .child(div().truncate().text_size(10).text_color(t.muted).child(`${a.space_name} / ${a.tab_name}`)));
     return v_flex().id('sixfold-sidebar').size_full().bg(t.chrome).text_color(t.foreground)
+      .on_mouse_up('left',(_e,cx)=>{
+        if(this.dragSpace){this.dragSpace=null;this.overSpace=null;cx.notify();}
+      })
       .child(h_flex().h(48).flex_none().pl(76).pr(8).items_center().gap(4)
         .child(div().flex_1().font_bold().text_size(14).child('Sixfold'))
         .child(this.button('sf-language',w.language,()=>run('sixfold-desk.language'),t)))
@@ -142,7 +194,21 @@ export default class SixfoldDesk extends View {
         .child(section(w.attention))
         .children(rows.length ? rows : [div().px(12).pb(8).text_size(11).text_color(t.muted).child(w.empty)])
         )
-      .when(this.bridgeError, e=>e.child(div().p(8).text_color(t.blocked).text_size(11).child('TUI focus link failed')))
+      .when(Boolean(last), e=>{
+        const label=address=>{
+          const p=all.find(p=>p.terminal===address);
+          const s=workspaceList.find(s=>s.tabs.some(tab=>tab.id===p?.tab));
+          return p?`${s?.name??''} / ${title(p)}`:address;
+        };
+        return e.child(v_flex().h(94).flex_none().px(12).py(8).gap(5).bg(t.surface).border_t(1).border_color(t.border)
+          .child(div().text_size(9).text_color(t.dim).child('MESSAGE FLOW'))
+          .child(div().truncate().text_size(10).text_color(t.foreground).child(label(last.source)))
+          .child(div().relative().h(8).w(180)
+            .child(div().absolute().left(0).top(3).h(2).w(180).bg(t.border))
+            .child(div().absolute().left(174).top(0).text_size(9).text_color(t.accent).child('›'))
+            .when(moving,h=>h.child(div().absolute().top(1).left(0).size(6).rounded(3).bg(t.accent).loop('left',{from:0,to:170,period:700}))))
+          .child(div().truncate().text_size(10).text_color(t.accent).child(label(last.target))));
+      })
       .child(h_flex().h(38).flex_none().px(7).items_center()
         .child(this.button('sf-settings',w.settings,()=>run('app.settings'),t))
         .child(div().flex_1())

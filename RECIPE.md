@@ -7,7 +7,8 @@ A compact workspace for several coding agents, designed around equal six-pane gr
 ## What you see
 
 Left: a 224 px sidebar with the Sixfold title, language toggle, blocked/done/working counters,
-workspace navigation and numbered agent/pane rows. The center shows the active tab's actual terminals.
+workspace navigation and numbered agent/pane rows under every workspace, even when inactive.
+Workspace headers drag to reorder; each agent row offers an explicit Ping control. The center shows the active tab's actual terminals.
 Each pane has a 27 px title/status header, 5 px gaps and a 2 px accent border while focused.
 A 30 px footer names the actual input target. The optional Files/Changes panel starts hidden at 340 px.
 The toolbar is 32 px and native tabs 34 px. Terminal fonts inherit personal settings.
@@ -22,7 +23,9 @@ Click a row to focus it. Status changes never automatically jump keyboard focus.
 Blockers precede completions in a separate attention area, with stable source order within each group.
 All controls use the app's live IDs. Keyboard shortcuts are layout-scoped; the current six-pane tab is
 preserved across theme switches. Korean is the initial label language; the language toggle persists English/Korean.
-No animation timer or network request is needed for terminal navigation.
+Terminal navigation never needs a network request. An optional local message log is polled once per second;
+recent successful sends animate a 2.4-second route with endpoint highlighting. The toolbar can disable motion.
+Ping shows send success or failure separately from a verified PONG reply.
 
 ## Built from
 
