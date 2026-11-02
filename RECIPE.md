@@ -8,7 +8,7 @@ A compact workspace for several coding agents, designed around equal six-pane gr
 
 Left: a 224 px sidebar with the Herdr Theme title, language toggle, blocked/done/working counters,
 workspace navigation and numbered agent/pane rows under every workspace, even when inactive.
-Workspace headers drag to reorder; each agent row offers an explicit Ping control. The center shows the active tab's actual terminals.
+Workspace headers drag to reorder; incoming message badges update without changing focus. The center shows the active tab's actual terminals.
 Each pane has a 27 px title/status header, 5 px gaps and a 2 px accent border while focused.
 A 30 px footer names the actual input target. The optional Files/Changes panel starts hidden at 340 px.
 The toolbar is 32 px and native tabs 34 px. Terminal fonts inherit personal settings.
@@ -20,12 +20,13 @@ Day uses #f8fafb terminals and #176878 focus. Layout theme selection follows sys
 Working is a solid dot, blocked an exclamation mark, done a check, idle an empty circle.
 Only reported states count; an unreported shell is never invented as a successful task.
 Click a row to focus it. Status changes never automatically jump keyboard focus.
-Blockers precede completions in a separate attention area, with stable source order within each group.
+Agent rows carry their own status; there is no duplicate attention area or per-agent Ping control.
 All controls use the app's live IDs. Keyboard shortcuts are layout-scoped; the current six-pane tab is
 preserved across theme switches. Korean is the initial label language; the language toggle persists English/Korean.
-Terminal navigation never needs a network request. An optional local message log is polled once per second;
-recent successful sends animate a 2.4-second route with endpoint highlighting. The toolbar can disable motion.
-Ping shows send success or failure separately from a verified PONG reply.
+Terminal navigation never needs a network request. File notifications observe an optional local message log.
+Up to four messages travel along separate native, color-coded routes, once each, with endpoint highlighting.
+Completed routes remain dimly visible with direction-specific counts; replay never re-sends a message.
+The toolbar can disable motion. A logged send is not a read receipt or a verified reply.
 
 ## Built from
 
@@ -53,3 +54,5 @@ The package must not contain private project folders or session IDs. Demo fixtur
 - Both appearances and label languages render correctly.
 - Keyboard pane navigation and optional side panel controls work.
 - The gallery preview comes from actual rendered, clearly labelled demo terminals.
+
+Message counts reconcile every 500 ms independently of focus and file watcher consumers. Partial writes retain the previous snapshot. Optional routing files may be absent. Common-to-project routing uses an atomic idle guard and protects drafts, recording and pending questions; queue drain runs every two seconds while configured. Common alerts are a separate compact section above message flow.

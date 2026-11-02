@@ -13,7 +13,7 @@ Workspace navigation, agent attention, numbered panes and a clear input target s
 - Shows every workspace and its agents together, independent of the selected workspace.
 - Prioritizes blocked, done, working and idle agents within each workspace. Custom monochrome Claude/Codex icons gain color and move subtly while active; sidebar rows have no numbers.
 - Reorders workspace headers by drag and drop using the app’s persisted space order.
-- Sends an explicit Ping to an agent; ↑ means sent, not a verified reply.
+- Shows incoming message counts live, without switching workspaces.
 - Makes keyboard focus visible with a 2 px cyan border and an input-target footer.
 - Keeps blockers and unseen completions visible; navigation is explicit, never triggered by a new status.
 - Offers Korean/English labels and matching light/dark palettes.
@@ -99,9 +99,13 @@ Herdr Theme connects the actual sender and recipient rows with an elbow pipe, mo
 and shows unread counters until the target is focused. Motion can be disabled in the toolbar.
 Native senders use `HC_TERMINAL_ID`; bridging older TUI senders requires your own private
 `~/.local/state/herdr-sixfold/migration-map.local.json` mapping. Keep that file out of Git.
-Direct RPC calls or send paths bypassing this launcher are not observed. The animation reports a
-successful send, not a read receipt. Ping likewise reports sending or failure; inspect the agent’s
-actual reply for PONG. It never forces a blocked permission prompt.
+`python3 scripts/install_trace.py --default-launcher` also routes the known `~/.local/bin/hc` core
+symlink through this observer, so existing shells do not need a PATH refresh. Unknown launchers
+are left untouched. Direct RPC calls bypassing the launcher are not observed.
+Up to four colored routes animate concurrently, each making one trip and then stopping. Recent
+routes retain directional counts, and their replay control never re-sends a message. Per-row Ping
+buttons and the duplicate attention panel are removed. The animation reports a successful send,
+not a read receipt; inspect the agent’s actual reply for PONG. It never forces a blocked prompt.
 
 ## Optional app voice routing
 
@@ -136,3 +140,5 @@ herdr-app check ~/.config/herdr-app/mods/sixfold-desk
 
 Model tests are not a native UI test. Verify a changed layout with `herdr-app status` and an actual screenshot.
 See [RECIPE.md](RECIPE.md) for the reproducible design brief. Apache-2.0.
+
+Incoming message badges reconcile every 500 ms without changing workspace or focus; unchanged snapshots do not redraw. See [COMMON_ROUTING.md](COMMON_ROUTING.md) for Common-to-project slot routing, protected composers and idle fallback. Run `python3 scripts/route.py --enable` to connect this checkout to the sidebar queue drain. The optional common alerts section reads `data/sixfold/alerts.json`; its collector is separate.
