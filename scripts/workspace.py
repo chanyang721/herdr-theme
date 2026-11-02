@@ -52,7 +52,7 @@ def main():
         for terminal,kind in zip(order,['claude','claude','codex','claude','claude','codex']):
             address=terminal['terminal']
             subprocess.run(['hc','label',address,'sixfold.native-agent='+kind],check=True,capture_output=True)
-            command='claude' if kind=='claude' else 'codex --no-daemon'
+            command='unset NO_COLOR; export TERM=xterm-256color COLORTERM=truecolor CLICOLOR=1; '+('claude' if kind=='claude' else 'codex --no-daemon')
             subprocess.run(['hc','send',address,command],check=True,capture_output=True)
     print(json.dumps({'space':new['space'],'tab':new['tab'],'terminals':order},ensure_ascii=False))
 
