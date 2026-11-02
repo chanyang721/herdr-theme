@@ -157,7 +157,12 @@ export default class SixfoldDesk extends View {
   startFlows(cx) {
     while (this.activeFlows.length < 4 && this.pendingFlows.length) {
       const event = this.pendingFlows.shift();
-      if (Date.now() - event.at > 15000) continue;
+      // Freshness was checked on ingestion. A real burst must not expire
+      // merely because earlier packets occupied the four visible lanes.
+      for(const address of [event.source,event.target]) {
+        const node=this.workflowNodes.find(node=>node.id===address);
+        if(node)this.expandedAgents.add(node.terminal);
+      }
       const occupied = new Set(this.activeFlows.map(flow => flow.lane));
       const lane = [0, 1, 2, 3].find(value => !occupied.has(value));
       const flow = { ...event, lane, phase: 'start' };
@@ -304,7 +309,7 @@ export default class SixfoldDesk extends View {
           })
           .child(icon(p,list.find(a=>a.address===p.terminal)?.program ?? p.program))
           .child(div().flex_1().min_w(0).truncate().text_size(11).child(title(p)))
-          .when(unseen(p.terminal)>0,e=>e.child(div().px(4).rounded(3).bg(t.accent).text_color(t.background).text_size(10).child(String(unseen(p.terminal)))))
+          .when(unseen(p.terminal)>0,e=>e.child(div().px(4).rounded(3).bg(t.accent).text_color(t.background).text_size(10).tooltip(this.lang()==='ko'?`읽지 않은 메시지 ${unseen(p.terminal)}개`:`${unseen(p.terminal)} unread messages`).child(String(unseen(p.terminal)))))
           .when(children.length>0,el=>el.child(div().id(`sf-children-${p.terminal}`).px(3).rounded(3).text_size(10).text_color(t.accent)
             .tooltip(this.lang()==='ko'?'서브에이전트 기록 펼치기':'Expand subagents')
             .on_mouse_down('left',(_event,cx)=>cx.stop_propagation())
