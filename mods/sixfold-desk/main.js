@@ -4,6 +4,7 @@ import { agents, panes, spaces, terminals, focused, props, theme, run, shared, s
 import { WORDS, counts, title, cycle, priority } from './model.js';
 
 import { freshMessages, recentRoutes } from './flow.js';
+import { pipeline } from './pipeline.js';
 import { watchAlerts, alertSection, visibleAlerts } from './alerts.js';
 
 const marks = { blocked: '!', done: '✓', working: '●', idle: '○' };
@@ -282,17 +283,8 @@ export default class SixfoldDesk extends View {
     const workspaceTree=v_flex().relative().flex_none().children(spaceRows)
       .children(paths.filter(flow => positions[flow.source] !== undefined && positions[flow.target] !== undefined).map(flow => {
         const from=positions[flow.source], to=positions[flow.target];
-        const top=Math.min(from,to), height=Math.abs(to-from), color=palette[flow.lane];
-        const progress=flow.phase === 'start' && motion ? from-top : to-top;
-        const opacity=flow.phase === 'history' ? 0.2 : flow.phase === 'arrived' ? 0.45 : 0.95;
-        return div().id(`sf-route-${flow.id}`).absolute().right(7+flow.lane*8).top(top).w(33-flow.lane*8).h(height+1)
-          .opacity(opacity).transition('opacity',350)
-          .child(div().absolute().right(0).top(0).w(flow.phase==='history'?1:3).h(height).rounded(2).bg(color))
-          .child(div().absolute().right(0).top(from-top).w(33-flow.lane*8).h(1).bg(color))
-          .child(div().absolute().right(0).top(to-top).w(33-flow.lane*8).h(1).bg(color))
-          .child(div().absolute().left(-4).top(to-top-8).text_size(13).text_color(color).child('‹'))
-          .when(flow.phase !== 'history', el => el.child(div().id(`sf-packet-${flow.id}`).absolute().right(-2).top(progress-5).size(10).rounded(5).bg(color)
-            .when(motion, el => el.transition('top',{duration:1600,easing:'ease-in-out'}))));
+        return pipeline({id:flow.id,width:33-flow.lane*8,from,to,color:palette[flow.lane],phase:flow.phase,motion})
+          .right(7+flow.lane*8);
       }));
     return v_flex().id('sixfold-sidebar').size_full().bg(t.chrome).text_color(t.foreground)
       .on_mouse_up('left',(_e,cx)=>{
