@@ -94,7 +94,7 @@ python3 scripts/install_trace.py
 ```
 
 The optional `hc` launcher forwards commands to `herdr-core`. Successful `hc send` calls append
-only sender, recipient and time to a local bounded log (32 events); message text is never stored.
+only sender, recipient and time to a local bounded log (1024 events); message text is never stored.
 Herdr Theme connects the actual sender and recipient rows with an elbow pipe, moves a dot along it, highlights its endpoints,
 and shows unread counters until the target is focused. Motion can be disabled in the toolbar.
 Native senders use `HC_TERMINAL_ID`; bridging older TUI senders requires your own private
@@ -141,7 +141,7 @@ herdr-app check ~/.config/herdr-app/mods/sixfold-desk
 Model tests are not a native UI test. Verify a changed layout with `herdr-app status` and an actual screenshot.
 See [RECIPE.md](RECIPE.md) for the reproducible design brief. Apache-2.0.
 
-Incoming message badges reconcile every 500 ms without changing workspace or focus; unchanged snapshots do not redraw. See [COMMON_ROUTING.md](COMMON_ROUTING.md) for Common-to-project slot routing, protected composers and idle fallback. Run `python3 scripts/route.py --enable` to connect this checkout to the sidebar queue drain. The optional common alerts section reads `data/sixfold/alerts.json`; its collector is separate.
+Incoming message badges reconcile every 250 ms without changing workspace or focus; unchanged snapshots do not redraw. See [COMMON_ROUTING.md](COMMON_ROUTING.md) for Common-to-project slot routing, protected composers and idle fallback. Run `python3 scripts/route.py --enable` to connect this checkout to the sidebar queue drain. The optional common alerts section reads `data/sixfold/alerts.json`; its collector is separate.
 
 Subagents expand under their parent agent with `▸ N`; parents without children remain visible. New observed delegations expand the corresponding tree and animate a native Bezier pipeline. Counts remain on agent rows, not workspace headers. `scripts/collect_workflow.py` reads Claude metadata, the read-only Codex database and hc parent links to publish `data/sixfold/workflow.json`. It supports `--once`; otherwise it reconciles every three seconds, writing only changes. Estimated activity is labelled. Startup history does not animate, and persistent collector registration is separate.
 

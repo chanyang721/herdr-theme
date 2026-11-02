@@ -23,8 +23,8 @@ Click a row to focus it. Status changes never automatically jump keyboard focus.
 Agent rows carry their own status; there is no duplicate attention area or per-agent Ping control.
 All controls use the app's live IDs. Keyboard shortcuts are layout-scoped; the current six-pane tab is
 preserved across theme switches. Korean is the initial label language; the language toggle persists English/Korean.
-Terminal navigation never needs a network request. A 500 ms reconciliation reads an optional local message log without changing focus.
-Up to four messages travel along separate native, color-coded routes, once each, with endpoint highlighting.
+Terminal navigation never needs a network request. A 250 ms reconciliation reads an optional local message log without changing focus.
+Messages begin immediately on independent native, color-coded routes. Each route carries one moving packet per message, including simultaneous sends and replies.
 Completed routes remain dimly visible with direction-specific counts; replay never re-sends a message.
 The toolbar can disable motion. A logged send is not a read receipt or a verified reply.
 
@@ -55,4 +55,4 @@ The package must not contain private project folders or session IDs. Demo fixtur
 - Keyboard pane navigation and optional side panel controls work.
 - The gallery preview comes from actual rendered, clearly labelled demo terminals.
 
-Message counts reconcile every 500 ms independently of focus and file watcher consumers. Partial writes retain the previous snapshot. Optional routing files may be absent. Common-to-project routing uses an atomic idle guard and protects drafts, recording and pending questions; queue drain runs every two seconds while configured. Common alerts are a separate compact section above message flow and show only items needing the user. Subagent trees expand under each parent from local workflow metadata, including explicit status sources and labelled activity estimates. Parent agents remain visible without children. Workspace headers show agent totals but no message sum.
+Message counts reconcile every 250 ms independently of focus and file watcher consumers. Partial writes retain the previous snapshot. Optional routing files may be absent. Common-to-project routing uses an atomic idle guard and protects drafts, recording and pending questions; queue drain runs every two seconds while configured. Common alerts are a separate compact section above message flow and show only items needing the user. Subagent trees expand under each parent from local workflow metadata, including explicit status sources and labelled activity estimates. Parent agents remain visible without children. Workspace headers show agent totals but no message sum.
