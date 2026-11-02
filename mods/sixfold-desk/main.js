@@ -18,23 +18,33 @@ export default class SixfoldDesk extends View {
     if (props()?.role !== 'sidebar') return;
     // File notifications start a small number of finite native transitions.
     // No frame-by-frame JavaScript animation or old-message replay on reload.
-    let previous = null;
-    const refresh = cx => cx.spawn(async cx => {
-      try {
-        const text = await readTextFile(`${appHome()}/data/sixfold/messages.json`);
-        const events = text ? JSON.parse(text).events ?? [] : [];
-        if (previous === null || events.at(-1)?.id !== this.messageEvents.at(-1)?.id) {
+    this.previousEvents = null;
+    this.messageSnapshot = null;
+    this.refreshBusy = false;
+    const refresh = cx => {
+      if (this.refreshBusy) return;
+      this.refreshBusy = true;
+      cx.spawn(async cx => {
+        try {
+          const text = await readTextFile(`${appHome()}/data/sixfold/messages.json`) || '{"events":[]}';
+          const snapshot = text;
+          if (snapshot === this.messageSnapshot) return;
+          const events = JSON.parse(text).events ?? [];
           const addresses = new Set(terminals().map(item => item.address));
-          this.pendingFlows.push(...freshMessages(previous, events).filter(event=>addresses.has(event.source)&&addresses.has(event.target)));
-          previous = events;
+          this.pendingFlows.push(...freshMessages(this.previousEvents, events).filter(event => addresses.has(event.source) && addresses.has(event.target)));
+          this.previousEvents = events;
           this.messageEvents = events;
+          this.messageSnapshot = snapshot;
           this.startFlows(cx);
           cx.notify();
-        }
-      } catch { /* Optional tracing must not disrupt terminals. */ }
-    });
+        } catch { /* Retry a partial write on the next tick, without clearing badges. */ }
+        finally { this.refreshBusy = false; }
+      });
+    };
     refresh(cx);
-    cx.timer.every(1000, refresh);
+    // File watchers are shared by mod copies. Reconcile independently of focus
+    // and watcher wakeups; redraw only when the persisted snapshot changes.
+    cx.timer.every(500, refresh);
     // Optional voice integration is opt-in and runs only from this one sidebar.
     // Focus is sampled by a timer, never changed by rendering background rows.
     let voiceBusy=false, voiceActionBusy=false, voiceKey=null;
@@ -232,6 +242,8 @@ export default class SixfoldDesk extends View {
         .tooltip(this.lang()==='ko'?'드래그하여 순서 변경':'Drag to reorder')
         .on_mouse_down('left',()=>{this.dragSpace=s.id;this.overSpace=s.id;})
         .child(div().flex_1().min_w(0).truncate().child(s.name))
+        .when(members.some(p=>unseen(p.terminal)>0),e=>e.child(div().px(4).rounded(3).bg(t.accent).text_color(t.background).text_size(10)
+          .child(String(members.reduce((sum,p)=>sum+unseen(p.terminal),0)))))
         .child(div().text_size(10).text_color(t.muted).child(String(members.length))))
       .children(members.map(p=>{
         const tab=s.tabs.find(tab=>tab.id===p.tab);
