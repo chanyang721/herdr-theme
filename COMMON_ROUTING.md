@@ -3,12 +3,13 @@
 공통 워크스페이스 에이전트는 특정 프로젝트의 작업을 직접 처리하기 전에 해당 프로젝트 pane으로 전달한다.
 
 ```sh
+python3 /Users/lukuku1006/work/projects/herdr-sixfold/scripts/route.py --enable
 python3 /Users/lukuku1006/work/projects/herdr-sixfold/scripts/route.py PeaceMinusOne '사용자가 요청한 작업 원문과 범위'
 python3 /Users/lukuku1006/work/projects/herdr-sixfold/scripts/route.py Medihomes '사용자가 요청한 작업 원문과 범위'
 ```
 
 - 실제 발신 pane은 `HC_TERMINAL_ID`, 기존 TUI는 `HERDR_PANE_ID`와 로컬 연결표에서 읽는다. 위치를 추측하거나 다른 발신자로 가장하지 않는다.
-- 프로젝트의 활성 탭에서 같은 위치를 먼저 선택한다. 작업 중·승인 대기는 건드리지 않고, 같은 종류의 빈 에이전트, 다른 빈 에이전트 순으로 대체한다.
+- 프로젝트의 활성 탭에서 같은 위치를 먼저 선택한다. 작업 중·승인 대기·done·초안·REC·응답 끝의 질문이 있는 pane은 건드리지 않고, 같은 종류의 빈 에이전트, 다른 빈 에이전트 순으로 대체한다.
 - 모두 바쁘면 로컬 대기열에 넣는다. Herdr Theme가 실행 중이면 빈 pane이 생겼을 때 전달한다. 작업을 끊거나 새 pane을 만들지 않는다.
 - `sent`는 전송 결과다. 실제 대상 주소와 `fallback`을 사용자에게 짧게 알린다. 완료라고 말하려면 대상의 결과 회신을 읽는다.
 - 전달 결과가 불명확한 오류는 자동 재전송하지 않는다. 중복 실행을 피하도록 확인 대기로 보존한다.

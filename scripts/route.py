@@ -164,7 +164,13 @@ def main():
     parser.add_argument('text', nargs='?')
     parser.add_argument('--from', dest='source')
     parser.add_argument('--drain', action='store_true')
+    parser.add_argument('--enable', action='store_true', help='enable the sidebar queue drain for this checkout')
     args = parser.parse_args()
+    if args.enable:
+        DATA.mkdir(parents=True, exist_ok=True)
+        (DATA / 'routing.json').write_text(json.dumps({'script': str(Path(__file__).resolve())}))
+        print(json.dumps({'state': 'enabled', 'script': str(Path(__file__).resolve())}))
+        return
     if not args.drain and (not args.project or not args.text):
         parser.error('project 와 작업 메시지가 필요합니다.')
     DATA.mkdir(parents=True, exist_ok=True)
