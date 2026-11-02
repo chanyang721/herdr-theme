@@ -1,5 +1,9 @@
 import importlib.util
 from pathlib import Path
+import json
+import sys
+import tempfile
+import subprocess
 import unittest
 from unittest.mock import patch
 
@@ -83,6 +87,58 @@ class RouteTests(unittest.TestCase):
                                 'text': 'hi', 'reply': reply}, spaces, live)
             self.assertEqual('한 번 회신하세요' in sent[0], reply)
             self.assertEqual('진행·완료 보고는 보내지 마세요' in sent[0], not reply)
+
+    def test_claude_question_remains_protected_below_timing_lines(self):
+        for verb in ('Churned', 'Brewed', 'Sautéed', 'Worked', 'Cogitated'):
+            self.assertFalse(route.receiver_available(f'이대로 진행할까요?\n✻ {verb} for 3s done...\n❯'))
+        self.assertTrue(route.receiver_available('완료했습니다.\n✻ Churned for 3s\n❯'))
+
+    def test_sent_request_is_removed_before_a_failed_refresh(self):
+        with tempfile.TemporaryDirectory() as directory:
+            data = Path(directory)
+            request = {'id': 'one', 'source': 's2', 'project': 'Medihomes', 'text': 'hi'}
+            (data / 'routing-queue.json').write_text(json.dumps({'requests': [request]}))
+            with patch.object(route, 'DATA', data), patch.object(route, 'QUEUE', data / 'routing-queue.json'), \
+                 patch.object(sys, 'argv', ['route.py', '--drain']), \
+                 patch.object(route, 'snapshot', side_effect=[fixture(), ValueError('refresh failed')]), \
+                 patch.object(route, 'dispatch', return_value={'state': 'sent'}) as dispatch:
+                with self.assertRaisesRegex(ValueError, 'refresh failed'):
+                    route.main()
+                route.main()  # An empty queue must not send again or need a snapshot.
+                self.assertEqual(dispatch.call_count, 1)
+            self.assertEqual(json.loads((data / 'routing-queue.json').read_text())['requests'], [])
+
+    def test_new_uncertain_request_is_held_and_never_automatically_retried(self):
+        for error in (ValueError('uncertain'), subprocess.TimeoutExpired('hc', 30)):
+            with self.subTest(error=error), tempfile.TemporaryDirectory() as directory:
+                data = Path(directory)
+                queue = data / 'routing-queue.json'
+                def uncertain(*args):
+                    # Hold must be durable before dispatch starts, including process crashes.
+                    self.assertTrue(json.loads(queue.read_text())['requests'][0]['hold'])
+                    raise error
+                with patch.object(route, 'DATA', data), patch.object(route, 'QUEUE', queue), \
+                     patch.object(sys, 'argv', ['route.py', 'Medihomes', 'hi', '--from', 's2']), \
+                     patch.object(route, 'snapshot', return_value=fixture()), \
+                     patch.object(route, 'dispatch', side_effect=uncertain) as dispatch:
+                    with self.assertRaises(type(error)):
+                        route.main()
+                    with patch.object(sys, 'argv', ['route.py', '--drain']):
+                        route.main()
+                    self.assertEqual(dispatch.call_count, 1)
+                stored = json.loads(queue.read_text())['requests'][0]
+                self.assertTrue(stored['hold'])
+                self.assertEqual(stored['text'], 'hi')
+
+    def test_busy_request_clears_attempt_hold_for_a_later_drain(self):
+        with tempfile.TemporaryDirectory() as directory:
+            with patch.object(route, 'QUEUE', Path(directory) / 'queue.json'), \
+                 patch.object(route, 'dispatch', return_value={'state': 'queued'}):
+                request = {'id': 'busy'}
+                pending = [request]
+                route.deliver_pending(request, pending, [], [])
+                self.assertNotIn('hold', request)
+                self.assertEqual(json.loads(route.QUEUE.read_text())['requests'], [request])
 
     def test_unknown_project_or_non_common_source_is_not_guessed(self):
         spaces, live = fixture()
