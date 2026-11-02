@@ -59,3 +59,15 @@ test('unreported and reconnecting targets keep unread messages until confirmed o
   assert.equal(unreadCount(events,'missing',focused),0);
   assert.equal(unreadCount(events,'unknown',focused),1);
 });
+
+test('native sends without an observed start stay unread even when the target is idle',()=>{
+  for(const started of [false,null]) {
+    const events=[{target:'a',at:1000,started}];
+    const agents=[{address:'a',status:'idle'}];
+    const seen=readThrough(events,agents,null,{},7000);
+    assert.equal(unreadCount(events,'a',seen),1);
+    assert.equal(unreadCount(events,'a',readThrough(events,agents,'a',seen,7000)),0);
+  }
+  const events=[{target:'a',at:1000,started:true}];
+  assert.equal(unreadCount(events,'a',readThrough(events,[{address:'a',status:'idle'}],null,{},7000)),0);
+});

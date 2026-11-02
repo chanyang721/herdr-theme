@@ -19,8 +19,10 @@ export function readThrough(events, agentList, focusedAddress, seen, now) {
   const next = {...seen};
   const completed = new Set(agentList.filter(a => a.status === 'idle' || a.status === 'done').map(a => a.address));
   for (const event of events) {
+    // Native sends can succeed without the recipient accepting a new turn.
+    const observedStart = !Object.hasOwn(event,'started') || event.started === true;
     const handled = event.target === focusedAddress
-      || (completed.has(event.target) && now - event.at >= HANDLED_AFTER_MS);
+      || (observedStart && completed.has(event.target) && now - event.at >= HANDLED_AFTER_MS);
     if (handled && event.at > (next[event.target] ?? 0)) next[event.target] = event.at;
   }
   return next;
