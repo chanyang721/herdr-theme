@@ -291,8 +291,6 @@ export default class SixfoldDesk extends View {
         .tooltip(this.lang()==='ko'?'드래그하여 순서 변경':'Drag to reorder')
         .on_mouse_down('left',()=>{this.dragSpace=s.id;this.overSpace=s.id;})
         .child(div().flex_1().min_w(0).truncate().child(s.name))
-        .when(members.some(p=>unseen(p.terminal)>0),e=>e.child(div().px(4).rounded(3).bg(t.accent).text_color(t.background).text_size(10)
-          .child(String(members.reduce((sum,p)=>sum+unseen(p.terminal),0)))))
         .child(div().text_size(10).text_color(t.muted).child(String(members.length))))
       .children(members.map(p=>{
         const tab=s.tabs.find(tab=>tab.id===p.tab);
