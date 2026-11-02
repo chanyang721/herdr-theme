@@ -29,6 +29,7 @@ test('background messages refresh without focus or watcher events, with no routi
   source = source.replace(/import \{ h_flex, v_flex \} from 'gpui-base';/, '');
   source = source.replace(/import \{([^}]+)\} from 'herdr';/, 'const {$1} = globalThis.__sixfoldTest;');
   for (const name of ['model','flow']) source = source.replace(`'./${name}.js'`,JSON.stringify(new URL(`../mods/sixfold-desk/${name}.js`,import.meta.url).href));
+  source = source.replace(/import \{ pipeline \} from '.\/pipeline.js';/, '');
   source = source.replace(/import \{ watchAlerts, alertSection, visibleAlerts \} from '.\/alerts.js';/,
     'const watchAlerts=()=>{};');
   const {default: Sidebar} = await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
