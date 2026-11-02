@@ -36,7 +36,7 @@ for (const native of [false,true]) test(`background messages refresh through ${n
   source = source.replace(/import \* as herdrNative from 'herdr';/, 'const herdrNative = globalThis.__sixfoldTest;');
   source = source.replace(/import \{([^}]+)\} from 'herdr';/, 'const {$1} = globalThis.__sixfoldTest;');
   for (const name of ['model','flow','workflow']) source = source.replace(`'./${name}.js'`,JSON.stringify(new URL(`../mods/sixfold-desk/${name}.js`,import.meta.url).href));
-  source = source.replace(/import \{ watchDocs, currentDocs, docsSection \} from '.\/docs.js';/, 'const watchDocs=()=>{};');
+  source = source.replace(/import \{ watchDocs, currentDocs, docsSection, prepareDocsInput \} from '.\/docs.js';/, 'const watchDocs=()=>{};');
   source = source.replace(/import \{ pipeline \} from '.\/pipeline.js';/, '');
   source = source.replace(/import \{ watchAlerts, alertSection, visibleAlerts \} from '.\/alerts.js';/,
     'const watchAlerts=()=>{};');

@@ -23,10 +23,9 @@ export function watchDocs(view,cx){
   };
   refresh(cx);cx.timer.every(2000,refresh);
 }
-export function docsSection(view,t,space=spaces().find(s=>s.active)){
-  const group=view.projectDocs?.spaces?.[space?.id]||view.projectDocs?.spaces?.[space?.name];
-  if(!view.docsSpaces?.has(space.id))return div();
-  if(!group)return div().px(5).py(5).text_size(10).text_color(t.dim).child('설정된 문서 폴더가 없습니다.');
+// Native retained input state must be created by init/event/command callbacks,
+// never while GPUI is rendering the document section.
+export function prepareDocsInput(view,space){
   view.docsSubmit??={};view.docsInputs??={};view.docsQueries??={};view.docsExpanded??=new Set();view.docsLimits??={};view.docsErrors??={};
   if(!view.docsInputs[space.id]){
     const input=InputState.new({placeholder:'파일명 검색'});
@@ -34,6 +33,12 @@ export function docsSection(view,t,space=spaces().find(s=>s.active)){
     input.on('submit',(_e,cx)=>view.docsSubmit[space.id]?.(cx));
     view.docsInputs[space.id]=input;
   }
+}
+export function docsSection(view,t,space=spaces().find(s=>s.active)){
+  const group=view.projectDocs?.spaces?.[space?.id]||view.projectDocs?.spaces?.[space?.name];
+  if(!view.docsSpaces?.has(space.id))return div();
+  if(!group)return div().px(5).py(5).text_size(10).text_color(t.dim).child('설정된 문서 폴더가 없습니다.');
+  if(!view.docsInputs?.[space.id])return div();
   const filtered=()=>group.files.filter(f=>(view.docsArchive||!archived(f))&&f.name.normalize('NFC').toLocaleLowerCase().includes((view.docsQueries[space.id]||'').normalize('NFC').toLocaleLowerCase()));
   const open=(file,cx,code=false)=>{
     if(!file)return;

@@ -24,7 +24,7 @@ test('project document index recovers after cold install and partial writes and 
 const doc=(path,mtime=1)=>({path,name:path.split('/').at(-1),mtime});
 let moduleId=0;
 async function sidebar(){
-  const handlers=new Map(),calls=[],tasks=[],labels=[];let active='Demo',run=async()=>({code:0});
+  const handlers=new Map(),calls=[],tasks=[],labels=[];let active='Demo',run=async()=>({code:0}),rendering=false;
   function element(){let id,proxy;proxy=new Proxy({}, {get(_target,key){
     if(key==='id')return value=>{id=value;return proxy;};
     if(key==='on_click')return callback=>{handlers.set(id,callback);return proxy;};
@@ -33,16 +33,17 @@ async function sidebar(){
     return ()=>proxy;
   }});return proxy;}
   const runtime={div:element,h_flex:element,v_flex:element,
-    InputState:{new:()=>({events:{},text:'',value(){return this.text;},on(event,callback){this.events[event]=callback;}})},Input:{new:element},
+    InputState:{new:()=>{assert.equal(rendering,false,'native input creation during render');return {events:{},text:'',value(){return this.text;},on(event,callback){this.events[event]=callback;}};}},Input:{new:element},
     spaces:()=>[{id:active,name:active,active:true}],exec:async(command,args)=>{calls.push({command,args});return run(command,args);}};
   const key=`__sidebarDocs${moduleId++}`;globalThis[key]=runtime;
   let source=await readFile(new URL('../mods/sixfold-desk/docs.js',import.meta.url),'utf8');
   source=source.replace(/\r\n/g,'\n');
   source=source.replace(/^import .*;\n/gm,'');source=`const {${Object.keys(runtime).join(',')}}=globalThis[${JSON.stringify(key)}];\n${source}`;
-  const {docsSection}=await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'));delete globalThis[key];
+  const {docsSection,prepareDocsInput}=await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'));delete globalThis[key];
   const view={docsSpaces:new Set(['Demo','Other']),projectDocs:{spaces:{Demo:{folder:'/project',files:[doc('/docs/guide.md',20),doc('/docs/report.pdf',10)]},Other:{folder:'/other',files:[doc('/other/other.md',30)]}}}};
   const cx={notify(){},spawn(fn){const promise=fn(cx);tasks.push(promise);return promise;}};
-  const render=(id='Demo')=>{handlers.clear();labels.length=0;docsSection(view,{}, {id,name:id});};render();
+  for(const id of ['Demo','Other'])prepareDocsInput(view,{id});
+  const render=(id='Demo')=>{handlers.clear();labels.length=0;rendering=true;try{docsSection(view,{}, {id,name:id});}finally{rendering=false;}};render();
   return {view,cx,handlers,calls,labels,render,setActive:value=>{active=value;},setRun:fn=>{run=fn;},flush:async()=>{await Promise.all(tasks);}};
 }
 

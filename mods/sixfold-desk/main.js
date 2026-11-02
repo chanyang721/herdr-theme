@@ -7,7 +7,7 @@ import { WORDS, counts, title, cycle, priority, readThrough, unreadCount } from 
 import { freshMessages, recentRoutes, simultaneousRoutes } from './flow.js';
 import { pipeline } from './pipeline.js';
 import { workflowNodes, delegationEvents, workflowStatus } from './workflow.js';
-import { watchDocs, currentDocs, docsSection } from './docs.js';
+import { watchDocs, currentDocs, docsSection, prepareDocsInput } from './docs.js';
 import { watchAlerts, alertSection, visibleAlerts } from './alerts.js';
 
 const hasPanel=node=>node?.id==='panel'||(node?.children||[]).some(hasPanel);
@@ -178,7 +178,7 @@ export default class SixfoldDesk extends View {
           if (a) run('agent.focus', { terminal: a.address });
         } else if (command === 'find-docs') {
           const space=spaces().find(s=>s.active);
-          if(space){this.docsSpaces.add(space.id);cx.notify();cx.timer.after(30,()=>this.docsInputs?.[space.id]?.focus());}
+          if(space){prepareDocsInput(this,space);this.docsSpaces.add(space.id);cx.notify();cx.timer.after(30,()=>this.docsInputs?.[space.id]?.focus());}
         } else if (command === 'language') {
           setShared('sixfold.language', this.lang() === 'ko' ? 'en' : 'ko');
         }
@@ -409,7 +409,7 @@ export default class SixfoldDesk extends View {
         })
         .child(div().id(`sf-docs-toggle-${s.id}`).text_size(11).text_color(t.accent).tooltip('프로젝트 문서 펼치기')
           .on_mouse_down('left',(_e,cx)=>cx.stop_propagation()).on_mouse_up('left',(_e,cx)=>cx.stop_propagation())
-          .on_click((_e,cx)=>{cx.stop_propagation();this.docsSpaces??=new Set();this.docsSpaces.has(s.id)?this.docsSpaces.delete(s.id):this.docsSpaces.add(s.id);cx.notify();})
+          .on_click((_e,cx)=>{cx.stop_propagation();prepareDocsInput(this,s);this.docsSpaces??=new Set();this.docsSpaces.has(s.id)?this.docsSpaces.delete(s.id):this.docsSpaces.add(s.id);cx.notify();})
           .child(this.docsSpaces?.has(s.id)?'▾':'▸'))
         .child(workspaceMark(s))
         .child(div().flex_1().min_w(0).truncate().text_color(s.active?t.foreground:t.muted).child(s.name))
