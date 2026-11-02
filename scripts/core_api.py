@@ -1,17 +1,21 @@
 """Use herdr-core's documented plain JSON-RPC transport through hc connect."""
 import json
-import select
+import queue
+import threading
 import subprocess
 
 
 def call(method, params):
-    process = subprocess.Popen(['hc', 'connect'], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
+    process = subprocess.Popen(['hc', 'connect'], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True, encoding='utf-8')
     try:
         process.stdin.write(json.dumps({'jsonrpc':'2.0','id':1,'method':method,'params':params})+'\n')
         process.stdin.flush()
-        if not select.select([process.stdout], [], [], 10)[0]:
-            raise TimeoutError(method)
-        reply = json.loads(process.stdout.readline())
+        replies = queue.Queue()
+        threading.Thread(target=lambda: replies.put(process.stdout.readline()), daemon=True).start()
+        try:
+            reply = json.loads(replies.get(timeout=10))
+        except queue.Empty:
+            raise TimeoutError(method) from None
         if 'error' in reply:
             raise RuntimeError(reply['error'])
         return reply['result']

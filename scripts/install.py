@@ -14,6 +14,8 @@ def main():
     repo = Path(__file__).resolve().parents[1]
     destinations = [(p, args.home/p.relative_to(repo)) for folder in ('layouts','themes','mods')
                     for p in (repo/folder).rglob('*') if p.is_file()]
+    destinations += [(repo/'scripts'/name, args.home/'scripts/sixfold'/name)
+                     for name in ('workspace.py','core_api.py','balance_grid.py')]
     for source, destination in destinations:
         if destination.exists():
             raise SystemExit(f'Already exists; refusing to overwrite: {destination}')

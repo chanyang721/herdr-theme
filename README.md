@@ -59,12 +59,14 @@ Non-macOS users can edit the layout-scoped fragment in `keys.json` to suit their
 
 ```sh
 python3 scripts/balance_grid.py
-python3 scripts/workspace.py "Example" /path/to/your/project --agents
+python3 scripts/workspace.py "Example" /path/to/your/project
 ```
 
 `balance_grid.py` uses the core's version-checked document API. It changes six-terminal tabs to equal
 rows and columns while retaining every existing pane ID and terminal address. It never restarts a program.
-The workspace helper starts four Claude and two Codex sessions when `--agents` is requested.
+The sidebar's **+ Space** and **Ctrl+Shift+N** open a name/folder dialog and create one tab with a 3×2 split: four Claude and two Codex sessions. Both CLIs and Python 3 must be installed. The workspace helper uses the same default; pass `--shells` for six plain shells (`--agents` remains compatible).
+
+For an existing installation, update `mods/sixfold-new-space`, `mods/sixfold-desk/main.js`, and the theme key bindings together. Copy `scripts/workspace.py`, `scripts/core_api.py`, and `scripts/balance_grid.py` to `~/.config/herdr-app/scripts/sixfold/`. The installer places these files there for new installations. Other layouts and explicit `space.new` commands retain Herdr's own behavior.
 Agent authentication and workspace trust use the agents' own interfaces.
 
 ## Optional live TUI bridge (macOS/Linux)

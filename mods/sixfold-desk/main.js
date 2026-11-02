@@ -1,6 +1,6 @@
 import { View, div, svg, image } from 'gpui-kit';
 import { h_flex, v_flex } from 'gpui-base';
-import { agents, panes, spaces, terminals, focused, props, theme, run, shared, setShared, setAgentOrder, nextCommand, exec, window, layout, readTextFile, writeTextFile, appHome } from 'herdr';
+import { agents, panes, spaces, terminals, focused, props, theme, run, shared, setShared, setAgentOrder, nextCommand, exec, window, layout, readTextFile, writeTextFile, appHome, openOverlay } from 'herdr';
 import { WORDS, counts, title, cycle, priority, readThrough, unreadCount } from './model.js';
 
 import { freshMessages, recentRoutes, simultaneousRoutes } from './flow.js';
@@ -149,7 +149,9 @@ export default class SixfoldDesk extends View {
         const command = await nextCommand();
         const f = focused();
         const current = panes().filter(p => p.tab === f?.tab);
-        if (command === 'next-pane' || command === 'prev-pane') {
+        if (command === 'new-workspace') {
+          openOverlay({mod:'sixfold-new-space',kind:'dialog',width:440,modal:true});
+        } else if (command === 'next-pane' || command === 'prev-pane') {
           const p = cycle(current, f?.pane, command === 'next-pane' ? 1 : -1);
           if (p) run('pane.focus', { pane: p.pane });
         } else if (command.startsWith('pane-')) {
@@ -339,7 +341,12 @@ export default class SixfoldDesk extends View {
         .when(this.dragSpace===s.id && this.overSpace!==s.id,e=>e.opacity(0.5))
         .when(this.dragSpace && this.overSpace===s.id && this.dragSpace!==s.id,e=>e.border(1).border_color(t.accent))
         .tooltip(this.lang()==='ko'?'드래그하여 순서 변경':'Drag to reorder')
-        .on_mouse_down('left',()=>{this.dragSpace=s.id;this.overSpace=s.id;})
+        .on_mouse_down('left',(_event,cx)=>{
+          // The sidebar is a window_drag region; this press belongs to the space.
+          cx.stop_propagation();
+          this.dragSpace=s.id;this.overSpace=s.id;
+          cx.notify();
+        })
         .child(workspaceMark(s))
         .child(div().flex_1().min_w(0).truncate().text_color(s.active?t.foreground:t.muted).child(s.name))
         .child(div().text_size(10).text_color(t.muted).child(String(members.length))))
@@ -434,6 +441,6 @@ export default class SixfoldDesk extends View {
       .child(h_flex().h(38).flex_none().px(7).items_center()
         .child(this.button('sf-settings',w.settings,()=>run('app.settings'),t))
         .child(div().flex_1())
-        .child(this.button('sf-new-space','+ Space',()=>run('space.new'),t)));
+        .child(this.button('sf-new-space','+ Space',()=>openOverlay({mod:'sixfold-new-space',kind:'dialog',width:440,modal:true}),t)));
   }
 }

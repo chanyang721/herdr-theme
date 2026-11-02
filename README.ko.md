@@ -36,7 +36,8 @@ herdr-app do layout.switch --name sixfold
 - Cmd+W / Cmd+Shift+W: 실수로 닫지 않도록 비활성
 
 `scripts/balance_grid.py`는 실행 중인 프로세스를 유지하고 6개 pane을 같은 크기로 맞춥니다.
-`scripts/workspace.py`는 프로젝트별 6분할을 생성합니다. `--agents`를 주면 Claude 4개·Codex 2개를 시작합니다.
+사이드바의 `+ Space` 또는 `Ctrl+Shift+N`으로 이름과 폴더를 입력하면 한 탭 안에 Claude 4개·Codex 2개를 3×2 스플릿으로 생성합니다.
+`scripts/workspace.py`도 같은 구성을 기본으로 사용합니다. 에이전트 없이 셸만 열려면 `--shells`를 지정하세요.
 
 기존 TUI 세션은 선택 기능인 `scripts/tui_bridge.py`로 연결할 수 있습니다.
 이는 새 런타임으로의 이력 변환이 아니라 기존 프로세스에 대한 실시간 연결입니다.

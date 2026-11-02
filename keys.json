@@ -1,5 +1,6 @@
 {
   "layout:sixfold": {
+    "ctrl-shift-n": "sixfold-desk.new-workspace",
     "cmd-]": "sixfold-desk.next-pane",
     "cmd-[": "sixfold-desk.prev-pane",
     "cmd-shift-j": "sixfold-desk.next-blocked",
