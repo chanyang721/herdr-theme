@@ -1,6 +1,6 @@
 import { View, div, svg, image } from 'gpui-kit';
 import { h_flex, v_flex } from 'gpui-base';
-import { agents, panes, spaces, terminals, focused, props, theme, run, shared, setShared, setAgentOrder, nextCommand, exec, hc, window, readTextFile, appHome } from 'herdr';
+import { agents, panes, spaces, terminals, focused, props, theme, run, shared, setShared, setAgentOrder, nextCommand, exec, hc, window, readTextFile, writeTextFile, appHome } from 'herdr';
 import { WORDS, counts, attention, title, cycle, priority } from './model.js';
 
 const marks = { blocked: '!', done: '✓', working: '●', idle: '○' };
@@ -29,6 +29,40 @@ export default class SixfoldDesk extends View {
     });
     refresh(cx);
     cx.timer.every(1000, refresh);
+    // Optional voice integration is opt-in and runs only from this one sidebar.
+    // Focus is sampled by a timer, never changed by rendering background rows.
+    let voiceBusy=false, voiceActionBusy=false, voiceKey=null;
+    cx.timer.every(500,cx=>{
+      if(voiceBusy)return;
+      voiceBusy=true;
+      cx.spawn(async cx=>{
+        try {
+          const config=JSON.parse(await readTextFile(`${appHome()}/data/sixfold/voice-integration.json`) || 'null');
+          if(!config?.script)return;
+          const f=focused(), facts=terminals(), current=facts.find(x=>x.address===f?.terminal);
+          const state={at:Date.now(),active:window().active,terminal:f?.terminal,
+            source:current?.labels?.['sixfold.source-pane'],
+            panes:agents().filter(a=>!facts.find(x=>x.address===a.address)?.labels?.['sixfold.source-pane'])
+              .filter(a=>['claude','codex'].includes(a.program?.key))
+              .map(a=>({pane_id:`app:${a.address}`,agent:a.program.key,agent_status:a.status}))};
+          const path=`${appHome()}/data/sixfold/voice-focus.json`;
+          const old=await readTextFile(path);
+          await writeTextFile(path,JSON.stringify(state),old);
+          const key=JSON.stringify([state.active,state.terminal,state.source]);
+          if(key!==voiceKey && !voiceActionBusy){
+            voiceKey=key;voiceActionBusy=true;
+            // Keep publishing focus while a voice connection starts. The helper
+            // rechecks that heartbeat before sending any microphone controls.
+            cx.spawn(async cx=>{
+              try {
+                await exec('python3',[config.script,'--app-focus']);
+              } finally {voiceActionBusy=false;}
+            });
+          }
+        } catch { /* Optional integration failure must not disrupt terminals. */ }
+        finally {voiceBusy=false;}
+      });
+    });
     cx.spawn(async (cx) => {
       for (;;) {
         const command = await nextCommand();

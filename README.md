@@ -103,6 +103,22 @@ Direct RPC calls or send paths bypassing this launcher are not observed. The ani
 successful send, not a read receipt. Ping likewise reports sending or failure; inspect the agent’s
 actual reply for PONG. It never forces a blocked permission prompt.
 
+## Optional app voice routing
+
+With an app-compatible `herdr-focus-queue` checkout already installed:
+
+```sh
+python3 scripts/install_voice.py /path/to/herdr-focus-queue
+```
+
+This opt-in integration publishes the active app pane to a local heartbeat. The voice plugin then
+routes microphones to that pane, including existing TUI attachments and native core sessions.
+Background app windows do not override TUI focus. The existing speech-end submission rules remain
+in the voice plugin; the theme grants no microphone permission or authentication. Existing Codex
+voice connections are muted/unmuted, never toggled off. Native Codex starts voice only from an observed
+empty CLI without a current connection. Remove `data/sixfold/voice-integration.json` under app home to
+stop the integration; that does not disconnect a voice conversation.
+
 ## What it runs
 
 The UI uses Herdr's live workspace/agent APIs and navigation commands, with no network requests.
