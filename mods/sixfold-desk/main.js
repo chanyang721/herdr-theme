@@ -15,6 +15,9 @@ export default class SixfoldDesk extends View {
     this.messageEvents = [];
     this.activeFlows = [];
     this.pendingFlows = [];
+    this.queuedRoutes = [];
+    this.routeScript = null;
+    this.routeBusy = false;
     this.seenMessages = new Set();
     if (props()?.role !== 'sidebar') return;
     this.alerts = [];
@@ -30,13 +33,19 @@ export default class SixfoldDesk extends View {
       cx.spawn(async cx => {
         try {
           const text = await readTextFile(`${appHome()}/data/sixfold/messages.json`) || '{"events":[]}';
-          const snapshot = text;
+          const routing = await readTextFile(`${appHome()}/data/sixfold/routing.json`).catch(()=>null) || 'null';
+          const queue = await readTextFile(`${appHome()}/data/sixfold/routing-queue.json`).catch(()=>null) || '{"requests":[]}';
+          const snapshot = JSON.stringify([text, routing, queue]);
           if (snapshot === this.messageSnapshot) return;
           const events = JSON.parse(text).events ?? [];
+          const config = JSON.parse(routing);
+          const requests = JSON.parse(queue).requests ?? [];
           const addresses = new Set(terminals().map(item => item.address));
           this.pendingFlows.push(...freshMessages(this.previousEvents, events).filter(event => addresses.has(event.source) && addresses.has(event.target)));
           this.previousEvents = events;
           this.messageEvents = events;
+          this.routeScript = config?.script;
+          this.queuedRoutes = requests.map(({id,source,project,hold,error})=>({id,source,project,hold,error}));
           this.messageSnapshot = snapshot;
           this.startFlows(cx);
           cx.notify();
@@ -48,6 +57,14 @@ export default class SixfoldDesk extends View {
     // File watchers are shared by mod copies. Reconcile independently of focus
     // and watcher wakeups; redraw only when the persisted snapshot changes.
     cx.timer.every(500, refresh);
+    cx.timer.every(2000, cx => {
+      if (this.routeBusy || !this.routeScript || !this.queuedRoutes.some(item=>!item.hold)) return;
+      this.routeBusy = true;
+      cx.spawn(async cx => {
+        try { await exec('python3',[this.routeScript,'--drain']); }
+        finally { this.routeBusy = false; }
+      });
+    });
     // Optional voice integration is opt-in and runs only from this one sidebar.
     // Focus is sampled by a timer, never changed by rendering background rows.
     let voiceBusy=false, voiceActionBusy=false, voiceKey=null;
@@ -289,11 +306,15 @@ export default class SixfoldDesk extends View {
         .child(section(w.spaces)).child(workspaceTree)
         )
       .when(visibleAlerts(this.alerts).length>0, e=>e.child(alertSection(this,t)))
-      .when(Boolean(last), e => e.child(v_flex().flex_none().px(10).py(9).gap(6).bg(t.surface).border_t(1).border_color(t.border)
+      .when(Boolean(last) || this.queuedRoutes.length > 0, e => e.child(v_flex().flex_none().px(10).py(9).gap(6).bg(t.surface).border_t(1).border_color(t.border)
         .child(h_flex().gap(5).items_center()
           .child(div().flex_1().text_size(10).font_bold().text_color(t.muted).child(this.lang()==='ko'?'메시지 흐름':'MESSAGE FLOW'))
           .child(div().text_size(10).text_color(t.accent).child(flows.length ? `${flows.length}${this.lang()==='ko'?'개 연결':' active'}` : (this.lang()==='ko'?'최근 전송':'Recent')))
           .when(this.pendingFlows.length>0, el=>el.child(div().text_size(10).text_color(t.muted).child(`+${this.pendingFlows.length}`))))
+        .children(this.queuedRoutes.slice(0,3).map(item=>h_flex().gap(5).text_size(10).text_color(item.hold?t.blocked:t.muted)
+          .tooltip(item.error || (this.lang()==='ko'?'사용 가능한 프로젝트 pane이 생기면 전달합니다':'Waiting for an available project pane'))
+          .child(div().child(item.hold?'!':'◷'))
+          .child(div().flex_1().truncate().child(`${item.project} · ${this.lang()==='ko'?'수신 pane 대기':'Waiting for a pane'}`))))
         .children((flows.length ? flows : history).map(flow => {
           const active=flows.some(item=>item.id===flow.id), color=palette[flow.lane??0];
           const arrived=!active || flow.phase==='arrived';
