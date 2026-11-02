@@ -1,6 +1,6 @@
 import { div } from 'gpui-kit';
 import { h_flex, v_flex } from 'gpui-base';
-import { run, readTextFile, writeTextFile, watchFolder, appHome } from 'herdr';
+import { run, readTextFile, writeTextFile, appHome } from 'herdr';
 
 const SHOWN = new Set(['needs-you']);  // Only what a person must decide; the rest stays in the project.
 const MARKS = { 'needs-you': '!', info: '✓', processing: '●' };
@@ -11,19 +11,25 @@ export function visibleAlerts(items, limit = 6) {
 }
 
 export function watchAlerts(view, cx) {
-  cx.spawn(async cx => {
-    for (;;) {
+  let loading = false;
+  let previous;
+  const refresh = cx => {
+    if (loading) return;
+    loading = true;
+    cx.spawn(async cx => {
       try {
         const text = await readTextFile(`${appHome()}/data/sixfold/alerts.json`);
-        view.alerts = text ? JSON.parse(text).items ?? [] : [];
+        if (text === previous) return;
+        const items = text ? JSON.parse(text).items ?? [] : [];
+        view.alerts = items;
+        previous = text;
         cx.notify();
-      } catch { /* Optional alerts must not disrupt terminals. */ }
-      let changed;
-      do {
-        changed = await watchFolder(`${appHome()}/data/sixfold`);
-      } while (!changed.some(path => path.endsWith('/alerts.json') || path === 'alerts.json'));
-    }
-  });
+      } catch { /* Missing folders and partial writes are retried on the next tick. */ }
+      finally { loading = false; }
+    });
+  };
+  refresh(cx);
+  cx.timer.every(2000, refresh);
 }
 
 async function dismiss(id) {
