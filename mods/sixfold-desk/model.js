@@ -17,10 +17,10 @@ export const HANDLED_AFTER_MS = 5000;
 // or once it sits idle past the wake-up. Working or blocked agents still owe theirs.
 export function readThrough(events, agentList, focusedAddress, seen, now) {
   const next = {...seen};
-  const pending = new Set(agentList.filter(a => a.status === 'working' || a.status === 'blocked').map(a => a.address));
+  const completed = new Set(agentList.filter(a => a.status === 'idle' || a.status === 'done').map(a => a.address));
   for (const event of events) {
     const handled = event.target === focusedAddress
-      || (!pending.has(event.target) && now - event.at >= HANDLED_AFTER_MS);
+      || (completed.has(event.target) && now - event.at >= HANDLED_AFTER_MS);
     if (handled && event.at > (next[event.target] ?? 0)) next[event.target] = event.at;
   }
   return next;
