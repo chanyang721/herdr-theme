@@ -7,6 +7,7 @@ import { readFile } from 'node:fs/promises';
 for (const native of [false,true]) test(`background messages refresh through ${native?'native events':'legacy trace'} without focus or watcher events`, async () => {
   let log = JSON.stringify({events:[]});
   let notifications = 0;
+  let pinText='{}';
   let malformedAuxiliary=false;
   const tasks = [];
   const timers = [];
@@ -20,6 +21,7 @@ for (const native of [false,true]) test(`background messages refresh through ${n
     props:()=>({role:'sidebar'}), appHome:()=>'/app',
     terminals:()=>[{address:'source'},{address:'target'}],
     readTextFile:async path=>{
+      if(path.endsWith('/workspace-pins.local.json'))return pinText;
       if(path.endsWith('/messages.json')) {
         assert.equal(native,false,'native event mode must not poll the legacy message file');
         return log;
@@ -70,5 +72,14 @@ for (const native of [false,true]) test(`background messages refresh through ${n
   assert.equal(view.activeFlows.length,13);
   assert.equal(view.pendingFlows.length,0);
   assert.equal(new Set(view.activeFlows.map(flow=>flow.id)).size,13);
+  pinText=JSON.stringify({spaces:[{id:'stable-id',machine:null}]});
+  refresh(cx);await tasks.at(-1);
+  assert.equal(view.workspacePins.spaces[0].id,'stable-id','config-only edits refresh without a message or focus change');
+  pinText='{partial';refresh(cx);await tasks.at(-1);
+  assert.equal(view.workspacePins.spaces[0].id,'stable-id','partial config keeps the last valid pins');
+  pinText=JSON.stringify({spaces:{invalid:true}});refresh(cx);await tasks.at(-1);
+  assert.equal(view.workspacePins.spaces[0].id,'stable-id','invalid schema keeps the last valid pins');
+  pinText=JSON.stringify({spaces:[]});refresh(cx);await tasks.at(-1);
+  assert.deepEqual(view.workspacePins,{spaces:[]});
   delete globalThis.__sixfoldTest;
 });
