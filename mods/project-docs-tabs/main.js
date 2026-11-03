@@ -14,6 +14,21 @@ const OPENED = 'sixfold.docs.opened.v1';
 const CLOSED = 'sixfold.docs.closed.v1';
 const isHtml = path => /\.html?$/i.test(path);
 const readable = path => /\.md$/i.test(path) || isHtml(path);
+// Puts the file itself (as Finder Cmd+C does) or its UTF-8 text on the general pasteboard.
+const MAC_COPY = String.raw`
+ObjC.import('AppKit');
+function run(args) {
+  var path = args[0], board = $.NSPasteboard.generalPasteboard, text;
+  if (!$.NSFileManager.defaultManager.isReadableFileAtPath($(path))) throw new Error('파일을 읽을 수 없습니다.');
+  if (args[1] === 'text') {
+    text = $.NSString.stringWithContentsOfFileEncodingError($(path), $.NSUTF8StringEncoding, null);
+    if (text.isNil()) throw new Error('UTF-8 본문을 읽을 수 없습니다.');
+  }
+  board.clearContents;
+  var ok = text ? board.setStringForType(text, $.NSPasteboardTypeString) : board.writeObjects($([$.NSURL.fileURLWithPath($(path))]));
+  if (!ok) throw new Error('클립보드에 넣지 못했습니다.');
+  return 'ok';
+}`;
 export default class ProjectDocuments extends View {
   init(_props, cx) {
     const p = props() || {};
@@ -97,7 +112,7 @@ export default class ProjectDocuments extends View {
   }
 
   choose(id, cx) {
-    this.selected = id;
+    this.selected = id; this.copied = null;
     setShared(STATE, { ...(shared(STATE) || {}), [this.spaceId]: id });
     this.load(cx); this.refresh(cx); cx.notify();
   }
@@ -198,6 +213,17 @@ export default class ProjectDocuments extends View {
     });
   }
 
+  copy(path, mode, cx) {
+    cx.spawn(async cx => {
+      try {
+        const result = await exec('osascript', ['-l', 'JavaScript', '-e', MAC_COPY, path, mode]);
+        if (result.code !== 0) throw Error(result.stderr.trim().replace(/^.*Error: /, '').replace(/ \(-?\d+\)$/, '') || '복사하지 못했습니다.');
+        this.actionError = null; this.copied = `${mode === 'text' ? '본문' : '파일'} 복사됨 · ${path.split('/').pop()}`;
+      } catch (error) { this.copied = null; this.actionError = `복사 실패 · ${String(error.message || error)}`; }
+      cx.notify();
+    });
+  }
+
   // Close a 열람 or 최근 tab; pinned ones are removed with 고정 해제.
   dismiss(id, cx) {
     const doc = this.documents.find(d => d.id === id);
@@ -254,12 +280,15 @@ export default class ProjectDocuments extends View {
         })))
       .when(Boolean(this.listError), el => el.child(notice(`목록 확인 실패 · 마지막 목록 유지: ${this.listError}`)))
       .when(Boolean(this.warnings?.length), el => el.child(notice(`조회 주의: ${this.warnings.join(', ')}`)))
-      .when(Boolean(this.actionError), el => el.child(notice(this.actionError)));
+      .when(Boolean(this.actionError), el => el.child(notice(this.actionError)))
+      .when(Boolean(this.copied), el => el.child(notice(this.copied)));
     if (!doc) return root.child(notice(this.refreshing ? '문서 목록 확인 중…' : '고정 문서가 없습니다. 고정 규칙 편집에서 문서를 추가하세요.'));
     root = root.child(h_flex().flex_none().px(8).gap(4).items_center()
       .child(div().flex_1().min_w(0).truncate().child(doc.name || doc.label))
       .when(Boolean(doc.path), el => el.child(button('docs-open', '기본 앱', cx => this.external('open', [doc.path], cx)))
-        .child(button('docs-edit', 'VS Code', cx => this.external('code', ['--reuse-window', doc.path], cx))))
+        .child(button('docs-edit', 'VS Code', cx => this.external('code', ['--reuse-window', doc.path], cx)))
+        .child(button('docs-copy-file', '파일 복사', cx => this.copy(doc.path, 'file', cx)))
+        .when(/\.md$/i.test(doc.path), el => el.child(button('docs-copy-text', '본문 복사', cx => this.copy(doc.path, 'text', cx)))))
       .child(button('docs-pin', doc.pinned ? '고정 해제' : '고정', cx => this.action(doc.pinned ? ['--unpin', doc.id] : ['--pin', doc.path], cx))))
       .child(notice(doc.path || doc.error || '경로 확인 필요'))
       .child(notice(`${this.newVersion ? '새 날짜판 · ' : ''}${this.lastSuccess ? `본문 확인 ${new Date(this.lastSuccess).toLocaleTimeString()}` : '본문 확인 전'}${this.truncated ? ' · 400,000자까지 표시' : ''}`))
