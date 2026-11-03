@@ -6,7 +6,7 @@ import { WORDS, counts, title, cycle, priority, readThrough, unreadCount } from 
 
 import { computerKind, computerStatus, tailscaleStatus, workspaceIdentity } from './sidebar-identity.js';
 
-import { freshMessages, recentRoutes, simultaneousRoutes } from './flow.js';
+import { freshMessages, simultaneousRoutes } from './flow.js';
 import { pipeline } from './pipeline.js';
 import { workflowNodes, delegationEvents, workflowStatus } from './workflow.js';
 import { watchDocs, currentDocs, docsSection, prepareDocsInput } from './docs.js';
@@ -264,7 +264,7 @@ export default class SixfoldDesk extends View {
       const same=this.activeFlows.filter(flow=>flow.source===event.source&&flow.target===event.target);
       const occupied = new Set(this.activeFlows.map(flow => flow.lane));
       const lane = same[0]?.lane ?? [0,1,2,3,4,5].find(value=>!occupied.has(value)) ?? this.activeFlows.length%6;
-      const travelMs=1600+(same.length%6)*180;
+      const travelMs=2600+(same.length%6)*220;
       const flow = { ...event, lane, travelMs, phase: 'start' };
       this.activeFlows.push(flow);
       cx.timer.after(60, cx => {
@@ -303,10 +303,7 @@ export default class SixfoldDesk extends View {
     const list = agents().filter(a => workspaceIds.has(a.space));
     const local = all.filter(p => p.tab === f?.tab);
     const total = counts(list);
-    const nodeIds = new Set([...facts.map(x=>x.address),...this.workflowNodes.map(x=>x.id)]);
-    const events = [...(this.messageEvents ?? []),...this.workflowEvents].filter(e=>nodeIds.has(e.source)&&nodeIds.has(e.target));
     const unseen = address => unreadCount(this.messageEvents,address,this.readMessages);
-    const last = events.at(-1);
     const palette = [t.accent, t.ansi6, t.ansi5, t.ansi3, t.ansi2, t.ansi4];
     const flows = this.activeFlows;
     const routes = simultaneousRoutes(flows);
@@ -320,8 +317,7 @@ export default class SixfoldDesk extends View {
       const s = spaces().find(s => s.tabs.some(tab => tab.id === p?.tab));
       return p ? `${s?.machine ? `${this.computerLabel(s.machine)} / ` : ''}${s?.name ?? ''} · ${title(p)}` : address === 'external' ? (this.lang() === 'ko' ? '외부' : 'External') : address;
     };
-    const history = recentRoutes(events);
-    const paths = flows.length ? routes : history.map((event, lane) => ({ ...event, lane, phase: 'history' }));
+    const paths = routes;
     if (role === 'pane') {
       const p = all.find(p => p.pane === props()?.pane);
       if (!p) return div();
@@ -535,44 +531,17 @@ export default class SixfoldDesk extends View {
           .when(discoveryOnly,row=>row.child(div().text_size(10).text_color(t.dim).child(this.lang()==='ko'?'설정 → Machines에서 SSH 컴퓨터를 등록하세요.':'Register an SSH computer in Settings → Machines.')))))
         )
       .when(visibleAlerts(this.alerts).length>0, e=>e.child(alertSection(this,t)))
-      .when(Boolean(last) || this.queuedRoutes.length > 0, e => e.child(v_flex().flex_none().px(10).py(9).gap(6).bg(t.surface).border_t(1).border_color(t.border)
-        .child(h_flex().gap(5).items_center()
-          .child(div().flex_1().text_size(10).font_bold().text_color(t.muted).child(this.lang()==='ko'?'메시지 흐름':'MESSAGE FLOW'))
-          .child(div().text_size(10).text_color(t.accent).child(flows.length ? this.lang()==='ko'?`${flows.length}개 전송 · ${routes.length}경로`:`${flows.length} messages · ${routes.length} routes` : (this.lang()==='ko'?'최근 전송':'Recent')))
-          .when(this.pendingFlows.length>0, el=>el.child(div().text_size(10).text_color(t.muted).child(`+${this.pendingFlows.length}`))))
-        .children(this.queuedRoutes.slice(0,3).map(item=>h_flex().gap(5).text_size(10).text_color(item.hold?t.blocked:t.muted)
-          .tooltip(item.error || (this.lang()==='ko'?'사용 가능한 프로젝트 pane이 생기면 전달합니다':'Waiting for an available project pane'))
-          .child(div().child(item.hold?'!':'◷'))
-          .child(div().flex_1().truncate().child(`${item.project} · ${this.lang()==='ko'?'수신 pane 대기':'Waiting for a pane'}`))))
-        .children((flows.length ? routes : history).map(flow => {
-          const active=Boolean(flow.packets?.length), color=palette[flow.lane??0];
-          const arrived=!active || flow.phase==='arrived';
-          const position=flow.phase==='start' && motion ? 0 : 156;
-          return v_flex().id(`sf-flow-card-${flow.id}`).gap(3).px(6).py(5).rounded(4).bg(t.chrome)
-            .tooltip(`${label(flow.source)} → ${label(flow.target)} · ${flow.kind==='delegate'?'실제 서브에이전트 위임 기록':this.lang()==='ko'?'전송됨 · 읽음 여부 아님':'Sent, not a read receipt'}`)
-            .on_click(()=>run('agent.focus',{terminal:this.workflowNodes.find(node=>node.id===flow.target)?.terminal||flow.target}))
-            .child(h_flex().gap(5).items_center()
-              .child(div().size(4).rounded(2).bg(color))
-              .child(div().flex_1().min_w(0).truncate().text_size(10).text_color(t.muted).child(label(flow.source)))
-              .when((flow.count??0)>1,el=>el.child(div().text_size(9).text_color(color).child(`×${flow.count}`)))
-              .when(!active, el=>el.child(div().id(`sf-replay-${flow.id}`).px(3).text_size(11).text_color(t.muted)
-                .tooltip(this.lang()==='ko'?'기록된 경로 다시 보기 · 메시지를 재전송하지 않습니다':'Replay this route without sending a message')
-                .on_mouse_down('left',(_event,cx)=>cx.stop_propagation())
-                .on_mouse_up('left',(_event,cx)=>cx.stop_propagation())
-                .on_click((_event,cx)=>{
-                  cx.stop_propagation();
-                  this.pendingFlows.push({...flow,id:`${flow.id}-replay-${Date.now()}`,at:Date.now(),replay:true});
-                  this.startFlows(cx);cx.notify();
-                }).child('↻'))))
-            .when(active, el=>el.child(div().relative().h(9).w(170).ml(9)
-              .child(div().absolute().left(0).top(2).h(1).w(161).bg(t.border))
-              .child(div().id(`sf-flow-dot-${flow.id}`).absolute().left(position).top(0).size(8).rounded(4).bg(color)
-                .when(motion, dot=>dot.transition('left',{duration:1600,easing:'ease-in-out'})))))
-            .child(h_flex().gap(5).items_center()
-              .child(div().text_size(10).text_color(color).child(arrived?'✓':'↓'))
-              .child(div().flex_1().min_w(0).truncate().text_size(10).text_color(t.foreground).child(label(flow.target)))
-              .when(arrived,el=>el.child(div().text_size(9).text_color(t.dim).child(flow.replay?(this.lang()==='ko'?'경로 재생':'Replay'):(flow.kind==='delegate'?'위임 기록':this.lang()==='ko'?'전송됨':'Sent')))));
-        }))))
+      .when(routes.length>0,e=>e.child(v_flex().id('sf-transient-flows').flex_none().px(10).py(6).gap(3).bg(t.surface).border_t(1).border_color(t.border)
+        .children(routes.slice(0,2).map(flow=>h_flex().id(`sf-transfer-${flow.id}`).gap(5).items_center().text_size(10)
+          .tooltip(`${label(flow.source)} → ${label(flow.target)} · ${this.lang()==='ko'?'전송 이벤트 · 읽음 확인 아님':'Send event, not a read receipt'}`)
+          .child(div().flex_none().text_color(palette[flow.lane%palette.length]).font_bold().child(flow.phase==='arrived'?'✓':'→'))
+          .child(div().flex_1().min_w(0).truncate().text_color(t.foreground).child(`${label(flow.source)} → ${label(flow.target)}`))
+          .when(flow.count>1,row=>row.child(div().text_color(palette[flow.lane%palette.length]).child(`×${flow.count}`)))))
+        .when(routes.length>2,row=>row.child(div().text_size(9).text_color(t.muted).child(this.lang()==='ko'?`+${routes.length-2}개 경로 전송 중`:`+${routes.length-2} active routes`)))))
+      .when(this.queuedRoutes.length>0,e=>e.child(h_flex().id('sf-delivery-status').flex_none().px(10).py(6).gap(5).items_center().border_t(1).border_color(t.border)
+        .tooltip(this.queuedRoutes.map(item=>`${item.project} · ${item.error || (item.hold?'전달 보류':'수신 pane 대기')}`).join('\n'))
+        .child(div().text_size(10).text_color(this.queuedRoutes.some(item=>item.hold||item.error)?t.blocked:t.muted)
+          .child(this.lang()==='ko'?`전달 대기 ${this.queuedRoutes.length} · 오류/보류 ${this.queuedRoutes.filter(item=>item.hold||item.error).length}`:`Queued ${this.queuedRoutes.length} · Error/held ${this.queuedRoutes.filter(item=>item.hold||item.error).length}`))))
       .child(h_flex().h(38).flex_none().px(7).items_center()
         .child(this.button('sf-settings',w.settings,()=>run('app.settings'),t))
         .child(div().flex_1())

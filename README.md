@@ -147,6 +147,13 @@ by a color theme. No microphone permission is granted by installing Herdr Theme.
 
 ## Message flow
 
+There is no permanent message-history panel or idle pipeline. New sends show a brighter,
+thicker directional pipeline and a brief sender → recipient notice for about five seconds.
+Colors and lanes separate concurrent routes; repeated sends retain individual packets and
+show a grouped count. The notice shows at most two routes and an overflow count. Unresolved
+queued/error/held deliveries remain in a compact status row with full tooltip details.
+Motion off keeps a static directional indication until the same expiry timer clears it.
+
 With a Herdr app exposing `messageEvents()` and a core emitting `message_sent`,
 the sidebar reads successful sends from the app's bounded in-memory event list.
 Direct `hc send` and RPC sends use the same path; no Python launcher or per-message
