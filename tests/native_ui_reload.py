@@ -10,9 +10,10 @@ import argparse
 import os,json,subprocess,time,tempfile,shutil
 parser=argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--reloads',type=int,default=80)
+parser.add_argument('--failed-reloads',type=int,default=0,help='Repeat incomplete-import/restore cycles until OOM or this limit')
 parser.add_argument('--install-smoke',action='store_true',help='Exercise the guarded installer twice against the disposable app')
 args=parser.parse_args()
-if not 0 <= args.reloads <= 1000: parser.error('--reloads must be 0..1000')
+if not 0 <= args.reloads <= 1000 or not 0 <= args.failed_reloads <= 200: parser.error('--reloads must be 0..1000 and --failed-reloads 0..200')
 core=shutil.which('herdr-core')
 if not core: raise SystemExit('herdr-core must be available on PATH')
 from pathlib import Path
@@ -63,6 +64,16 @@ try:
   if st['errors']:
    print(json.dumps(receipt['reloads'][-1]),flush=True);run('herdr-app','shot',str(base/'stress-failure.png'));break
   if i%10==0:print(json.dumps({'generation':i,'errors':[]}),flush=True)
+ receipt['failedReloadCycles']=[]
+ for i in range(1,args.failed_reloads+1):
+  write(s.replace("import { WORDS, counts,", "import { notYetInstalled, WORDS, counts,"))
+  failed=status()
+  write(s);restored=status()
+  receipt['failedReloadCycles'].append({'cycle':i,'failedErrors':failed['errors'],'restoredErrors':restored['errors']})
+  if restored['errors']:
+   print(json.dumps({'failedReloadCycle':i,'restoredErrors':restored['errors']}),flush=True)
+   run('herdr-app','shot',str(base/'failed-reload-stress.png'));break
+  if i%10==0:print(json.dumps({'failedReloadCycle':i,'restoredErrors':[]}),flush=True)
  receipt['freshCheck']=run('herdr-app','check',str(mod));stop();launch();receipt['cleanRestart']=status();assert not receipt['cleanRestart']['errors'];run('herdr-app','shot',str(base/'restart.png'));print(json.dumps({'restartErrors':receipt['cleanRestart']['errors']}),flush=True)
  if args.install_smoke:
   candidate=base/'candidate';source=candidate/'mods/sixfold-desk';source.mkdir(parents=True);(candidate/'layouts').mkdir()
