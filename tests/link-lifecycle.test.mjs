@@ -50,6 +50,7 @@ test('with every lane fading, the longest-fading one gives its lane to a new lin
 
 // Render the sidebar with a fake UI, as tests/computers.test.mjs does, to check what
 // the computer list draws for sends between computers.
+let loads = 0;
 async function sidebar(runtime) {
   let source = await readFile(new URL('../mods/sixfold-desk/main.js', import.meta.url), 'utf8');
   source = source.replace(/import \{ View, div, svg, image \} from 'gpui-kit';/, 'const {View,div,svg,image}=globalThis.__linkRuntime;')
@@ -64,6 +65,8 @@ async function sidebar(runtime) {
   for (const name of ['model', 'flow', 'workflow', 'sidebar-identity', 'collab']) source = source.replace(`'./${name}.js'`, JSON.stringify(new URL(`../mods/sixfold-desk/${name}.js`, import.meta.url).href));
   source = source.replace(/import \{ pipeline \} from [^;]+;/, 'const pipeline=()=>{throw Error("unexpected path");};');
   globalThis.__linkRuntime = runtime;
+  // A distinct source per call: the module reads its runtime once, at import.
+  source += `\n// load ${++loads}`;
   const { default: Sidebar } = await import('data:text/javascript;base64,' + Buffer.from(source).toString('base64'));
   return Sidebar;
 }
@@ -108,5 +111,61 @@ test('two same-way sends between computers each get a packet, and the link sched
     assert(rows.has('sf-link-send-a') && rows.has('sf-link-send-b'), 'one packet per send');
     assert.notEqual(rows.get('sf-link-send-a').topValue, rows.get('sf-link-send-b').topValue, 'the later send starts from the sender while the first travels');
     assert.equal(view.linkWake, at + 500 + LINK_SEND_MS, 'the link is due to end five minutes after the last send');
+  } finally { delete globalThis.__linkRuntime; }
+});
+
+function sidebarRuntime(spaces, agents, machines) {
+  return {
+    View: class {}, div: element, svg: element, image: element, h_flex: element, v_flex: element,
+    props: () => ({ role: 'sidebar' }), theme: () => ({}), focused: () => ({ space: spaces[0].id, tab: spaces[0].tabs[0].id }),
+    spaces: () => spaces, agents: () => agents, panes: () => [],
+    terminals: () => [{ address: 't1' }, { address: 'worker/t1' }, { address: 'other/t1' }], window: () => ({}), layout: () => ({}),
+    machines: () => machines.map(name => ({ name, layout: 'ready' })),
+    shared: () => undefined, setShared: () => {}, setAgentOrder: () => {}, run: () => {}, openOverlay: () => {},
+  };
+}
+
+function renderRows(view) {
+  const rows = new Map();
+  const visit = node => { if (!node || typeof node !== 'object') return; if (node.rowId) rows.set(node.rowId, node); for (const child of node.nodes ?? []) visit(child); };
+  visit(view.render());
+  return rows;
+}
+
+function quietView(Sidebar, messageEvents = []) {
+  const view = new Sidebar();
+  Object.assign(view, { workflowNodes: [], workflowEvents: [], pendingFlows: [], queuedRoutes: [], workspaceIcons: {}, expandedAgents: new Set(), readMessages: {}, computers: {}, messageEvents, activeFlows: [] });
+  return view;
+}
+
+test('a workspace worked on from other computers carries ⇄ on its border, with a count from two up', async () => {
+  const spaces = [
+    { id: 'home', machine: null, name: 'Game', tabs: [{ id: 'h' }] },
+    { id: 'worker/w', machine: 'worker', name: 'Game (worker)', tabs: [{ id: 'worker/tw' }] },
+    { id: 'other/o', machine: 'other', name: 'Game', tabs: [{ id: 'other/to' }] },
+  ];
+  const working = space => ({ address: `${space}-agent`, space, status: 'working' });
+  try {
+    let Sidebar = await sidebar(sidebarRuntime(spaces, [working('home'), working('worker/w')], [null, 'worker', 'other']));
+    let rows = renderRows(quietView(Sidebar));
+    assert.deepEqual(rows.get('sf-space-mark-home')?.nodes, ['⇄'], 'one other computer: the mark alone');
+    Sidebar = await sidebar(sidebarRuntime(spaces, [working('home'), working('worker/w'), working('other/o')], [null, 'worker', 'other']));
+    rows = renderRows(quietView(Sidebar));
+    assert.deepEqual(rows.get('sf-space-mark-home')?.nodes, ['⇄2'], 'two other computers: the mark and their number');
+    Sidebar = await sidebar(sidebarRuntime(spaces, [working('home')], [null, 'worker', 'other']));
+    rows = renderRows(quietView(Sidebar));
+    assert(!rows.has('sf-space-mark-home'), 'no shared work, no mark');
+  } finally { delete globalThis.__linkRuntime; }
+});
+
+test('after a send link has gone, the ten-minute counts still schedule their redraw', async () => {
+  const spaces = [{ id: 'home', machine: null, name: 'Home', tabs: [{ id: 'h' }] }, { id: 'worker/w', machine: 'worker', name: 'Worker', tabs: [{ id: 'worker/tw' }] }];
+  try {
+    const Sidebar = await sidebar(sidebarRuntime(spaces, [], [null, 'worker']));
+    const at = Date.now() - 6 * 60 * 1000;
+    const view = quietView(Sidebar, [{ id: 'a', seq: 1, source: 't1', target: 'worker/t1', at }]);
+    renderRows(view);
+    assert.equal(view.linkSeen.size, 0, 'past five minutes the send no longer links the computers');
+    assert.equal(view.linkWake, at + 10 * 60 * 1000 + 1, 'redraw when the send leaves the ↑/↓ window');
   } finally { delete globalThis.__linkRuntime; }
 });

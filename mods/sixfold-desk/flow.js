@@ -97,3 +97,15 @@ export function machineTraffic(events, machineOf, now, windowMs = 10 * 60 * 1000
   }
   return traffic;
 }
+
+// When the last-ten-minutes ↑/↓ counts next change with no new send: the oldest
+// counted send leaving the window. Null when no send is counted.
+export function trafficWake(events, machineOf, now, windowMs = 10 * 60 * 1000) {
+  let wake = null;
+  for (const event of events) {
+    if (!Number.isFinite(event.at) || now - event.at > windowMs || !crossMachine(event, machineOf)) continue;
+    const leaves = event.at + windowMs + 1;
+    if (wake === null || leaves < wake) wake = leaves;
+  }
+  return wake;
+}

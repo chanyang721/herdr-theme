@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { crossMachine, followComputer, terminalMachine, machineHops, machineTraffic } from '../mods/sixfold-desk/flow.js';
+import { crossMachine, followComputer, terminalMachine, machineHops, machineTraffic, trafficWake } from '../mods/sixfold-desk/flow.js';
 
 const machines = { t1: null, t5: null, 'sub1/t7': 'sub1', 'sub2/t2': 'sub2' };
 const machineOf = address => machines[address];
@@ -66,4 +66,16 @@ test('recent sends between computers, newest first, and per-computer counts', ()
   assert.deepEqual(traffic.get(null), { sent: 1, received: 1 }, 'older than ten minutes is left out');
   assert.deepEqual(traffic.get('sub1'), { sent: 2, received: 1 });
   assert.deepEqual(traffic.get('sub2'), { sent: 0, received: 1 });
+});
+
+test('the ↑/↓ counts next change when their oldest send leaves the window', () => {
+  const now = 1_000_000_000, minute = 60 * 1000;
+  const events = [
+    { id: 'local', source: 't1', target: 't5', at: now - 9 * minute },
+    { id: 'old', source: 't1', target: 'sub1/t7', at: now - 11 * minute },
+    { id: 'a', source: 't1', target: 'sub1/t7', at: now - 7 * minute },
+    { id: 'b', source: 'sub1/t7', target: 't1', at: now - 2 * minute },
+  ];
+  assert.equal(trafficWake(events, machineOf, now), now - 7 * minute + 10 * minute + 1);
+  assert.equal(trafficWake(events.slice(0, 2), machineOf, now), null, 'nothing counted, nothing due');
 });
