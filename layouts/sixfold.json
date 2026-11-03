@@ -52,16 +52,6 @@
           }
         },
         {
-          "id": "session-pets",
-          "type": "block",
-          "size": {
-            "px": 16
-          },
-          "content": {
-            "mod": "session-pets"
-          }
-        },
-        {
           "id": "monitor-strip",
           "type": "row",
           "size": {
@@ -185,7 +175,7 @@
                         "role": "pane"
                       }
                     },
-                    "height": 27,
+                    "height": 43,
                     "position": "top",
                     "reveal": "always"
                   }

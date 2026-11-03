@@ -12,6 +12,7 @@ import { workflowNodes, delegationEvents, workflowStatus, sessionChildren, activ
 import { watchDocs, currentDocs, docsSection, prepareDocsInput } from './docs.js';
 import { watchAlerts, alertSection, visibleAlerts } from './alerts.js';
 import { workspaceAlertsRow, hasWorkspaceAlerts, openInbox } from './alert-inbox.js';
+import { panePet } from './pets.js';
 
 const hasPanel=node=>node?.id==='panel'||(node?.children||[]).some(hasPanel);
 
@@ -365,6 +366,7 @@ export default class SixfoldDesk extends View {
         .border(1).border_color(style.border)
         .on_click(() => run('pane.focus', { pane: p.pane }))
         .child(div().flex_none().font_bold().text_color(p.focused ? t.accent : t.dim).child(String(index).padStart(2, '0')))
+        .child(panePet(p,t,shared))
         .child(div().flex_1().min_w(0).truncate().text_color(t.foreground).child(title(p)))
         .child(this.badge(p.status, p.status ? w[p.status] : '', t, 11, ['working', 'blocked'].includes(p.status) ? t.foreground : null)));
     }
