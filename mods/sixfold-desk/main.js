@@ -585,15 +585,17 @@ export default class SixfoldDesk extends View {
           ? svg(icon.path).size(14).text_color(workspaceColor(s)) : image(icon.path).w(14).h(14));
       return box.bg(workspaceColor(s)).child(svg(`mods/sixfold-desk/icons/ws-${workspaceIdentity(s)||'workspace'}.svg`).size(12).flex_none().text_color(t.background));
     };
-    const spaceRows=groups.map(({s,members})=>{ const mark=spaceLink(s), linked=mark && !mark.gone ? mark : null; return v_flex().id(`sf-space-${s.id}`).relative().ml(7).mr(LINK_MARGIN).mb(12).gap(2).flex_none().rounded(6).border(1).border_color(workspacePinned(s,this.workspacePins)?t.accent:t.border)
-      // Worked on together with another computer now: the link's quiet colour, dashed.
-      .when(Boolean(linked),e=>e.border_dashed().border_color(linked.lane.colors.link))
+    const spaceRows=groups.map(({s,members})=>{ const mark=spaceLink(s), linked=mark && !mark.gone ? mark : null;
       // A small ⇄ sits on the top border (drawn over it, the box does not move), with the
-      // number of other computers from two up; their names are in its tooltip.
-      .when(Boolean(mark),e=>e.child(h_flex().id(`sf-space-mark-${s.id}`).absolute().top(-7).right(10).h(13).px(3).items_center().bg(t.chrome)
+      // number of other computers from two up; their names are in its tooltip. It is the
+      // card's last child so the header's background does not cover it.
+      const markView = mark ? h_flex().id(`sf-space-mark-${s.id}`).absolute().top(-7).right(10).h(13).px(3).items_center().bg(t.chrome)
         .text_size(10).text_color(mark.lane.colors.packet).opacity(mark.gone ? 0 : 0.85).when(motion,el=>el.transition('opacity',600))
         .tooltip(`${mark.partners.map(m => this.computerLabel(m)).join(', ')}${this.lang()==='ko' ? '과 협업 중' : ': worked on together now'}\n${collabNote}`)
-        .child(`⇄${mark.partners.length > 1 ? mark.partners.length : ''}`)))
+        .child(`⇄${mark.partners.length > 1 ? mark.partners.length : ''}`) : null;
+      return v_flex().id(`sf-space-${s.id}`).relative().ml(7).mr(LINK_MARGIN).mb(12).gap(2).flex_none().rounded(6).border(1).border_color(workspacePinned(s,this.workspacePins)?t.accent:t.border)
+      // Worked on together with another computer now: the link's quiet colour, dashed.
+      .when(Boolean(linked),e=>e.border_dashed().border_color(linked.lane.colors.link))
       .when(this.dragSpace && this.overSpace===s.id && this.dragSpace!==s.id,e=>e.border_t(2).border_color(t.accent))
       .on_mouse_move((_event,cx)=>{
         const source=spaces().find(x=>x.id===this.dragSpace);
@@ -666,7 +668,7 @@ export default class SixfoldDesk extends View {
 
       })).child(div().id(`sf-docs-height-${s.id}`).min_w(0)
         .on_size_change((size,cx)=>{const height=size.height/(settings().zoom||1);this.docsHeights??={};if(Math.abs((this.docsHeights[s.id]||0)-height)>1){this.docsHeights[s.id]=height;cx.notify();}})
-        .child(docsSection(this,t,s)));});
+        .child(docsSection(this,t,s))).when(Boolean(markView),e=>e.child(markView));});
     const workspaceTree=v_flex().relative().flex_none().children(spaceRows)
       .children(paths.filter(flow => positions[flow.source] !== undefined && positions[flow.target] !== undefined).map(flow => {
         const from=positions[flow.source], to=positions[flow.target];
