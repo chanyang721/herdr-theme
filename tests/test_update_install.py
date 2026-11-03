@@ -1,4 +1,3 @@
-import fcntl
 import json
 import os
 from pathlib import Path
@@ -8,7 +7,7 @@ import unittest
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
-from update_install import InstallError, update
+from update_install import InstallError, exchange_directories, lock_exclusive, update
 
 
 class UpdateInstallTests(unittest.TestCase):
@@ -25,8 +24,8 @@ class UpdateInstallTests(unittest.TestCase):
         (self.source / 'required.js').write_text('dependency')
         (self.target / 'main.js').write_text('old')
         (self.target / 'unlisted.js').write_text('preserve me')
-        self.cli = self.base / 'fake-herdr'
-        self.cli.write_text('#!' + sys.executable + '''
+        script = self.base / 'fake-herdr.py'
+        script.write_text('#!' + sys.executable + '''
 import json,os,sys
 from pathlib import Path
 home=Path(os.environ['HERDR_APP_HOME']);config=json.loads((home/'fake.json').read_text())
@@ -43,7 +42,13 @@ elif sys.argv[1]=='status':
  print(json.dumps({'errors':errors,'space':'space','tab':'tab','focused_pane':'moved' if current=='new' and config.get('focus_change') else 'pane'}))
 else:sys.exit(4)
 ''')
-        self.cli.chmod(0o755)
+        script.chmod(0o755)
+        if sys.platform == 'win32':
+            # Windows cannot start a shebang script directly; a batch wrapper stands in for the CLI.
+            self.cli = self.base / 'fake-herdr.cmd'
+            self.cli.write_text(f'@"{sys.executable}" "{script}" %*' + chr(10))
+        else:
+            self.cli = script
         self.configure()
 
     def configure(self, **value):
@@ -117,7 +122,7 @@ else:sys.exit(4)
         lock = self.home / 'data/sixfold/install.lock'
         lock.parent.mkdir(parents=True)
         with lock.open('w') as stream:
-            fcntl.flock(stream, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            lock_exclusive(stream)
             with self.assertRaisesRegex(InstallError, 'holds the lock'):
                 self.install()
         self.assertEqual(self.calls(), [])
@@ -162,6 +167,35 @@ else:sys.exit(4)
         self.assertEqual((self.home / 'layouts/sixfold.json').read_text(), '{"old":true}')
         self.assertEqual((self.target / 'main.js').read_text(), 'old')
 
+
+    def test_exchange_swaps_directory_contents_and_leaves_no_scratch_path(self):
+        left, right = self.base / 'stage/example', self.base / 'live/example'
+        left.mkdir(parents=True)
+        right.mkdir(parents=True)
+        (left / 'main.js').write_text('candidate')
+        (right / 'main.js').write_text('installed')
+        exchange_directories(left, right)
+        self.assertEqual((right / 'main.js').read_text(), 'candidate')
+        self.assertEqual((left / 'main.js').read_text(), 'installed')
+        self.assertEqual(sorted(p.name for p in left.parent.iterdir()), ['example'])
+
+    @unittest.skipUnless(sys.platform == 'win32', 'Windows rename fallback only')
+    def test_windows_failed_second_rename_restores_the_installed_directory(self):
+        import update_install
+        left, right = self.base / 'stage/example', self.base / 'live/example'
+        left.mkdir(parents=True)
+        right.mkdir(parents=True)
+        (right / 'main.js').write_text('installed')
+        real = os.rename
+        def flaky(source, target):
+            if Path(source) == left:
+                raise PermissionError('held open')
+            return real(source, target)
+        with patch('update_install.os.rename', side_effect=flaky), patch('update_install.time.sleep'):
+            with self.assertRaises(PermissionError):
+                update_install.exchange_directories(left, right)
+        self.assertEqual((right / 'main.js').read_text(), 'installed')
+        self.assertFalse((left.parent / 'example.exchange-aside').exists())
 
 if __name__ == '__main__':
     unittest.main()

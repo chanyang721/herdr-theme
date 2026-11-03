@@ -3,7 +3,6 @@
 import argparse
 import contextlib
 import ctypes
-import fcntl
 import hashlib
 import json
 import os
@@ -14,6 +13,11 @@ import sys
 import tempfile
 import time
 from datetime import datetime, timezone
+
+if sys.platform == 'win32':
+    import msvcrt
+else:
+    import fcntl
 
 
 class InstallError(RuntimeError):
@@ -29,14 +33,58 @@ def atomic_write(path, data, mode=0o644):
             stream.flush()
             os.fsync(stream.fileno())
         os.chmod(temporary, mode)
-        os.replace(temporary, path)
+        rename_with_retry(temporary, path, replace=True)
     finally:
         with contextlib.suppress(FileNotFoundError):
             os.unlink(temporary)
 
 
+def lock_exclusive(stream):
+    """Take the install lock without waiting; BlockingIOError when another installer holds it."""
+    if sys.platform == 'win32':
+        stream.seek(0)
+        try:
+            msvcrt.locking(stream.fileno(), msvcrt.LK_NBLCK, 1)
+        except OSError as error:
+            raise BlockingIOError(str(error)) from error
+    else:
+        fcntl.flock(stream, fcntl.LOCK_EX | fcntl.LOCK_NB)
+
+
+def rename_with_retry(source, target, attempts=25, replace=False):
+    """Windows refuses a rename while a reader holds a file open; wait briefly for it."""
+    for attempt in range(attempts):
+        try:
+            (os.replace if replace else os.rename)(source, target)
+            return
+        except PermissionError:
+            if attempt == attempts - 1:
+                raise
+            time.sleep(.04)
+
+
+def exchange_directories_windows(left, right):
+    """Swap two directories with three renames on one volume.
+
+    Windows has no directory-swap call, so `right` is missing for the moment
+    between the first two renames. A failed second rename puts `right` back.
+    """
+    aside = left.parent / (left.name + '.exchange-aside')
+    if aside.exists():
+        raise InstallError(f'Exchange scratch path already exists: {aside}')
+    rename_with_retry(right, aside)
+    try:
+        rename_with_retry(left, right)
+    except BaseException:
+        rename_with_retry(aside, right)
+        raise
+    rename_with_retry(aside, left)
+
+
 def exchange_directories(left, right):
     """Exchange two directories in one filesystem operation (no missing-path gap)."""
+    if sys.platform == 'win32':
+        return exchange_directories_windows(Path(left), Path(right))
     libc = ctypes.CDLL(None, use_errno=True)
     if sys.platform == 'darwin':
         call = libc.renamex_np
@@ -47,7 +95,7 @@ def exchange_directories(left, right):
         call.argtypes = [ctypes.c_int, ctypes.c_char_p, ctypes.c_int, ctypes.c_char_p, ctypes.c_uint]
         result = call(-100, os.fsencode(left), -100, os.fsencode(right), 2)  # RENAME_EXCHANGE
     else:
-        raise InstallError('Atomic directory exchange requires macOS or Linux renameat2; no unsafe fallback')
+        raise InstallError('Directory exchange requires macOS, Linux renameat2 or Windows; no unsafe fallback')
     if result:
         error = ctypes.get_errno()
         raise OSError(error, os.strerror(error))
@@ -68,7 +116,7 @@ def digest(data):
 
 
 def read_status(cli, env):
-    result = subprocess.run([cli, 'status'], env=env, check=True, capture_output=True, text=True, timeout=15)
+    result = subprocess.run([cli, 'status'], env=env, check=True, capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=15)
     status = json.loads(result.stdout)
     if not isinstance(status, dict) or not isinstance(status.get('errors'), list):
         raise InstallError('status must contain an errors array')
@@ -123,7 +171,7 @@ def update(repo, home, names, cli='herdr-app', verify_timeout=10, allow_unhealth
     lock_path.parent.mkdir(parents=True, exist_ok=True)
     with lock_path.open('a+') as lock:
         try:
-            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            lock_exclusive(lock)
         except BlockingIOError as error:
             raise InstallError('Another installation holds the lock; do not copy files manually') from error
         env = {**os.environ, 'HERDR_APP_HOME': str(home)}
@@ -161,7 +209,7 @@ def update(repo, home, names, cli='herdr-app', verify_timeout=10, allow_unhealth
                 if relative.parts[0] == 'mods':
                     atomic_write(stage / Path(*relative.parts[1:]), payload, mode)
             for name in mods:
-                checked = subprocess.run([cli, 'check', str(stage / name)], env=env, capture_output=True, text=True, timeout=30)
+                checked = subprocess.run([cli, 'check', str(stage / name)], env=env, capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=30)
                 if checked.returncode:
                     raise InstallError(f'Native check failed for {name}: {checked.stdout.strip()} {checked.stderr.strip()}')
             # Validate before touching installed code; backups never live in mods/.
@@ -197,7 +245,7 @@ def update(repo, home, names, cli='herdr-app', verify_timeout=10, allow_unhealth
                     if target.exists():
                         exchange_directories(stage / name, target)
                     else:
-                        os.replace(stage / name, target)
+                        rename_with_retry(stage / name, target)
                     swapped.append(name)
                 for relative, payload, mode in files:
                     if relative.parts[0] == 'mods':
@@ -255,7 +303,7 @@ def update(repo, home, names, cli='herdr-app', verify_timeout=10, allow_unhealth
                         conflicts.append('mods/' + name)
                         continue
                     if initial_mod_digests[name] is None:
-                        os.replace(target, stage / name)
+                        rename_with_retry(target, stage / name)
                     else:
                         exchange_directories(stage / name, target)
                 candidate = {relative: payload for relative, payload, _ in files}

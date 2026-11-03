@@ -51,7 +51,7 @@ python3 scripts/update_install.py mods/sixfold-desk/main.js mods/sixfold-desk/mo
 The updater locks `data/sixfold/install.lock`, builds complete affected mod trees outside `mods/`, runs
 native checks, keeps full backups under `backups/sixfold-update-*/`, then atomically exchanges each
 mod directory. Unlisted installed files stay in the candidate tree. Identical contents and modes are skipped to avoid unnecessary reloads. It requires macOS directory swap
-or Linux `renameat2` exchange; there is no partial-file fallback for mods. Layout/theme files explicitly
+or Linux `renameat2` exchange. Windows has no directory swap, so there the updater moves the installed mod aside, moves the checked candidate in and puts the old tree in the stage folder: the mod path is missing for that moment, and a failed move puts the installed tree back. There is no partial-file fallback for mods. Layout/theme files explicitly
 listed are atomically replaced individually. Repository `scripts/<file>` installs into `scripts/sixfold/<file>`
 to match the initial installer; scripts are also replaced individually. It verifies `status.errors` stays empty for one second
 and that space, tab and focused pane are unchanged. Failed checks do not install; failed verification
