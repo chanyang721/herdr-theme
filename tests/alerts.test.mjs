@@ -6,6 +6,7 @@ test('alerts recover after cold install and partial writes without a folder watc
   let text;
   let notifications = 0;
   let refresh;
+  let ledgerText = null;
   const tasks = [];
   const view = {alerts: []};
   const cx = {
@@ -17,9 +18,18 @@ test('alerts recover after cold install and partial writes without a folder watc
     appHome: () => '/fresh-install',
     setShared() {},
     readTextFile: async path => {
+      if (path.endsWith('/slack-popup-events.json')) {
+        if (ledgerText === null) throw new Error('ledger missing');
+        return ledgerText;
+      }
       if (!path.endsWith('/alerts.json')) throw new Error('optional file missing');
       if (text === undefined) throw new Error('folder does not exist');
       return text;
+    },
+    writeTextFile: async (_path, value, expected) => {
+      if (ledgerText !== expected) throw new Error('compare-and-swap conflict');
+      ledgerText = value;
+      return null;
     },
   };
   let source = await readFile(new URL('../mods/sixfold-desk/alerts.js', import.meta.url), 'utf8');
@@ -27,7 +37,7 @@ test('alerts recover after cold install and partial writes without a folder watc
   source = source.replace(/^import .* from 'gpui-kit';\n/m, '');
   source = source.replace(/^import .* from 'gpui-base';\n/m, '');
   source = source.replace(/^import .* from 'herdr';/m,
-    'const {appHome, readTextFile, setShared, notify} = globalThis.__alertsRuntime;');
+    'const {appHome, readTextFile, writeTextFile, setShared, notify} = globalThis.__alertsRuntime;');
   try {
     const {watchAlerts} = await import('data:text/javascript;base64,' + Buffer.from(source).toString('base64'));
     watchAlerts(view, cx);
@@ -55,21 +65,75 @@ test('alerts recover after cold install and partial writes without a folder watc
   }
 });
 
-test('new mentions and finished reviews reopen the popup once; cold history does not',async()=>{
-  const files=new Map([['alerts.json','{"items":[]}'],['project-alerts.json','{"items":[],"projects":["Medihomes"]}'],['slack-alerts-read.json','{}'],['slack-mentions.json','{"items":[{"id":"old"}]}'],['slack-workflows.json','{"jobs":{}}']]);
+test('popup events persist by source/result identity, ignoring timestamps and transient omissions',async()=>{
+  const files=new Map([
+    ['alerts.json','{"items":[]}'],['project-alerts.json','{"items":[],"projects":["Medihomes"]}'],
+    ['slack-alerts-read.json','{}'],['slack-mentions.json','{"items":[{"id":"old"}]}'],
+    ['slack-live-health.json','{"state":"ok","checked":1}'],
+    ['slack-workflows.json','{"jobs":{"job":{"id":"job","version":"source-v1","state":"needs_decision","summary":"Review ready","artifacts":["/report.md"],"finished_at":"first"},"legacy":{"id":"legacy","state":"ready","summary":"Old wording","sources":[{"id":"slack:C1:legacy"}],"artifacts":[],"finished_at":"first"}}}'],
+  ]);
+  const opens=[];
+  async function startWatcher(){
+    const tasks=[];let refresh;
+    const cx={notify(){},spawn(fn){const task=fn(cx);tasks.push(task);return task;},timer:{every(_ms,fn){refresh=fn;}}};
+    globalThis.__popupRuntime={
+      appHome:()=>'/test',setShared(){},openOverlay:x=>opens.push(x),
+      readTextFile:async path=>{const name=path.split('/').at(-1);if(!files.has(name))throw new Error('missing');return files.get(name);},
+      writeTextFile:async(_path,value,expected)=>{const name=_path.split('/').at(-1);const old=files.has(name)?files.get(name):null;if(old!==expected)throw new Error('compare-and-swap conflict');files.set(name,value);return null;},
+    };
+    let source=await readFile(new URL('../mods/sixfold-desk/alerts.js',import.meta.url),'utf8');
+    source=source.replace(/^import .* from 'gpui-kit';\n/m,'').replace(/^import .* from 'gpui-base';\n/m,'')
+      .replace(/^import .* from 'herdr';/m,'const {appHome,readTextFile,writeTextFile,setShared,openOverlay}=globalThis.__popupRuntime;');
+    const {watchAlerts}=await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64')+'#'+Math.random());
+    watchAlerts({alerts:[]},cx);await tasks.at(-1);
+    return async()=>{refresh(cx);await tasks.at(-1);};
+  }
+  try{
+    let refresh=await startWatcher();
+    assert.equal(opens.length,0,'existing messages/results are seeded silently');
+    const saved=JSON.parse(files.get('slack-popup-events.json'));
+    assert.equal(saved.schema,1);assert.equal(saved.seen.length,3);
+
+    files.set('slack-live-health.json','{"state":"ok","checked":2}');
+    files.set('slack-workflows.json','{"jobs":{"job":{"id":"job","version":"source-v1","state":"needs_decision","summary":"Reworded review summary","artifacts":["/report.md"],"finished_at":"second"},"legacy":{"id":"legacy","state":"ready","summary":"Reworded legacy summary","sources":[{"id":"slack:C1:legacy"}],"artifacts":[],"finished_at":"second"}}}');
+    await refresh();assert.equal(opens.length,0,'health ticks, summaries and finished_at changes are not new events');
+
+    files.set('slack-mentions.json','{"items":[]}');await refresh();
+    files.set('slack-mentions.json','{"items":[{"id":"old"},{"id":"new"}]}');await refresh();
+    assert.equal(opens.length,1,'a new source opens once after a transient omission');
+    assert.equal(opens[0].props.review,false);
+    await refresh();assert.equal(opens.length,1);
+
+    files.set('slack-workflows.json','{"jobs":{"job":{"id":"job","version":"source-v2","state":"needs_decision","summary":"Updated source review","artifacts":["/report.md"],"finished_at":"third"}}}');
+    await refresh();assert.equal(opens.length,2,'a changed source/result opens once');
+    files.set('slack-workflows.json','{"jobs":{"job":{"id":"job","version":"source-v2","state":"needs_decision","summary":"Updated source review","artifacts":["/report.md"],"finished_at":"fourth"}}}');
+    await refresh();assert.equal(opens.length,2,'a second timestamp change does not reopen it');
+
+    refresh=await startWatcher();
+    assert.equal(opens.length,2,'a fresh watcher/restart honors the persistent ledger');
+    assert.equal(opens[1].props.review,true);
+    assert.equal(opens[0].kind,'window');assert.equal(opens[0].key,opens[1].key);
+  }finally{delete globalThis.__popupRuntime;}
+});
+
+test('an empty first run seeds the ledger before later new source arrives',async()=>{
+  const files=new Map([
+    ['alerts.json','{"items":[]}'],['project-alerts.json','{"items":[]}'],['slack-alerts-read.json','{}'],
+    ['slack-mentions.json','{"items":[]}'],['slack-live-health.json','{}'],['slack-workflows.json','{"jobs":{}}'],
+  ]);
   const tasks=[],opens=[];let refresh;
   const cx={notify(){},spawn(fn){const task=fn(cx);tasks.push(task);return task;},timer:{every(_ms,fn){refresh=fn;}}};
-  globalThis.__popupRuntime={appHome:()=>'/test',readTextFile:async path=>files.get(path.split('/').at(-1)) || '{}',setShared(){},openOverlay:x=>opens.push(x)};
+  globalThis.__popupRuntime={appHome:()=>'/test',setShared(){},openOverlay:x=>opens.push(x),
+    readTextFile:async path=>{const name=path.split('/').at(-1);if(!files.has(name))throw new Error('missing');return files.get(name);},
+    writeTextFile:async(_path,value,expected)=>{const name=_path.split('/').at(-1);const old=files.has(name)?files.get(name):null;if(old!==expected)throw new Error('compare-and-swap conflict');files.set(name,value);return null;}};
   let source=await readFile(new URL('../mods/sixfold-desk/alerts.js',import.meta.url),'utf8');
   source=source.replace(/^import .* from 'gpui-kit';\n/m,'').replace(/^import .* from 'gpui-base';\n/m,'')
-    .replace(/^import .* from 'herdr';/m,'const {appHome,readTextFile,setShared,openOverlay}=globalThis.__popupRuntime;');
+    .replace(/^import .* from 'herdr';/m,'const {appHome,readTextFile,writeTextFile,setShared,openOverlay}=globalThis.__popupRuntime;');
   try{
-    const {watchAlerts}=await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64')+'#popup');
-    watchAlerts({alerts:[]},cx);await tasks.at(-1);assert.equal(opens.length,0);
-    files.set('slack-mentions.json','{"items":[{"id":"old"},{"id":"new"}]}');refresh(cx);await tasks.at(-1);assert.equal(opens.length,1);
-    refresh(cx);await tasks.at(-1);assert.equal(opens.length,1);
-    files.set('slack-workflows.json','{"jobs":{"job":{"id":"job","state":"needs_decision","finished_at":"now"}}}');refresh(cx);await tasks.at(-1);assert.equal(opens.length,2);
-    assert.equal(opens[0].props.review,false);assert.equal(opens[1].props.review,true);
-    assert.equal(opens[0].kind,'window');assert.equal(opens[0].key,opens[1].key);
+    const {watchAlerts}=await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64')+'#empty-first-run');
+    watchAlerts({alerts:[]},cx);await tasks.at(-1);
+    assert.deepEqual(JSON.parse(files.get('slack-popup-events.json')),{schema:1,seen:[]});
+    files.set('slack-mentions.json','{"items":[{"id":"later"}]}');refresh(cx);await tasks.at(-1);
+    assert.equal(opens.length,1,'the first post-install source still opens');
   }finally{delete globalThis.__popupRuntime;}
 });

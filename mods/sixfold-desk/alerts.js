@@ -4,6 +4,47 @@ import { run, readTextFile, writeTextFile, appHome, setShared, openOverlay } fro
 
 const SHOWN = new Set(['needs-you']);  // Only what a person must decide; the rest stays in the project.
 const MARKS = { 'needs-you': '!', info: '✓', processing: '●' };
+const WORKFLOW_RESULTS = new Set(['ready', 'needs_decision', 'blocked']);
+
+function popupEvents(mentions, read, workflows) {
+  const events = [];
+  for (const item of mentions ?? []) {
+    if (typeof item?.id === 'string' && item.id) {
+      events.push({key: `mention:${item.id}`, popup: read[item.id] !== item.id});
+    }
+  }
+  for (const job of Object.values(workflows ?? {})) {
+    if (!job?.id || !WORKFLOW_RESULTS.has(job.state)) continue;
+    const artifacts = Array.isArray(job.artifacts) ? [...job.artifacts].sort() : [];
+    // finished_at is an audit timestamp, not a new source or review result.
+    // Summaries are editable presentation. Prefer the stable workflow version;
+    // legacy records fall back to their source identities and result artifacts.
+    const sources = Array.isArray(job.sources) ? job.sources.map(source => source?.id).filter(Boolean).sort() : [];
+    const revision = typeof job.version === 'string' && job.version ? ['version', job.version] : ['legacy', sources];
+    const result = [job.id, revision, job.state, artifacts];
+    events.push({key: `workflow:${JSON.stringify(result)}`, popup: true, review: true});
+  }
+  return events;
+}
+
+async function notifyNewPopupEvents(events) {
+  const path = `${appHome()}/data/sixfold/slack-popup-events.json`;
+  const text = await readTextFile(path).catch(() => null);
+  const firstRun = text === null;
+  const ledger = firstRun ? {schema: 1, seen: []} : JSON.parse(text);
+  if (ledger?.schema !== 1 || !Array.isArray(ledger.seen) || !ledger.seen.every(key => typeof key === 'string')) {
+    throw new Error('Invalid Slack popup event ledger');
+  }
+  const seen = new Set(ledger.seen);
+  const fresh = events.filter(event => !seen.has(event.key));
+  if (!fresh.length && !firstRun) return null;
+
+  // Seed existing history silently on first run. Later writes use the exact
+  // previous contents as a compare-and-swap guard across multiple views.
+  const next = {schema: 1, seen: [...ledger.seen, ...fresh.map(event => event.key)]};
+  await writeTextFile(path, JSON.stringify(next), text);
+  return firstRun ? null : fresh.find(event => event.popup) ?? null;
+}
 
 // Tracked Slack, GitHub and pane requests, ordered by the watcher: needs-you first.
 export function visibleAlerts(items, limit = 6) {
@@ -13,7 +54,6 @@ export function visibleAlerts(items, limit = 6) {
 export function watchAlerts(view, cx) {
   let loading = false;
   let previous;
-  let mentionIds;
   const refresh = cx => {
     if (loading) return;
     loading = true;
@@ -31,15 +71,11 @@ export function watchAlerts(view, cx) {
         const items = feed.items ?? [];
         const read=JSON.parse(readText || '{}');
         const tagged=JSON.parse(mentions || '{}').items ?? [];
-        const ids=new Set(tagged.map(i=>i.id));
-        const fresh=mentionIds && tagged.filter(i=>!mentionIds.has(i.id) && read[i.id]!==i.id);
         const states=JSON.parse(workflows || '{}').jobs ?? {};
-        const oldStates=view.slackWorkflowStates;
-        const finished=oldStates && Object.values(states).some(job=>['ready','needs_decision','blocked'].includes(job.state) && job.finished_at!==oldStates[job.id]?.finished_at);
+        const event=await notifyNewPopupEvents(popupEvents(tagged,read,states));
         setShared('sixfold.slackHealth',JSON.parse(health || '{}'));
         setShared('sixfold.slackWorkflows',states);
-        if(fresh?.length || finished)openOverlay({mod:'sixfold-slack-inbox',kind:'window',key:'slack-mentions',keep:true,width:1040,height:800,props:{window:true,review:Boolean(finished)}});
-        mentionIds=ids;view.slackWorkflowStates=states;
+        if(event)openOverlay({mod:'sixfold-slack-inbox',kind:'window',key:'slack-mentions',keep:true,width:1040,height:800,props:{window:true,review:Boolean(event.review)}});
         setShared('sixfold.alertItems',items);
         setShared('sixfold.alertRead',read);
         setShared('sixfold.alertProjects',feed.projects ?? []);
