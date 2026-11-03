@@ -17,6 +17,17 @@ const hasPanel=node=>node?.id==='panel'||(node?.children||[]).some(hasPanel);
 
 const marks = { blocked: '!', done: '✓', working: '●', idle: '○' };
 
+// Pane frames expose only a shared border and focus override. Keep status
+// decoration inside the header so it never competes with the keyboard frame.
+export function paneHeaderStyle(p, t) {
+  const color = p.status === 'working' ? t.working : p.status === 'blocked' ? t.blocked : null;
+  return {
+    background: color ? `${color.slice(0, 7)}24` : p.focused ? t.selected : t.chrome,
+    base: color ? t.chrome : p.focused ? t.selected : t.chrome,
+    border: !p.focused && color ? color : null,
+  };
+}
+
 export default class SixfoldDesk extends View {
   init(_props, cx) {
     this.dragSpace = null;
@@ -245,7 +256,7 @@ export default class SixfoldDesk extends View {
       .hover(s => s.bg(t.hover).text_color(t.foreground)).on_click(action).child(text);
   }
 
-  badge(status, text, t, size = 11) {
+  badge(status, text, t, size = 11, labelColor = null) {
     // Working uses the stock Herdr spinner (same asset, color and speed as the default agents list).
     const mark = status === 'working'
       ? svg('mods/workspace-chrome/spinner.svg').size(size+1).flex_none().text_color(t.working).spin(900)
@@ -255,7 +266,7 @@ export default class SixfoldDesk extends View {
           .loop('opacity', { from: 0.35, to: 1, period: 2400 })
       : div().font_bold().child(marks[status] ?? '·');
     return h_flex().gap(5).items_center().text_size(size).text_color(t[status] ?? t.muted)
-      .child(mark).child(text);
+      .child(mark).child(labelColor ? div().text_color(labelColor).child(text) : text);
   }
 
   startFlows(cx) {
@@ -327,12 +338,14 @@ export default class SixfoldDesk extends View {
       const p = all.find(p => p.pane === props()?.pane);
       if (!p) return div();
       const index = all.filter(x => x.tab === p.tab).findIndex(x => x.pane === p.pane) + 1;
-      return h_flex().id(`sixfold-head-${p.pane}`).size_full().items_center().gap(7).px(9)
-        .bg(p.focused ? t.selected : t.chrome).text_size(11.5)
+      const style = paneHeaderStyle(p, t);
+      return div().size_full().bg(style.base).child(h_flex().id(`sixfold-head-${p.pane}`).size_full().items_center().gap(7).px(9)
+        .bg(style.background).text_size(11.5)
+        .when(Boolean(style.border), el => el.border(1).border_color(style.border))
         .on_click(() => run('pane.focus', { pane: p.pane }))
         .child(div().flex_none().font_bold().text_color(p.focused ? t.accent : t.dim).child(String(index).padStart(2, '0')))
         .child(div().flex_1().min_w(0).truncate().text_color(t.foreground).child(title(p)))
-        .child(this.badge(p.status, p.status ? w[p.status] : '', t));
+        .child(this.badge(p.status, p.status ? w[p.status] : '', t, 11, ['working', 'blocked'].includes(p.status) ? t.foreground : null)));
     }
     if (role === 'footer') {
       const p = all.find(p => p.pane === f?.pane);
