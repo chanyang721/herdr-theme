@@ -99,3 +99,16 @@ class DocumentTests(unittest.TestCase):
             self.assertFalse(os.path.lexists(base/'target'/'guide.md'))
             self.assertEqual(config.read_bytes(),original_config)
             self.assertEqual(doc.read_bytes(),original_doc)
+
+class RuleOnlySpaceTests(unittest.TestCase):
+    def test_spaces_with_only_doc_tab_rules_are_indexed_by_id_without_links(self):
+        with tempfile.TemporaryDirectory() as root:
+            base=Path(root);source=base/'docs';source.mkdir();(source/'guide.md').write_text('x')
+            config=base/'config.json';config.write_text(json.dumps({'version':1,'spaces':{'Demo':{'folders':[str(source)],'target':str(base/'target')}}}))
+            pins=base/'pins.json';pins.write_text(json.dumps({'version':1,'spaces':{
+                'sp-demo':{'name':'Demo','folders':[str(source)]},
+                'sp-share':{'name':'Share','folders':[str(source)]}}}))
+            result=collect(config,base/'index.json',pins)
+            self.assertEqual(set(result['spaces']),{'Demo','sp-share'},'a space already configured by name is not indexed twice')
+            self.assertEqual(result['spaces']['sp-share']['files'][0]['name'],'guide.md')
+            self.assertEqual(sorted(p.name for p in base.iterdir()),['config.json','docs','index.json','pins.json','target'])
