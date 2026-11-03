@@ -65,7 +65,8 @@ test('alerts recover after cold install and partial writes without a folder watc
   }
 });
 
-test('popup events persist by source/result identity, ignoring timestamps and transient omissions',async()=>{
+for (const lineEnding of ['\n', '\r\n']) {
+test(`popup events persist by source/result identity, ignoring timestamps and transient omissions (${lineEnding === '\n' ? 'LF' : 'CRLF'})`,async()=>{
   const files=new Map([
     ['alerts.json','{"items":[]}'],['project-alerts.json','{"items":[],"projects":["Medihomes"]}'],
     ['slack-alerts-read.json','{}'],['slack-mentions.json','{"items":[{"id":"old"}]}'],
@@ -82,7 +83,8 @@ test('popup events persist by source/result identity, ignoring timestamps and tr
       writeTextFile:async(_path,value,expected)=>{const name=_path.split('/').at(-1);const old=files.has(name)?files.get(name):null;if(old!==expected)throw new Error('compare-and-swap conflict');files.set(name,value);return null;},
     };
     let source=await readFile(new URL('../mods/sixfold-desk/alerts.js',import.meta.url),'utf8');
-    source=source.replace(/^import .* from 'gpui-kit';\n/m,'').replace(/^import .* from 'gpui-base';\n/m,'')
+    source=source.replace(/\r?\n/g,lineEnding);
+    source=source.replace(/^import .* from 'gpui-kit';\r?\n/m,'').replace(/^import .* from 'gpui-base';\r?\n/m,'')
       .replace(/^import .* from 'herdr';/m,'const {appHome,readTextFile,writeTextFile,setShared,openOverlay}=globalThis.__popupRuntime;');
     const {watchAlerts}=await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64')+'#'+Math.random());
     watchAlerts({alerts:[]},cx);await tasks.at(-1);
@@ -116,7 +118,7 @@ test('popup events persist by source/result identity, ignoring timestamps and tr
   }finally{delete globalThis.__popupRuntime;}
 });
 
-test('an empty first run seeds the ledger before later new source arrives',async()=>{
+test(`an empty first run seeds the ledger before later new source arrives (${lineEnding === '\n' ? 'LF' : 'CRLF'})`,async()=>{
   const files=new Map([
     ['alerts.json','{"items":[]}'],['project-alerts.json','{"items":[]}'],['slack-alerts-read.json','{}'],
     ['slack-mentions.json','{"items":[]}'],['slack-live-health.json','{}'],['slack-workflows.json','{"jobs":{}}'],
@@ -127,7 +129,8 @@ test('an empty first run seeds the ledger before later new source arrives',async
     readTextFile:async path=>{const name=path.split('/').at(-1);if(!files.has(name))throw new Error('missing');return files.get(name);},
     writeTextFile:async(_path,value,expected)=>{const name=_path.split('/').at(-1);const old=files.has(name)?files.get(name):null;if(old!==expected)throw new Error('compare-and-swap conflict');files.set(name,value);return null;}};
   let source=await readFile(new URL('../mods/sixfold-desk/alerts.js',import.meta.url),'utf8');
-  source=source.replace(/^import .* from 'gpui-kit';\n/m,'').replace(/^import .* from 'gpui-base';\n/m,'')
+  source=source.replace(/\r?\n/g,lineEnding);
+  source=source.replace(/^import .* from 'gpui-kit';\r?\n/m,'').replace(/^import .* from 'gpui-base';\r?\n/m,'')
     .replace(/^import .* from 'herdr';/m,'const {appHome,readTextFile,writeTextFile,setShared,openOverlay}=globalThis.__popupRuntime;');
   try{
     const {watchAlerts}=await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64')+'#empty-first-run');
@@ -137,3 +140,4 @@ test('an empty first run seeds the ledger before later new source arrives',async
     assert.equal(opens.length,1,'the first post-install source still opens');
   }finally{delete globalThis.__popupRuntime;}
 });
+}
