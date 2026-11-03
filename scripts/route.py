@@ -94,7 +94,9 @@ def receiver_available(text):
     draft = lines[index].lstrip()[1:].strip(' ▁▂▃▄▅▆▇█')
     if draft and not draft.startswith(('Ask Codex to do anything', 'Ask a follow-up question', 'Try "')):
         return False
-    footer = '\n'.join(lines[max(0, index-4):index])
+    # Voice/recording indicators may be below the current composer (Codex)
+    # as well as above it (Claude). Inspect both sides of the last prompt.
+    footer = '\n'.join(lines[max(0, index-4):])
     if 'REC' in footer or 'voice ● listening' in footer:
         return False
     # Ignore UI footer/timing lines; a question at the end of the last assistant

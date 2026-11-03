@@ -284,3 +284,7 @@ workspace with the same name does not inherit it. No names or default pins are h
 The setting reloads live, keeps its last valid value on malformed JSON, and an empty
 `spaces` array clears all markers. It does not reorder workspaces or prevent deletion,
 and is independent of document pins and native terminal pins.
+
+Project overload collaboration uses explicit task records and durable leases above existing Share routing; see [commands, safety and verification](docs/overload-collaboration.md). The sidebar drains registered collaboration work only after `collaborate.py enable`; raw terminal text is never treated as a confirmed pending queue.
+
+A low-contrast 16px session-pet strip below the toolbar reflects the current workspace agents. `sixfold.pets=false` hides it; `sixfold.pets.motion=false` or `sixfold.motion=false` stops motion.
