@@ -14,6 +14,7 @@ from pathlib import Path
 import re
 import shutil
 import subprocess
+import sys
 import time
 import unicodedata
 from collect_docs import atomic_json, is_archived
@@ -157,8 +158,13 @@ def copy_feature(repo, app_home):
             shutil.copy2(source_path, destination)
     scripts = app_home/'data/sixfold/doc-tabs'
     scripts.mkdir(parents=True, exist_ok=True)
-    for name in ('install_doc_tabs.py', 'resolve_doc_pins.py', 'collect_docs.py', 'core_api.py', 'render_mermaid.py'):
+    for name in ('install_doc_tabs.py', 'resolve_doc_pins.py', 'collect_docs.py', 'core_api.py', 'render_mermaid.py', 'render_html.py'):
         shutil.copy2(repo/'scripts'/name, scripts/name)
+    try:
+        compile_swift(repo/'scripts/render_html.swift', scripts/'render-html')
+    except RuntimeError as error:
+        # Markdown still works without it; HTML documents then show the install notice.
+        print(f'HTML renderer skipped: {str(error)[:300]}', file=sys.stderr)
 
 
 def install_mermaid(repo, app_home, library):
@@ -171,6 +177,11 @@ def install_mermaid(repo, app_home, library):
     shutil.copy2(library, tools/'mermaid/mermaid.min.js')
     notice = library.parents[1]/'LICENSE'
     if notice.exists(): shutil.copy2(notice, tools/'mermaid/LICENSE')
+    compile_swift(repo/'scripts/render_mermaid.swift', tools/'render-mermaid')
+
+
+def compile_swift(source, output):
+    """Compile a WebKit renderer with the first macOS SDK the installed compiler accepts."""
     sdks = [Path('/Library/Developer/CommandLineTools/SDKs')/name for name in ('MacOSX26.5.sdk', 'MacOSX15.4.sdk')]
     found = subprocess.run(['xcrun', '--show-sdk-path'], capture_output=True, text=True)
     if found.returncode == 0: sdks.append(Path(found.stdout.strip()))
@@ -178,10 +189,10 @@ def install_mermaid(repo, app_home, library):
     # The newest SDK can be ahead of the installed compiler; try known matches first.
     for sdk in dict.fromkeys(sdks):
         if not sdk.exists(): continue
-        attempt = subprocess.run(['swiftc', '-O', '-sdk', str(sdk), str(repo/'scripts/render_mermaid.swift'), '-o', str(tools/'render-mermaid')], capture_output=True, text=True)
+        attempt = subprocess.run(['swiftc', '-O', '-sdk', str(sdk), str(source), '-o', str(output)], capture_output=True, text=True)
         if not attempt.returncode: return
         errors.append(attempt.stderr)
-    raise RuntimeError('A compatible macOS Swift SDK is required for Mermaid diagrams.\n' + '\n'.join(errors)[-2000:])
+    raise RuntimeError(f'A compatible macOS Swift SDK is required for {output.name}.\n' + '\n'.join(errors)[-2000:])
 
 
 def main():

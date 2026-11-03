@@ -10,6 +10,8 @@ const STATE = 'sixfold.docs.selection.v1';
 // scripts/open_doc_tab.py writes the latest open request; each space handles it once.
 const REQUEST = 'project-docs-open.json';
 const OPENED = 'sixfold.docs.opened.v1';
+const isHtml = path => /\.html?$/i.test(path);
+const readable = path => /\.md$/i.test(path) || isHtml(path);
 export default class ProjectDocuments extends View {
   init(_props, cx) {
     const p = props() || {};
@@ -17,6 +19,7 @@ export default class ProjectDocuments extends View {
     this.script = p.resolverScript || `${appHome()}/data/sixfold/doc-tabs/resolve_doc_pins.py`;
     this.config = p.pinsConfig || `${appHome()}/data/sixfold/project-docs-pins.json`;
     this.mermaidScript = p.mermaidScript || `${appHome()}/data/sixfold/doc-tabs/render_mermaid.py`;
+    this.htmlScript = p.htmlScript || `${appHome()}/data/sixfold/doc-tabs/render_html.py`;
     this.documents = []; this.watchers = new Map(); this.generation = 0;
     this.selected = shared(STATE)?.[this.spaceId]; this.width = 800;
     this.refresh(cx);
@@ -105,7 +108,7 @@ export default class ProjectDocuments extends View {
     if (!doc || doc.status !== 'ok') { this.bodyError = doc?.error || doc?.status || null; return; }
     this.lastPath = doc.path; this.lastId = doc.id;
     this.watch([dirname(doc.path)], cx);
-    if (!doc.path.toLowerCase().endsWith('.md')) { this.blocks = null; this.bodyError = null; return; }
+    if (!readable(doc.path)) { this.blocks = null; this.bodyError = null; return; }
     this.loading = true;
     cx.spawn(async cx => {
       const current = () => !this.closed && this.generation === generation && this.bodyKey === key;
@@ -115,6 +118,15 @@ export default class ProjectDocuments extends View {
         if (text === null) throw Error('파일을 읽을 수 없습니다.');
         if (text.includes('\0')) throw Error('텍스트 문서가 아닙니다.');
         const look = `${settings()?.dark ? 'dark' : 'light'}:${theme().canvas}`;
+        if (isHtml(doc.path)) {
+          if (text !== this.bodyText || look !== this.diagramLook) {
+            const pages = await this.page(doc.path, look);
+            if (!current()) return;
+            this.bodyText = text; this.diagramLook = look; this.blocks = pages; this.imageWarning = null; this.truncated = false;
+          }
+          this.bodyError = null; this.lastSuccess = Date.now();
+          return;
+        }
         // Rendered diagrams are cached by code and look, so only file images force a restage.
         if (text !== this.bodyText || look !== this.diagramLook || this.blocks?.some(block => block.media && !block.diagram) || this.imageWarning) {
           const body = text.slice(0, LIMIT);
@@ -146,6 +158,16 @@ export default class ProjectDocuments extends View {
       if (failed.length) this.diagramError = `Mermaid ${failed.length}개는 코드로 표시: ${failed[0]}`;
     } catch (error) { this.diagramError = String(error.message || error); }
     return result;
+  }
+
+  // HTML reports are drawn by WebKit as the browser shows them, then laid out as image tiles.
+  async page(path, look) {
+    this.diagramError = null;
+    const run = await exec('python3', [this.htmlScript, '--doc', path, '--theme', look.split(':')[0]]);
+    let data = {};
+    try { data = JSON.parse(run.stdout || '{}'); } catch {}
+    if (run.code !== 0 || !Array.isArray(data.pages)) throw Error(data.error || run.stderr.trim() || 'HTML 렌더링 실패');
+    return data.pages.map(media => ({ media, diagram: true }));
   }
 
   action(args, cx) {
@@ -184,7 +206,7 @@ export default class ProjectDocuments extends View {
     try {
       const link = resolveLink(file, url);
       if (link.url) cx.open_url(link.url);
-      else if (link.file?.toLowerCase().endsWith('.md')) {
+      else if (link.file && readable(link.file)) {
         this.reveal(link.file);
         this.choose(this.selected, cx);
       } else if (link.file) this.external('open', [link.file], cx);
@@ -220,7 +242,8 @@ export default class ProjectDocuments extends View {
       .when(Boolean(this.bodyError), el => el.child(notice(`확인 실패 · ${this.bodyError}${this.blocks ? ' · 마지막 성공 본문 표시' : ''}`)))
       .when(Boolean(this.imageWarning), el => el.child(notice('일부 이미지를 읽을 수 없습니다.')))
       .when(Boolean(this.diagramError), el => el.child(notice(this.diagramError)));
-    if (doc.path && !doc.path.toLowerCase().endsWith('.md')) return root.child(notice('PDF·Word·Excel 문서는 기본 앱으로 여세요.'));
+    if (doc.path && !readable(doc.path)) return root.child(notice('PDF·Word·Excel 문서는 기본 앱으로 여세요.'));
+    if (doc.path && isHtml(doc.path)) root = root.child(notice('HTML은 브라우저 화면 그대로 표시 · 글자 복사와 링크는 기본 앱에서'));
     if (!this.blocks) return root.child(notice(this.loading ? '문서 읽는 중…' : '본문을 표시할 수 없습니다.'));
     return root.child(v_flex().id(`docs-body-${this.bodyKey}`).flex_1().min_h(0).min_w(0).overflow_y_scrollbar().p(20).gap(12)
       .on_size_change((size, cx) => { if (Math.abs(this.width - size.width) > 1) { this.width = size.width; cx.notify(); } })

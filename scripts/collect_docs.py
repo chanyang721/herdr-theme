@@ -9,7 +9,7 @@ from pathlib import Path
 import tempfile
 import unicodedata
 
-EXTENSIONS={'.md','.pdf','.docx','.xlsx'}
+EXTENSIONS={'.md','.html','.htm','.pdf','.docx','.xlsx'}
 OWNER='herdr-project-docs-v1'
 
 

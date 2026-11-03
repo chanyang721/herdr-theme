@@ -30,6 +30,7 @@ async function harness({ documents = [document('a'), document('b')], selection }
       calls.push({ command, args });
       if (command !== 'python3') return { code: 0, stdout: '', stderr: '' };
       if (args[0].endsWith('render_mermaid.py')) return state.mermaid ? state.mermaid(args) : { code: 0, stdout: '{"diagrams":[]}', stderr: '' };
+      if (args[0].endsWith('render_html.py')) return state.html(args);
       if (state.result) return state.result();
       return { code: 0, stdout: JSON.stringify({ spaceId: 'Demo', documents: state.documents, warnings: [], checkedAt: 1, watchRoots: ['/docs'] }), stderr: '' };
     },
@@ -216,4 +217,18 @@ test('documents with mermaid render diagram images once and keep code with a not
   h.state.mermaid = () => ({ code: 0, stdout: JSON.stringify({ diagrams: [{ code: 'graph TD\nA-->C', error: 'Parse error' }] }), stderr: '' });
   h.state.text = () => '```mermaid\ngraph TD\nA-->C\n```'; h.view.load(h.cx); await h.flush();
   assert.equal(h.view.blocks.some(b => b.diagram), false); assert.match(h.view.diagramError, /Parse error/);
+});
+
+test('html documents render as page images once and report renderer failures', async t => {
+  const h = await harness({ documents: [document('report', '/docs/report.html')] }); t.after(() => h.view.close());
+  let runs = 0;
+  h.state.html = args => { runs++; assert.deepEqual(args.slice(1), ['--doc', '/docs/report.html', '--theme', 'dark']);
+    return { code: 0, stdout: JSON.stringify({ pages: [{ path: 'mods/project-docs-tabs/.cache/html-a-0.png', width: 960, height: 2000 }, { path: 'mods/project-docs-tabs/.cache/html-a-1.png', width: 960, height: 300 }] }), stderr: '' }; };
+  h.state.text = () => '<html><body>표</body></html>'; h.view.load(h.cx); await h.flush();
+  assert.equal(h.view.blocks.length, 2); assert.ok(h.view.blocks.every(b => b.media && b.diagram)); assert.equal(runs, 1);
+  h.view.load(h.cx); await h.flush(); assert.equal(runs, 1, 'an unchanged page is not rendered again');
+  h.render(); assert.ok(h.labels.some(l => l.startsWith('HTML은')));
+  h.state.html = () => ({ code: 1, stdout: JSON.stringify({ error: 'HTML 렌더러가 설치되지 않았습니다.' }), stderr: '' });
+  h.state.text = () => '<html>바뀜</html>'; h.view.load(h.cx); await h.flush();
+  assert.match(h.view.bodyError, /설치되지 않았습니다/); assert.equal(h.view.blocks.length, 2, 'the last good page stays');
 });
