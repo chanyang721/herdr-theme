@@ -1,0 +1,193 @@
+{
+  "id": "root",
+  "type": "row",
+  "titlebar": "none",
+  "traffic_lights": [
+    12,
+    16
+  ],
+  "background": "canvas",
+  "terminal_padding": [
+    8,
+    7
+  ],
+  "theme": {
+    "dark": "sixfold-night",
+    "light": "sixfold-day"
+  },
+  "preview": "layouts/sixfold.svg",
+  "children": [
+    {
+      "id": "sidebar",
+      "type": "block",
+      "size": {
+        "px": 224
+      },
+      "min": 180,
+      "max": 380,
+      "window_drag": true,
+      "content": {
+        "mod": "sixfold-desk",
+        "props": {
+          "role": "sidebar"
+        }
+      }
+    },
+    {
+      "id": "work",
+      "type": "column",
+      "children": [
+        {
+          "id": "toolbar",
+          "type": "block",
+          "size": {
+            "px": 32
+          },
+          "window_drag": true,
+          "content": {
+            "mod": "sixfold-desk",
+            "props": {
+              "role": "toolbar"
+            }
+          }
+        },
+        {
+          "id": "monitor-strip",
+          "type": "row",
+          "size": {
+            "px": 30
+          },
+          "background": "chrome",
+          "children": [
+            {
+              "id": "monitor-left",
+              "type": "block",
+              "size": {
+                "weight": 1
+              },
+              "content": {
+                "mod": "sixfold-tools",
+                "props": {
+                  "spacer": true
+                }
+              }
+            },
+            {
+              "id": "system-metrics",
+              "type": "block",
+              "size": {
+                "px": 405
+              },
+              "content": {
+                "mod": "system-metrics"
+              }
+            },
+            {
+              "id": "agent-usage-summary",
+              "type": "block",
+              "size": {
+                "px": 250
+              },
+              "content": {
+                "mod": "agent-usage",
+                "props": {
+                  "role": "summary"
+                }
+              }
+            },
+            {
+              "id": "usage-bar",
+              "type": "block",
+              "size": {
+                "px": 410
+              },
+              "content": {
+                "mod": "usage-bar"
+              }
+            },
+            {
+              "id": "monitor-right",
+              "type": "block",
+              "size": {
+                "weight": 1
+              },
+              "content": {
+                "mod": "sixfold-tools",
+                "props": {
+                  "spacer": true
+                }
+              }
+            }
+          ]
+        },
+        {
+          "id": "tabs",
+          "type": "block",
+          "size": {
+            "px": 34
+          },
+          "window_drag": true,
+          "content": {
+            "mod": "sixfold-tabs",
+            "props": {
+              "panels": []
+            }
+          }
+        },
+        {
+          "id": "body",
+          "type": "row",
+          "padding": 5,
+          "gap": 5,
+          "children": [
+            {
+              "id": "main",
+              "type": "block",
+              "content": {
+                "tab": "active",
+                "pane": {
+                  "gap": 5,
+                  "radius": 6,
+                  "background": "background",
+                  "border": {
+                    "width": 1,
+                    "color": "border"
+                  },
+                  "focus": {
+                    "width": 2,
+                    "color": "accent"
+                  },
+                  "lone": true,
+                  "header": {
+                    "content": {
+                      "mod": "sixfold-desk",
+                      "props": {
+                        "role": "pane"
+                      }
+                    },
+                    "height": 27,
+                    "position": "top",
+                    "reveal": "always"
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "id": "status",
+          "type": "block",
+          "size": {
+            "px": 30
+          },
+          "content": {
+            "mod": "sixfold-desk",
+            "props": {
+              "role": "footer"
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

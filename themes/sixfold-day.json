@@ -30,6 +30,7 @@
     "working": "#305da4",
     "idle": "#607589",
     "border": "#bfccd5",
-    "selected": "#d0e6eb"
+    "selected": "#d0e6eb",
+    "dim": "#77818a"
   }
 }

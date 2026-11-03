@@ -16,6 +16,10 @@ def main():
                     for p in (repo/folder).rglob('*') if p.is_file()]
     destinations += [(repo/'scripts'/name, args.home/'scripts/sixfold'/name)
                      for name in ('workspace.py','core_api.py','balance_grid.py','collect_computers.py')]
+    # Herdr already supplies these names. Preserve installed/customized palettes.
+    references = {'atom-one-dark.json', 'win98.json'}
+    destinations = [(source, destination) for source, destination in destinations
+                    if not (source.parent == repo/'themes' and source.name in references and destination.exists())]
     for source, destination in destinations:
         if destination.exists():
             raise SystemExit(f'Already exists; refusing to overwrite: {destination}')
