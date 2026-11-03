@@ -2,7 +2,7 @@
 
 실제 설치본의 `sixfold` 레이아웃에서 모니터 줄을 보관한 파일입니다. 2026-11-03 설치본 동기화로 기본 `layouts/sixfold.json`도 현재 설치된 모니터 줄을 포함합니다.
 
-이 레이아웃에는 `system-metrics`, `agent-usage`, `usage-bar`가 별도로 설치되어 있어야 합니다. System Metrics와 Agent Usage는 [Herdr Workspace Mods](https://github.com/chanyang721/herdr-workspace-mods), Usage Bar는 [별도 저장소](https://github.com/berkeatac/herdr-usage-bar)의 설치 지침을 따릅니다. 계정 할당량과 세션 토큰 사용량은 서로 다른 값입니다.
+이 레이아웃에는 `system-metrics`, `agent-usage`, `codex-resets`, `usage-bar`가 별도로 설치되어 있어야 합니다. System Metrics, Agent Usage, Codex Resets는 [Herdr Workspace Mods](https://github.com/chanyang721/herdr-workspace-mods), Usage Bar는 [별도 저장소](https://github.com/berkeatac/herdr-usage-bar)의 설치 지침을 따릅니다. 계정 할당량과 세션 토큰 사용량은 서로 다른 값입니다.
 
 필요한 모드를 설치한 다음 이 파일을 앱의 `layouts/sixfold-monitor.json`으로 복사하면 선택 가능한 별도 레이아웃이 됩니다. 기본 설치기는 extras의 파일과 외부 모드 자체를 설치하지 않습니다. 기존 사용자의 테마·레이아웃 선택은 변경하지 않습니다.
 

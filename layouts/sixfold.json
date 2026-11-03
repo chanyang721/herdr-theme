@@ -116,6 +116,16 @@
               }
             },
             {
+              "id": "codex-resets",
+              "type": "block",
+              "size": {
+                "px": 110
+              },
+              "content": {
+                "mod": "codex-resets"
+              }
+            },
+            {
               "id": "monitor-right",
               "type": "block",
               "size": {
