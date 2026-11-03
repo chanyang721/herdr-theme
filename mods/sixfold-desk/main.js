@@ -4,6 +4,8 @@ import * as herdrNative from 'herdr';
 import { agents, panes, spaces, terminals, focused, props, theme, run, shared, setShared, setAgentOrder, nextCommand, exec, window, layout, readTextFile, writeTextFile, appHome, openOverlay, settings } from 'herdr';
 import { WORDS, counts, title, cycle, priority, readThrough, unreadCount } from './model.js';
 
+import { computerKind, computerStatus, tailscaleStatus, workspaceIdentity } from './sidebar-identity.js';
+
 import { freshMessages, recentRoutes, simultaneousRoutes } from './flow.js';
 import { pipeline } from './pipeline.js';
 import { workflowNodes, delegationEvents, workflowStatus } from './workflow.js';
@@ -354,13 +356,13 @@ export default class SixfoldDesk extends View {
       const machineSpaces = spaces().filter(space => (space.machine ?? null) === name);
       const selected = selectedMachine === name;
       const ready = machine.layout === 'ready';
-      const state = this.lang() === 'ko'
-        ? (ready ? '연결됨' : machine.layout === 'loading' ? '연결 중' : '연결 끊김')
-        : (ready ? 'Connected' : machine.layout === 'loading' ? 'Connecting' : 'Offline');
+      const state = computerStatus(machine, this.lang());
+      const config = name === null ? this.computers?.local : this.computers?.machines?.[name];
+      const kind = name === null ? 'laptop' : computerKind(config?.os);
       const key = name === null ? 'local' : `remote:${name}`;
-      return h_flex().id(`sf-computer-${key}`).h(29).px(7).gap(6).items_center().rounded(4)
+      return h_flex().id(`sf-computer-${key}`).h(38).px(7).gap(6).items_center().rounded(4)
         .bg(selected ? t.selected : t.surface).hover(style => style.bg(t.hover))
-        .tooltip(name === null ? displayName : `${displayName} · ${name}`)
+        .tooltip(`${displayName}${name === null ? '' : ` · ${name}`}\n${state}${name === null ? '' : (this.lang()==='ko'?' · Herdr 원격 등록됨':' · Registered in Herdr')}`)
         .on_mouse_down('left', (_event, cx) => cx.stop_propagation())
         .on_click(() => {
           const remembered = {...shared('sixfold.computing.last-spaces')};
@@ -371,21 +373,23 @@ export default class SixfoldDesk extends View {
           else if (existing) run('space.select', { id: existing.id });
           else this.newWorkspace(name);
         })
-        .child(div().text_size(10).text_color(ready ? t.done : t.blocked).child(ready ? '●' : '○'))
-        .child(div().flex_1().min_w(0).truncate().text_size(11).font_bold().child(displayName))
-        .child(div().text_size(9).text_color(t.dim).child(String(machineSpaces.length)))
-        .child(div().text_size(9).text_color(t.muted).child(state));
+        .child(svg(`mods/sixfold-desk/icons/device-${kind}.svg`).size(14).flex_none().text_color(t.muted))
+        .child(v_flex().flex_1().min_w(0)
+          .child(div().truncate().text_size(11).font_bold().child(displayName))
+          .child(div().truncate().text_size(9).text_color(t.muted).child(state)))
+        .child(div().flex_none().text_size(9).text_color(t.dim).child(String(machineSpaces.length)))
+        .child(div().flex_none().text_size(9).text_color(ready ? t.done : t.blocked).child(ready ? '●' : '○'));
     });
     if(this.computers?.tailscale){
       for(const peer of this.tailscalePeers??[]){
-        const state=peer.online===null ? (this.lang()==='ko'?'상태 미확인':'Unknown')
-          : peer.online ? (this.lang()==='ko'?'온라인':'Online') : (this.lang()==='ko'?'오프라인':'Offline');
+        const state=tailscaleStatus(peer,this.lang());
         computerRows.push(h_flex().id(`sf-tailscale-${peer.name}`).h(36).px(7).gap(6).items_center()
-          .tooltip(`${peer.host} · ${(peer.ips??[]).join(', ')} · ${peer.os}\nTailscale ${state}\n${this.lang()==='ko'?'목록 표시 전용 · 원격 셸 미연결':'Discovery only · remote shell not connected'}`)
-          .child(div().text_size(10).text_color(peer.online===true?t.done:t.dim).child(peer.online===true?'●':'○'))
+          .tooltip(`${peer.host} · ${(peer.ips??[]).join(', ')} · ${peer.os}\n${state}\n${this.lang()==='ko'?'목록 표시 전용 · Herdr 원격 미등록 · SSH 연결 확인 안 됨':'Discovery only · not registered in Herdr · SSH not verified'}`)
+          .child(svg(`mods/sixfold-desk/icons/device-${computerKind(peer.os, peer.host || peer.name)}.svg`).size(14).flex_none().text_color(t.muted))
           .child(v_flex().flex_1().min_w(0)
             .child(div().truncate().text_size(11).font_bold().child(peer.name))
-            .child(div().text_size(9).text_color(t.muted).child(`Tailscale ${state} · ${this.lang()==='ko'?'셸 미연결':'No shell'}`))));
+            .child(div().truncate().text_size(9).text_color(t.muted).child(state)))
+          .child(div().flex_none().text_size(9).text_color(peer.online===true?t.done:t.dim).child(peer.online===true?'●':'○')));
       }
       if(this.tailscaleError)computerRows.push(div().px(7).text_size(10).text_color(t.blocked)
         .child(this.lang()==='ko'?'Tailscale 상태 확인 불가':'Tailscale status unavailable'));
@@ -404,17 +408,16 @@ export default class SixfoldDesk extends View {
       }
       offset=row-3+(this.docsHeights?.[s.id]||0);
     }
-    const workspaceColor = s => s.name==='공통' ? t.accent : s.name==='PeaceMinusOne' ? t.ansi5 : s.name==='Medihomes' ? t.ansi6
-      : [t.accent,t.ansi5,t.ansi6,t.ansi3,t.ansi2,t.ansi4][[...s.id].reduce((hash,c)=>(hash*31+c.charCodeAt(0))>>>0,0)%6];
+    const workspaceColor = s => { const saved=shared('space.colors')?.[s.id]; if(saved)return saved.startsWith('#')?saved:(t[saved]||t.accent); return s.name==='공통' ? t.accent : s.name==='PeaceMinusOne' ? t.ansi5 : s.name==='Medihomes' ? t.ansi6
+      : [t.accent,t.ansi5,t.ansi6,t.ansi3,t.ansi2,t.ansi4][[...s.id].reduce((hash,c)=>(hash*31+c.charCodeAt(0))>>>0,0)%6]; };
     const workspaceMark = s => {
       const configured=this.workspaceIcons[s.id] || this.workspaceIcons[s.name];
       const icon=typeof configured==='string'?{path:configured}:configured;
-      const box=div().size(20).flex_none().rounded(4).items_center().justify_center();
+      const box=h_flex().size(16).flex_none().rounded(4).items_center().justify_center();
       if(icon?.path)return box.bg(icon.background||t.surface).child(
         icon.path.toLowerCase().endsWith('.svg') && icon.tint
-          ? svg(icon.path).size(16).text_color(workspaceColor(s)) : image(icon.path).w(16).h(16));
-      return box.bg(workspaceColor(s)).text_color(t.background).text_size(10).font_bold()
-        .child(s.name==='공통'?'공':s.name.slice(0,1).toUpperCase());
+          ? svg(icon.path).size(14).text_color(workspaceColor(s)) : image(icon.path).w(14).h(14));
+      return box.bg(workspaceColor(s)).child(svg(`mods/sixfold-desk/icons/ws-${workspaceIdentity(s)||'workspace'}.svg`).size(12).flex_none().text_color(t.background));
     };
     const spaceRows=groups.map(({s,members})=>v_flex().id(`sf-space-${s.id}`).ml(7).mr(41).mb(12).gap(2).flex_none().rounded(6).border(1).border_color(t.border)
       .when(this.dragSpace && this.overSpace===s.id && this.dragSpace!==s.id,e=>e.border_t(2).border_color(t.accent))
@@ -432,7 +435,7 @@ export default class SixfoldDesk extends View {
         } else if(source.id===s.id)run('space.select',{id:s.id});
         cx.stop_propagation();cx.notify();
       })
-      .child(h_flex().h(36).flex_none().pl(6).pr(8).items_center().gap(6).rounded(5).border_l(3).border_color(workspaceColor(s)).bg(s.active?t.selected:t.surface).text_size(12).font_bold()
+      .child(h_flex().h(36).flex_none().pl(6).pr(8).items_center().gap(4).rounded(5).border_l(3).border_color(workspaceColor(s)).bg(s.active?t.selected:t.surface).text_size(12).font_bold()
         .when(this.dragSpace===s.id && this.overSpace!==s.id,e=>e.opacity(0.5))
         .when(this.dragSpace && this.overSpace===s.id && this.dragSpace!==s.id,e=>e.border(1).border_color(t.accent))
         .tooltip(this.lang()==='ko'?'드래그하여 순서 변경':'Drag to reorder')

@@ -11,14 +11,14 @@ def computers(status):
         raise ValueError('Tailscale is not running')
     rows = []
     for peer in (status.get('Peer') or {}).values():
-        if peer.get('OS') not in ('windows', 'macOS', 'linux'):
+        if peer.get('OS') not in ('windows', 'macOS', 'linux', 'iOS', 'iPadOS', 'android'):
             continue
         name = (peer.get('DNSName') or '').split('.')[0] or peer.get('HostName')
         if not name:
             continue
         rows.append({'name': name, 'host': peer.get('HostName', name),
                      'ips': peer.get('TailscaleIPs') or [], 'os': peer.get('OS'),
-                     'online': peer.get('Online') is True})
+                     'online': peer.get('Online') if isinstance(peer.get('Online'), bool) else None})
     return sorted(rows, key=lambda row: row['name'])
 
 
