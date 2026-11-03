@@ -15,7 +15,7 @@ def main():
     destinations = [(p, args.home/p.relative_to(repo)) for folder in ('layouts','themes','mods')
                     for p in (repo/folder).rglob('*') if p.is_file()]
     destinations += [(repo/'scripts'/name, args.home/'scripts/sixfold'/name)
-                     for name in ('workspace.py','core_api.py','balance_grid.py','collect_computers.py')]
+                     for name in ('workspace.py','core_api.py','balance_grid.py','collect_computers.py','route.py','collaborate.py')]
     # Herdr already supplies these names. Preserve installed/customized palettes.
     references = {'atom-one-dark.json', 'win98.json'}
     destinations = [(source, destination) for source, destination in destinations
