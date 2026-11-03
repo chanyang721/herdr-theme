@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """Write data/sixfold/workflow.json: each agent's sub-agents, from recorded facts only."""
 import argparse
-import fcntl
 from functools import lru_cache
 import json
 import os
@@ -14,7 +13,8 @@ import sys
 import time
 import uuid
 
-BASE = Path.home() / 'Library' / 'Application Support' / 'LukukuWatch'
+WINDOWS = os.name == 'nt'
+BASE = (Path(os.environ.get('LOCALAPPDATA', Path.home())) if WINDOWS else Path.home() / 'Library' / 'Application Support') / 'LukukuWatch'
 DATA = Path(os.environ.get('HERDR_APP_HOME', Path.home() / '.config' / 'herdr-app')) / 'data' / 'sixfold'
 OUTPUT = DATA / 'workflow.json'
 HC = shutil.which('hc') or str(Path.home() / '.local/share/herdr-sixfold/bin/hc')
@@ -31,7 +31,7 @@ INTERVAL = 3
 
 
 def hc(*args):
-    result = subprocess.run([HC, *args], capture_output=True, text=True, timeout=10)
+    result = subprocess.run([HC, *args], capture_output=True, text=True, encoding='utf-8', timeout=10)
     return json.loads(result.stdout or '{}')
 
 
@@ -39,26 +39,34 @@ def family(agent):
     return 'claude' if agent in ('claude', 'claude-code') else agent
 
 
+def child_pids(pid):
+    if WINDOWS:
+        return [child for child, parent in windows_processes().items() if parent == pid]
+    children = subprocess.run(['/usr/bin/pgrep', '-P', str(pid)], capture_output=True, text=True)
+    return [int(line) for line in children.stdout.split()]
+
+
 def process_tree(pid):
     found, queue = [], [pid]
     while queue and len(found) < 12:
         current = queue.pop(0)
         found.append(current)
-        children = subprocess.run(['/usr/bin/pgrep', '-P', str(current)], capture_output=True, text=True)
-        queue += [int(line) for line in children.stdout.split()]
+        queue += child_pids(current)
     return found
 
 
 def claude_session(pids):
     for pid in pids:
         try:
-            return json.loads((CLAUDE / 'sessions' / f'{pid}.json').read_text())['sessionId']
+            return json.loads((CLAUDE / 'sessions' / f'{pid}.json').read_text(encoding='utf-8'))['sessionId']
         except (OSError, ValueError, KeyError):
             continue
     return None
 
 
 def codex_thread(pids):
+    if WINDOWS:
+        return windows_codex_thread(pids)
     for pid in pids:
         files = subprocess.run(['/usr/sbin/lsof', '-p', str(pid)], capture_output=True, text=True).stdout
         match = ROLLOUT.search(files)
@@ -67,10 +75,115 @@ def codex_thread(pids):
     return None
 
 
+CODEX_SCAN_LIMIT = 64
+CODEX_RESCAN_SECONDS = 30
+_codex_holders = {}  # codex pid -> the root thread whose rollout it holds open
+_codex_scanned = {}  # agent pids -> when a scan last found nothing for them
+_processes = (0.0, {})
+
+
+def windows_processes():
+    """pid -> parent pid from one Toolhelp snapshot, reused for a second."""
+    global _processes
+    if time.time() - _processes[0] < 1:
+        return _processes[1]
+    import ctypes
+    from ctypes import wintypes
+
+    class Entry(ctypes.Structure):
+        _fields_ = [('size', wintypes.DWORD), ('usage', wintypes.DWORD), ('pid', wintypes.DWORD),
+                    ('heap', ctypes.c_size_t), ('module', wintypes.DWORD), ('threads', wintypes.DWORD),
+                    ('parent', wintypes.DWORD), ('priority', ctypes.c_long), ('flags', wintypes.DWORD),
+                    ('exe', ctypes.c_wchar * 260)]
+    kernel = ctypes.WinDLL('kernel32', use_last_error=True)
+    kernel.CreateToolhelp32Snapshot.restype = wintypes.HANDLE
+    snapshot = kernel.CreateToolhelp32Snapshot(0x2, 0)  # TH32CS_SNAPPROCESS
+    if snapshot in (None, wintypes.HANDLE(-1).value):
+        return {}
+    parents, entry = {}, Entry()
+    entry.size = ctypes.sizeof(Entry)
+    try:
+        more = kernel.Process32FirstW(snapshot, ctypes.byref(entry))
+        while more:
+            parents[entry.pid] = entry.parent
+            more = kernel.Process32NextW(snapshot, ctypes.byref(entry))
+    finally:
+        kernel.CloseHandle(snapshot)
+    _processes = (time.time(), parents)
+    return parents
+
+
+def file_holders(path):
+    """Processes holding `path` open, from the Restart Manager (no lsof on Windows)."""
+    import ctypes
+    from ctypes import wintypes
+
+    class Process(ctypes.Structure):
+        _fields_ = [('pid', wintypes.DWORD), ('started', wintypes.FILETIME)]
+
+    class Info(ctypes.Structure):
+        _fields_ = [('process', Process), ('app', ctypes.c_wchar * 256), ('service', ctypes.c_wchar * 64),
+                    ('type', ctypes.c_int), ('status', wintypes.DWORD), ('session', wintypes.DWORD),
+                    ('restartable', wintypes.BOOL)]
+    manager = ctypes.WinDLL('rstrtmgr')
+    session, key = wintypes.DWORD(), ctypes.create_unicode_buffer(64)
+    if manager.RmStartSession(ctypes.byref(session), 0, key):
+        return set()
+    try:
+        if manager.RmRegisterResources(session, 1, (ctypes.c_wchar_p * 1)(str(path)), 0, None, 0, None):
+            return set()
+        needed, count, reasons, infos = wintypes.UINT(), wintypes.UINT(16), wintypes.DWORD(), (Info * 16)()
+        if manager.RmGetList(session, ctypes.byref(needed), ctypes.byref(count), infos, ctypes.byref(reasons)):
+            return set()
+        return {infos[i].process.pid for i in range(count.value)}
+    finally:
+        manager.RmEndSession(session)
+
+
+def windows_codex_thread(pids):
+    """The root Codex thread whose rollout one of `pids` holds open.
+
+    Each lookup costs ~60 ms a file, so a known holder is only rechecked and a
+    full scan of recent rollouts runs at most every CODEX_RESCAN_SECONDS."""
+    if not CODEX_DB.exists():
+        return None
+    connection = sqlite3.connect(f'file:{CODEX_DB}?mode=ro', uri=True, timeout=1)
+    try:
+        for pid in pids:
+            thread = _codex_holders.get(pid)
+            if not thread:
+                continue
+            row = connection.execute('select rollout_path from threads where id = ?', (thread,)).fetchone()
+            if row and pid in file_holders(row[0]):
+                return thread
+            del _codex_holders[pid]
+        key = tuple(pids)
+        if time.time() - _codex_scanned.get(key, 0) < CODEX_RESCAN_SECONDS:
+            return None
+        claimed = set(_codex_holders.values())
+        # Sub-agent threads can share their parent's process; only a root names the session.
+        rows = connection.execute(
+            'select id, rollout_path from threads where archived = 0 '
+            'and id not in (select child_thread_id from thread_spawn_edges) '
+            'order by updated_at desc limit ?', (CODEX_SCAN_LIMIT,)).fetchall()
+        for thread, rollout in rows:
+            if thread in claimed:
+                continue
+            holders = file_holders(rollout)
+            for pid in holders:
+                _codex_holders.setdefault(pid, thread)
+            if holders & set(pids):
+                return thread
+        _codex_scanned[key] = time.time()
+        return None
+    finally:
+        connection.close()
+
+
 def bridged_session(address, kind):
     """Common terminals only attach to a herdr pane, so the agent's process lives there."""
     try:
-        panes = json.loads(BRIDGES.read_text()).get('panes', [])
+        panes = json.loads(BRIDGES.read_text(encoding='utf-8')).get('panes', [])
         pane = next(p['source'] for p in panes if p['terminal'] == address)
     except (OSError, ValueError, KeyError, StopIteration):
         return None
@@ -88,7 +201,8 @@ def identify(terminal, cache):
     address = terminal['address']
     facts = hc('get', address)
     pid = facts.get('pid')
-    pids = process_tree(pid) if pid else []
+    # A machine/ address runs on another computer: its pid means nothing here.
+    pids = process_tree(pid) if pid and '/' not in address else []
     kind = family(terminal.get('agent'))
     session = claude_session(pids) if kind == 'claude' else codex_thread(pids) if kind == 'codex' else None
     session = session or bridged_session(address, kind)
@@ -109,7 +223,7 @@ def _transcript_facts(path, kind, thread, modified, size):
     """Read lifecycle facts, never treat a spawn link or silence as running."""
     status, source, task = None, None, ''
     try:
-        with Path(path).open() as stream:
+        with Path(path).open(encoding='utf-8', errors='replace') as stream:
             for line in stream:
                 try:
                     row = json.loads(line)
@@ -151,11 +265,30 @@ def _transcript_facts(path, kind, thread, modified, size):
     return status, source, next((line.strip()[:160] for line in task.splitlines() if line.strip()), '')
 
 
+def born(path):
+    info = path.stat()
+    return getattr(info, 'st_birthtime', info.st_ctime)  # Windows before Python 3.12: ctime is creation.
+
+
+def lock_once(stream):
+    """True when this process holds the collector lock."""
+    try:
+        if WINDOWS:
+            import msvcrt
+            msvcrt.locking(stream.fileno(), msvcrt.LK_NBLCK, 1)
+        else:
+            import fcntl
+            fcntl.flock(stream, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:  # BlockingIOError on POSIX, PermissionError from msvcrt.
+        return False
+    return True
+
+
 def claude_children(session, terminal, now):
     nodes = []
     for meta in CLAUDE.glob(f'projects/*/{session}/subagents/*.meta.json'):
         try:
-            data = json.loads(meta.read_text())
+            data = json.loads(meta.read_text(encoding='utf-8'))
         except (OSError, ValueError):
             continue
         log = meta.with_name(meta.name.replace('.meta.json', '.jsonl'))
@@ -170,7 +303,7 @@ def claude_children(session, terminal, now):
         nodes.append({'id': f'sub:{terminal}:{log.stem}', 'parent': terminal, 'terminal': terminal,
                       'label': data.get('description') or data.get('agentType') or log.stem,
                       'task': data.get('description') or task, 'agentType': data.get('agentType') or '',
-                      'status': status, 'statusSource': source, 'at': int(meta.stat().st_birthtime * 1000)})
+                      'status': status, 'statusSource': source, 'at': int(born(meta) * 1000)})
     return nodes
 
 
@@ -263,9 +396,7 @@ def main():
     BASE.mkdir(parents=True, exist_ok=True)
     DATA.mkdir(parents=True, exist_ok=True)
     lock = (BASE / 'workflow.lock').open('w')
-    try:
-        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-    except BlockingIOError:
+    if not lock_once(lock):
         return 0
     seen = None  # Every start is a new baseline, so old delegations never replay.
     cache, events = {}, []
