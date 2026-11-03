@@ -31,3 +31,13 @@ jobs:
         with:
           python-version: '3.12'
       - run: python3 -m unittest discover -s tests -p 'test_*.py'
+
+  workflow-windows:
+    # Exercise the GUI collector's real child process, not only its JSON output.
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m unittest discover -s tests -p 'test_workflow_collector.py'

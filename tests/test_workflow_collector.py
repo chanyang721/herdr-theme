@@ -5,6 +5,9 @@ import json
 import tempfile
 import sqlite3
 import time
+import os
+import subprocess
+import sys
 from unittest.mock import patch, Mock
 
 spec=importlib.util.spec_from_file_location('workflow_collector',Path(__file__).parents[1]/'scripts/collect_workflow.py')
@@ -19,6 +22,32 @@ class WorkflowCollectorTests(unittest.TestCase):
             self.assertEqual(collector.hc('ls', '--json'), {})
         self.assertEqual(run.call_args.kwargs['creationflags'], 0x08000000)
         self.assertEqual(run.call_args.args[0], [collector.HC, 'ls', '--json'])
+
+    @unittest.skipUnless(os.name == 'nt', 'Windows GUI parent and console allocation')
+    def test_gui_collector_does_not_allocate_a_console_for_its_core_query(self):
+        pythonw = Path(sys.executable).with_name('pythonw.exe')
+        self.assertTrue(pythonw.is_file(), 'Windows Python must include its GUI interpreter')
+        # Reproduce the scheduled pythonw collector, then run a console program
+        # through the real hc() path. No mocking of subprocess or Windows flags.
+        parent = '''
+import ctypes, importlib.util, json, sys
+from pathlib import Path
+spec = importlib.util.spec_from_file_location('collector', sys.argv[1])
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+module.HC = sys.argv[3]
+child = 'import ctypes,json; print(json.dumps({"console":bool(ctypes.windll.kernel32.GetConsoleWindow())}))'
+result = {"parentConsole": bool(ctypes.windll.kernel32.GetConsoleWindow()),
+          "child": module.hc('-c', child)}
+Path(sys.argv[2]).write_text(json.dumps(result), encoding='utf-8')
+'''
+        with tempfile.TemporaryDirectory() as folder:
+            result = Path(folder)/'console.json'
+            subprocess.run([str(pythonw), '-c', parent, str(Path(collector.__file__).resolve()),
+                            str(result), sys.executable], check=True, capture_output=True,
+                           timeout=20, creationflags=subprocess.CREATE_NO_WINDOW)
+            self.assertEqual(json.loads(result.read_text(encoding='utf-8')),
+                             {'parentConsole':False, 'child':{'console':False}})
 
     def test_same_pty_and_agent_pid_can_switch_session(self):
         terminal = {'address': 't4', 'agent': 'codex'}
