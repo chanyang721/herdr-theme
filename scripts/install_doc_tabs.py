@@ -157,8 +157,31 @@ def copy_feature(repo, app_home):
             shutil.copy2(source_path, destination)
     scripts = app_home/'data/sixfold/doc-tabs'
     scripts.mkdir(parents=True, exist_ok=True)
-    for name in ('install_doc_tabs.py', 'resolve_doc_pins.py', 'collect_docs.py', 'core_api.py'):
+    for name in ('install_doc_tabs.py', 'resolve_doc_pins.py', 'collect_docs.py', 'core_api.py', 'render_mermaid.py'):
         shutil.copy2(repo/'scripts'/name, scripts/name)
+
+
+def install_mermaid(repo, app_home, library):
+    """Compile the offline WebKit renderer and copy a local mermaid.min.js beside it."""
+    library = library.expanduser().resolve(strict=True)
+    if library.name != 'mermaid.min.js':
+        raise ValueError('Pass the mermaid package file dist/mermaid.min.js')
+    tools = app_home/'data/sixfold/doc-tabs'
+    (tools/'mermaid').mkdir(parents=True, exist_ok=True)
+    shutil.copy2(library, tools/'mermaid/mermaid.min.js')
+    notice = library.parents[1]/'LICENSE'
+    if notice.exists(): shutil.copy2(notice, tools/'mermaid/LICENSE')
+    sdks = [Path('/Library/Developer/CommandLineTools/SDKs')/name for name in ('MacOSX26.5.sdk', 'MacOSX15.4.sdk')]
+    found = subprocess.run(['xcrun', '--show-sdk-path'], capture_output=True, text=True)
+    if found.returncode == 0: sdks.append(Path(found.stdout.strip()))
+    errors = []
+    # The newest SDK can be ahead of the installed compiler; try known matches first.
+    for sdk in dict.fromkeys(sdks):
+        if not sdk.exists(): continue
+        attempt = subprocess.run(['swiftc', '-O', '-sdk', str(sdk), str(repo/'scripts/render_mermaid.swift'), '-o', str(tools/'render-mermaid')], capture_output=True, text=True)
+        if not attempt.returncode: return
+        errors.append(attempt.stderr)
+    raise RuntimeError('A compatible macOS Swift SDK is required for Mermaid diagrams.\n' + '\n'.join(errors)[-2000:])
 
 
 def main():
@@ -168,7 +191,13 @@ def main():
     group.add_argument('--ensure-tabs', action='store_true')
     parser.add_argument('--home', type=Path, default=Path(os.environ.get('HERDR_APP_HOME', Path.home()/'.config/herdr-app')))
     parser.add_argument('--repo', type=Path, default=Path(__file__).resolve().parents[1])
+    parser.add_argument('--mermaid', type=Path, help='local mermaid.min.js (npm package mermaid, dist/) for diagram images')
     args = parser.parse_args()
+    if args.mermaid:
+        # Diagram support is independent of the tab structure; install it on its own too.
+        install_mermaid(args.repo, args.home.expanduser().absolute(), args.mermaid)
+        if not (args.install or args.ensure_tabs):
+            print(json.dumps({'mermaid': True}, ensure_ascii=False)); return
     app_home = args.home.expanduser().absolute()
     snapshot = call('doc.get', {'name': 'herdr-app'})
     planned, added = ensure_document_tabs(snapshot['value'], app_home)

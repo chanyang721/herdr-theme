@@ -1,8 +1,9 @@
 import { View, div, image } from 'gpui-kit';
 import { v_flex, h_flex, TextView } from 'gpui-base';
-import { props, appHome, readTextFile, exec, watchFolder, theme, shared, setShared, spaces, panes } from 'herdr';
+import { props, appHome, readTextFile, exec, watchFolder, theme, settings, shared, setShared, spaces, panes } from 'herdr';
 import { stageMarkdown } from './vendor/markdown.js';
 import { dirname, resolveLink } from './vendor/paths.js';
+import { mermaidFences, applyDiagrams } from './mermaid.js';
 
 const LIMIT = 400000;
 const STATE = 'sixfold.docs.selection.v1';
@@ -15,6 +16,7 @@ export default class ProjectDocuments extends View {
     this.spaceId = p.spaceId;
     this.script = p.resolverScript || `${appHome()}/data/sixfold/doc-tabs/resolve_doc_pins.py`;
     this.config = p.pinsConfig || `${appHome()}/data/sixfold/project-docs-pins.json`;
+    this.mermaidScript = p.mermaidScript || `${appHome()}/data/sixfold/doc-tabs/render_mermaid.py`;
     this.documents = []; this.watchers = new Map(); this.generation = 0;
     this.selected = shared(STATE)?.[this.spaceId]; this.width = 800;
     this.refresh(cx);
@@ -112,10 +114,15 @@ export default class ProjectDocuments extends View {
         if (!current()) return;
         if (text === null) throw Error('파일을 읽을 수 없습니다.');
         if (text.includes('\0')) throw Error('텍스트 문서가 아닙니다.');
-        if (text !== this.bodyText || this.blocks?.some(block => block.media) || this.imageWarning) {
-          const staged = await stageMarkdown(text.slice(0, LIMIT), { file: doc.path, root: dirname(doc.path), on: null });
+        const look = `${settings()?.dark ? 'dark' : 'light'}:${theme().canvas}`;
+        // Rendered diagrams are cached by code and look, so only file images force a restage.
+        if (text !== this.bodyText || look !== this.diagramLook || this.blocks?.some(block => block.media && !block.diagram) || this.imageWarning) {
+          const body = text.slice(0, LIMIT);
+          const staged = await stageMarkdown(body, { file: doc.path, root: dirname(doc.path), on: null });
           if (!current()) return;
-          this.bodyText = text; this.blocks = staged.blocks; this.imageWarning = staged.unavailable;
+          const diagrams = await this.diagrams(body, doc.path, look);
+          if (!current()) return;
+          this.bodyText = text; this.diagramLook = look; this.blocks = applyDiagrams(staged.blocks, diagrams); this.imageWarning = staged.unavailable;
           this.watch(staged.files.map(dirname), cx);
           this.truncated = text.length > LIMIT;
         }
@@ -123,6 +130,22 @@ export default class ProjectDocuments extends View {
       } catch (error) { if (current()) this.bodyError = String(error.message || error); }
       finally { if (current()) { this.loading = false; cx.notify(); } }
     });
+  }
+
+  async diagrams(text, path, look) {
+    const result = new Map();
+    this.diagramError = null;
+    if (!mermaidFences(text).length) return result;
+    try {
+      const [mode, background] = look.split(':');
+      const run = await exec('python3', [this.mermaidScript, '--doc', path, '--theme', mode, '--background', /^#[0-9a-f]{6}$/i.test(background) ? background : '#ffffff']);
+      const data = JSON.parse(run.stdout || '{}');
+      if (run.code !== 0 || data.error) throw Error(data.error || run.stderr.trim() || 'Mermaid 렌더링 실패');
+      const failed = [];
+      for (const d of data.diagrams || []) d.path ? result.set(d.code, { path: d.path, width: d.width, height: d.height }) : failed.push(d.error);
+      if (failed.length) this.diagramError = `Mermaid ${failed.length}개는 코드로 표시: ${failed[0]}`;
+    } catch (error) { this.diagramError = String(error.message || error); }
+    return result;
   }
 
   action(args, cx) {
@@ -195,7 +218,8 @@ export default class ProjectDocuments extends View {
       .child(notice(doc.path || doc.error || '경로 확인 필요'))
       .child(notice(`${this.newVersion ? '새 날짜판 · ' : ''}${this.lastSuccess ? `본문 확인 ${new Date(this.lastSuccess).toLocaleTimeString()}` : '본문 확인 전'}${this.truncated ? ' · 400,000자까지 표시' : ''}`))
       .when(Boolean(this.bodyError), el => el.child(notice(`확인 실패 · ${this.bodyError}${this.blocks ? ' · 마지막 성공 본문 표시' : ''}`)))
-      .when(Boolean(this.imageWarning), el => el.child(notice('일부 이미지를 읽을 수 없습니다.')));
+      .when(Boolean(this.imageWarning), el => el.child(notice('일부 이미지를 읽을 수 없습니다.')))
+      .when(Boolean(this.diagramError), el => el.child(notice(this.diagramError)));
     if (doc.path && !doc.path.toLowerCase().endsWith('.md')) return root.child(notice('PDF·Word·Excel 문서는 기본 앱으로 여세요.'));
     if (!this.blocks) return root.child(notice(this.loading ? '문서 읽는 중…' : '본문을 표시할 수 없습니다.'));
     return root.child(v_flex().id(`docs-body-${this.bodyKey}`).flex_1().min_h(0).min_w(0).overflow_y_scrollbar().p(20).gap(12)

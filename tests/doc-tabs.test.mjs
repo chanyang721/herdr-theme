@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { resolveLink } from '../mods/project-docs-tabs/vendor/paths.js';
+import { mermaidFences, applyDiagrams } from '../mods/project-docs-tabs/mermaid.js';
 
 const document = (id, path = `/docs/${id}.md`, pinned = true) => ({ id, path, pinned, label: id, name: path.split('/').at(-1), status: 'ok' });
 const deferred = () => { let resolve, reject; const promise = new Promise((yes, no) => { resolve = yes; reject = no; }); return { promise, resolve, reject }; };
@@ -28,11 +29,12 @@ async function harness({ documents = [document('a'), document('b')], selection }
     exec: async (command, args) => {
       calls.push({ command, args });
       if (command !== 'python3') return { code: 0, stdout: '', stderr: '' };
+      if (args[0].endsWith('render_mermaid.py')) return state.mermaid ? state.mermaid(args) : { code: 0, stdout: '{"diagrams":[]}', stderr: '' };
       if (state.result) return state.result();
       return { code: 0, stdout: JSON.stringify({ spaceId: 'Demo', documents: state.documents, warnings: [], checkedAt: 1, watchRoots: ['/docs'] }), stderr: '' };
     },
     watchFolder: root => { const pending = deferred(); watchers.set(root, pending); return pending.promise; },
-    theme: () => ({}), shared: key => stored[key], setShared: (key, value) => { stored[key] = value; },
+    theme: () => ({ canvas: '#101010' }), settings: () => ({ dark: true }), mermaidFences, applyDiagrams, shared: key => stored[key], setShared: (key, value) => { stored[key] = value; },
     spaces: () => [{ id: 'Demo', active: state.active, tabs: [{ id: 'tab-docs', active: true }] }],
     panes: () => [{ mod: 'project-docs-tabs', tab: 'tab-docs' }],
     stageMarkdown: (...args) => state.stage(...args), dirname: path => path.slice(0, path.lastIndexOf('/')),
@@ -188,4 +190,30 @@ test('an open request shows its file once in the matching space and leaves other
   h.state.request = { spaceId: 'Demo', path: '/reports/new.md', at: 7 }; h.view.refresh(h.cx); await h.flush();
   const opened = h.view.documents.find(d => d.opened);
   assert.equal(opened.path, '/reports/new.md'); assert.equal(h.view.selected, opened.id);
+});
+
+test('mermaid fences are found by exact code and unrendered diagrams stay as code', () => {
+  const text = '앞\n```mermaid\nflowchart LR\n  A-->B\n```\n중간\n~~~~ mermaid\nsequenceDiagram\n~~~~\n```js\nmermaid\n```\n끝';
+  const fences = mermaidFences(text);
+  assert.deepEqual(fences.map(f => f.code), ['flowchart LR\n  A-->B', 'sequenceDiagram']);
+  assert.equal(text.slice(fences[0].start, fences[0].end), '```mermaid\nflowchart LR\n  A-->B\n```');
+  assert.deepEqual(mermaidFences('```mermaid\nunclosed'), []);
+  const media = { path: 'mods/project-docs-tabs/.cache/m.png', width: 10, height: 5 };
+  const blocks = applyDiagrams([{ text }], new Map([['flowchart LR\n  A-->B', media]]));
+  assert.equal(blocks[0].text, '앞\n'); assert.deepEqual(blocks[1], { media, diagram: true });
+  assert.ok(blocks[2].text.includes('~~~~ mermaid\nsequenceDiagram'), 'a failed diagram keeps its code');
+  assert.deepEqual(applyDiagrams([{ text }], new Map()), [{ text }]);
+});
+
+test('documents with mermaid render diagram images once and keep code with a notice on failure', async t => {
+  const h = await harness(); t.after(() => h.view.close());
+  let runs = 0;
+  h.state.mermaid = args => { runs++; assert.deepEqual(args.slice(-4), ['--theme', 'dark', '--background', '#101010']);
+    return { code: 0, stdout: JSON.stringify({ diagrams: [{ code: 'graph TD\nA-->B', path: 'mods/project-docs-tabs/.cache/a.png', width: 40, height: 20 }] }), stderr: '' }; };
+  h.state.text = () => '# 제목\n```mermaid\ngraph TD\nA-->B\n```\n끝'; h.view.load(h.cx); await h.flush();
+  assert.equal(h.view.blocks.filter(b => b.diagram).length, 1); assert.equal(runs, 1);
+  h.view.load(h.cx); await h.flush(); assert.equal(runs, 1, 'an unchanged document does not rerender diagrams');
+  h.state.mermaid = () => ({ code: 0, stdout: JSON.stringify({ diagrams: [{ code: 'graph TD\nA-->C', error: 'Parse error' }] }), stderr: '' });
+  h.state.text = () => '```mermaid\ngraph TD\nA-->C\n```'; h.view.load(h.cx); await h.flush();
+  assert.equal(h.view.blocks.some(b => b.diagram), false); assert.match(h.view.diagramError, /Parse error/);
 });
