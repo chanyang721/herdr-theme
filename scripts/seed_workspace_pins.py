@@ -1,22 +1,33 @@
 #!/usr/bin/env python3
 """Seed local workspace pins once, resolving IDs from this computer's Herdr app."""
 import argparse
-import fcntl
 import json
 import os
 import subprocess
+from contextlib import contextmanager
 from pathlib import Path
 
 NAMES = ('Share', 'PeaceMinusOne', 'Medihomes')
 
+
+
+@contextmanager
+def seed_lock(path):
+    try:
+        path.mkdir()
+    except FileExistsError:
+        raise RuntimeError(f'Another workspace seed is running; check {path}') from None
+    try:
+        yield
+    finally:
+        path.rmdir()
 
 def seed(app_home, ensure_spaces=False, command='herdr-app'):
     target = app_home/'data/sixfold/workspace-pins.local.json'
     if target.exists():
         return False
     target.parent.mkdir(parents=True, exist_ok=True)
-    with (target.parent/'workspace-pins-seed.lock').open('a') as lock:
-        fcntl.flock(lock, fcntl.LOCK_EX)
+    with seed_lock(target.parent/'workspace-pins-seed.lock'):
         if target.exists():
             return False
         env = {**os.environ, 'HERDR_APP_HOME': str(app_home)}
