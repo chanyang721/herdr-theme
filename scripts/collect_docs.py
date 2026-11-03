@@ -99,8 +99,8 @@ def owned_links(folder,items):
     return None
 
 
-def collect(config,index):
-    data=json.loads(config.read_text())
+def collect(config,index,pins=None):
+    data=json.loads(config.read_text()) if config.exists() else {'version':1,'spaces':{}}
     if data.get('version')!=1 or not isinstance(data.get('spaces'),dict):raise ValueError('Expected version:1 and spaces mapping')
     output={'version':1,'spaces':{}}
     for space,settings in data['spaces'].items():
@@ -113,6 +113,16 @@ def collect(config,index):
         if problem:warnings.append(problem)
         output['spaces'][space]={'folder':str(target.resolve()),'files':items}
         if warnings:output['spaces'][space]['warning']=','.join(sorted(set(warnings)))
+    # Spaces that only have 문서 tab rules are indexed by id from those folders, without links.
+    try:
+        rules=json.loads(pins.read_text()).get('spaces',{}) if pins else {}
+    except (OSError,ValueError,AttributeError):rules={}
+    for space_id,settings in rules.items():
+        if space_id in output['spaces'] or settings.get('name') in output['spaces'] or not isinstance(settings.get('folders'),list):continue
+        warnings=[]
+        items=documents(settings['folders'],warnings,include_archived=True)
+        output['spaces'][space_id]={'folder':'','files':items}
+        if warnings:output['spaces'][space_id]['warning']=','.join(sorted(set(warnings)))
     atomic_json(index,output)
     return output
 
@@ -122,12 +132,13 @@ def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--config',type=Path,default=home/'project-docs.json')
     parser.add_argument('--output',type=Path,default=home/'project-docs-index.json')
+    parser.add_argument('--pins',type=Path,default=home/'project-docs-pins.json')
     args=parser.parse_args()
-    if not args.config.exists():return
+    if not args.config.exists() and not args.pins.exists():return
     args.output.parent.mkdir(parents=True,exist_ok=True)
     with args.output.with_suffix('.lock').open('a') as lock:
         fcntl.flock(lock,fcntl.LOCK_EX)
-        result=collect(args.config,args.output)
+        result=collect(args.config,args.output,args.pins)
     print(json.dumps({'spaces':len(result['spaces']),'documents':sum(len(x['files']) for x in result['spaces'].values())}))
 
 

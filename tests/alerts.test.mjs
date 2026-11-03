@@ -15,7 +15,9 @@ test('alerts recover after cold install and partial writes without a folder watc
   };
   globalThis.__alertsRuntime = {
     appHome: () => '/fresh-install',
-    readTextFile: async () => {
+    setShared() {},
+    readTextFile: async path => {
+      if (!path.endsWith('/alerts.json')) throw new Error('optional file missing');
       if (text === undefined) throw new Error('folder does not exist');
       return text;
     },
@@ -25,7 +27,7 @@ test('alerts recover after cold install and partial writes without a folder watc
   source = source.replace(/^import .* from 'gpui-kit';\n/m, '');
   source = source.replace(/^import .* from 'gpui-base';\n/m, '');
   source = source.replace(/^import .* from 'herdr';/m,
-    'const {appHome, readTextFile} = globalThis.__alertsRuntime;');
+    'const {appHome, readTextFile, setShared, notify} = globalThis.__alertsRuntime;');
   try {
     const {watchAlerts} = await import('data:text/javascript;base64,' + Buffer.from(source).toString('base64'));
     watchAlerts(view, cx);
@@ -35,10 +37,10 @@ test('alerts recover after cold install and partial writes without a folder watc
     refresh(cx);
     await tasks.at(-1);
     assert.equal(view.alerts[0].id, 'late');
-    assert.equal(notifications, 1);
+    assert.equal(notifications, 2);
     refresh(cx);
     await tasks.at(-1);
-    assert.equal(notifications, 1);
+    assert.equal(notifications, 2);
     text = '{partial';
     refresh(cx);
     await tasks.at(-1);
@@ -47,7 +49,7 @@ test('alerts recover after cold install and partial writes without a folder watc
     refresh(cx);
     await tasks.at(-1);
     assert.deepEqual(view.alerts, []);
-    assert.equal(notifications, 2);
+    assert.equal(notifications, 3);
   } finally {
     delete globalThis.__alertsRuntime;
   }

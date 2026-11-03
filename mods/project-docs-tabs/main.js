@@ -29,6 +29,17 @@ function run(args) {
   if (!ok) throw new Error('클립보드에 넣지 못했습니다.');
   return 'ok';
 }`;
+const HOME = /^\/Users\/[^/]+/;
+// Groups tabs by the folder that holds each file, in first-seen order (pinned first, as listed).
+export function folderGroups(documents) {
+  const groups = new Map();
+  for (const d of documents) {
+    const folder = d.path ? dirname(d.path) : '';
+    if (!groups.has(folder)) groups.set(folder, { label: folder ? folder.replace(HOME, '~') : '경로 확인 필요', documents: [] });
+    groups.get(folder).documents.push(d);
+  }
+  return [...groups.values()];
+}
 export default class ProjectDocuments extends View {
   init(_props, cx) {
     const p = props() || {};
@@ -68,9 +79,11 @@ export default class ProjectDocuments extends View {
             this.linked = null;
           } else this.documents.push(this.linked);
         }
-        const request = await readTextFile(`${dirname(this.config)}/${REQUEST}`).then(text => text ? JSON.parse(text) : null).catch(() => null);
+        const saved = await readTextFile(`${dirname(this.config)}/${REQUEST}`).then(text => text ? JSON.parse(text) : null).catch(() => null);
         if (this.closed) return;
-        if (request?.spaceId === this.spaceId && typeof request.path === 'string' && request.at > (shared(OPENED)?.[this.spaceId] ?? 0)) {
+        // Version 2 keeps one request per space; version 1 held only the latest one.
+        const request = saved?.requests ? saved.requests[this.spaceId] : saved?.spaceId === this.spaceId ? saved : null;
+        if (typeof request?.path === 'string' && request.at > (shared(OPENED)?.[this.spaceId] ?? 0)) {
           setShared(OPENED, { ...(shared(OPENED) || {}), [this.spaceId]: request.at });
           this.reveal(request.path);
         }
@@ -271,13 +284,15 @@ export default class ProjectDocuments extends View {
         .child(div().flex_1().font_semibold().child('프로젝트 문서 · 읽기 전용'))
         .child(button('docs-refresh', '새로 고침', cx => this.refresh(cx)))
         .child(button('docs-settings', '고정 규칙 편집', cx => this.external('code', ['--reuse-window', this.config], cx))))
-      .child(h_flex().id('docs-tabbar').h(this.documents.length > 4 ? 90 : 48).flex_none().flex_wrap().gap(4).p(8).overflow_y_scrollbar()
-        .children(this.documents.map(d => {
-          const tab = button(`doc-${d.id}`, `${d.pinned ? '◆' : d.opened ? '열람' : '최근'} ${d.label}`, cx => this.choose(d.id, cx))
-            .max_w(300).truncate().bg(d.id === this.selected ? t.selected : t.chrome);
-          return d.pinned ? tab : h_flex().flex_none().items_center().rounded(5).bg(d.id === this.selected ? t.selected : t.chrome)
-            .child(tab.pr(4)).child(button(`doc-close-${d.id}`, '×', cx => this.dismiss(d.id, cx)).px(6).text_color(t.muted));
-        })))
+      .child(v_flex().id('docs-tabbar').max_h(this.documents.length > 4 ? 220 : 120).flex_none().gap(6).p(8).overflow_y_scrollbar()
+        .children(folderGroups(this.documents).map(group => v_flex().flex_none().gap(3)
+          .child(div().text_size(11).text_color(t.muted).truncate().child(`${group.label} (${group.documents.length})`))
+          .child(h_flex().flex_none().flex_wrap().gap(4).children(group.documents.map(d => {
+            const tab = button(`doc-${d.id}`, `${d.pinned ? '◆' : d.opened ? '열람' : '최근'} ${d.label}`, cx => this.choose(d.id, cx))
+              .max_w(300).truncate().bg(d.id === this.selected ? t.selected : t.chrome);
+            return d.pinned ? tab : h_flex().flex_none().items_center().rounded(5).bg(d.id === this.selected ? t.selected : t.chrome)
+              .child(tab.pr(4)).child(button(`doc-close-${d.id}`, '×', cx => this.dismiss(d.id, cx)).px(6).text_color(t.muted));
+          }))))))
       .when(Boolean(this.listError), el => el.child(notice(`목록 확인 실패 · 마지막 목록 유지: ${this.listError}`)))
       .when(Boolean(this.warnings?.length), el => el.child(notice(`조회 주의: ${this.warnings.join(', ')}`)))
       .when(Boolean(this.actionError), el => el.child(notice(this.actionError)))

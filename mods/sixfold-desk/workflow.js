@@ -28,7 +28,17 @@ export function delegationEvents(incoming, nodes) {
 
 export function workflowStatus(node, language='ko') {
   const labels = language==='ko'
-    ? {finished:'종료',recent:'활동 추정',quiet:'조용함 추정',open:'연결 기록',closed:'연결 종료',working:'작업 중',idle:'대기',done:'완료',blocked:'확인 필요'}
+    ? {interrupted:'중단',finished:'완료',recent:'활동 추정',quiet:'조용함 추정',open:'연결 기록',closed:'연결 종료',working:'작업 중',idle:'대기',done:'완료',blocked:'확인 필요'}
     : {recent:'Recent (estimated)',quiet:'Quiet (estimated)',open:'Link recorded'};
   return labels[node.status] || node.status || (language==='ko'?'상태 미확인':'Unknown');
+}
+
+// Only observed work or explicitly labelled recent estimates expand by default.
+export const activeWorkflow = node => ['working','blocked','recent'].includes(node.status);
+export function sessionChildren(nodes, terminal, history=false) {
+  const owned=nodes.filter(node=>node.terminal===terminal);
+  const ordered=[];
+  const walk=parent=>{for(const node of owned.filter(n=>n.parent===parent)){ordered.push(node);walk(node.id);}};
+  walk(terminal);
+  return ordered.filter(node=>history || activeWorkflow(node));
 }

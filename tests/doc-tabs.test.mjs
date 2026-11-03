@@ -193,6 +193,16 @@ test('an open request shows its file once in the matching space and leaves other
   assert.equal(opened.path, '/reports/new.md'); assert.equal(h.view.selected, opened.id);
 });
 
+test('per-space open requests are each shown in their own space and the tab list is grouped by folder', async t => {
+  const h = await harness({ documents: [document('a'), document('r', '/reports/r.md', false), document('b')] }); t.after(() => h.view.close());
+  h.state.request = { version: 2, requests: { Other: { path: '/docs/a.md', at: 9 }, Demo: { path: '/docs/b.md', at: 8 } } };
+  h.view.refresh(h.cx); await h.flush();
+  assert.equal(h.view.selected, 'b', 'a later request for another space must not hide this space\'s request');
+  h.render();
+  const folders = h.labels.filter(label => /\(\d+\)$/.test(label));
+  assert.deepEqual(folders, ['/docs (2)', '/reports (1)']);
+});
+
 test('mermaid fences are found by exact code and unrendered diagrams stay as code', () => {
   const text = '앞\n```mermaid\nflowchart LR\n  A-->B\n```\n중간\n~~~~ mermaid\nsequenceDiagram\n~~~~\n```js\nmermaid\n```\n끝';
   const fences = mermaidFences(text);

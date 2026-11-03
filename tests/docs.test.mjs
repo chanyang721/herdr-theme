@@ -5,18 +5,21 @@ import {readFile} from 'node:fs/promises';
 test('project document index recovers after cold install and partial writes and follows active space', async()=>{
   let text,refresh,active='Demo',notifications=0;const tasks=[];const view={projectDocs:null};
   const cx={notify(){notifications++;},spawn(task){const p=task(cx);tasks.push(p);return p;},timer:{every(ms,fn){assert.equal(ms,2000);refresh=fn;}}};
-  globalThis.__docsRuntime={appHome:()=>'/app',spaces:()=>[{id:active,name:active,active:true}],readTextFile:async()=>{if(text===undefined)throw Error('missing');return text;}};
+  const collects=[];
+  globalThis.__docsRuntime={appHome:()=>'/app',spaces:()=>[{id:active,name:active,active:true}],readTextFile:async()=>{if(text===undefined)throw Error('missing');return text;},exec:async(command,args)=>{collects.push([command,...args]);return {code:0};}};
   let source=await readFile(new URL('../mods/sixfold-desk/docs.js',import.meta.url),'utf8');
   source=source.replace(/\r\n/g,'\n');
-  source=source.replace(/^import .* from 'gpui-kit';\n/m,'').replace(/^import .* from 'gpui-base';\n/m,'').replace(/^import .* from 'herdr';/m,'const {appHome,readTextFile,spaces}=globalThis.__docsRuntime;');
+  source=source.replace(/^import .* from 'gpui-kit';\n/m,'').replace(/^import .* from 'gpui-base';\n/m,'').replace(/^import .* from 'herdr';/m,'const {appHome,readTextFile,spaces,exec}=globalThis.__docsRuntime;');
   try{
     const {watchDocs,currentDocs}=await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
     watchDocs(view,cx);await tasks.at(-1);assert.equal(currentDocs(view.projectDocs),null);
+    assert.deepEqual(collects,[['python3','/app/data/sixfold/doc-tabs/collect_docs.py']],'the index is rebuilt on start, then at most every 30 seconds');
     text=JSON.stringify({version:1,spaces:{Demo:{folder:'/docs',files:[{name:'guide.md',path:'/docs/guide.md',mtime:12}]}}});
     refresh(cx);await tasks.at(-1);assert.equal(currentDocs(view.projectDocs).files[0].name,'guide.md');assert.equal(notifications,1);
     text='{partial';refresh(cx);await tasks.at(-1);assert.equal(currentDocs(view.projectDocs).files.length,1);
     active='Unconfigured';assert.equal(currentDocs(view.projectDocs),null);
     active='Demo';text=JSON.stringify({version:1,spaces:{}});refresh(cx);await tasks.at(-1);assert.equal(currentDocs(view.projectDocs),null);assert.equal(notifications,2);
+    assert.equal(collects.length,1);
   }finally{delete globalThis.__docsRuntime;}
 });
 
@@ -32,7 +35,7 @@ async function sidebar(){
     if(key==='child')return value=>{if(typeof value==='string')labels.push(value);return proxy;};
     return ()=>proxy;
   }});return proxy;}
-  const runtime={div:element,h_flex:element,v_flex:element,
+  const runtime={div:element,h_flex:element,v_flex:element,appHome:()=>'/app',
     InputState:{new:()=>{assert.equal(rendering,false,'native input creation during render');return {events:{},text:'',value(){return this.text;},on(event,callback){this.events[event]=callback;}};}},Input:{new:element},
     spaces:()=>[{id:active,name:active,active:true}],exec:async(command,args)=>{calls.push({command,args});return run(command,args);}};
   const key=`__sidebarDocs${moduleId++}`;globalThis[key]=runtime;
@@ -66,9 +69,9 @@ test('NFC/NFD filename search expands matching folders and Enter opens first mat
     const file=doc(`/docs/${'메디홈즈-보고서.md'.normalize(filenameForm)}`,30);h.view.projectDocs.spaces.Demo.files=[file,doc('/docs/unrelated.md')];h.render('Demo');
     const input=h.view.docsInputs.Demo;input.text='메디홈즈'.normalize(queryForm);input.events.change({},h.cx);h.render('Demo');
     assert.equal([...h.handlers.keys()].filter(k=>k.startsWith('sf-doc-Demo')).length,1);
-    input.events.submit({},h.cx);await h.flush();assert.deepEqual(h.calls.at(-1),{command:'open',args:[file.path]});
+    input.events.submit({},h.cx);await h.flush();assert.deepEqual(h.calls.at(-1),{command:'python3',args:['/app/data/sixfold/doc-tabs/open_doc_tab.py',file.path,'--space','Demo']});
     h.render('Other');const other=h.view.docsInputs.Other;assert.notEqual(input,other);assert.equal(h.view.docsQueries.Other,undefined);
-    other.events.submit({},h.cx);await h.flush();assert.equal(h.calls.at(-1).args[0],'/other/other.md');
+    other.events.submit({},h.cx);await h.flush();assert.deepEqual(h.calls.at(-1).args.slice(1),['/other/other.md','--space','Other']);
     assert.equal(h.view.docsQueries.Demo,input.text);
   }
 });
@@ -89,24 +92,25 @@ test('folder groups and their document rows are newest first',async()=>{
   const h=await sidebar();h.view.projectDocs.spaces.Demo.files=[doc('/old/first.md',1),doc('/new/older.md',10),doc('/new/latest.md',30)];h.render();
   assert.match(h.labels.find(s=>s.startsWith('▸')),/new/);
   h.handlers.get('sf-docs-folder-Demo-0')({},h.cx);h.render();h.handlers.get('sf-doc-Demo-0-0')({},h.cx);await h.flush();
-  assert.equal(h.calls[0].args[0],'/new/latest.md');
+  assert.equal(h.calls[0].args[1],'/new/latest.md');
 });
 
-test('default application and explicit VS Code actions report nonzero errors and clear them on retry',async()=>{
+test('Markdown opens in the 문서 tab, other files in the default app, ↗ in VS Code; errors clear on retry',async()=>{
   const h=await sidebar();h.handlers.get('sf-docs-folder-Demo-0')({},h.cx);h.render();
-  for(const [id,command,args] of [['sf-doc-Demo-0-0','open',['/docs/guide.md']],['sf-doc-code-Demo-0-0','code',['--reuse-window','/docs/guide.md']]]){
+  for(const [id,command,args] of [['sf-doc-Demo-0-0','python3',['/app/data/sixfold/doc-tabs/open_doc_tab.py','/docs/guide.md','--space','Demo']],['sf-doc-Demo-0-1','open',['/docs/report.pdf']],['sf-doc-code-Demo-0-0','code',['--reuse-window','/docs/guide.md']]]){
     h.setRun(async()=>({code:1}));h.handlers.get(id)({},h.cx);await h.flush();assert.match(h.view.docsErrors.Demo,/열지 못했습니다/);
     assert.deepEqual(h.calls.at(-1),{command,args});
     h.setRun(async()=>({code:0}));h.handlers.get(id)({},h.cx);await h.flush();assert.equal(h.view.docsErrors.Demo,null);
   }
-  h.setRun(async()=>{throw Error('missing app');});h.handlers.get('sf-doc-Demo-0-0')({},h.cx);await h.flush();assert.match(h.view.docsErrors.Demo,/기본 앱/);
+  h.setRun(async()=>{throw Error('missing app');});h.handlers.get('sf-doc-Demo-0-1')({},h.cx);await h.flush();assert.match(h.view.docsErrors.Demo,/기본 앱/);
+  h.handlers.get('sf-doc-Demo-0-0')({},h.cx);await h.flush();assert.match(h.view.docsErrors.Demo,/문서 탭/);
   h.render('Other');assert.equal(h.view.docsErrors.Other,undefined);
 });
 
 test('Enter uses the refreshed index rather than the first rendered document snapshot',async()=>{
   const h=await sidebar();
   h.view.projectDocs={spaces:{Demo:{folder:'/project',files:[doc('/docs/fresh.md',100)]}}};h.render();
-  h.view.docsInputs.Demo.events.submit({},h.cx);await h.flush();assert.equal(h.calls.at(-1).args[0],'/docs/fresh.md');
+  h.view.docsInputs.Demo.events.submit({},h.cx);await h.flush();assert.equal(h.calls.at(-1).args[1],'/docs/fresh.md');
 });
 
 

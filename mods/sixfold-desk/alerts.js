@@ -1,6 +1,6 @@
 import { div } from 'gpui-kit';
 import { h_flex, v_flex } from 'gpui-base';
-import { run, readTextFile, writeTextFile, appHome } from 'herdr';
+import { run, readTextFile, writeTextFile, appHome, setShared } from 'herdr';
 
 const SHOWN = new Set(['needs-you']);  // Only what a person must decide; the rest stays in the project.
 const MARKS = { 'needs-you': '!', info: '✓', processing: '●' };
@@ -18,10 +18,18 @@ export function watchAlerts(view, cx) {
     loading = true;
     cx.spawn(async cx => {
       try {
-        const text = await readTextFile(`${appHome()}/data/sixfold/alerts.json`);
+        const legacy = await readTextFile(`${appHome()}/data/sixfold/alerts.json`).catch(()=>'{"items":[]}');
+        const tracked = await readTextFile(`${appHome()}/data/sixfold/project-alerts.json`).catch(()=>'{"items":[]}');
+        const readText = await readTextFile(`${appHome()}/data/sixfold/slack-alerts-read.json`).catch(()=>'{}');
+        const text=JSON.stringify([legacy,tracked,readText]);
         if (text === previous) return;
-        const items = text ? JSON.parse(text).items ?? [] : [];
-        view.alerts = items;
+        const feed=JSON.parse(tracked || '{}');
+        const items = feed.items ?? [];
+        const read=JSON.parse(readText || '{}');
+        setShared('sixfold.alertItems',items);
+        setShared('sixfold.alertRead',read);
+        setShared('sixfold.alertProjects',feed.projects ?? []);
+        view.alerts = JSON.parse(legacy || '{}').items ?? [];
         previous = text;
         cx.notify();
       } catch { /* Missing folders and partial writes are retried on the next tick. */ }
