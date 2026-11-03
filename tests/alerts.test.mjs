@@ -66,7 +66,7 @@ test('alerts recover after cold install and partial writes without a folder watc
 });
 
 for (const lineEnding of ['\n', '\r\n']) {
-test(`popup events persist by source/result identity, ignoring timestamps and transient omissions (${lineEnding === '\n' ? 'LF' : 'CRLF'})`,async()=>{
+test(`workflow updates never auto-open; new mentions open once across health ticks, omissions and restart (${lineEnding === '\n' ? 'LF' : 'CRLF'})`,async()=>{
   const files=new Map([
     ['alerts.json','{"items":[]}'],['project-alerts.json','{"items":[],"projects":["Medihomes"]}'],
     ['slack-alerts-read.json','{}'],['slack-mentions.json','{"items":[{"id":"old"}]}'],
@@ -94,27 +94,28 @@ test(`popup events persist by source/result identity, ignoring timestamps and tr
     let refresh=await startWatcher();
     assert.equal(opens.length,0,'existing messages/results are seeded silently');
     const saved=JSON.parse(files.get('slack-popup-events.json'));
-    assert.equal(saved.schema,1);assert.equal(saved.seen.length,3);
+    assert.equal(saved.schema,1);assert.deepEqual(saved.seen,['mention:old']);
 
     files.set('slack-live-health.json','{"state":"ok","checked":2}');
     files.set('slack-workflows.json','{"jobs":{"job":{"id":"job","version":"source-v1","state":"needs_decision","summary":"Reworded review summary","artifacts":["/report.md"],"finished_at":"second"},"legacy":{"id":"legacy","state":"ready","summary":"Reworded legacy summary","sources":[{"id":"slack:C1:legacy"}],"artifacts":[],"finished_at":"second"}}}');
-    await refresh();assert.equal(opens.length,0,'health ticks, summaries and finished_at changes are not new events');
+    await refresh();assert.equal(opens.length,0,'health ticks, workflow versions, summaries and finished_at do not auto-open');
 
     files.set('slack-mentions.json','{"items":[]}');await refresh();
+    files.set('slack-mentions.json','{"items":[{"id":"old"}]}');await refresh();
+    assert.equal(opens.length,0,'an old source returning after a transient omission stays suppressed');
     files.set('slack-mentions.json','{"items":[{"id":"old"},{"id":"new"}]}');await refresh();
-    assert.equal(opens.length,1,'a new source opens once after a transient omission');
+    assert.equal(opens.length,1,'a genuinely new mention opens once');
     assert.equal(opens[0].props.review,false);
     await refresh();assert.equal(opens.length,1);
 
     files.set('slack-workflows.json','{"jobs":{"job":{"id":"job","version":"source-v2","state":"needs_decision","summary":"Updated source review","artifacts":["/report.md"],"finished_at":"third"}}}');
-    await refresh();assert.equal(opens.length,2,'a changed source/result opens once');
+    await refresh();assert.equal(opens.length,1,'a changed workflow result remains available without auto-opening');
     files.set('slack-workflows.json','{"jobs":{"job":{"id":"job","version":"source-v2","state":"needs_decision","summary":"Updated source review","artifacts":["/report.md"],"finished_at":"fourth"}}}');
-    await refresh();assert.equal(opens.length,2,'a second timestamp change does not reopen it');
+    await refresh();assert.equal(opens.length,1,'a second workflow timestamp change remains quiet');
 
     refresh=await startWatcher();
-    assert.equal(opens.length,2,'a fresh watcher/restart honors the persistent ledger');
-    assert.equal(opens[1].props.review,true);
-    assert.equal(opens[0].kind,'window');assert.equal(opens[0].key,opens[1].key);
+    assert.equal(opens.length,1,'a fresh watcher/restart honors the persistent mention ledger');
+    assert.equal(opens[0].kind,'window');
   }finally{delete globalThis.__popupRuntime;}
 });
 

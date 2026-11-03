@@ -118,4 +118,4 @@ Project document tracking: see [configuration and collector](docs/project-docume
 
 ## 2026-11-03 설치본 동기화
 
-현재 `layouts/sixfold.json`은 실제 설치된 모니터 줄을 포함합니다. 사용 전 외부 모드 `system-metrics`, `agent-usage`, `usage-bar`를 별도 설치해야 합니다([의존성 안내](extras/monitor-layout/README.md)). 이 저장소는 외부 모드의 버전을 고정하거나 자동 설치하지 않습니다.
+현재 `layouts/sixfold.json`은 실제 설치된 모니터 줄을 포함합니다. 사용 전 외부 모드 `system-metrics`, `agent-usage`, `plan-usage`를 별도 설치해야 합니다([의존성 안내](extras/monitor-layout/README.md)). 이 저장소는 외부 모드의 버전을 고정하거나 자동 설치하지 않습니다.

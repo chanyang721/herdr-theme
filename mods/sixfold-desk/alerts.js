@@ -4,25 +4,13 @@ import { run, readTextFile, writeTextFile, appHome, setShared, openOverlay } fro
 
 const SHOWN = new Set(['needs-you']);  // Only what a person must decide; the rest stays in the project.
 const MARKS = { 'needs-you': '!', info: '✓', processing: '●' };
-const WORKFLOW_RESULTS = new Set(['ready', 'needs_decision', 'blocked']);
 
-function popupEvents(mentions, read, workflows) {
+function popupEvents(mentions, read) {
   const events = [];
   for (const item of mentions ?? []) {
     if (typeof item?.id === 'string' && item.id) {
       events.push({key: `mention:${item.id}`, popup: read[item.id] !== item.id});
     }
-  }
-  for (const job of Object.values(workflows ?? {})) {
-    if (!job?.id || !WORKFLOW_RESULTS.has(job.state)) continue;
-    const artifacts = Array.isArray(job.artifacts) ? [...job.artifacts].sort() : [];
-    // finished_at is an audit timestamp, not a new source or review result.
-    // Summaries are editable presentation. Prefer the stable workflow version;
-    // legacy records fall back to their source identities and result artifacts.
-    const sources = Array.isArray(job.sources) ? job.sources.map(source => source?.id).filter(Boolean).sort() : [];
-    const revision = typeof job.version === 'string' && job.version ? ['version', job.version] : ['legacy', sources];
-    const result = [job.id, revision, job.state, artifacts];
-    events.push({key: `workflow:${JSON.stringify(result)}`, popup: true, review: true});
   }
   return events;
 }
@@ -72,7 +60,7 @@ export function watchAlerts(view, cx) {
         const read=JSON.parse(readText || '{}');
         const tagged=JSON.parse(mentions || '{}').items ?? [];
         const states=JSON.parse(workflows || '{}').jobs ?? {};
-        const event=await notifyNewPopupEvents(popupEvents(tagged,read,states));
+        const event=await notifyNewPopupEvents(popupEvents(tagged,read));
         setShared('sixfold.slackHealth',JSON.parse(health || '{}'));
         setShared('sixfold.slackWorkflows',states);
         if(event)openOverlay({mod:'sixfold-slack-inbox',kind:'window',key:'slack-mentions',keep:true,width:1040,height:800,props:{window:true,review:Boolean(event.review)}});
