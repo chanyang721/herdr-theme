@@ -62,6 +62,75 @@
           }
         },
         {
+          "id": "monitor-strip",
+          "type": "row",
+          "size": {
+            "px": 30
+          },
+          "background": "chrome",
+          "children": [
+            {
+              "id": "monitor-left",
+              "type": "block",
+              "size": {
+                "weight": 1
+              },
+              "content": {
+                "mod": "sixfold-tools",
+                "props": {
+                  "spacer": true
+                }
+              }
+            },
+            {
+              "id": "system-metrics",
+              "type": "block",
+              "size": {
+                "px": 405
+              },
+              "content": {
+                "mod": "system-metrics"
+              }
+            },
+            {
+              "id": "agent-usage-summary",
+              "type": "block",
+              "size": {
+                "px": 250
+              },
+              "content": {
+                "mod": "agent-usage",
+                "props": {
+                  "role": "summary"
+                }
+              }
+            },
+            {
+              "id": "usage-bar",
+              "type": "block",
+              "size": {
+                "px": 410
+              },
+              "content": {
+                "mod": "usage-bar"
+              }
+            },
+            {
+              "id": "monitor-right",
+              "type": "block",
+              "size": {
+                "weight": 1
+              },
+              "content": {
+                "mod": "sixfold-tools",
+                "props": {
+                  "spacer": true
+                }
+              }
+            }
+          ]
+        },
+        {
           "id": "tabs",
           "type": "block",
           "size": {
@@ -95,7 +164,7 @@
                     "color": "border"
                   },
                   "focus": {
-                    "width": 2,
+                    "width": 1,
                     "color": "accent"
                   },
                   "lone": true,

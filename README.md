@@ -25,6 +25,11 @@ The public preview uses labelled demo programs, not real projects, conversations
 
 Requires Herdr app 0.1.11 or newer and Python 3.
 
+The synchronized `sixfold` layout includes the installed monitor strip. Install its external
+`system-metrics`, `agent-usage`, and `usage-bar` dependencies separately before selecting it;
+see [monitor layout requirements](extras/monitor-layout/README.md). These external mod versions
+are not pinned or installed by this repository.
+
 ```sh
 git clone https://github.com/chanyang721/herdr-theme.git
 cd herdr-theme
