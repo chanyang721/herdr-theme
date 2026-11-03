@@ -124,6 +124,7 @@ class WindowsTests(unittest.TestCase):
             def held(rollout):
                 calls.append(rollout);return holders[rollout]
             with patch.object(collector,'CODEX_DB',path),patch.object(collector,'file_holders',side_effect=held), \
+                 patch.object(collector,'windows_processes',return_value={30:1,40:30,50:1}), \
                  patch.dict(collector._codex_holders,clear=True),patch.dict(collector._codex_scanned,clear=True):
                 self.assertEqual(collector.windows_codex_thread([30,40]),'root')
                 self.assertNotIn('c.jsonl',calls,'a sub-agent thread never names the session')
@@ -135,3 +136,21 @@ class WindowsTests(unittest.TestCase):
                 calls.clear()
                 self.assertIsNone(collector.windows_codex_thread([30,40]))
                 self.assertEqual(calls,[],'a fruitless scan waits before scanning again')
+
+    def test_codex_resumed_under_a_new_pid_is_found_again(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path=Path(folder)/'state.sqlite'
+            db=sqlite3.connect(path)
+            db.execute('create table threads(id,rollout_path,archived,updated_at)')
+            db.execute('create table thread_spawn_edges(parent_thread_id,child_thread_id,status)')
+            db.execute("insert into threads values('root','r.jsonl',0,1)")
+            db.commit();db.close()
+            holders={'r.jsonl':{40}}
+            alive={30:1,40:30}
+            with patch.object(collector,'CODEX_DB',path),patch.object(collector,'file_holders',side_effect=lambda r:holders[r]), \
+                 patch.object(collector,'windows_processes',side_effect=lambda:alive), \
+                 patch.dict(collector._codex_holders,clear=True),patch.dict(collector._codex_scanned,clear=True):
+                self.assertEqual(collector.windows_codex_thread([30,40]),'root')
+                holders['r.jsonl']={41};alive={31:1,41:31}  # Codex restarted and resumed the same thread
+                self.assertEqual(collector.windows_codex_thread([31,41]),'root')
+                self.assertEqual(collector._codex_holders,{41:'root'},'the gone pid is forgotten')

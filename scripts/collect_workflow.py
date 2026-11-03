@@ -160,18 +160,20 @@ def windows_codex_thread(pids):
         key = tuple(pids)
         if time.time() - _codex_scanned.get(key, 0) < CODEX_RESCAN_SECONDS:
             return None
-        claimed = set(_codex_holders.values())
+        # Forget processes that are gone. A thread another holder had is still
+        # scanned: a restarted Codex can resume it under a new pid.
+        alive = windows_processes()
+        for pid in [pid for pid in _codex_holders if pid not in alive]:
+            del _codex_holders[pid]
         # Sub-agent threads can share their parent's process; only a root names the session.
         rows = connection.execute(
             'select id, rollout_path from threads where archived = 0 '
             'and id not in (select child_thread_id from thread_spawn_edges) '
             'order by updated_at desc limit ?', (CODEX_SCAN_LIMIT,)).fetchall()
         for thread, rollout in rows:
-            if thread in claimed:
-                continue
             holders = file_holders(rollout)
             for pid in holders:
-                _codex_holders.setdefault(pid, thread)
+                _codex_holders[pid] = thread
             if holders & set(pids):
                 return thread
         _codex_scanned[key] = time.time()
