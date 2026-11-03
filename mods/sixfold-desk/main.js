@@ -19,8 +19,11 @@ const hasPanel=node=>node?.id==='panel'||(node?.children||[]).some(hasPanel);
 const marks = { blocked: '!', done: '✓', working: '●', idle: '○' };
 // One slow pass of the dot along a link pipe while computers work together.
 const LINK_FLOW_MS = 4000;
-// Right margin of the computer list kept for link lanes (four lanes, 4 px apart).
-const LINK_MARGIN = 19;
+// Right margin kept beside the computer and workspace lists alike: message curves
+// and computer links draw in it, so both lists end on the same line.
+const LINK_MARGIN = 41;
+// Computer rows match the workspace header rows now that they hold one status line.
+const COMPUTER_ROW = 36;
 
 // Pane frames expose only a shared border and focus override. Keep status
 // decoration inside the header so it never competes with the keyboard frame.
@@ -472,7 +475,7 @@ export default class SixfoldDesk extends View {
       const config = name === null ? this.computers?.local : this.computers?.machines?.[name];
       const kind = name === null ? 'laptop' : computerKind(config?.os);
       const key = name === null ? 'local' : `remote:${name}`;
-      let row = h_flex().id(`sf-computer-${key}`).h(38).flex_none().px(7).gap(6).items_center().rounded(4)
+      let row = h_flex().id(`sf-computer-${key}`).h(COMPUTER_ROW).flex_none().px(7).gap(6).items_center().rounded(4)
         .bg(selected ? t.selected : t.surface).hover(style => style.bg(t.hover))
         .tooltip(`${displayName}${name === null ? '' : ` · ${name}`}\n${state}${name === null ? '' : (this.lang()==='ko'?' · Herdr 원격 등록됨':' · Registered in Herdr')}\n${['working','done','blocked','idle'].map(status => `${w[status]} ${agentCount[status]}`).join(' · ')}${sharedProjects.length ? `\n${sharedProjects.map(collabText).join('\n')}\n${collabNote}` : ''}`)
         .on_mouse_down('left', (_event, cx) => cx.stop_propagation())
@@ -501,7 +504,7 @@ export default class SixfoldDesk extends View {
     if(this.computers?.tailscale){
       for(const peer of this.tailscalePeers??[]){
         const state=tailscaleStatus(peer,this.lang());
-        const row = h_flex().id(`sf-tailscale-${peer.name}`).h(38).flex_none().px(7).gap(6).items_center().rounded(4)
+        const row = h_flex().id(`sf-tailscale-${peer.name}`).h(COMPUTER_ROW).flex_none().px(7).gap(6).items_center().rounded(4)
           .bg(selectedComputer===`tailscale:${peer.name}`?t.selected:t.surface).hover(style=>style.bg(t.hover))
           .on_mouse_down('left',(_event,cx)=>cx.stop_propagation())
           .on_click(()=>this.selectComputer(`tailscale:${peer.name}`))
@@ -514,8 +517,8 @@ export default class SixfoldDesk extends View {
       }
     }
     const activeComputers=computerItems.filter(item=>item.active);
-    // Visible computer rows are 38 px tall with 3 px gaps: the centre of row i.
-    const rowY = index => index * 41 + 19;
+    // Visible computer rows are COMPUTER_ROW tall with 3 px gaps: the centre of row i.
+    const rowY = index => index * (COMPUTER_ROW + 3) + COMPUTER_ROW / 2;
     const rowIndex = machine => activeComputers.findIndex(item => item.name === machine);
     const otherComputers=computerItems.filter(item=>!item.active);
     const computersExpanded=shared('sixfold.computing.expanded')===true;
@@ -558,7 +561,7 @@ export default class SixfoldDesk extends View {
           ? svg(icon.path).size(14).text_color(workspaceColor(s)) : image(icon.path).w(14).h(14));
       return box.bg(workspaceColor(s)).child(svg(`mods/sixfold-desk/icons/ws-${workspaceIdentity(s)||'workspace'}.svg`).size(12).flex_none().text_color(t.background));
     };
-    const spaceRows=groups.map(({s,members})=>{ const linked=spaceLink(s); return v_flex().id(`sf-space-${s.id}`).ml(7).mr(41).mb(12).gap(2).flex_none().rounded(6).border(1).border_color(workspacePinned(s,this.workspacePins)?t.accent:t.border)
+    const spaceRows=groups.map(({s,members})=>{ const linked=spaceLink(s); return v_flex().id(`sf-space-${s.id}`).ml(7).mr(LINK_MARGIN).mb(12).gap(2).flex_none().rounded(6).border(1).border_color(workspacePinned(s,this.workspacePins)?t.accent:t.border)
       // Worked on together with another computer now: the link's quiet colour, dashed.
       .when(Boolean(linked),e=>e.border_dashed().border_color(linked.lane.colors.link))
       .when(this.dragSpace && this.overSpace===s.id && this.dragSpace!==s.id,e=>e.border_t(2).border_color(t.accent))
