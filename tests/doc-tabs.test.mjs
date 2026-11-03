@@ -7,7 +7,7 @@ import { mermaidFences, applyDiagrams } from '../mods/project-docs-tabs/mermaid.
 const document = (id, path = `/docs/${id}.md`, pinned = true) => ({ id, path, pinned, label: id, name: path.split('/').at(-1), status: 'ok' });
 const deferred = () => { let resolve, reject; const promise = new Promise((yes, no) => { resolve = yes; reject = no; }); return { promise, resolve, reject }; };
 let moduleId = 0;
-async function harness({ documents = [document('a'), document('b')], selection } = {}) {
+async function harness({ documents = [document('a'), document('b')], selection, lineEnding } = {}) {
   const handlers = new Map(), calls = [], reads = [], labels = [], timer = new Map(), watchers = new Map();
   const state = { documents, selected: selection, active: false, text: path => `본문 ${path}`, result: null, stage: async text => ({ blocks: [{ text }], files: [], unavailable: false }) };
   const stored = { 'sixfold.docs.selection.v1': selection ? { Demo: selection, Other: 'other' } : { Other: 'other' } };
@@ -43,7 +43,8 @@ async function harness({ documents = [document('a'), document('b')], selection }
   };
   const key = `__documentTabs${moduleId++}`; globalThis[key] = runtime;
   let source = await readFile(new URL('../mods/project-docs-tabs/main.js', import.meta.url), 'utf8');
-  source = source.replace(/^import .*;\n/gm, '');
+  if (lineEnding) source = source.replace(/\r?\n/g, lineEnding);
+  source = source.replace(/^import .*;\r?\n/gm, '');
   source = `const {${Object.keys(runtime).join(',')}} = globalThis[${JSON.stringify(key)}];\n${source}`;
   const { default: Panel } = await import('data:text/javascript;base64,' + Buffer.from(source).toString('base64'));
   delete globalThis[key];
@@ -55,13 +56,15 @@ async function harness({ documents = [document('a'), document('b')], selection }
   return { state, view, calls, reads, handlers, labels, stored, timer, watchers, cx, flush, render };
 }
 
-test('document selection restores per workspace and changing it preserves other workspace selections', async t => {
-  const h = await harness({ selection: 'b' }); t.after(() => h.view.close());
+for (const lineEnding of ['\n', '\r\n']) {
+test(`document selection restores per workspace and changing it preserves other workspace selections (${lineEnding === '\n' ? 'LF' : 'CRLF'})`, async t => {
+  const h = await harness({ selection: 'b', lineEnding }); t.after(() => h.view.close());
   assert.equal(h.view.selected, 'b'); assert.equal(h.view.bodyText, '본문 /docs/b.md');
   h.view.choose('a', h.cx); await h.flush();
   assert.deepEqual(h.stored['sixfold.docs.selection.v1'], { Other: 'other', Demo: 'a' });
   assert.equal(h.view.bodyText, '본문 /docs/a.md');
 });
+}
 
 test('late reads from the previous document cannot overwrite a new selection', async t => {
   const h = await harness(); t.after(() => h.view.close());
