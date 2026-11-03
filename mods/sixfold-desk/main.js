@@ -385,7 +385,7 @@ export default class SixfoldDesk extends View {
         const state=tailscaleStatus(peer,this.lang());
         computerRows.push(h_flex().id(`sf-tailscale-${peer.name}`).h(36).px(7).gap(6).items_center()
           .tooltip(`${peer.host} · ${(peer.ips??[]).join(', ')} · ${peer.os}\n${state}\n${this.lang()==='ko'?'목록 표시 전용 · Herdr 원격 미등록 · SSH 연결 확인 안 됨':'Discovery only · not registered in Herdr · SSH not verified'}`)
-          .child(svg(`mods/sixfold-desk/icons/device-${computerKind(peer.os, peer.host || peer.name)}.svg`).size(14).flex_none().text_color(t.muted))
+          .child(svg(`mods/sixfold-desk/icons/device-${computerKind(peer.os, peer.name || peer.host)}.svg`).size(14).flex_none().text_color(t.muted))
           .child(v_flex().flex_1().min_w(0)
             .child(div().truncate().text_size(11).font_bold().child(peer.name))
             .child(div().truncate().text_size(9).text_color(t.muted).child(state)))
