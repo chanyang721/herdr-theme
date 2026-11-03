@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { crossMachine, followComputer } from '../mods/sixfold-desk/flow.js';
+import { crossMachine, followComputer, terminalMachine } from '../mods/sixfold-desk/flow.js';
 
 const machines = { t1: null, t5: null, 'sub1/t7': 'sub1', 'sub2/t2': 'sub2' };
 const machineOf = address => machines[address];
@@ -40,4 +40,13 @@ test('no focused space is not a focus move', () => {
   assert.equal(followComputer(state, null, 'local'), 'remote:sub1');
   assert.equal(followComputer(state, 'remote:sub1', 'local'), 'remote:sub1', 'focus coming back is not a new move');
   assert.equal(followComputer({}, null, 'remote:sub2'), 'remote:sub2');
+});
+
+test('a parked remote terminal still names its computer', () => {
+  const known = new Set(['t1', 'sub1/t7']); // terminals(): sub1/t7 has no pane
+  const machineOf = address => terminalMachine(address, known);
+  assert.equal(machineOf('sub1/t7'), 'sub1');
+  assert.equal(machineOf('t1'), null);
+  assert.equal(machineOf('sub1/t9'), undefined);
+  assert.deepEqual(crossMachine({ source: 't1', target: 'sub1/t7' }, machineOf), { from: null, to: 'sub1', far: 'sub1' });
 });

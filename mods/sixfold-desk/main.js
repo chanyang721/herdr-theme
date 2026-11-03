@@ -6,7 +6,7 @@ import { WORDS, counts, title, cycle, priority, readThrough, unreadCount } from 
 
 import { computerKind, computerStatus, tailscaleStatus, workspaceIdentity, workspacePinned } from './sidebar-identity.js';
 
-import { freshMessages, recentRoutes, simultaneousRoutes, crossMachine, followComputer } from './flow.js';
+import { freshMessages, recentRoutes, simultaneousRoutes, crossMachine, followComputer, terminalMachine } from './flow.js';
 import { pipeline } from './pipeline.js';
 import { workflowNodes, delegationEvents, workflowStatus, sessionChildren, activeWorkflow } from './workflow.js';
 import { watchDocs, currentDocs, docsSection, prepareDocsInput } from './docs.js';
@@ -341,11 +341,8 @@ export default class SixfoldDesk extends View {
     const routes = simultaneousRoutes(flows);
     const motion = shared('sixfold.motion') !== false;
     const endpoint = address => flows.some(flow => flow.source === address || flow.target === address);
-    const machineOf = address => {
-      const p = panes().find(p => p.terminal === address);
-      if (!p) return undefined;
-      return spaces().find(s => s.tabs.some(tab => tab.id === p.tab))?.machine ?? null;
-    };
+    const known = new Set(facts.map(x => x.address));
+    const machineOf = address => terminalMachine(address, known);
     // Sends that cross to another connected computer get their own marks.
     const remoteRoutes = routes.map(route => ({ route, hop: crossMachine(route, machineOf) })).filter(item => item.hop);
     const routeColor = address => palette[flows.find(flow => flow.target === address || flow.source === address)?.lane ?? 0];
@@ -574,7 +571,8 @@ export default class SixfoldDesk extends View {
         return pipeline({id:flow.id,width:37-flow.lane*5,from,to,color:palette[flow.lane],phase:flow.phase,packets:flow.packets,motion})
           .right(3+flow.lane*5);
       }))
-      // The far end is on another computer: run the pipe up to the computer list.
+      // The far end is on another computer: run the pipe up to the top of this list,
+      // just under the computer rows (the far computer's row is marked there).
       .children(remoteRoutes.filter(({route}) => (positions[route.source] === undefined) !== (positions[route.target] === undefined)).map(({route}) => {
         const outgoing = positions[route.source] !== undefined;
         const row = outgoing ? positions[route.source] : positions[route.target];

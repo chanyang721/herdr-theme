@@ -49,6 +49,15 @@ export function crossMachine(route, machineOf) {
   return from !== undefined && to !== undefined && from !== to ? { from, to, far: to ?? from } : null;
 }
 
+// The computer a known terminal lives on: its machine/ prefix, null for this
+// computer, undefined when the address is no known terminal. Parked and
+// background terminals have no pane, so the address is the record to read.
+export function terminalMachine(address, known) {
+  if (!known.has(address)) return undefined;
+  const slash = address.indexOf('/');
+  return slash > 0 ? address.slice(0, slash) : null;
+}
+
 // Follow focus onto another computer, but keep a manual pick until focus moves there.
 // A null focusKey (no focused space) is not a move and changes nothing.
 export function followComputer(state, focusKey, saved) {
