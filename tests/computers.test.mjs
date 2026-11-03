@@ -8,10 +8,13 @@ test('computer selection scopes workspaces and agents and restores each selectio
   const rows=new Map(),calls=[],state={};
   function element(){
     let proxy;
-    proxy=new Proxy({}, {get(_target,key){
+    proxy=new Proxy({nodes:[]}, {get(_target,key){
       if(key==='then')return undefined;
       if(key==='when')return (condition,fn)=>{if(condition)fn(proxy);return proxy;};
-      if(key==='id')return id=>{rows.set(id,proxy);return proxy;};
+      if(key==='id')return id=>{_target.rowId=id;return proxy;};
+      if(key==='child')return node=>{_target.nodes.push(node);return proxy;};
+      if(key==='children')return nodes=>{_target.nodes.push(...nodes);return proxy;};
+      if(key==='nodes' || key==='rowId')return _target[key];
       if(key==='on_click')return fn=>{proxy.click=fn;return proxy;};
       if(key==='click')return _target.click;
       return ()=>proxy;
@@ -49,7 +52,11 @@ test('computer selection scopes workspaces and agents and restores each selectio
     const {default:Sidebar}=await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
     const view=new Sidebar();
     Object.assign(view,{workflowNodes:[],workflowEvents:[],messageEvents:[],activeFlows:[],pendingFlows:[],queuedRoutes:[],workspaceIcons:{},expandedAgents:new Set(),readMessages:{},computers:{}});
-    const render=()=>{rows.clear();view.render();};
+    const render=()=>{
+      rows.clear();
+      const visit=node=>{if(!node || typeof node!=='object')return;if(node.rowId)rows.set(node.rowId,node);for(const child of node.nodes??[])visit(child);};
+      visit(view.render());
+    };
     render();
     assert(rows.has('sf-space-home-a'));assert(rows.has('sf-space-home-b'));
     assert(!rows.has('sf-space-worker/a'));assert.deepEqual(order,['t1']);
@@ -69,6 +76,10 @@ test('computer selection scopes workspaces and agents and restores each selectio
     assert(rows.has('sf-space-home-b'));assert(!rows.has('sf-space-worker/b'));
     rows.get('sf-computer-remote:empty').click();render();
     assert(rows.has('sf-empty-workspaces'));assert(!rows.has('sf-space-home-a'));
+    assert(!rows.has('sf-computer-remote:offline'),'disconnected machines start collapsed');
+    assert(rows.has('sf-compact-remote:offline'));
+    rows.get('sf-computers-toggle').click();render();
+    assert(rows.has('sf-computers-other'));
     rows.get('sf-computer-remote:offline').click();render();
     assert.equal(state['sixfold.computing.selected'],'remote:offline');
     assert(rows.has('sf-empty-workspaces'));
@@ -82,6 +93,18 @@ test('computer selection scopes workspaces and agents and restores each selectio
     assert(rows.has('sf-empty-workspaces'));assert(!rows.has('sf-space-home-a'));
     assert(!rows.has('sf-new-space'),'unregistered peer cannot create a local workspace accidentally');
     assert.equal(calls.length,beforeSelection);
+    rows.get('sf-computers-toggle').click();render();
+    assert(!rows.has('sf-computers-other'));
+    assert(!rows.has('sf-tailscale-desktop-test'),'online but unregistered peers stay in the compact group');
+    assert(rows.has('sf-compact-tailscale:desktop-test'));
+    view.tailscalePeers.push(...Array.from({length:10},(_,i)=>({name:`offline-${i}`,os:'ios',online:false})));
+    view.tailscalePeers.push({name:'unknown',os:'linux',online:null});
+    render();
+    assert.equal([...rows.keys()].filter(key=>key.startsWith('sf-compact-')).length,3,'icon strip stays bounded with many peers');
+    assert(rows.has('sf-compact-tailscale:desktop-test'),'selected peer stays visible');
+    assert.equal(calls.length,beforeSelection);
+    view.tailscaleError=true;render();
+    assert(rows.has('sf-computers-summary'));
     view.computers={tailscale:false};render();
     assert(!rows.has('sf-tailscale-desktop-test'));
     view.computers={local:{label:'My PC'},machines:{worker:{label:'Build',folder:'/projects'}}};
