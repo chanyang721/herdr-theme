@@ -96,23 +96,13 @@
               }
             },
             {
-              "id": "usage-bar",
+              "id": "plan-usage",
               "type": "block",
               "size": {
-                "px": 410
+                "px": 440
               },
               "content": {
-                "mod": "usage-bar"
-              }
-            },
-            {
-              "id": "codex-resets",
-              "type": "block",
-              "size": {
-                "px": 110
-              },
-              "content": {
-                "mod": "codex-resets"
+                "mod": "plan-usage"
               }
             },
             {
