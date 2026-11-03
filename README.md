@@ -273,3 +273,7 @@ Separate mod recipes let you place document and usage tools in a personal layout
 Independent mod releases: [System Metrics](https://github.com/chanyang721/herdr-workspace-mods/tree/main/system-metrics) · [Project Document Viewer](https://github.com/chanyang721/herdr-workspace-mods/tree/main/document-viewer).
 
 Project document tracking: see [configuration and collector](docs/project-documents.md). The base theme uses full-width terminals; configured latest documents live in the left sidebar.
+
+Project overload collaboration uses explicit task records and durable leases above existing Share routing; see [commands, safety and verification](docs/overload-collaboration.md). The sidebar drains registered collaboration work only after `collaborate.py enable`; raw terminal text is never treated as a confirmed pending queue.
+
+A low-contrast 16px session-pet strip below the toolbar reflects the current workspace agents. `sixfold.pets=false` hides it; `sixfold.pets.motion=false` or `sixfold.motion=false` stops motion.
