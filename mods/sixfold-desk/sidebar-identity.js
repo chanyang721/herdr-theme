@@ -23,6 +23,14 @@ export function computerStatus(machine, lang = 'ko', platform = 'macos') {
   return `${lang === 'ko' ? 'Herdr 원격' : 'Herdr remote'} · ${state}`;
 }
 
+// The row's own words: nothing while this computer or a connected one is fine
+// (the coloured icon says it), a short word only when it is not.
+export function computerAlert(machine, lang = 'ko') {
+  if (machine.name == null || machine.layout === 'ready') return null;
+  if (machine.layout === 'loading') return lang === 'ko' ? '연결 중' : 'Connecting';
+  return lang === 'ko' ? '연결 끊김' : 'Disconnected';
+}
+
 export function tailscaleStatus(peer, lang = 'ko') {
   if (peer.online === true) return lang === 'ko'
     ? 'Tailscale 온라인 · SSH 미등록' : 'Tailscale online · SSH unregistered';

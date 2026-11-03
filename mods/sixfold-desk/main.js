@@ -4,7 +4,7 @@ import * as herdrNative from 'herdr';
 import { agents, panes, spaces, terminals, focused, props, theme, run, shared, setShared, setAgentOrder, nextCommand, exec, window, layout, readTextFile, writeTextFile, appHome, openOverlay, settings } from 'herdr';
 import { WORDS, counts, title, cycle, priority, readThrough, unreadCount } from './model.js';
 
-import { computerKind, computerStatus, tailscaleStatus, workspaceIdentity, workspacePinned } from './sidebar-identity.js';
+import { computerKind, computerStatus, computerAlert, tailscaleStatus, workspaceIdentity, workspacePinned } from './sidebar-identity.js';
 
 import { freshMessages, recentRoutes, simultaneousRoutes, crossMachine, followComputer, terminalMachine, machineHops, machineTraffic } from './flow.js';
 import { pipeline } from './pipeline.js';
@@ -482,7 +482,8 @@ export default class SixfoldDesk extends View {
           .child(div().truncate().text_size(11).font_bold().child(displayName))
           .child(h_flex().min_w(0).gap(6).items_center()
             .children(['working','done','blocked'].filter(status => agentCount[status] > 0).map(status => this.badge(status, String(agentCount[status]), t, 9)))
-            .child(div().flex_1().min_w(0).truncate().text_size(9).text_color(t.muted).child(state))))
+            // The icon's colour says connected; words only for an exception. The tooltip keeps the detail.
+            .child(div().flex_1().min_w(0).truncate().text_size(9).text_color(machine.layout === 'loading' ? t.muted : t.blocked).child(computerAlert(machine, this.lang()) ?? ''))))
         .child(div().flex_none().text_size(9).text_color(t.dim).child(String(machineSpaces.length)));
       const hop = remoteRoutes.find(item => item.hop.from === name || item.hop.to === name);
       const sent = traffic.get(name)?.sent ?? 0, received = traffic.get(name)?.received ?? 0;
