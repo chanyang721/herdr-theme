@@ -88,3 +88,22 @@ Project document tracking: see [configuration and collector](docs/project-docume
 `python3 scripts/install.py --home ~/.config/herdr-app --update`는 관리 mod와 helper를 갱신합니다. 개인 `settings.json`·기존 키 섹션·데이터는 보존하며, 직접 수정한 layout/theme도 보존합니다. 이전 설치 manifest가 없는 기존 layout/theme은 사용자 설정으로 취급합니다. mod는 전체 디렉터리를 staging한 뒤 교체합니다. `--update` 없는 첫 설치의 덮어쓰기 거부 동작은 유지합니다.
 
 `python3 scripts/seed_workspace_pins.py --home ~/.config/herdr-app --ensure-spaces`는 고정 설정 파일이 없을 때만 현재 컴퓨터의 Share·PeaceMinusOne·Medihomes를 찾아 실제 ID로 시드합니다. 없는 로컬 워크스페이스는 만들고 원래 선택 화면을 복원합니다. Herdr 앱이 실행 중이어야 하며 기존 `workspace-pins.local.json`은 내용에 관계없이 보존합니다. `--ensure-spaces`를 빼면 없는 워크스페이스를 만들지 않고 오류를 보고합니다. 테스트 시 `HERDR_APP_BIN`으로 앱 실행 파일을 대체할 수 있습니다.
+
+## 끝난 임시 워크스페이스 자동 정리
+
+`scripts/close_finished_spaces.py`는 기본 dry-run입니다. 고정 목록은 LukukuWatch의
+`close-finished-spaces.json`에서 이름 및 기기/ID로 지정하며, 현재 보고 있는 공간은 제외합니다.
+모든 에이전트가 idle/done이고, 입력이 비었으며, 프로세스·백엔드 실행 세션·서브에이전트·확인 대기가
+없다는 증거와 출력 불변이 10분간 관찰돼야 후보가 됩니다. 원격이나 확인할 수 없는 상태는 유지합니다.
+백엔드 세션 연결이 없거나 오래된 경우에도 일을 끝냈다고 추정하지 않습니다.
+
+`python3 scripts/install_space_cleanup.py --install`은 5분 주기의
+`co.lukuku.close-finished-spaces`를 dry-run으로 등록합니다. 30분 이상·7회 이상의 관찰 로그를
+직접 검토한 뒤 `--install --enable-apply`로 전환해야 실제 종료됩니다. 관찰 코드가 바뀌면
+관찰 기간과 검토가 초기화됩니다. 실행 로그·잠금·상태는
+`~/Library/Application Support/LukukuWatch/`에 저장하고 Herdr mod/layout에는 쓰지 않습니다.
+
+종료 직전 조건을 다시 검사하고 기록을 남긴 다음, 종료 여부와 포커스 불변을 확인합니다.
+미커밋 파일은 기록에 남기고 보존하며 git worktree도 삭제하지 않습니다. 기존 날짜/이름 기록은
+덮어쓰지 않고 자동 정리 시각만 덧붙입니다. 승인·확인 대기는 공간을 유지하고 설정된 Share 세션에
+하루 한 번까지 이유를 알립니다. `--only-space ID`로 한 공간만 관찰할 수 있으며 조건을 우회하지 않습니다.
