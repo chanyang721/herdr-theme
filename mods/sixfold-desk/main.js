@@ -60,7 +60,7 @@ export default class SixfoldDesk extends View {
           const workflowText = await readTextFile(`${appHome()}/data/sixfold/workflow.json`).catch(()=>null) || '{"nodes":[],"events":[]}';
           const iconText = await readTextFile(`${appHome()}/data/sixfold/workspace-icons.json`).catch(()=>null) || '{}';
           const computerText = await readTextFile(`${appHome()}/data/sixfold/computers.local.json`).catch(()=>null) || '{}';
-          const snapshot = JSON.stringify([text, routing, queue, workflowText, iconText, computerText]);
+          const snapshot = JSON.stringify([text, routing, queue, workflowText, iconText, computerText, terminals().map(item=>item.address)]);
           if (snapshot === this.messageSnapshot) return;
           const events = JSON.parse(text).events ?? [];
           try { this.workspaceIcons = JSON.parse(iconText); } catch { /* Keep the last valid icons. */ }
@@ -77,10 +77,7 @@ export default class SixfoldDesk extends View {
           this.workflowEvents = delegationEvents(workflow.events,this.workflowNodes);
           this.workflowNodes.forEach(node=>addresses.add(node.id));
           const delegations = freshMessages(this.previousDelegations,this.workflowEvents);
-          for (const event of delegations) {
-            const target = this.workflowNodes.find(node=>node.id===event.target);
-            if (target) this.expandedAgents.add(target.terminal);
-          }
+          // Active rows already show by default; new events must not open history.
           this.pendingFlows.push(...delegations);
           this.previousDelegations = this.workflowEvents;
           this.pendingFlows.push(...freshMessages(this.previousEvents, events).filter(event => addresses.has(event.source) && addresses.has(event.target)));
@@ -260,10 +257,6 @@ export default class SixfoldDesk extends View {
       const event = this.pendingFlows.shift();
       // Freshness was checked on ingestion. A real burst must not expire
       // merely because earlier packets occupied the four visible lanes.
-      for(const address of [event.source,event.target]) {
-        const node=this.workflowNodes.find(node=>node.id===address);
-        if(node)this.expandedAgents.add(node.terminal);
-      }
       const same=this.activeFlows.filter(flow=>flow.source===event.source&&flow.target===event.target);
       const occupied = new Set(this.activeFlows.map(flow => flow.lane));
       const lane = same[0]?.lane ?? [0,1,2,3,4,5].find(value=>!occupied.has(value)) ?? this.activeFlows.length%6;
