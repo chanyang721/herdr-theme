@@ -8,7 +8,7 @@ import { computerKind, computerStatus, tailscaleStatus, workspaceIdentity, works
 
 import { freshMessages, recentRoutes, simultaneousRoutes, crossMachine, followComputer, terminalMachine, machineHops, machineTraffic } from './flow.js';
 import { pipeline } from './pipeline.js';
-import { machineCounts, projectGroups, groupSends, liveLinks, linkPalette } from './collab.js';
+import { machineCounts, projectGroups, liveLinks, linkPalette, projectName } from './collab.js';
 import { workflowNodes, delegationEvents, workflowStatus, sessionChildren, activeWorkflow } from './workflow.js';
 import { watchDocs, currentDocs, docsSection, prepareDocsInput } from './docs.js';
 import { watchAlerts, alertSection, visibleAlerts } from './alerts.js';
@@ -19,6 +19,8 @@ const hasPanel=node=>node?.id==='panel'||(node?.children||[]).some(hasPanel);
 const marks = { blocked: '!', done: '✓', working: '●', idle: '○' };
 // One slow pass of the dot along a link pipe while computers work together.
 const LINK_FLOW_MS = 4000;
+// Right margin of the computer list kept for link lanes (four lanes, 4 px apart).
+const LINK_MARGIN = 19;
 
 // Pane frames expose only a shared border and focus override. Keep status
 // decoration inside the header so it never competes with the keyboard frame.
@@ -426,7 +428,6 @@ export default class SixfoldDesk extends View {
     const sendEvents = (this.messageEvents ?? []).filter(event => !event.external);
     const traffic = machineTraffic(sendEvents, machineOf, Date.now());
     const hops = machineHops(sendEvents, machineOf, 32);
-    const filed = groupSends(hops, linkGroups, 3, linkGroups.length ? 3 : 4);
     // Computers joined now (collab.js liveLinks). Each link keeps its slot (lane and
     // colour) while it lasts; a link that ends fades out, then leaves.
     const linkColors = linkPalette(t);
@@ -447,9 +448,17 @@ export default class SixfoldDesk extends View {
     }
     const lanes = [...this.linkSeen.values()].sort((a, b) => a.slot - b.slot).map(entry => ({ ...entry, colors: linkColors[entry.slot % linkColors.length] }));
     this.linkFlowing = motion && lanes.some(lane => lane.link.working && !lane.gone);
+    // A workspace inside a live project link, with the other computers in it.
+    const spaceLink = space => {
+      const name = projectName(space, machine => machine === null ? null : this.computerLabel(machine)).normalize('NFC').toLowerCase();
+      const machine = space.machine ?? null;
+      const lane = lanes.find(item => !item.gone && item.link.name && item.link.name.normalize('NFC').toLowerCase() === name && item.link.machines.includes(machine));
+      return lane ? { lane, partners: lane.link.machines.filter(other => other !== machine) } : null;
+    };
     const laneOf = (from, to) => lanes.find(lane => !lane.gone && lane.link.machines.includes(from) && lane.link.machines.includes(to));
-    const laneX = slot => 4 + slot * 6;
-    const gutter = lanes.length ? laneX(Math.max(...lanes.map(lane => lane.slot))) + 10 : 7;
+    // Link lanes sit in a fixed right margin of the computer list (LINK_MARGIN), drawn
+    // over it: rows keep their width whether or not a link shows. Offsets are from the right.
+    const laneRight = slot => 4 + slot * 4;
     const sendNote = this.lang()==='ko' ? '전송 이벤트 · 읽음 확인 아님' : 'Send event, not a read receipt';
     const computerItems = (typeof herdrNative.machines === 'function' ? herdrNative.machines() : [{name:null,layout:'ready'}]).map(machine => {
       const name = machine.name;
@@ -481,7 +490,7 @@ export default class SixfoldDesk extends View {
         // No outline or blink: only the counter takes the link's packet tone while a send moves.
         const color = hop ? (laneOf(hop.hop.from, hop.hop.to)?.colors.packet ?? t.muted) : t.muted;
         const incoming = hop?.hop.to === name;
-        row = row.child(h_flex().flex_none().gap(3).text_size(10).font_bold().text_color(color)
+        row = row.child(h_flex().flex_none().gap(3).text_size(9).text_color(color)
           .tooltip(`${hop ? (this.lang()==='ko' ? (incoming ? '지금 다른 컴퓨터에서 받는 중' : '지금 다른 컴퓨터로 보내는 중') : (incoming ? 'Receiving from another computer now' : 'Sending to another computer now')) + '\n' : ''}${this.lang()==='ko' ? `최근 10분 다른 컴퓨터와: 보냄 ${sent} · 받음 ${received}` : `Last 10 min with other computers: sent ${sent} · received ${received}`}\n${sendNote}`)
           .when(sent > 0 || (hop && !incoming), el => el.child(`↑${sent || ''}`))
           .when(received > 0 || incoming, el => el.child(`↓${received || ''}`)));
@@ -507,20 +516,6 @@ export default class SixfoldDesk extends View {
     // Visible computer rows are 38 px tall with 3 px gaps: the centre of row i.
     const rowY = index => index * 41 + 19;
     const rowIndex = machine => activeComputers.findIndex(item => item.name === machine);
-    // Panel groups: worked on together now, or with recent sends filed under them.
-    const shownGroups = linkGroups.map((group, index) => ({ group, sends: filed.byGroup[index] })).filter(item => item.group.active || item.sends.length > 0);
-    const hopRow = ({ event, hop }, color, indent) => {
-      const live = remoteRoutes.some(item => item.route.source === event.source && item.route.target === event.target);
-      const here = hop.from === null ? 'out' : hop.to === null ? 'in' : 'via';
-      const short = address => { const p = panes().find(p => p.terminal === address); return p ? title(p) : address.split('/').pop(); };
-      return h_flex().id(`sf-hop-${event.id}`).pl(indent).gap(5).items_center().text_size(10)
-        .tooltip(`${label(event.source)} → ${label(event.target)}\n${new Date(event.at).toLocaleString()}${event.started === true ? (this.lang()==='ko' ? ' · 받은 쪽 작업 시작' : ' · target started working') : ''}\n${sendNote}`)
-        .child(div().flex_none().font_bold().text_color(live ? color : t.muted).child(here === 'in' ? '↓' : here === 'out' ? '↑' : '⇄'))
-        .child(div().flex_none().font_bold().text_color(live ? t.foreground : t.muted).child(`${this.computerLabel(hop.from)} → ${this.computerLabel(hop.to)}`))
-        .child(div().flex_1().min_w(0).truncate().text_size(9).text_color(t.dim).child(`${short(event.source)} → ${short(event.target)}`))
-        .when(event.started === true, row => row.child(div().flex_none().text_size(9).text_color(t.done ?? t.muted).child('✓')))
-        .child(div().flex_none().text_size(9).text_color(t.dim).child(new Date(event.at).toTimeString().slice(0, 5)));
-    };
     const otherComputers=computerItems.filter(item=>!item.active);
     const computersExpanded=shared('sixfold.computing.expanded')===true;
     const computerRows=activeComputers.map(item=>item.row);
@@ -562,7 +557,9 @@ export default class SixfoldDesk extends View {
           ? svg(icon.path).size(14).text_color(workspaceColor(s)) : image(icon.path).w(14).h(14));
       return box.bg(workspaceColor(s)).child(svg(`mods/sixfold-desk/icons/ws-${workspaceIdentity(s)||'workspace'}.svg`).size(12).flex_none().text_color(t.background));
     };
-    const spaceRows=groups.map(({s,members})=>v_flex().id(`sf-space-${s.id}`).ml(7).mr(41).mb(12).gap(2).flex_none().rounded(6).border(1).border_color(workspacePinned(s,this.workspacePins)?t.accent:t.border)
+    const spaceRows=groups.map(({s,members})=>{ const linked=spaceLink(s); return v_flex().id(`sf-space-${s.id}`).ml(7).mr(41).mb(12).gap(2).flex_none().rounded(6).border(1).border_color(workspacePinned(s,this.workspacePins)?t.accent:t.border)
+      // Worked on together with another computer now: the link's quiet colour, dashed.
+      .when(Boolean(linked),e=>e.border_dashed().border_color(linked.lane.colors.link))
       .when(this.dragSpace && this.overSpace===s.id && this.dragSpace!==s.id,e=>e.border_t(2).border_color(t.accent))
       .on_mouse_move((_event,cx)=>{
         const source=spaces().find(x=>x.id===this.dragSpace);
@@ -581,7 +578,7 @@ export default class SixfoldDesk extends View {
       .child(h_flex().h(36).flex_none().pl(6).pr(8).items_center().gap(4).rounded(5).border_l(3).border_color(workspaceColor(s)).bg(s.active?t.selected:t.surface).text_size(12).font_bold()
         .when(this.dragSpace===s.id && this.overSpace!==s.id,e=>e.opacity(0.5))
         .when(this.dragSpace && this.overSpace===s.id && this.dragSpace!==s.id,e=>e.border(1).border_color(t.accent))
-        .tooltip(this.lang()==='ko'?'드래그하여 순서 변경':'Drag to reorder')
+        .tooltip(`${linked ? `${linked.partners.map(m => this.computerLabel(m)).join(', ')}${this.lang()==='ko' ? '과 협업 중' : ': worked on together now'} · ${collabNote}\n` : ''}${this.lang()==='ko'?'드래그하여 순서 변경':'Drag to reorder'}`)
         .on_mouse_down('left',(_event,cx)=>{
           // The sidebar is a window_drag region; this press belongs to the space.
           cx.stop_propagation();
@@ -635,7 +632,7 @@ export default class SixfoldDesk extends View {
 
       })).child(div().id(`sf-docs-height-${s.id}`).min_w(0)
         .on_size_change((size,cx)=>{const height=size.height/(settings().zoom||1);this.docsHeights??={};if(Math.abs((this.docsHeights[s.id]||0)-height)>1){this.docsHeights[s.id]=height;cx.notify();}})
-        .child(docsSection(this,t,s))));
+        .child(docsSection(this,t,s)));});
     const workspaceTree=v_flex().relative().flex_none().children(spaceRows)
       .children(paths.filter(flow => positions[flow.source] !== undefined && positions[flow.target] !== undefined).map(flow => {
         const from=positions[flow.source], to=positions[flow.target];
@@ -660,23 +657,23 @@ export default class SixfoldDesk extends View {
       .child(h_flex().px(12).py(11).gap(16).flex_none().justify_center().font_bold().children(['blocked','done','working'].map(s => this.badge(s,String(total[s]),t,14))))
       .child(v_flex().id('sf-scroll').flex_1().min_h(0).overflow_y_scroll()
         .child(computerSection)
-        .child(v_flex().relative().flex_none().pl(gutter).pr(7).pb(6).gap(3).children(computerRows)
-          // Computers joined now: right-angle 1px dashed pipes in the left gutter, one lane
+        .child(v_flex().relative().flex_none().pl(7).pr(LINK_MARGIN).pb(6).gap(3).children(computerRows)
+          // Computers joined now: right-angle 1px dashed pipes in the right margin, one lane
           // each, ending on the rows. A slow dim dot runs while they work together; a send
           // passes from its sender's row to its receiver's as a brighter packet.
           .children(lanes.flatMap(lane => {
             const rows = lane.link.machines.map(rowIndex).filter(index => index >= 0).sort((a, b) => a - b);
             if (rows.length < 2) return [];
-            const x = laneX(lane.slot), top = rowY(rows[0]), bottom = rowY(rows[rows.length - 1]);
+            const right = laneRight(lane.slot), top = rowY(rows[0]), bottom = rowY(rows[rows.length - 1]);
             const color = lane.colors.link;
             const group = linkGroups.find(item => item.name === lane.link.name);
             const tip = group
               ? `${collabText(group)}\n${collabNote}`
               : `${lane.link.machines.map(m => this.computerLabel(m)).join(' ↔ ')}\n${this.lang()==='ko' ? '최근 5분 안 송수신' : 'Sent within the last 5 minutes'} · ${sendNote}`;
             const fade = el => el.opacity(lane.gone ? 0 : 1).when(motion, e => e.transition('opacity', 600));
-            const parts = [fade(div().id(`sf-link-${lane.link.key}`).absolute().left(x).top(top).w(2).h(bottom - top).border_l(1).border_dashed().border_color(color).tooltip(tip))];
-            for (const row of rows) parts.push(fade(div().id(`sf-link-${lane.link.key}-${row}`).absolute().left(x).top(rowY(row)).w(gutter - x).h(2).border_t(1).border_dashed().border_color(color)));
-            if (lane.link.working && motion && !lane.gone) parts.push(div().id(`sf-link-flow-${lane.link.key}`).absolute().left(x - 1).size(3).rounded(2).bg(color)
+            const parts = [fade(div().id(`sf-link-${lane.link.key}`).absolute().right(right).top(top).w(2).h(bottom - top).border_r(1).border_dashed().border_color(color).tooltip(tip))];
+            for (const row of rows) parts.push(fade(div().id(`sf-link-${lane.link.key}-${row}`).absolute().right(right).top(rowY(row)).w(LINK_MARGIN - right).h(2).border_t(1).border_dashed().border_color(color)));
+            if (lane.link.working && motion && !lane.gone) parts.push(div().id(`sf-link-flow-${lane.link.key}`).absolute().right(right - 1).size(3).rounded(2).bg(color)
               .top((this.linkFlowEnd ? bottom : top) - 1).transition('top', { duration: LINK_FLOW_MS - 200, easing: 'linear' }));
             return parts;
           }))
@@ -684,25 +681,10 @@ export default class SixfoldDesk extends View {
             const lane = laneOf(hop.from, hop.to), from = rowIndex(hop.from), to = rowIndex(hop.to);
             if (!lane || from < 0 || to < 0) return null;
             const y = route.phase === 'start' && motion ? rowY(from) : rowY(to);
-            return div().id(`sf-link-send-${route.id}`).absolute().left(laneX(lane.slot) - 2).top(y - 2).size(5).rounded(3).bg(lane.colors.packet)
+            return div().id(`sf-link-send-${route.id}`).absolute().right(laneRight(lane.slot) - 2).top(y - 2).size(5).rounded(3).bg(lane.colors.packet)
               .opacity(route.phase === 'arrived' ? 0.4 : 1)
               .when(motion, el => el.transition('top', { duration: route.packets?.[0]?.travelMs ?? 1600, easing: 'linear' }));
           }).filter(Boolean)))
-        .when(shownGroups.length > 0 || filed.others.length > 0, el => el.child(v_flex().id('sf-machine-activity').flex_none().mx(7).mb(6).px(7).py(5).gap(3).rounded(4).bg(t.surface)
-          .child(div().text_size(9).font_bold().text_color(t.dim).child(this.lang()==='ko' ? '컴퓨터 간 활동' : 'ACROSS COMPUTERS'))
-          .children(shownGroups.map(({ group, sends }) => {
-            const color = lanes.find(lane => lane.link.key === `project:${group.name}` && !lane.gone)?.colors.packet ?? t.dim;
-            return v_flex().id(`sf-group-${group.name}`).gap(2)
-              .child(h_flex().gap(5).items_center().text_size(10).tooltip(`${collabText(group)}\n${collabNote}`)
-                .child(div().flex_none().px(3).rounded(3).border(1).border_dashed().border_color(color).text_size(9).text_color(color)
-                  .child(group.active ? (this.lang()==='ko' ? '협업 중' : 'Together') : (this.lang()==='ko' ? '송수신' : 'Sends')))
-                .child(div().flex_1().min_w(0).truncate().text_color(t.foreground).child(group.name)))
-              .child(div().pl(4).truncate().text_size(9).text_color(t.muted)
-                .child(group.machines.map((m, i) => `${this.computerLabel(m)}${group.working[i] ? ` ●${group.working[i]}` : ''}`).join(' · ')))
-              .children(sends.map(item => hopRow(item, color, 8)));
-          }))
-          .when(shownGroups.length > 0 && filed.others.length > 0, el => el.child(div().pt(2).text_size(9).text_color(t.dim).child(this.lang()==='ko' ? '그 밖의 컴퓨터 간 전송' : 'Other sends')))
-          .children(filed.others.map(item => hopRow(item, t.muted, 0)))))
         .child(section(`${discoveryOnly?selectedComputer.slice(10):this.computerLabel(selectedMachine)} · ${w.spaces}`)).child(workspaceTree)
         .when(workspaceList.length===0,e=>e.child(v_flex().id('sf-empty-workspaces').px(12).pb(12).gap(5)
           .child(div().text_size(11).text_color(t.muted).child(this.lang()==='ko'?(discoveryOnly?'등록 안 됨, 워크스페이스 없음':'워크스페이스 없음'):(discoveryOnly?'Unregistered, no workspaces':'No workspaces')))

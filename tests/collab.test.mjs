@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { projectName, machineCounts, projectGroups, collaborations, groupSends, liveLinks, LINK_SEND_MS, tone, linkPalette } from '../mods/sixfold-desk/collab.js';
+import { projectName, machineCounts, projectGroups, collaborations, liveLinks, LINK_SEND_MS, tone, linkPalette } from '../mods/sixfold-desk/collab.js';
 
 const labels = { sub1: '서브1', sub2: '서브2', notebook1: '노트북1' };
 const labelOf = machine => labels[machine] ?? null;
@@ -39,13 +39,6 @@ test('a project on four computers is one group with each computer\'s working cou
   assert.equal(groups.length, 2, 'home spaces are not a project');
   assert.deepEqual(collaborations([agent('a'), agent('b')], spaces, labelOf).map(group => group.name), ['거상 제어판']);
   assert.deepEqual(collaborations([agent('a'), agent('b', 'done')], spaces, labelOf), [], 'one side done is not together');
-});
-
-test('a send is filed under the smallest group holding both ends', () => {
-  const groups = [{ machines: [null, 'notebook1', 'sub1', 'sub2'] }, { machines: [null, 'sub2'] }];
-  const filed = groupSends([hop(1, null, 'sub2', 0), hop(2, 'sub1', null, 0), hop(3, 'sub1', 'x', 0)], groups);
-  assert.deepEqual(filed.byGroup.map(list => list.map(item => item.event.id)), [[2], [1]]);
-  assert.deepEqual(filed.others.map(item => item.event.id), [3]);
 });
 
 test('only working computers and recent sends are joined', () => {

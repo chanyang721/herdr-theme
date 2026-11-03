@@ -72,23 +72,6 @@ export function collaborations(agentList, spaceList, labelOf = () => null) {
   return projectGroups(agentList, spaceList, labelOf).filter(group => group.active);
 }
 
-// Sends between computers, filed under the smallest group holding both ends
-// (the most specific project); the rest stay apart. Pairs are kept as sent.
-export function groupSends(hops, groups, perGroup = 3, rest = 3) {
-  const byGroup = groups.map(() => []);
-  const others = [];
-  for (const item of hops) {
-    let best = -1;
-    groups.forEach((group, index) => {
-      if (group.machines.includes(item.hop.from) && group.machines.includes(item.hop.to)
-          && (best < 0 || group.machines.length < groups[best].machines.length)) best = index;
-    });
-    if (best >= 0) { if (byGroup[best].length < perGroup) byGroup[best].push(item); }
-    else if (others.length < rest) others.push(item);
-  }
-  return { byGroup, others };
-}
-
 // How long a send keeps two computers joined after it.
 export const LINK_SEND_MS = 5 * 60 * 1000;
 
