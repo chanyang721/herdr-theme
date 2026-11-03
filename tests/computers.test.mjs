@@ -40,7 +40,7 @@ test('computer selection scopes workspaces and agents and restores each selectio
     .replace(/import \{ h_flex, v_flex \} from 'gpui-base';/,'const {h_flex,v_flex}=globalThis.__computersRuntime;')
     .replace(/import \* as herdrNative from 'herdr';/,'const herdrNative=globalThis.__computersRuntime;')
     .replace(/import \{([^}]+)\} from 'herdr';/,'const {$1}=globalThis.__computersRuntime;')
-    .replace(/import \{ watchDocs, currentDocs, docsSection \} from '.\/docs.js';/,'const currentDocs=()=>null;')
+    .replace(/import \{[^}]*\} from '.\/docs.js';/,'const currentDocs=()=>null;const docsSection=()=>null;const prepareDocsInput=()=>{};')
     .replace(/import \{ watchAlerts, alertSection, visibleAlerts \} from '.\/alerts.js';/,'const visibleAlerts=()=>[];');
   for(const name of ['model','flow','workflow','pipeline'])source=source.replace(`'./${name}.js'`,JSON.stringify(new URL(`../mods/sixfold-desk/${name}.js`,import.meta.url).href));
   // A path is never painted in this test; avoid loading the native path builder.
