@@ -78,3 +78,22 @@ Separate mod recipes let you place document and usage tools in a personal layout
 Independent mod releases: [System Metrics](https://github.com/chanyang721/herdr-workspace-mods/tree/main/system-metrics) · [Project Document Viewer](https://github.com/chanyang721/herdr-workspace-mods/tree/main/document-viewer).
 
 Project document tracking: see [configuration and collector](docs/project-documents.md). The base theme uses full-width terminals; configured latest documents live in the left sidebar.
+
+## 끝난 임시 워크스페이스 자동 정리
+
+`scripts/close_finished_spaces.py`는 기본 dry-run입니다. 고정 목록은 LukukuWatch의
+`close-finished-spaces.json`에서 이름 및 기기/ID로 지정하며, 현재 보고 있는 공간은 제외합니다.
+모든 에이전트가 idle/done이고, 입력이 비었으며, 프로세스·백엔드 실행 세션·서브에이전트·확인 대기가
+없다는 증거와 출력 불변이 10분간 관찰돼야 후보가 됩니다. 원격이나 확인할 수 없는 상태는 유지합니다.
+백엔드 세션 연결이 없거나 오래된 경우에도 일을 끝냈다고 추정하지 않습니다.
+
+`python3 scripts/install_space_cleanup.py --install`은 5분 주기의
+`co.lukuku.close-finished-spaces`를 dry-run으로 등록합니다. 30분 이상·7회 이상의 관찰 로그를
+직접 검토한 뒤 `--install --enable-apply`로 전환해야 실제 종료됩니다. 관찰 코드가 바뀌면
+관찰 기간과 검토가 초기화됩니다. 실행 로그·잠금·상태는
+`~/Library/Application Support/LukukuWatch/`에 저장하고 Herdr mod/layout에는 쓰지 않습니다.
+
+종료 직전 조건을 다시 검사하고 기록을 남긴 다음, 종료 여부와 포커스 불변을 확인합니다.
+미커밋 파일은 기록에 남기고 보존하며 git worktree도 삭제하지 않습니다. 기존 날짜/이름 기록은
+덮어쓰지 않고 자동 정리 시각만 덧붙입니다. 승인·확인 대기는 공간을 유지하고 설정된 Share 세션에
+하루 한 번까지 이유를 알립니다. `--only-space ID`로 한 공간만 관찰할 수 있으며 조건을 우회하지 않습니다.

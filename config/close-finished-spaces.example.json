@@ -1,0 +1,9 @@
+{
+  "fixed_names": ["Share", "PeaceMinusOne", "Medihomes"],
+  "fixed_spaces": [],
+  "idle_seconds": 600,
+  "trial_seconds": 1800,
+  "max_sample_gap_seconds": 660,
+  "notify_terminal": null,
+  "reviewed_dry_run_at": null
+}
