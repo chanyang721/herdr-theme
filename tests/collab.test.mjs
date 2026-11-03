@@ -47,7 +47,7 @@ test('only working computers and recent sends are joined', () => {
   const links = liveLinks(groups, [hop(1, null, 'sub2', now - 1000), hop(2, 'notebook1', 'sub2', now - 1000), hop(3, 'sub1', 'notebook1', now - LINK_SEND_MS - 1)], now);
   assert.deepEqual(links, [
     { key: 'project:거상 제어판', name: '거상 제어판', machines: [null, 'sub1', 'sub2'], working: true },
-    { key: 'send:notebook1|sub2', name: null, machines: ['notebook1', 'sub2'], working: false },
+    { key: 'send:notebook1|sub2', name: null, machines: ['notebook1', 'sub2'], working: false, until: now - 1000 + LINK_SEND_MS },
   ], 'the idle computer, a send inside the group and an old send add nothing');
   assert.deepEqual(liveLinks(projectGroups([agent('a')], spaces, labelOf), [], now), [], 'a shared name alone is not a link');
 });
