@@ -11,7 +11,7 @@ import { pipeline } from './pipeline.js';
 import { workflowNodes, delegationEvents, workflowStatus, sessionChildren, activeWorkflow } from './workflow.js';
 import { watchDocs, currentDocs, docsSection, prepareDocsInput } from './docs.js';
 import { watchAlerts, alertSection, visibleAlerts } from './alerts.js';
-import { alertBadge, openInbox } from './alert-inbox.js';
+import { workspaceAlertsRow, hasWorkspaceAlerts, openInbox } from './alert-inbox.js';
 
 const hasPanel=node=>node?.id==='panel'||(node?.children||[]).some(hasPanel);
 
@@ -419,7 +419,7 @@ export default class SixfoldDesk extends View {
     const groups=workspaceList.map(s=>({s,members:priority(s.tabs.flatMap(tab=>all.filter(p=>p.tab===tab.id)))}));
     const positions={};let offset=0;
     for(const {s,members} of groups){
-      let row=offset+53;
+      let row=offset+53+(hasWorkspaceAlerts(s.name)?26:0);
       for (const p of members) {
         positions[p.terminal]=row;row+=30;
         {
@@ -473,8 +473,8 @@ export default class SixfoldDesk extends View {
           .child(this.docsSpaces?.has(s.id)?'▾':'▸'))
         .child(workspaceMark(s))
         .child(div().flex_1().min_w(0).truncate().text_color(s.active?t.foreground:t.muted).child(s.name))
-        .child(alertBadge(`space-${s.id}`,t,{project:s.name}))
         .child(div().text_size(10).text_color(t.muted).child(String(members.length))))
+      .child(workspaceAlertsRow(s,t))
       .children(members.map(p=>{
         const tab=s.tabs.find(tab=>tab.id===p.tab);
         const records=sessionChildren(this.workflowNodes,p.terminal,true);

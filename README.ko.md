@@ -59,7 +59,7 @@ herdr-app do layout.switch --name sixfold
 
 메시지 개수는 워크스페이스를 누르지 않아도 0.25초마다 갱신합니다. 저장 내용이 같으면 다시 그리지 않습니다. 에이전트가 작업을 마치거나 해당 pane을 포커스하면 개수가 사라지고, 읽은 위치는 `data/sixfold/messages-read.json`에 저장되어 재시작해도 다시 쌓이지 않습니다. Share→프로젝트 같은 위치 전달과 빈 pane 대체는 [COMMON_ROUTING.md](COMMON_ROUTING.md)를 따르며, `python3 scripts/route.py --enable`로 현재 checkout의 대기열 처리를 연결합니다. Share 알림은 `data/sixfold/alerts.json`을 읽으며 수집기는 별도입니다.
 
-채널 새 메시지는 워크스페이스 이름 옆의 Slack 아이콘에만 표시합니다. `data/sixfold/project-alerts.json`의 `projects`는 추적할 워크스페이스 이름 배열, `items`는 채널 수집기가 확인한 새 메시지(`id`, `project`, `author`, `text`, `at`, `link`) 배열입니다. 기존 미완료 업무 수와 혼합하지 않으며, 읽음은 `slack-alerts-read.json`에 메시지 ID로 보존합니다. 아이콘을 누르면 해당 워크스페이스의 새 메시지를 확인할 수 있습니다. 멘션 팝업은 `sixfold-slack-inbox` mod이며 `data/sixfold/slack-mentions.json`의 `items`에서 워크스페이스·채널·작성자·내용·원문 링크를 표시합니다. `herdr-app do mod.open '{"name":"sixfold-slack-inbox"}'`으로 열거나 닫습니다. 채널 조회와 집계 시작 시각 관리는 별도 수집기에서 처리합니다.
+채널 새 메시지는 워크스페이스 제목 아래 별도의 ‘채널 알림’ 줄에 Slack 아이콘으로 표시합니다. 제목 줄의 기존 세션 수·고정핀과 분리합니다. `data/sixfold/project-alerts.json`의 `projects`는 추적할 워크스페이스 이름 배열, `items`는 채널 수집기가 확인한 새 메시지(`id`, `project`, `author`, `text`, `at`, `link`) 배열입니다. 기존 미완료 업무 수와 혼합하지 않으며, 읽음은 `slack-alerts-read.json`에 메시지 ID로 보존합니다. 아이콘을 누르면 해당 워크스페이스의 새 메시지를 확인할 수 있습니다. 멘션 팝업은 `sixfold-slack-inbox` mod이며 `data/sixfold/slack-mentions.json`의 `items`에서 워크스페이스·채널·작성자·내용·원문 링크를 표시합니다. `herdr-app do mod.open '{"name":"sixfold-slack-inbox"}'`으로 열거나 닫습니다. 채널 조회와 집계 시작 시각 관리는 별도 수집기에서 처리합니다.
 
 멘션은 채널과 부모 `thread_ts`(또는 원문 링크의 `thread_ts`)가 같은 스레드끼리 묶고, 워크스페이스별 색상·필터와 미확인 스레드 수를 표시합니다. 기본은 미확인만 보기이며, ‘이 스레드 확인’을 눌러야 팝업의 확인 상태가 저장됩니다. 원문 열기만으로 확인 처리하지 않으며, 새 멘션 답글이 오면 다시 미확인으로 표시합니다. 이 상태는 Slack 앱의 실제 읽음 상태와 별도입니다.
 
