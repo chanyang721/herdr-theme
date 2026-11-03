@@ -76,7 +76,7 @@
               "id": "system-metrics",
               "type": "block",
               "size": {
-                "px": 405
+                "px": 520
               },
               "content": {
                 "mod": "system-metrics"

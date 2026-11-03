@@ -40,3 +40,9 @@ test('pane header shows the session share of the weekly window, or a quiet unkno
  assert.equal(module.sharePercent(0.04),'<0.1%');
  assert.equal(module.sharePercent(23.4),'23%');
 });
+
+test('the sidebar publishes the computer it shows for the CPU/RAM strip',async()=>{
+ const main=await readFile(new URL('../mods/sixfold-desk/main.js',import.meta.url),'utf8');
+ assert.match(main,/setShared\('sixfold\.computing\.shown', \{ key: selectedComputer, label \}\)/);
+ assert.match(main,/if \(role === 'sidebar'\) \{\s*\/\/ Publish the computer/);
+});

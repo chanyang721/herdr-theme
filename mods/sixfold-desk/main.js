@@ -379,6 +379,13 @@ export default class SixfoldDesk extends View {
     const facts = terminals();
     const onlySpace = props()?.onlySpace;
     const selectedComputer = this.selectedComputer();
+    if (role === 'sidebar') {
+      // Publish the computer this sidebar shows, so the strip's CPU/RAM follow it.
+      const machine = selectedComputer.startsWith('remote:') ? selectedComputer.slice(7) : null;
+      const label = selectedComputer.startsWith('tailscale:') ? selectedComputer.slice(10) : this.computerLabel(machine);
+      const shown = shared('sixfold.computing.shown');
+      if (shown?.key !== selectedComputer || shown?.label !== label) setShared('sixfold.computing.shown', { key: selectedComputer, label });
+    }
     const discoveryOnly = selectedComputer.startsWith('tailscale:');
     const selectedMachine = role === 'sidebar'
       ? (selectedComputer.startsWith('remote:') ? selectedComputer.slice(7) : null)
