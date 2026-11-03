@@ -90,7 +90,8 @@ export function liveLinks(groups, hops, now, windowMs = LINK_SEND_MS) {
     if (!Number.isFinite(event.at) || now - event.at > windowMs) continue;
     if (links.some(link => link.machines.includes(hop.from) && link.machines.includes(hop.to))) continue;
     const machines = [hop.from, hop.to].sort((a, b) => order(a).localeCompare(order(b)));
-    links.push({ key: `send:${machines.join('|')}`, name: null, machines, working: false });
+    // Hops come newest first, so this is the pair's latest send: the link ends at `until`.
+    links.push({ key: `send:${machines.join('|')}`, name: null, machines, working: false, until: event.at + windowMs });
   }
   return links;
 }
@@ -118,4 +119,36 @@ export function linkPalette(t) {
     const base = tone(t[name] ?? t.accent, grey, 0.35);
     return { link: tone(base, background, 0.45), packet: base };
   });
+}
+
+// How long an ended link takes to fade before it leaves.
+export const LINK_FADE_MS = 1500;
+
+// Keep each drawn link in its lane while it lasts, in `seen` (key -> {link, gone, slot}).
+// Ended links are dropped first, so their lanes are free for new ones in the same
+// pass; with all lanes taken, the link fading longest gives its lane up. Without
+// motion an ended link leaves at once. `wake` is when the drawing next changes
+// with no new event: a send link reaching its end, or a fade finishing.
+export function trackLinks(seen, links, now, motion = true, slots = 4) {
+  const live = new Set(links.map(link => link.key));
+  for (const [key, entry] of seen) {
+    if (live.has(key)) continue;
+    entry.gone ??= now;
+    if (!motion || now - entry.gone >= LINK_FADE_MS) seen.delete(key);
+  }
+  for (const link of links) {
+    const entry = seen.get(link.key);
+    if (entry) { entry.link = link; entry.gone = null; continue; }
+    const used = new Set([...seen.values()].map(item => item.slot));
+    let slot = [...Array(slots).keys()].find(value => !used.has(value));
+    if (slot === undefined) {
+      const fading = [...seen].filter(([, item]) => item.gone !== null).sort((a, b) => a[1].gone - b[1].gone)[0];
+      if (!fading) continue;
+      seen.delete(fading[0]);
+      slot = fading[1].slot;
+    }
+    seen.set(link.key, { link, gone: null, slot });
+  }
+  const wakes = [...seen.values()].map(item => item.gone !== null ? item.gone + LINK_FADE_MS : item.link.until).filter(Number.isFinite);
+  return { lanes: [...seen.values()].sort((a, b) => a.slot - b.slot), wake: wakes.length ? Math.min(...wakes) : null };
 }

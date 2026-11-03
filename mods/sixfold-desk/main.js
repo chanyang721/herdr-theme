@@ -8,7 +8,7 @@ import { computerKind, computerStatus, computerAlert, tailscaleStatus, workspace
 
 import { freshMessages, recentRoutes, simultaneousRoutes, crossMachine, followComputer, terminalMachine, machineHops, machineTraffic } from './flow.js';
 import { pipeline } from './pipeline.js';
-import { machineCounts, projectGroups, liveLinks, linkPalette, projectName } from './collab.js';
+import { machineCounts, projectGroups, liveLinks, linkPalette, projectName, trackLinks } from './collab.js';
 import { workflowNodes, delegationEvents, workflowStatus, sessionChildren, activeWorkflow } from './workflow.js';
 import { watchDocs, currentDocs, docsSection, prepareDocsInput } from './docs.js';
 import { watchAlerts, alertSection, visibleAlerts } from './alerts.js';
@@ -134,6 +134,14 @@ export default class SixfoldDesk extends View {
     cx.timer.every(LINK_FLOW_MS, cx => {
       if (!this.linkFlowing) return;
       this.linkFlowEnd = !this.linkFlowEnd;
+      cx.notify();
+    });
+    // Links also change with time alone: a send link ends five minutes after its last
+    // send and an ended link leaves after its fade. Redraw when the next one is due.
+    this.linkWake = null;
+    cx.timer.every(250, cx => {
+      if (this.linkWake === null || Date.now() < this.linkWake) return;
+      this.linkWake = null;
       cx.notify();
     });
     // Opt-in local status read only. These peers are not hc connections.
@@ -437,19 +445,9 @@ export default class SixfoldDesk extends View {
     const now = Date.now();
     const links = liveLinks(linkGroups, hops, now);
     this.linkSeen ??= new Map();
-    for (const link of links) {
-      const entry = this.linkSeen.get(link.key);
-      if (entry) { entry.link = link; entry.gone = null; continue; }
-      const used = new Set([...this.linkSeen.values()].map(item => item.slot));
-      const slot = [0, 1, 2, 3].find(value => !used.has(value));
-      if (slot !== undefined) this.linkSeen.set(link.key, { link, gone: null, slot });
-    }
-    for (const [key, entry] of this.linkSeen) {
-      if (links.some(link => link.key === key)) continue;
-      entry.gone ??= now;
-      if (!motion || now - entry.gone > 1500) this.linkSeen.delete(key);
-    }
-    const lanes = [...this.linkSeen.values()].sort((a, b) => a.slot - b.slot).map(entry => ({ ...entry, colors: linkColors[entry.slot % linkColors.length] }));
+    const tracked = trackLinks(this.linkSeen, links, now, motion);
+    this.linkWake = tracked.wake;
+    const lanes = tracked.lanes.map(entry => ({ ...entry, colors: linkColors[entry.slot % linkColors.length] }));
     this.linkFlowing = motion && lanes.some(lane => lane.link.working && !lane.gone);
     // A workspace inside a live project link, with the other computers in it.
     const spaceLink = space => {
@@ -681,14 +679,17 @@ export default class SixfoldDesk extends View {
               .top((this.linkFlowEnd ? bottom : top) - 1).transition('top', { duration: LINK_FLOW_MS - 200, easing: 'linear' }));
             return parts;
           }))
-          .children(remoteRoutes.map(({ route, hop }) => {
+          // One packet per send: a route merges same-way sends, each still moves on its own.
+          .children(remoteRoutes.flatMap(({ route, hop }) => {
             const lane = laneOf(hop.from, hop.to), from = rowIndex(hop.from), to = rowIndex(hop.to);
-            if (!lane || from < 0 || to < 0) return null;
-            const y = route.phase === 'start' && motion ? rowY(from) : rowY(to);
-            return div().id(`sf-link-send-${route.id}`).absolute().right(laneRight(lane.slot) - 2).top(y - 2).size(5).rounded(3).bg(lane.colors.packet)
-              .opacity(route.phase === 'arrived' ? 0.4 : 1)
-              .when(motion, el => el.transition('top', { duration: route.packets?.[0]?.travelMs ?? 1600, easing: 'linear' }));
-          }).filter(Boolean)))
+            if (!lane || from < 0 || to < 0) return [];
+            return (route.packets?.length ? route.packets : [{ id: route.id, phase: route.phase }]).map(packet => {
+              const y = packet.phase === 'start' && motion ? rowY(from) : rowY(to);
+              return div().id(`sf-link-send-${packet.id}`).absolute().right(laneRight(lane.slot) - 2).top(y - 2).size(5).rounded(3).bg(lane.colors.packet)
+                .opacity(packet.phase === 'arrived' ? 0.4 : 1)
+                .when(motion, el => el.transition('top', { duration: packet.travelMs ?? 1600, easing: 'linear' }));
+            });
+          })))
         .child(section(`${discoveryOnly?selectedComputer.slice(10):this.computerLabel(selectedMachine)} · ${w.spaces}`)).child(workspaceTree)
         .when(workspaceList.length===0,e=>e.child(v_flex().id('sf-empty-workspaces').px(12).pb(12).gap(5)
           .child(div().text_size(11).text_color(t.muted).child(this.lang()==='ko'?(discoveryOnly?'등록 안 됨, 워크스페이스 없음':'워크스페이스 없음'):(discoveryOnly?'Unregistered, no workspaces':'No workspaces')))
