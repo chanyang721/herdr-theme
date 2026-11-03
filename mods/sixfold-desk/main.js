@@ -24,7 +24,8 @@ export function paneHeaderStyle(p, t) {
   return {
     background: color ? `${color.slice(0, 7)}24` : p.focused ? t.selected : t.chrome,
     base: color ? t.chrome : p.focused ? t.selected : t.chrome,
-    border: !p.focused && color ? color : null,
+    // Always reserve the 1px border; toggling it on focus shifts the header text.
+    border: !p.focused && color ? color : '#00000000',
   };
 }
 
@@ -335,7 +336,7 @@ export default class SixfoldDesk extends View {
       const style = paneHeaderStyle(p, t);
       return div().size_full().bg(style.base).child(h_flex().id(`sixfold-head-${p.pane}`).size_full().items_center().gap(7).px(9)
         .bg(style.background).text_size(11.5)
-        .when(Boolean(style.border), el => el.border(1).border_color(style.border))
+        .border(1).border_color(style.border)
         .on_click(() => run('pane.focus', { pane: p.pane }))
         .child(div().flex_none().font_bold().text_color(p.focused ? t.accent : t.dim).child(String(index).padStart(2, '0')))
         .child(div().flex_1().min_w(0).truncate().text_color(t.foreground).child(title(p)))
