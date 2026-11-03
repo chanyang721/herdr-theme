@@ -61,6 +61,12 @@ test('computer selection scopes workspaces and agents and restores each selectio
     render();
     assert(rows.has('sf-space-home-a'));assert(rows.has('sf-space-home-b'));
     assert(!rows.has('sf-space-worker/a'));assert.deepEqual(order,['t1']);
+    assert(!rows.has('sf-pinned-home-a'),'no hardcoded default pins');
+    view.workspacePins={spaces:[{id:'home-a',machine:null}]};render();
+    assert(rows.has('sf-pinned-home-a'));
+    assert(!rows.has('sf-pinned-home-b'));
+    view.workspacePins={spaces:[]};render();
+    assert(!rows.has('sf-pinned-home-a'),'empty configuration removes the marker');
     const beforeSelection=calls.length;
     rows.get('sf-computer-remote:worker').click();render();
     assert.equal(state['sixfold.computing.selected'],'remote:worker');
