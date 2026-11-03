@@ -34,7 +34,7 @@ If a configured workspace has no folder rows, inspect `files` and `warning` in i
 |---|---|
 | PeaceMinusOne | `peaceminusone-backend/docs/ARCHITECTURE.md`, `MICROSERVICES.md`, `raffle-architecture.md`, `restock-alimtalk-architecture.md`, `adr/README.md` |
 | Medihomes | 보고서 폴더의 `20261027_메디홈즈_전체구조_착수전_정리.md`, `20261027_메디홈즈_고객사관점_비즈니스구조_계약목적.md`, `20261027_메디홈즈_프로젝트_현황_참여자_환경_제약.md`의 최신 날짜판 |
-| 공통 | `COMMON_ROUTING.md`, `README.ko.md` |
+| Share | `COMMON_ROUTING.md`, `README.ko.md` |
 | Voice | 해당 공간 프로젝트의 `README.md` |
 | Herdr | `README.ko.md`, `docs/project-documents.md` |
 
