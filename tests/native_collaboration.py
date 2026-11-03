@@ -115,7 +115,7 @@ while True:
             for address in addresses:
                 subprocess.run([real_hc, 'kill', address], env=env, capture_output=True, timeout=10)
                 subprocess.run([real_hc, 'rm', address], env=env, capture_output=True, timeout=10)
-            subprocess.run([real_hc, 'server', 'stop'], env=env, capture_output=True, timeout=10)
+            subprocess.run([real_hc, 'server', 'stop'], env=env, capture_output=True, timeout=10, check=bool(addresses))
 
 
 if __name__ == '__main__':
