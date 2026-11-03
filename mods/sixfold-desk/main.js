@@ -239,16 +239,16 @@ export default class SixfoldDesk extends View {
       .hover(s => s.bg(t.hover).text_color(t.foreground)).on_click(action).child(text);
   }
 
-  badge(status, text, t) {
+  badge(status, text, t, size = 11) {
     // Working uses the stock Herdr spinner (same asset, color and speed as the default agents list).
     const mark = status === 'working'
-      ? svg('mods/workspace-chrome/spinner.svg').size(12).flex_none().text_color(t.working).spin(900)
+      ? svg('mods/workspace-chrome/spinner.svg').size(size+1).flex_none().text_color(t.working).spin(900)
       // Idle: the same ring at rest, breathing slowly instead of turning.
       : status === 'idle'
-      ? svg('mods/sixfold-desk/icons/idle.svg').size(12).flex_none().text_color(t.idle ?? t.dim)
+      ? svg('mods/sixfold-desk/icons/idle.svg').size(size+1).flex_none().text_color(t.idle ?? t.dim)
           .loop('opacity', { from: 0.35, to: 1, period: 2400 })
       : div().font_bold().child(marks[status] ?? '·');
-    return h_flex().gap(5).items_center().text_size(11).text_color(t[status] ?? t.muted)
+    return h_flex().gap(5).items_center().text_size(size).text_color(t[status] ?? t.muted)
       .child(mark).child(text);
   }
 
@@ -521,7 +521,7 @@ export default class SixfoldDesk extends View {
       .child(h_flex().h(48).flex_none().pl(76).pr(8).items_center().gap(4)
         .child(div().flex_1().font_bold().text_size(14).child('Herdr Theme'))
         .child(this.button('sf-language',w.language,()=>run('sixfold-desk.language'),t)))
-      .child(h_flex().px(12).py(9).gap(12).flex_none().justify_center().children(['blocked','done','working'].map(s => this.badge(s,String(total[s]),t))))
+      .child(h_flex().px(12).py(11).gap(16).flex_none().justify_center().font_bold().children(['blocked','done','working'].map(s => this.badge(s,String(total[s]),t,14))))
       .child(v_flex().id('sf-scroll').flex_1().min_h(0).overflow_y_scroll()
         .child(computerSection)
         .child(v_flex().flex_none().px(7).pb(6).gap(3).children(computerRows))
