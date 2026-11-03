@@ -4,7 +4,7 @@ import * as herdrNative from 'herdr';
 import { agents, panes, spaces, terminals, focused, props, theme, run, shared, setShared, setAgentOrder, nextCommand, exec, window, layout, readTextFile, writeTextFile, appHome, openOverlay, settings } from 'herdr';
 import { WORDS, counts, title, cycle, priority, readThrough, unreadCount } from './model.js';
 
-import { computerKind, computerStatus, tailscaleStatus, workspaceIdentity } from './sidebar-identity.js';
+import { computerKind, computerStatus, tailscaleStatus, workspaceIdentity, workspacePinned } from './sidebar-identity.js';
 
 import { freshMessages, recentRoutes, simultaneousRoutes } from './flow.js';
 import { pipeline } from './pipeline.js';
@@ -22,6 +22,7 @@ export default class SixfoldDesk extends View {
     this.overSpace = null;
     this.messageEvents = [];
     this.workspaceIcons = {};
+    this.workspacePins = {spaces:[]};
     this.computers = {};
     this.tailscalePeers = [];
     this.tailscaleError = null;
@@ -58,11 +59,16 @@ export default class SixfoldDesk extends View {
           const queue = await readTextFile(`${appHome()}/data/sixfold/routing-queue.json`).catch(()=>null) || '{"requests":[]}';
           const workflowText = await readTextFile(`${appHome()}/data/sixfold/workflow.json`).catch(()=>null) || '{"nodes":[],"events":[]}';
           const iconText = await readTextFile(`${appHome()}/data/sixfold/workspace-icons.json`).catch(()=>null) || '{}';
+          const pinText = await readTextFile(`${appHome()}/data/sixfold/workspace-pins.local.json`).catch(()=>null) || '{"spaces":[]}';
           const computerText = await readTextFile(`${appHome()}/data/sixfold/computers.local.json`).catch(()=>null) || '{}';
-          const snapshot = JSON.stringify([text, routing, queue, workflowText, iconText, computerText]);
+          const snapshot = JSON.stringify([text, routing, queue, workflowText, iconText, computerText, pinText]);
           if (snapshot === this.messageSnapshot) return;
           const events = JSON.parse(text).events ?? [];
           try { this.workspaceIcons = JSON.parse(iconText); } catch { /* Keep the last valid icons. */ }
+          try {
+            const pins=JSON.parse(pinText);
+            if(pins && Array.isArray(pins.spaces))this.workspacePins=pins;
+          } catch { /* Preserve the last valid pin configuration during partial writes. */ }
           try {
             const computers = JSON.parse(computerText);
             if (computers && typeof computers === 'object' && !Array.isArray(computers)) this.computers = computers;
@@ -445,7 +451,7 @@ export default class SixfoldDesk extends View {
           ? svg(icon.path).size(14).text_color(workspaceColor(s)) : image(icon.path).w(14).h(14));
       return box.bg(workspaceColor(s)).child(svg(`mods/sixfold-desk/icons/ws-${workspaceIdentity(s)||'workspace'}.svg`).size(12).flex_none().text_color(t.background));
     };
-    const spaceRows=groups.map(({s,members})=>v_flex().id(`sf-space-${s.id}`).ml(7).mr(41).mb(12).gap(2).flex_none().rounded(6).border(1).border_color(t.border)
+    const spaceRows=groups.map(({s,members})=>v_flex().id(`sf-space-${s.id}`).ml(7).mr(41).mb(12).gap(2).flex_none().rounded(6).border(1).border_color(workspacePinned(s,this.workspacePins)?t.accent:t.border)
       .when(this.dragSpace && this.overSpace===s.id && this.dragSpace!==s.id,e=>e.border_t(2).border_color(t.accent))
       .on_mouse_move((_event,cx)=>{
         const source=spaces().find(x=>x.id===this.dragSpace);
@@ -476,6 +482,9 @@ export default class SixfoldDesk extends View {
           .on_click((_e,cx)=>{cx.stop_propagation();prepareDocsInput(this,s);this.docsSpaces??=new Set();this.docsSpaces.has(s.id)?this.docsSpaces.delete(s.id):this.docsSpaces.add(s.id);cx.notify();})
           .child(this.docsSpaces?.has(s.id)?'▾':'▸'))
         .child(workspaceMark(s))
+        .when(workspacePinned(s,this.workspacePins),e=>e.child(div().id(`sf-pinned-${s.id}`).w(14).flex_none()
+          .tooltip(this.lang()==='ko'?'고정 워크스페이스 · workspace-pins.local.json':'Pinned workspace · workspace-pins.local.json')
+          .child(svg('mods/sixfold-desk/icons/pin.svg').size(12).text_color(t.accent))))
         .child(div().flex_1().min_w(0).truncate().text_color(s.active?t.foreground:t.muted).child(s.name))
         .child(div().text_size(10).text_color(t.muted).child(String(members.length))))
       .children(members.map(p=>{

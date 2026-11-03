@@ -233,3 +233,14 @@ Separate mod recipes let you place document and usage tools in a personal layout
 Independent mod releases: [System Metrics](https://github.com/chanyang721/herdr-workspace-mods/tree/main/system-metrics) · [Project Document Viewer](https://github.com/chanyang721/herdr-workspace-mods/tree/main/document-viewer).
 
 Project document tracking: see [configuration and collector](docs/project-documents.md). The base theme uses full-width terminals; configured latest documents live in the left sidebar.
+
+## Pinned workspace markers
+
+Configure `~/.config/herdr-app/data/sixfold/workspace-pins.local.json` with
+`{"spaces":[{"id":"actual-space-id","machine":null}]}` using IDs from `herdr-app ls`.
+Remote entries need the app's qualified space ID and machine name. Only exact machine/ID
+matches receive a pin icon and accent border. Renaming preserves the marker; another
+workspace with the same name does not inherit it. No names or default pins are hardcoded.
+The setting reloads live, keeps its last valid value on malformed JSON, and an empty
+`spaces` array clears all markers. It does not reorder workspaces or prevent deletion,
+and is independent of document pins and native terminal pins.

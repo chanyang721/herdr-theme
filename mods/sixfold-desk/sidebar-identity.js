@@ -36,3 +36,11 @@ export function workspaceIdentity(space) {
   if (name === 'herdr') return 'terminal';
   return null;
 }
+
+// Pin identity is configured explicitly by machine + stable space ID. Names,
+// document pins and native terminal pins do not imply workspace pinning.
+export function workspacePinned(space, config) {
+  return Array.isArray(config?.spaces) && config.spaces.some(item =>
+    item && typeof item.id === 'string' && item.id.length > 0 &&
+    item.id === space.id && (item.machine ?? null) === (space.machine ?? null));
+}
