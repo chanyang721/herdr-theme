@@ -6,6 +6,9 @@ import { dirname, resolveLink } from './vendor/paths.js';
 
 const LIMIT = 400000;
 const STATE = 'sixfold.docs.selection.v1';
+// scripts/open_doc_tab.py writes the latest open request; each space handles it once.
+const REQUEST = 'project-docs-open.json';
+const OPENED = 'sixfold.docs.opened.v1';
 export default class ProjectDocuments extends View {
   init(_props, cx) {
     const p = props() || {};
@@ -39,6 +42,12 @@ export default class ProjectDocuments extends View {
             this.linked = null;
           } else this.documents.push(this.linked);
         }
+        const request = await readTextFile(`${dirname(this.config)}/${REQUEST}`).then(text => text ? JSON.parse(text) : null).catch(() => null);
+        if (this.closed) return;
+        if (request?.spaceId === this.spaceId && typeof request.path === 'string' && request.at > (shared(OPENED)?.[this.spaceId] ?? 0)) {
+          setShared(OPENED, { ...(shared(OPENED) || {}), [this.spaceId]: request.at });
+          this.reveal(request.path);
+        }
         this.checkedAt = data.checkedAt;
         if (!this.documents.some(d => d.id === this.selected)) this.selected = this.documents[0]?.id;
         if (this.selected && shared(STATE)?.[this.spaceId] !== this.selected) {
@@ -68,7 +77,7 @@ export default class ProjectDocuments extends View {
             if (this.closed || this.watchers.get(root) !== token) return;
             // Ignore our installer lock and unrelated generated data in this
             // folder; otherwise a refresh can trigger its own next refresh.
-            if (root === dirname(this.config) && !changed.some(path => path === root || path.endsWith('/' + this.config.split('/').pop()))) continue;
+            if (root === dirname(this.config) && !changed.some(path => path === root || path.endsWith('/' + this.config.split('/').pop()) || path.endsWith('/' + REQUEST))) continue;
             this.refresh(cx);
           }
         } catch { this.watchers.delete(root); }
@@ -138,17 +147,23 @@ export default class ProjectDocuments extends View {
     });
   }
 
+  // Select a listed document, or show an unlisted one as a temporary 열람 tab.
+  reveal(path) {
+    const existing = this.documents.find(d => d.path === path);
+    if (existing) { this.selected = existing.id; return; }
+    this.linked = { id: `opened-${path}`, path, name: path.split('/').pop(),
+      label: path.split('/').pop(), kind: 'file', status: 'ok', pinned: false, opened: true };
+    this.documents = this.documents.filter(d => !d.opened).concat(this.linked);
+    this.selected = this.linked.id;
+  }
+
   follow(file, url, cx) {
     try {
       const link = resolveLink(file, url);
       if (link.url) cx.open_url(link.url);
       else if (link.file?.toLowerCase().endsWith('.md')) {
-        const existing = this.documents.find(d => d.path === link.file);
-        if (existing) { this.choose(existing.id, cx); return; }
-        this.linked = { id: `opened-${link.file}`, path: link.file, name: link.file.split('/').pop(),
-          label: link.file.split('/').pop(), kind: 'file', status: 'ok', pinned: false, opened: true };
-        this.documents = this.documents.filter(d => !d.opened).concat(this.linked);
-        this.choose(this.linked.id, cx);
+        this.reveal(link.file);
+        this.choose(this.selected, cx);
       } else if (link.file) this.external('open', [link.file], cx);
     } catch (error) { this.actionError = String(error.message || error); cx.notify(); }
   }

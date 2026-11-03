@@ -24,7 +24,7 @@ async function harness({ documents = [document('a'), document('b')], selection }
     View: class {}, div: element, image: element, v_flex: element, h_flex: element,
     TextView: { markdown: (_id, text) => { labels.push(text); return element(); } },
     props: () => ({ spaceId: 'Demo' }), appHome: () => '/app',
-    readTextFile: async path => { reads.push(path); return state.text(path); },
+    readTextFile: async path => { if (path.endsWith('/project-docs-open.json')) return state.request ? JSON.stringify(state.request) : null; reads.push(path); return state.text(path); },
     exec: async (command, args) => {
       calls.push({ command, args });
       if (command !== 'python3') return { code: 0, stdout: '', stderr: '' };
@@ -175,4 +175,17 @@ test('malformed or wrong-workspace resolver replies cannot replace the last vali
     assert.equal(h.view.documents, documents); assert.equal(h.view.blocks, body); assert.match(h.view.listError, /목록 형식/);
     assert.doesNotThrow(() => h.render());
   }
+});
+
+test('an open request shows its file once in the matching space and leaves other spaces alone', async t => {
+  const h = await harness({ documents: [document('a'), document('b', '/docs/b.md')] }); t.after(() => h.view.close());
+  h.state.request = { spaceId: 'Other', path: '/docs/b.md', at: 5 }; h.view.refresh(h.cx); await h.flush();
+  assert.equal(h.view.selected, 'a');
+  h.state.request = { spaceId: 'Demo', path: '/docs/b.md', at: 6 }; h.view.refresh(h.cx); await h.flush();
+  assert.equal(h.view.selected, 'b');
+  h.view.choose('a', h.cx); await h.flush(); h.view.refresh(h.cx); await h.flush();
+  assert.equal(h.view.selected, 'a', 'a handled request must not reopen after the person moves on');
+  h.state.request = { spaceId: 'Demo', path: '/reports/new.md', at: 7 }; h.view.refresh(h.cx); await h.flush();
+  const opened = h.view.documents.find(d => d.opened);
+  assert.equal(opened.path, '/reports/new.md'); assert.equal(h.view.selected, opened.id);
 });
