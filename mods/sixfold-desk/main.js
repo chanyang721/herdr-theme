@@ -6,7 +6,7 @@ import { WORDS, counts, title, cycle, priority, readThrough, unreadCount } from 
 
 import { computerKind, computerStatus, tailscaleStatus, workspaceIdentity, workspacePinned } from './sidebar-identity.js';
 
-import { freshMessages, recentRoutes, simultaneousRoutes } from './flow.js';
+import { freshMessages, recentRoutes, simultaneousRoutes, crossMachine, followComputer, terminalMachine } from './flow.js';
 import { pipeline } from './pipeline.js';
 import { workflowNodes, delegationEvents, workflowStatus, sessionChildren, activeWorkflow } from './workflow.js';
 import { watchDocs, currentDocs, docsSection, prepareDocsInput } from './docs.js';
@@ -251,14 +251,15 @@ export default class SixfoldDesk extends View {
   }
 
   selectedComputer() {
-    const saved = shared('sixfold.computing.selected');
-    if (typeof saved === 'string' && (saved === 'local' || /^(remote|tailscale):.+/.test(saved))) return saved;
-    const machine = spaces().find(space => space.id === focused()?.space)?.machine;
-    return machine ? `remote:${machine}` : 'local';
+    const space = focused()?.space;
+    const machine = spaces().find(s => s.id === space)?.machine;
+    // Moving focus to another computer's session switches the list with it.
+    return followComputer(this.computerFollow ??= {}, !space ? null : machine ? `remote:${machine}` : 'local', shared('sixfold.computing.selected'));
   }
 
   selectComputer(key) {
     // Listing another computer is independent of terminal focus and connectivity.
+    (this.computerFollow ??= {}).follow = false;
     setShared('sixfold.computing.selected', key);
   }
 
@@ -340,6 +341,10 @@ export default class SixfoldDesk extends View {
     const routes = simultaneousRoutes(flows);
     const motion = shared('sixfold.motion') !== false;
     const endpoint = address => flows.some(flow => flow.source === address || flow.target === address);
+    const known = new Set(facts.map(x => x.address));
+    const machineOf = address => terminalMachine(address, known);
+    // Sends that cross to another connected computer get their own marks.
+    const remoteRoutes = routes.map(route => ({ route, hop: crossMachine(route, machineOf) })).filter(item => item.hop);
     const routeColor = address => palette[flows.find(flow => flow.target === address || flow.source === address)?.lane ?? 0];
     const label = address => {
       const child=this.workflowNodes.find(node=>node.id===address);
@@ -407,7 +412,7 @@ export default class SixfoldDesk extends View {
       const config = name === null ? this.computers?.local : this.computers?.machines?.[name];
       const kind = name === null ? 'laptop' : computerKind(config?.os);
       const key = name === null ? 'local' : `remote:${name}`;
-      const row = h_flex().id(`sf-computer-${key}`).h(38).flex_none().px(7).gap(6).items_center().rounded(4)
+      let row = h_flex().id(`sf-computer-${key}`).h(38).flex_none().px(7).gap(6).items_center().rounded(4)
         .bg(selected ? t.selected : t.surface).hover(style => style.bg(t.hover))
         .tooltip(`${displayName}${name === null ? '' : ` · ${name}`}\n${state}${name === null ? '' : (this.lang()==='ko'?' · Herdr 원격 등록됨':' · Registered in Herdr')}`)
         .on_mouse_down('left', (_event, cx) => cx.stop_propagation())
@@ -417,6 +422,16 @@ export default class SixfoldDesk extends View {
           .child(div().truncate().text_size(11).font_bold().child(displayName))
           .child(div().truncate().text_size(9).text_color(t.muted).child(state)))
         .child(div().flex_none().text_size(9).text_color(t.dim).child(String(machineSpaces.length)));
+      const hop = remoteRoutes.find(item => item.hop.from === name || item.hop.to === name);
+      if (hop) {
+        const color = palette[hop.route.lane % palette.length];
+        const incoming = hop.hop.to === name;
+        row = row.border(1).border_color(color)
+          .when(motion, el => el.loop('opacity', { from: 0.55, to: 1, period: 900 }))
+          .child(div().flex_none().text_size(11).font_bold().text_color(color)
+            .tooltip(this.lang()==='ko' ? (incoming ? '다른 컴퓨터에서 메시지 수신' : '다른 컴퓨터로 메시지 전송') : (incoming ? 'Message from another computer' : 'Message to another computer'))
+            .child(incoming ? '⇣' : '⇡'));
+      }
       return {row, active:name===null || ready || machine.layout==='loading'};
     });
     if(this.computers?.tailscale){
@@ -555,6 +570,14 @@ export default class SixfoldDesk extends View {
         const from=positions[flow.source], to=positions[flow.target];
         return pipeline({id:flow.id,width:37-flow.lane*5,from,to,color:palette[flow.lane],phase:flow.phase,packets:flow.packets,motion})
           .right(3+flow.lane*5);
+      }))
+      // The far end is on another computer: run the pipe up to the top of this list,
+      // just under the computer rows (the far computer's row is marked there).
+      .children(remoteRoutes.filter(({route}) => (positions[route.source] === undefined) !== (positions[route.target] === undefined)).map(({route}) => {
+        const outgoing = positions[route.source] !== undefined;
+        const row = outgoing ? positions[route.source] : positions[route.target];
+        return pipeline({id:`${route.id}-hop`,width:37-route.lane*5,from:outgoing?row:0,to:outgoing?0:row,color:palette[route.lane%palette.length],phase:route.phase,packets:route.packets,motion})
+          .right(3+route.lane*5);
       }));
     return v_flex().id('sixfold-sidebar').size_full().bg(t.chrome).text_color(t.foreground)
       .on_mouse_up('left',(_e,cx)=>{
@@ -578,6 +601,8 @@ export default class SixfoldDesk extends View {
           .tooltip(`${label(flow.source)} → ${label(flow.target)} · ${this.lang()==='ko'?'전송 이벤트 · 읽음 확인 아님':'Send event, not a read receipt'}`)
           .child(div().flex_none().text_color(palette[flow.lane%palette.length]).font_bold().child(flow.phase==='arrived'?'✓':'→'))
           .child(div().flex_1().min_w(0).truncate().text_color(t.foreground).child(`${label(flow.source)} → ${label(flow.target)}`))
+          .when(Boolean(crossMachine(flow,machineOf)),row=>row.child(div().flex_none().px(4).rounded(3).border(1).border_color(palette[flow.lane%palette.length]).text_size(9).text_color(palette[flow.lane%palette.length])
+            .child(`⇄ ${this.computerLabel(crossMachine(flow,machineOf).far)}`)))
           .when(flow.count>1,row=>row.child(div().text_color(palette[flow.lane%palette.length]).child(`×${flow.count}`)))))
         .when(routes.length>2,row=>row.child(div().text_size(9).text_color(t.muted).child(this.lang()==='ko'?`+${routes.length-2}개 경로 전송 중`:`+${routes.length-2} active routes`)))))
       .when(this.queuedRoutes.length>0,e=>e.child(h_flex().id('sf-delivery-status').flex_none().px(10).py(6).gap(5).items_center().border_t(1).border_color(t.border)
