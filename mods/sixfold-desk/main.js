@@ -6,7 +6,7 @@ import { WORDS, counts, title, cycle, priority, readThrough, unreadCount } from 
 
 import { computerKind, computerStatus, computerAlert, tailscaleStatus, workspaceIdentity, workspacePinned } from './sidebar-identity.js';
 
-import { freshMessages, recentRoutes, simultaneousRoutes, crossMachine, followComputer, terminalMachine, machineHops, machineTraffic } from './flow.js';
+import { freshMessages, recentRoutes, simultaneousRoutes, crossMachine, followComputer, terminalMachine, machineHops, machineTraffic, trafficWake } from './flow.js';
 import { pipeline } from './pipeline.js';
 import { machineCounts, projectGroups, liveLinks, linkPalette, projectName, trackLinks } from './collab.js';
 import { workflowNodes, delegationEvents, workflowStatus, sessionChildren, activeWorkflow } from './workflow.js';
@@ -468,15 +468,19 @@ export default class SixfoldDesk extends View {
     const links = liveLinks(linkGroups, hops, now);
     this.linkSeen ??= new Map();
     const tracked = trackLinks(this.linkSeen, links, now, motion);
-    this.linkWake = tracked.wake;
+    // Redraw when a link ends or fades, or when a counted send leaves the ten-minute ↑↓ window.
+    const wakes = [tracked.wake, trafficWake(sendEvents, machineOf, now)].filter(value => value !== null);
+    this.linkWake = wakes.length ? Math.min(...wakes) : null;
     const lanes = tracked.lanes.map(entry => ({ ...entry, colors: linkColors[entry.slot % linkColors.length] }));
     this.linkFlowing = motion && lanes.some(lane => lane.link.working && !lane.gone);
-    // A workspace inside a live project link, with the other computers in it.
+    // A workspace inside a project link, with the other computers in it. `gone` while
+    // the link fades: the border is back to normal and the ⇄ mark fades with the pipe.
     const spaceLink = space => {
       const name = projectName(space, machine => machine === null ? null : this.computerLabel(machine)).normalize('NFC').toLowerCase();
       const machine = space.machine ?? null;
-      const lane = lanes.find(item => !item.gone && item.link.name && item.link.name.normalize('NFC').toLowerCase() === name && item.link.machines.includes(machine));
-      return lane ? { lane, partners: lane.link.machines.filter(other => other !== machine) } : null;
+      const found = item => item.link.name && item.link.name.normalize('NFC').toLowerCase() === name && item.link.machines.includes(machine);
+      const lane = lanes.find(item => !item.gone && found(item)) ?? lanes.find(found);
+      return lane ? { lane, gone: Boolean(lane.gone), partners: lane.link.machines.filter(other => other !== machine) } : null;
     };
     const laneOf = (from, to) => lanes.find(lane => !lane.gone && lane.link.machines.includes(from) && lane.link.machines.includes(to));
     // Link lanes sit in a fixed right margin of the computer list (LINK_MARGIN), drawn
@@ -581,9 +585,15 @@ export default class SixfoldDesk extends View {
           ? svg(icon.path).size(14).text_color(workspaceColor(s)) : image(icon.path).w(14).h(14));
       return box.bg(workspaceColor(s)).child(svg(`mods/sixfold-desk/icons/ws-${workspaceIdentity(s)||'workspace'}.svg`).size(12).flex_none().text_color(t.background));
     };
-    const spaceRows=groups.map(({s,members})=>{ const linked=spaceLink(s); return v_flex().id(`sf-space-${s.id}`).ml(7).mr(LINK_MARGIN).mb(12).gap(2).flex_none().rounded(6).border(1).border_color(workspacePinned(s,this.workspacePins)?t.accent:t.border)
+    const spaceRows=groups.map(({s,members})=>{ const mark=spaceLink(s), linked=mark && !mark.gone ? mark : null; return v_flex().id(`sf-space-${s.id}`).relative().ml(7).mr(LINK_MARGIN).mb(12).gap(2).flex_none().rounded(6).border(1).border_color(workspacePinned(s,this.workspacePins)?t.accent:t.border)
       // Worked on together with another computer now: the link's quiet colour, dashed.
       .when(Boolean(linked),e=>e.border_dashed().border_color(linked.lane.colors.link))
+      // A small ⇄ sits on the top border (drawn over it, the box does not move), with the
+      // number of other computers from two up; their names are in its tooltip.
+      .when(Boolean(mark),e=>e.child(h_flex().id(`sf-space-mark-${s.id}`).absolute().top(-7).right(10).h(13).px(3).items_center().bg(t.chrome)
+        .text_size(10).text_color(mark.lane.colors.packet).opacity(mark.gone ? 0 : 0.85).when(motion,el=>el.transition('opacity',600))
+        .tooltip(`${mark.partners.map(m => this.computerLabel(m)).join(', ')}${this.lang()==='ko' ? '과 협업 중' : ': worked on together now'}\n${collabNote}`)
+        .child(`⇄${mark.partners.length > 1 ? mark.partners.length : ''}`)))
       .when(this.dragSpace && this.overSpace===s.id && this.dragSpace!==s.id,e=>e.border_t(2).border_color(t.accent))
       .on_mouse_move((_event,cx)=>{
         const source=spaces().find(x=>x.id===this.dragSpace);
