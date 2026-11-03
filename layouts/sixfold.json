@@ -85,7 +85,7 @@
                     "color": "border"
                   },
                   "focus": {
-                    "width": 2,
+                    "width": 1,
                     "color": "accent"
                   },
                   "lone": true,
