@@ -521,7 +521,7 @@ export default class SixfoldDesk extends View {
       .child(h_flex().h(48).flex_none().pl(76).pr(8).items_center().gap(4)
         .child(div().flex_1().font_bold().text_size(14).child('Herdr Theme'))
         .child(this.button('sf-language',w.language,()=>run('sixfold-desk.language'),t)))
-      .child(h_flex().px(12).py(9).gap(12).flex_none().children(['blocked','done','working'].map(s => this.badge(s,String(total[s]),t))))
+      .child(h_flex().px(12).py(9).gap(12).flex_none().justify_center().children(['blocked','done','working'].map(s => this.badge(s,String(total[s]),t))))
       .child(v_flex().id('sf-scroll').flex_1().min_h(0).overflow_y_scroll()
         .child(computerSection)
         .child(v_flex().flex_none().px(7).pb(6).gap(3).children(computerRows))
