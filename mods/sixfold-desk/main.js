@@ -13,6 +13,7 @@ import { watchDocs, currentDocs, docsSection, prepareDocsInput } from './docs.js
 import { watchAlerts, alertSection, visibleAlerts } from './alerts.js';
 import { workspaceAlertsRow, hasWorkspaceAlerts, openInbox } from './alert-inbox.js';
 import { panePet } from './pets.js';
+import { paneUsage } from './session-usage.js';
 
 const hasPanel=node=>node?.id==='panel'||(node?.children||[]).some(hasPanel);
 
@@ -368,6 +369,9 @@ export default class SixfoldDesk extends View {
         .child(div().flex_none().font_bold().text_color(p.focused ? t.accent : t.dim).child(String(index).padStart(2, '0')))
         .child(panePet(p,t,shared))
         .child(div().flex_1().min_w(0).truncate().text_color(t.foreground).child(title(p)))
+        // Session usage sits in the middle: title and an equal spacer share the room around it.
+        .child(paneUsage(p, t, shared))
+        .child(div().flex_1().min_w(0))
         .child(this.badge(p.status, p.status ? w[p.status] : '', t, 11, ['working', 'blocked'].includes(p.status) ? t.foreground : null)));
     }
     if (role === 'footer') {

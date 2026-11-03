@@ -46,7 +46,8 @@ test('computer selection scopes workspaces and agents and restores each selectio
     .replace(/import \{[^}]*\} from '.\/docs.js';/,'const currentDocs=()=>null;const docsSection=()=>null;const prepareDocsInput=()=>{};')
     .replace(/import \{ watchAlerts, alertSection, visibleAlerts \} from '.\/alerts.js';/,'const visibleAlerts=()=>[];')
     .replace(/import .* from '.\/alert-inbox.js';/,'const workspaceAlertsRow=()=>null, hasWorkspaceAlerts=()=>false;')
-    .replace(/import \{ panePet \} from '.\/pets.js';/,'const panePet=()=>null;');
+    .replace(/import \{ panePet \} from '.\/pets.js';/,'const panePet=()=>null;')
+    .replace(/import \{ paneUsage \} from '.\/session-usage.js';/,'const paneUsage=()=>null;');
   for(const name of ['model','flow','workflow','pipeline','sidebar-identity'])source=source.replace(`'./${name}.js'`,JSON.stringify(new URL(`../mods/sixfold-desk/${name}.js`,import.meta.url).href));
   // A path is never painted in this test; avoid loading the native path builder.
   source=source.replace(/import \{ pipeline \} from [^;]+;/,'const pipeline=()=>{throw Error("unexpected path");};');

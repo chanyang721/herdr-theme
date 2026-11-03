@@ -83,19 +83,6 @@
               }
             },
             {
-              "id": "agent-usage-summary",
-              "type": "block",
-              "size": {
-                "px": 250
-              },
-              "content": {
-                "mod": "agent-usage",
-                "props": {
-                  "role": "summary"
-                }
-              }
-            },
-            {
               "id": "plan-usage",
               "type": "block",
               "size": {
