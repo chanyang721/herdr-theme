@@ -104,6 +104,23 @@ live; the optional folder applies to new workspaces. Keep private addresses, pat
 out of Git. For an existing installation, update both `mods/sixfold-desk/main.js` and
 `mods/sixfold-new-space/main.js` together, then run `herdr-app check` on each folder.
 
+For discovery without a remote connection, set `"tailscale": true` in that same local JSON object.
+Install `scripts/collect_computers.py` under `~/.config/herdr-app/scripts/sixfold/` and update
+`mods/sixfold-desk/main.js`. Every 15 seconds the sidebar reads **local** `tailscale status --json`;
+Windows, macOS and Linux peers appear with their Tailscale DNS hostname and online flag.
+These passive rows cannot open shells or workspaces. “Tailscale Online” is the local status report,
+not proof that SSH or Herdr is reachable. Failed reads mark retained peers unknown.
+Disabling the option hides the discovery rows. No ACL changes, peer probes or remote installs occur.
+
+Native remote work requires a noninteractive SSH connection (or a byte-preserving `--via` command)
+and a compatible `hc` on the target; `hc machine add --help` documents `--install` for copying it.
+Machine registration initiates a connection, so do it only after remote access is authorized.
+For a Windows target, enable OpenSSH Server, start `sshd`, configure key authentication and an
+inbound TCP 22 firewall rule scoped to the Mac's Tailscale IP (or the intended Tailscale range).
+Review any broader default OpenSSH firewall rule. Install compatible Windows herdr-core on PATH
+and verify its availability before registering with `hc machine add user@TAILSCALE_IP --name HOST`.
+The theme does not enable these services or authenticate on the target's behalf.
+
 ## Optional live TUI bridge (macOS/Linux)
 
 Herdr TUI and Herdr app have separate runtimes. A bridge is a live attachment, not a native import:

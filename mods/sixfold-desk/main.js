@@ -21,6 +21,8 @@ export default class SixfoldDesk extends View {
     this.messageEvents = [];
     this.workspaceIcons = {};
     this.computers = {};
+    this.tailscalePeers = [];
+    this.tailscaleError = null;
     this.workflowNodes = [];
     this.workflowEvents = [];
     this.previousDelegations = null;
@@ -94,6 +96,25 @@ export default class SixfoldDesk extends View {
     // File watchers are shared by mod copies. Reconcile independently of focus
     // and watcher wakeups; redraw only when the persisted snapshot changes.
     cx.timer.every(250, refresh);
+    // Opt-in local status read only. These peers are not hc connections.
+    let computersBusy=false, computersAt=0;
+    cx.timer.every(1000,cx=>{
+      if(!this.computers?.tailscale || computersBusy || Date.now()-computersAt<15000)return;
+      computersBusy=true;computersAt=Date.now();
+      cx.spawn(async cx=>{
+        try {
+          const result=await exec('python3',[`${appHome()}/scripts/sixfold/collect_computers.py`]);
+          if(result.code!==0)throw Error('status unavailable');
+          const status=JSON.parse(result.stdout);
+          if(status.error || !Array.isArray(status.peers))throw Error('status unavailable');
+          this.tailscalePeers=status.peers;
+          this.tailscaleError=null;
+        } catch {
+          this.tailscalePeers=this.tailscalePeers.map(peer=>({...peer,online:null}));
+          this.tailscaleError=true;
+        } finally {computersBusy=false;cx.notify();}
+      });
+    });
     // Kept on disk so a restart does not count the whole message log as unread.
     let readBusy=false;
     cx.timer.every(1000,cx=>{
@@ -355,6 +376,20 @@ export default class SixfoldDesk extends View {
         .child(div().text_size(9).text_color(t.dim).child(String(machineSpaces.length)))
         .child(div().text_size(9).text_color(t.muted).child(state));
     });
+    if(this.computers?.tailscale){
+      for(const peer of this.tailscalePeers??[]){
+        const state=peer.online===null ? (this.lang()==='ko'?'상태 미확인':'Unknown')
+          : peer.online ? (this.lang()==='ko'?'온라인':'Online') : (this.lang()==='ko'?'오프라인':'Offline');
+        computerRows.push(h_flex().id(`sf-tailscale-${peer.name}`).h(36).px(7).gap(6).items_center()
+          .tooltip(`${peer.host} · ${(peer.ips??[]).join(', ')} · ${peer.os}\nTailscale ${state}\n${this.lang()==='ko'?'목록 표시 전용 · 원격 셸 미연결':'Discovery only · remote shell not connected'}`)
+          .child(div().text_size(10).text_color(peer.online===true?t.done:t.dim).child(peer.online===true?'●':'○'))
+          .child(v_flex().flex_1().min_w(0)
+            .child(div().truncate().text_size(11).font_bold().child(peer.name))
+            .child(div().text_size(9).text_color(t.muted).child(`Tailscale ${state} · ${this.lang()==='ko'?'셸 미연결':'No shell'}`))));
+      }
+      if(this.tailscaleError)computerRows.push(div().px(7).text_size(10).text_color(t.blocked)
+        .child(this.lang()==='ko'?'Tailscale 상태 확인 불가':'Tailscale status unavailable'));
+    }
     const groups=workspaceList.map(s=>({s,members:priority(s.tabs.flatMap(tab=>all.filter(p=>p.tab===tab.id)))}));
     const positions={};let offset=0;
     for(const {s,members} of groups){
