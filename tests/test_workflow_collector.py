@@ -5,7 +5,7 @@ import json
 import tempfile
 import sqlite3
 import time
-from unittest.mock import patch
+from unittest.mock import patch, Mock
 
 spec=importlib.util.spec_from_file_location('workflow_collector',Path(__file__).parents[1]/'scripts/collect_workflow.py')
 collector=importlib.util.module_from_spec(spec)
@@ -13,6 +13,13 @@ spec.loader.exec_module(collector)
 
 
 class WorkflowCollectorTests(unittest.TestCase):
+    def test_background_core_queries_suppress_windows_console_windows(self):
+        with patch.object(collector.subprocess, 'run', return_value=Mock(stdout='{}')) as run, \
+             patch.object(collector.subprocess, 'CREATE_NO_WINDOW', 0x08000000, create=True):
+            self.assertEqual(collector.hc('ls', '--json'), {})
+        self.assertEqual(run.call_args.kwargs['creationflags'], 0x08000000)
+        self.assertEqual(run.call_args.args[0], [collector.HC, 'ls', '--json'])
+
     def test_same_pty_and_agent_pid_can_switch_session(self):
         terminal = {'address': 't4', 'agent': 'codex'}
         cache = {}

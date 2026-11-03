@@ -31,7 +31,8 @@ INTERVAL = 3
 
 
 def hc(*args):
-    result = subprocess.run([HC, *args], capture_output=True, text=True, encoding='utf-8', timeout=10)
+    result = subprocess.run([HC, *args], capture_output=True, text=True, encoding='utf-8', timeout=10,
+                            creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
     return json.loads(result.stdout or '{}')
 
 
@@ -190,10 +191,12 @@ def bridged_session(address, kind):
     except (OSError, ValueError, KeyError, StopIteration):
         return None
     if kind == 'claude':
-        output = subprocess.run([HERDR, 'pane', 'get', pane], capture_output=True, text=True, timeout=10).stdout
+        output = subprocess.run([HERDR, 'pane', 'get', pane], capture_output=True, text=True, timeout=10,
+                                creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0)).stdout
         result = json.loads(output or '{}').get('result', {})
         return ((result.get('pane') or result).get('agent_session') or {}).get('value')
-    output = subprocess.run([HERDR, 'pane', 'process-info', '--pane', pane], capture_output=True, text=True, timeout=10).stdout
+    output = subprocess.run([HERDR, 'pane', 'process-info', '--pane', pane], capture_output=True, text=True, timeout=10,
+                            creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0)).stdout
     pids = [int(pid) for pid in re.findall(r'"pid":\s*(\d+)', output)]
     return codex_thread(pids)
 
