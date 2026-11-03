@@ -48,6 +48,8 @@ export default class SixfoldDesk extends View {
     this.queuedRoutes = [];
     this.routeScript = null;
     this.routeBusy = false;
+    this.collaborationScript = null;
+    this.collaborationBusy = false;
     this.readMessages = {};
     if (props()?.role !== 'sidebar') return;
     this.projectDocs=null;
@@ -69,12 +71,13 @@ export default class SixfoldDesk extends View {
             ? JSON.stringify({events:herdrNative.messageEvents()})
             : await readTextFile(`${appHome()}/data/sixfold/messages.json`).catch(()=>null) || '{"events":[]}';
           const routing = await readTextFile(`${appHome()}/data/sixfold/routing.json`).catch(()=>null) || 'null';
+          const collaborationText = await readTextFile(`${appHome()}/data/sixfold/collaboration.json`).catch(()=>null) || 'null';
           const queue = await readTextFile(`${appHome()}/data/sixfold/routing-queue.json`).catch(()=>null) || '{"requests":[]}';
           const workflowText = await readTextFile(`${appHome()}/data/sixfold/workflow.json`).catch(()=>null) || '{"nodes":[],"events":[]}';
           const iconText = await readTextFile(`${appHome()}/data/sixfold/workspace-icons.json`).catch(()=>null) || '{}';
           const pinText = await readTextFile(`${appHome()}/data/sixfold/workspace-pins.local.json`).catch(()=>null) || '{"spaces":[]}';
           const computerText = await readTextFile(`${appHome()}/data/sixfold/computers.local.json`).catch(()=>null) || '{}';
-          const snapshot = JSON.stringify([text, routing, queue, workflowText, iconText, computerText, pinText, terminals().map(item=>item.address)]);
+          const snapshot = JSON.stringify([text, routing, collaborationText, queue, workflowText, iconText, computerText, pinText, terminals().map(item=>item.address)]);
           if (snapshot === this.messageSnapshot) return;
           const events = JSON.parse(text).events ?? [];
           try { this.workspaceIcons = JSON.parse(iconText); } catch { /* Keep the last valid icons. */ }
@@ -88,6 +91,8 @@ export default class SixfoldDesk extends View {
           } catch { /* Keep computer labels through partial writes. */ }
           const optional=(text,fallback)=>{try{return JSON.parse(text);}catch{return fallback;}};
           const config = optional(routing,{script:this.routeScript});
+          const collaboration = optional(collaborationText,null);
+          this.collaborationScript = collaboration?.enabled === true && typeof collaboration.script === "string" ? collaboration.script : null;
           const requests = optional(queue,{requests:this.queuedRoutes}).requests ?? [];
           const addresses = new Set(terminals().map(item => item.address));
           const workflow = optional(workflowText,{nodes:this.workflowNodes,events:this.workflowEvents});
@@ -157,6 +162,16 @@ export default class SixfoldDesk extends View {
       cx.spawn(async cx => {
         try { await exec('python3',[this.routeScript,'--drain']); }
         finally { this.routeBusy = false; }
+      });
+    });
+    // Registered work uses its own lease ledger; never infer tasks from speech or UI activity.
+    cx.timer.every(2000, cx => {
+      if (this.collaborationBusy || !this.collaborationScript) return;
+      this.collaborationBusy = true;
+      cx.spawn(async cx => {
+        try { await exec('python3',[this.collaborationScript,'drain']); }
+        catch { /* The durable lease prevents blind retry after ambiguous delivery. */ }
+        finally { this.collaborationBusy = false; }
       });
     });
     // Optional voice integration is opt-in and runs only from this one sidebar.
