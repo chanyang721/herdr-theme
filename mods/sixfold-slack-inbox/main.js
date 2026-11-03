@@ -1,12 +1,13 @@
 import { View, div, image } from 'gpui-kit';
 import { h_flex, v_flex } from 'gpui-base';
 import { theme, props, appHome, readTextFile, writeTextFile, shared, setShared, openOverlay, closeOverlay, exec } from 'herdr';
+import { readable, threadGroups } from './model.js';
 
 export default class MentionInbox extends View {
   init(_props,cx) {
-    this.items=[];
+    this.items=[];this.project=null;this.onlyUnread=true;this.expanded=new Set();this.error='';
     if(props()?.overlay && !props()?.window && !props()?.newMessages){
-      openOverlay({mod:'sixfold-slack-inbox',kind:'window',key:'slack-mentions',keep:true,width:760,height:620,props:{window:true}});
+      openOverlay({mod:'sixfold-slack-inbox',kind:'window',key:'slack-mentions',keep:true,width:1040,height:800,props:{window:true}});
       closeOverlay(props().overlay);
     }
     let busy=false,previous;
@@ -15,39 +16,80 @@ export default class MentionInbox extends View {
       busy=true;
       cx.spawn(async cx=>{
         try{
-          const file=props()?.newMessages ? 'project-alerts.json' : 'slack-mentions.json';
+          const file=props()?.newMessages?'project-alerts.json':'slack-mentions.json';
           const text=await readTextFile(`${appHome()}/data/sixfold/${file}`);
-          if(text===previous)return;
-          const data=JSON.parse(text);
-          this.items=(data.items ?? []).filter(i=>!props()?.project || i.project.toLowerCase()===props()?.project.toLowerCase());this.scope=data.scope;
-          previous=text;cx.notify();
+          const readText=await readTextFile(`${appHome()}/data/sixfold/slack-alerts-read.json`).catch(()=>'{}');
+          const snapshot=JSON.stringify([text,readText]);
+          if(snapshot===previous)return;
+          const data=JSON.parse(text);const read=JSON.parse(readText || '{}');
+          this.items=(data.items ?? []).filter(i=>!props()?.project || i.project.toLowerCase()===props().project.toLowerCase());
+          this.scope=data.scope;setShared('sixfold.alertRead',read);
+          previous=snapshot;cx.notify();
         }catch{/* Preserve the last valid snapshot through collector writes. */}
         finally{busy=false;}
       });
     };
     refresh(cx);cx.timer.every(2000,refresh);
   }
+  async mark(group) {
+    const path=`${appHome()}/data/sixfold/slack-alerts-read.json`;
+    // Re-read immediately so a second window's acknowledgements are retained.
+    const old=await readTextFile(path).catch(()=>null);const read=old?JSON.parse(old):{};
+    for(const item of group.items)read[item.id]=item.id;
+    await writeTextFile(path,JSON.stringify(read),old);setShared('sixfold.alertRead',read);
+  }
   render(){
-    const t=theme();
-    return v_flex().id('sf-mentions').size_full().p(16).gap(10).bg(t.chrome).text_color(t.foreground)
-      .child(h_flex().gap(8).items_center()
-        .child(image('mods/sixfold-desk/icons/slack.svg').size(20))
-        .child(div().flex_1().font_bold().text_size(16).child(`${props()?.newMessages ? props()?.project+' · 새 메시지' : '나를 태그한 메시지'} · ${this.items.length}`))
-        .child(div().id('sf-mentions-close').px(8).py(4).text_size(12).text_color(t.accent).on_click(()=>closeOverlay(props()?.overlay)).child('닫기')))
-      .child(div().text_size(10).text_color(t.muted).child(this.scope || (props()?.newMessages ? '연결된 채널에서 새로 도착한 메시지입니다.' : '직접 확인한 멘션 · 처리 여부는 원문을 확인하세요.')))
-      .child(v_flex().id('sf-mentions-scroll').flex_1().min_h(0).overflow_y_scroll().gap(8)
-        .when(this.items.length===0,e=>e.child(div().text_size(12).text_color(t.muted).child('새로 도착한 메시지가 없습니다.')))
-        .children(this.items.map(item=>v_flex().id(`sf-mention-${item.id}`).p(10).gap(5).rounded(5).bg(t.surface)
-          .child(div().text_size(13).font_bold().child(`${item.project} · ${item.channel_name || item.channel}`))
-          .child(div().text_size(10).text_color(t.muted).child(`${item.author || ''} · ${item.at || ''}`))
-          .child(div().text_size(12).child((item.text || '').replace(/<@[^>|]+\|([^>]+)>/g,'@$1').replace(/<@U0C65183V1U>/g,'@이찬양').replace(/<(https?:[^>|]+)\|([^>]+)>/g,'$2')))
-          .when(props()?.newMessages,e=>e.child(div().id(`sf-read-${item.id}`).py(4).text_size(11).text_color(t.accent)
-            .on_click((_event,cx)=>cx.spawn(async()=>{
-              const path=`${appHome()}/data/sixfold/slack-alerts-read.json`;
-              const old=await readTextFile(path).catch(()=>null);const read=old?JSON.parse(old):{};
-              read[item.id]=item.id;await writeTextFile(path,JSON.stringify(read),old);setShared('sixfold.alertRead',read);
-            })).child((shared('sixfold.alertRead') ?? {})[item.id]===item.id?'확인함':'확인했어요')))
-          .when(/^https:\/\/lukukuworkspace\.slack\.com\/archives\//.test(item.link || ''),e=>e.child(div().id(`sf-mention-source-${item.id}`).py(4).text_size(11).text_color(t.accent)
-            .on_click((_event,cx)=>cx.spawn(async()=>{await exec('open',[item.link]);})).child('원문 보기'))))));
+    const t=theme(),read=shared('sixfold.alertRead') ?? {};
+    const groups=threadGroups(this.items,read),unread=groups.filter(g=>g.unread>0).length;
+    const projects=[...new Set(groups.map(g=>g.project))];
+    const color=name=>name.toLowerCase()==='peaceminusone'?t.ansi6:name.toLowerCase()==='medihomes'?t.ansi5:t.muted;
+    const shown=groups.filter(g=>(!this.project || g.project===this.project) && (!this.onlyUnread || g.unread>0));
+    const button=(id,label,selected,action)=>div().id(id).px(12).py(7).rounded(5).text_size(13).font_semibold()
+      .bg(selected?t.selected:t.surface).text_color(selected?t.accent:t.muted).hover(s=>s.bg(t.hover)).on_click(action).child(label);
+    return v_flex().id('sf-mentions').size_full().p(20).gap(12).bg(t.chrome).text_color(t.foreground)
+      .child(h_flex().gap(10).items_center()
+        .child(image('mods/sixfold-desk/icons/slack.svg').size(26))
+        .child(div().flex_1().font_bold().text_size(21).child(props()?.newMessages?`${props()?.project} · 새 메시지`:'나를 태그한 스레드'))
+        .child(div().px(10).py(5).rounded(5).bg(t.selected).text_color(t.accent).font_bold().text_size(15).child(`미확인 ${unread}`))
+        .child(button('sf-mentions-close','닫기',false,()=>closeOverlay(props()?.overlay))))
+      .child(div().text_size(12).text_color(t.muted).child('미확인은 이 팝업에서 확인하지 않은 스레드입니다. Slack 앱의 읽음 상태와 별도로 관리합니다.'))
+      .child(h_flex().gap(7).items_center()
+        .child(button('sf-filter-all-projects',`전체 ${groups.length}`,!this.project,(_e,cx)=>{this.project=null;cx.notify();}))
+        .children(projects.map(project=>button(`sf-filter-${project}`,`${project} · ${groups.filter(g=>g.project===project && g.unread>0).length} 미확인`,this.project===project,(_e,cx)=>{this.project=project;cx.notify();}).text_color(color(project)))))
+      .child(h_flex().gap(7).items_center()
+        .child(button('sf-filter-unread','미확인만',this.onlyUnread,(_e,cx)=>{this.onlyUnread=true;cx.notify();}))
+        .child(button('sf-filter-all','확인한 스레드 포함',!this.onlyUnread,(_e,cx)=>{this.onlyUnread=false;cx.notify();}))
+        .child(div().flex_1())
+        .child(div().text_size(12).text_color(t.muted).child(`${groups.length}개 스레드 · ${this.items.length}개 멘션`)))
+      .when(Boolean(this.error),e=>e.child(div().text_size(12).text_color(t.blocked).child(this.error)))
+      .child(v_flex().id('sf-mentions-scroll').flex_1().min_h(0).overflow_y_scroll().gap(15)
+        .when(shown.length===0,e=>e.child(div().p(20).text_size(15).text_color(t.muted).child('이 조건에 해당하는 미확인 스레드가 없습니다.')))
+        .children(projects.filter(p=>shown.some(g=>g.project===p)).map(project=>v_flex().id(`sf-group-${project}`).gap(9)
+          .child(h_flex().gap(8).items_center().py(5)
+            .child(div().w(5).h(22).rounded(2).bg(color(project)))
+            .child(div().font_bold().text_size(18).text_color(color(project)).child(project==='미연결'?'연결된 워크스페이스 없음':project))
+            .child(div().text_size(12).text_color(t.muted).child(`${shown.filter(g=>g.project===project).length}개 스레드`)))
+          .children(shown.filter(g=>g.project===project).map(group=>{
+            const expanded=this.expanded.has(group.key),latest=group.latest;
+            const body=readable(latest.text),preview=body.length>260?body.slice(0,260)+'…':body;
+            return v_flex().id(`sf-thread-${group.key}`).p(14).gap(9).rounded(7).bg(t.surface).border(1).border_color(group.unread?color(project):t.border)
+              .child(h_flex().gap(8).items_center()
+                .child(div().px(8).py(3).rounded(4).bg(group.unread?t.selected:t.chrome).text_color(group.unread?t.accent:t.muted).text_size(12).font_bold().child(group.unread?`● 미확인 ${group.unread}건`:'✓ 확인함'))
+                .child(div().font_bold().text_size(14).child(group.channel))
+                .child(div().flex_1())
+                .child(div().text_size(11).text_color(t.muted).child(`${latest.at || ''} · 멘션 ${group.items.length}건`)))
+              .child(div().text_size(16).font_bold().child(group.title.length>105?group.title.slice(0,105)+'…':group.title))
+              .child(div().text_size(12).text_color(t.muted).child((latest.author || '작성자 미확인').replace(/ <[^>]+>/g,'')))
+              .child(div().text_size(14).child(preview))
+              .when(expanded,e=>e.child(v_flex().gap(10).pt(8).border_t(1).border_color(t.border)
+                .children(group.items.map(item=>v_flex().id(`sf-detail-${item.id}`).gap(4)
+                  .child(div().text_size(11).text_color(t.muted).child(`${item.at || ''} · ${item.author || ''}`))
+                  .child(div().text_size(14).child(readable(item.text)))))))
+              .child(h_flex().gap(7)
+                .child(button(`sf-expand-${group.key}`,expanded?'본문 접기':`스레드 멘션 ${group.items.length}건 보기`,expanded,(_e,cx)=>{expanded?this.expanded.delete(group.key):this.expanded.add(group.key);cx.notify();}))
+                .when(/^https:\/\/lukukuworkspace\.slack\.com\/archives\//.test(latest.link || ''),e=>e.child(button(`sf-source-${group.key}`,'원문 열기',false,(_e,cx)=>cx.spawn(async()=>{await exec('open',[latest.link]);}))))
+                .when(group.unread>0,e=>e.child(button(`sf-read-${group.key}`,'이 스레드 확인',true,(_e,cx)=>cx.spawn(async()=>{try{await this.mark(group);this.error='';}catch{this.error='확인 상태를 저장하지 못했습니다. 다시 눌러 주세요.';}cx.notify();})))));
+          })))))
+      .child(div().text_size(11).text_color(t.dim).child(this.scope || '원문을 직접 확인한 메시지만 표시합니다.'));
   }
 }
