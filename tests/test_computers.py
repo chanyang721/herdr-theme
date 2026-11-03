@@ -13,13 +13,16 @@ spec.loader.exec_module(collector)
 
 
 class ComputersTest(unittest.TestCase):
-    def test_desktop_names_status_and_mobile_exclusion(self):
+    def test_desktop_and_mobile_names_preserve_network_status(self):
         peers = collector.computers({'BackendState':'Running', 'Peer':{
             'a':{'DNSName':'desktop-test.tail.example.', 'HostName':'DESKTOP-TEST', 'OS':'windows','Online':True},
             'b':{'HostName':'offline', 'OS':'linux','Online':False},
             'c':{'HostName':'phone', 'OS':'iOS','Online':True},
+            'd':{'HostName':'tablet', 'OS':'iPadOS','Online':False},
+            'e':{'HostName':'android', 'OS':'android'},
         }})
-        self.assertEqual([(p['name'],p['online']) for p in peers], [('desktop-test',True),('offline',False)])
+        self.assertEqual([(p['name'],p['online']) for p in peers],
+                         [('android',None),('desktop-test',True),('offline',False),('phone',True),('tablet',False)])
         with self.assertRaises(ValueError):
             collector.computers({'BackendState':'Stopped'})
 
