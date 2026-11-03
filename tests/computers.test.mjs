@@ -44,7 +44,8 @@ test('computer selection scopes workspaces and agents and restores each selectio
     .replace(/import \* as herdrNative from 'herdr';/,'const herdrNative=globalThis.__computersRuntime;')
     .replace(/import \{([^}]+)\} from 'herdr';/,'const {$1}=globalThis.__computersRuntime;')
     .replace(/import \{[^}]*\} from '.\/docs.js';/,'const currentDocs=()=>null;const docsSection=()=>null;const prepareDocsInput=()=>{};')
-    .replace(/import \{ watchAlerts, alertSection, visibleAlerts \} from '.\/alerts.js';/,'const visibleAlerts=()=>[];');
+    .replace(/import \{ watchAlerts, alertSection, visibleAlerts \} from '.\/alerts.js';/,'const visibleAlerts=()=>[];')
+    .replace(/import .* from '.\/alert-inbox.js';/,'const alertBadge=()=>null, receiver=()=>null;');
   for(const name of ['model','flow','workflow','pipeline','sidebar-identity'])source=source.replace(`'./${name}.js'`,JSON.stringify(new URL(`../mods/sixfold-desk/${name}.js`,import.meta.url).href));
   // A path is never painted in this test; avoid loading the native path builder.
   source=source.replace(/import \{ pipeline \} from [^;]+;/,'const pipeline=()=>{throw Error("unexpected path");};');
@@ -77,7 +78,8 @@ test('computer selection scopes workspaces and agents and restores each selectio
     rows.get('sf-computer-remote:empty').click();render();
     assert(rows.has('sf-empty-workspaces'));assert(!rows.has('sf-space-home-a'));
     assert(!rows.has('sf-computer-remote:offline'),'disconnected machines start collapsed');
-    assert(rows.has('sf-compact-remote:offline'));
+    assert(!rows.has('sf-computers-summary'));
+    assert(![...rows.keys()].some(key=>key.startsWith('sf-compact-')));
     rows.get('sf-computers-toggle').click();render();
     assert(rows.has('sf-computers-other'));
     rows.get('sf-computer-remote:offline').click();render();
@@ -95,16 +97,21 @@ test('computer selection scopes workspaces and agents and restores each selectio
     assert.equal(calls.length,beforeSelection);
     rows.get('sf-computers-toggle').click();render();
     assert(!rows.has('sf-computers-other'));
-    assert(!rows.has('sf-tailscale-desktop-test'),'online but unregistered peers stay in the compact group');
-    assert(rows.has('sf-compact-tailscale:desktop-test'));
+    assert(!rows.has('sf-tailscale-desktop-test'),'online but unregistered peers stay hidden');
+    assert(!rows.has('sf-compact-tailscale:desktop-test'));
     view.tailscalePeers.push(...Array.from({length:10},(_,i)=>({name:`offline-${i}`,os:'ios',online:false})));
     view.tailscalePeers.push({name:'unknown',os:'linux',online:null});
     render();
-    assert.equal([...rows.keys()].filter(key=>key.startsWith('sf-compact-')).length,3,'icon strip stays bounded with many peers');
-    assert(rows.has('sf-compact-tailscale:desktop-test'),'selected peer stays visible');
+    assert.equal([...rows.keys()].filter(key=>key.startsWith('sf-compact-')).length,0,'collapsed devices have no icons regardless of count or selection');
+    assert(![...rows.keys()].some(key=>key.startsWith('sf-tailscale-')));
     assert.equal(calls.length,beforeSelection);
     view.tailscaleError=true;render();
-    assert(rows.has('sf-computers-summary'));
+    assert(!rows.has('sf-computers-summary'));
+    assert(!rows.has('sf-computers-error'));
+    rows.get('sf-computers-toggle').click();render();
+    assert(rows.has('sf-computers-error'));
+    assert(rows.has('sf-tailscale-unknown'));
+    assert(rows.has('sf-tailscale-offline-9'));
     view.computers={tailscale:false};render();
     assert(!rows.has('sf-tailscale-desktop-test'));
     view.computers={local:{label:'My PC'},machines:{worker:{label:'Build',folder:'/projects'}}};
