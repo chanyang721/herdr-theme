@@ -1,6 +1,6 @@
 import { div } from 'gpui-kit';
 import { h_flex, v_flex } from 'gpui-base';
-import { run, readTextFile, writeTextFile, appHome, setShared } from 'herdr';
+import { run, readTextFile, writeTextFile, appHome, setShared, openOverlay } from 'herdr';
 
 const SHOWN = new Set(['needs-you']);  // Only what a person must decide; the rest stays in the project.
 const MARKS = { 'needs-you': '!', info: '✓', processing: '●' };
@@ -13,6 +13,7 @@ export function visibleAlerts(items, limit = 6) {
 export function watchAlerts(view, cx) {
   let loading = false;
   let previous;
+  let mentionIds;
   const refresh = cx => {
     if (loading) return;
     loading = true;
@@ -21,11 +22,24 @@ export function watchAlerts(view, cx) {
         const legacy = await readTextFile(`${appHome()}/data/sixfold/alerts.json`).catch(()=>'{"items":[]}');
         const tracked = await readTextFile(`${appHome()}/data/sixfold/project-alerts.json`).catch(()=>'{"items":[]}');
         const readText = await readTextFile(`${appHome()}/data/sixfold/slack-alerts-read.json`).catch(()=>'{}');
-        const text=JSON.stringify([legacy,tracked,readText]);
+        const mentions=await readTextFile(`${appHome()}/data/sixfold/slack-mentions.json`).catch(()=>'{"items":[]}');
+        const health=await readTextFile(`${appHome()}/data/sixfold/slack-live-health.json`).catch(()=>'{}');
+        const workflows=await readTextFile(`${appHome()}/data/sixfold/slack-workflows.json`).catch(()=>'{"jobs":{}}');
+        const text=JSON.stringify([legacy,tracked,readText,mentions,health,workflows]);
         if (text === previous) return;
         const feed=JSON.parse(tracked || '{}');
         const items = feed.items ?? [];
         const read=JSON.parse(readText || '{}');
+        const tagged=JSON.parse(mentions || '{}').items ?? [];
+        const ids=new Set(tagged.map(i=>i.id));
+        const fresh=mentionIds && tagged.filter(i=>!mentionIds.has(i.id) && read[i.id]!==i.id);
+        const states=JSON.parse(workflows || '{}').jobs ?? {};
+        const oldStates=view.slackWorkflowStates;
+        const finished=oldStates && Object.values(states).some(job=>['ready','needs_decision','blocked'].includes(job.state) && job.finished_at!==oldStates[job.id]?.finished_at);
+        setShared('sixfold.slackHealth',JSON.parse(health || '{}'));
+        setShared('sixfold.slackWorkflows',states);
+        if(fresh?.length || finished)openOverlay({mod:'sixfold-slack-inbox',kind:'window',key:'slack-mentions',keep:true,width:1040,height:800,props:{window:true,review:Boolean(finished)}});
+        mentionIds=ids;view.slackWorkflowStates=states;
         setShared('sixfold.alertItems',items);
         setShared('sixfold.alertRead',read);
         setShared('sixfold.alertProjects',feed.projects ?? []);
