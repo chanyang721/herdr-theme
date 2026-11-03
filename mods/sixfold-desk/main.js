@@ -8,6 +8,7 @@ import { computerKind, computerStatus, tailscaleStatus, workspaceIdentity, works
 
 import { freshMessages, recentRoutes, simultaneousRoutes, crossMachine, followComputer, terminalMachine } from './flow.js';
 import { pipeline } from './pipeline.js';
+import { machineCounts, collaborations } from './collab.js';
 import { workflowNodes, delegationEvents, workflowStatus, sessionChildren, activeWorkflow } from './workflow.js';
 import { watchDocs, currentDocs, docsSection, prepareDocsInput } from './docs.js';
 import { watchAlerts, alertSection, visibleAlerts } from './alerts.js';
@@ -402,8 +403,17 @@ export default class SixfoldDesk extends View {
           .when(active && shared('sixfold.motion')!==false,e=>e.loop('top',{from:0,to:2,period:900})));
     };
     const section = text => div().px(12).pt(13).pb(6).text_size(10).font_bold().text_color(t.dim).child(text);
+    const agentList = agents(), spaceList = spaces();
+    const machineAgents = machineCounts(agentList, spaceList);
+    // Same-named projects with working agents on two computers. Names only: not a message route.
+    const collabs = collaborations(agentList, spaceList, machine => machine === null ? null : this.computerLabel(machine));
+    const collabColor = t.foreground;
+    const collabNote = this.lang()==='ko' ? '같은 프로젝트 동시 작업 표시 · 메시지 전달 증거 아님' : 'Same project worked on at once · not evidence of messages';
+    const collabText = project => `${project.name}: ${project.machines.map(m => this.computerLabel(m)).join(' ↔ ')}`;
     const computerItems = (typeof herdrNative.machines === 'function' ? herdrNative.machines() : [{name:null,layout:'ready'}]).map(machine => {
       const name = machine.name;
+      const agentCount = machineAgents.get(name) ?? { blocked: 0, done: 0, working: 0, idle: 0 };
+      const sharedProjects = collabs.filter(project => project.machines.includes(name));
       const displayName = this.computerLabel(name);
       const machineSpaces = spaces().filter(space => (space.machine ?? null) === name);
       const selected = selectedComputer === (name === null ? 'local' : `remote:${name}`);
@@ -414,13 +424,18 @@ export default class SixfoldDesk extends View {
       const key = name === null ? 'local' : `remote:${name}`;
       let row = h_flex().id(`sf-computer-${key}`).h(38).flex_none().px(7).gap(6).items_center().rounded(4)
         .bg(selected ? t.selected : t.surface).hover(style => style.bg(t.hover))
-        .tooltip(`${displayName}${name === null ? '' : ` · ${name}`}\n${state}${name === null ? '' : (this.lang()==='ko'?' · Herdr 원격 등록됨':' · Registered in Herdr')}`)
+        .tooltip(`${displayName}${name === null ? '' : ` · ${name}`}\n${state}${name === null ? '' : (this.lang()==='ko'?' · Herdr 원격 등록됨':' · Registered in Herdr')}\n${['working','done','blocked','idle'].map(status => `${w[status]} ${agentCount[status]}`).join(' · ')}`)
         .on_mouse_down('left', (_event, cx) => cx.stop_propagation())
         .on_click(() => this.selectComputer(key))
         .child(svg(`mods/sixfold-desk/icons/device-${kind}.svg`).size(14).flex_none().text_color(name===null||ready||machine.layout==='loading'?t.accent:t.dim).when(machine.layout==='loading',icon=>icon.opacity(0.5)))
         .child(v_flex().flex_1().min_w(0)
           .child(div().truncate().text_size(11).font_bold().child(displayName))
-          .child(div().truncate().text_size(9).text_color(t.muted).child(state)))
+          .child(h_flex().min_w(0).gap(6).items_center()
+            .children(['working','done','blocked','idle'].filter(status => agentCount[status] > 0).map(status => this.badge(status, String(agentCount[status]), t, 9)))
+            .child(div().flex_1().min_w(0).truncate().text_size(9).text_color(t.muted).child(state))))
+        .when(sharedProjects.length > 0, el => el.child(div().flex_none().px(3).rounded(3).border(1).border_dashed().border_color(collabColor).opacity(0.7)
+          .text_size(9).text_color(collabColor).tooltip(`${sharedProjects.map(collabText).join('\n')}\n${collabNote}`)
+          .child(this.lang()==='ko' ? '협업 중' : 'Shared')))
         .child(div().flex_none().text_size(9).text_color(t.dim).child(String(machineSpaces.length)));
       const hop = remoteRoutes.find(item => item.hop.from === name || item.hop.to === name);
       if (hop) {
@@ -432,7 +447,7 @@ export default class SixfoldDesk extends View {
             .tooltip(this.lang()==='ko' ? (incoming ? '다른 컴퓨터에서 메시지 수신' : '다른 컴퓨터로 메시지 전송') : (incoming ? 'Message from another computer' : 'Message to another computer'))
             .child(incoming ? '⇣' : '⇡'));
       }
-      return {row, active:name===null || ready || machine.layout==='loading'};
+      return {row, name, active:name===null || ready || machine.layout==='loading'};
     });
     if(this.computers?.tailscale){
       for(const peer of this.tailscalePeers??[]){
@@ -589,7 +604,17 @@ export default class SixfoldDesk extends View {
       .child(h_flex().px(12).py(11).gap(16).flex_none().justify_center().font_bold().children(['blocked','done','working'].map(s => this.badge(s,String(total[s]),t,14))))
       .child(v_flex().id('sf-scroll').flex_1().min_h(0).overflow_y_scroll()
         .child(computerSection)
-        .child(v_flex().flex_none().px(7).pb(6).gap(3).children(computerRows))
+        .child(v_flex().relative().flex_none().px(7).pb(6).gap(3).children(computerRows)
+          // A dashed, still bracket in the left gutter joins computers sharing a project.
+          // Message routes are solid moving curves beside the workspace list.
+          .children(collabs.slice(0, 3).map((project, index) => {
+            const rows = project.machines.map(m => activeComputers.findIndex(item => item.name === m)).filter(i => i >= 0);
+            if (rows.length < 2) return null;
+            const first = Math.min(...rows), last = Math.max(...rows);
+            return div().id(`sf-collab-${index}`).absolute().left(1 + index * 2).top(first * 41 + 12).w(4).h((last - first) * 41 + 14)
+              .border_l(1).border_t(1).border_b(1).border_dashed().border_color(collabColor).opacity(0.6)
+              .tooltip(`${collabText(project)}\n${collabNote}`);
+          }).filter(Boolean)))
         .child(section(`${discoveryOnly?selectedComputer.slice(10):this.computerLabel(selectedMachine)} · ${w.spaces}`)).child(workspaceTree)
         .when(workspaceList.length===0,e=>e.child(v_flex().id('sf-empty-workspaces').px(12).pb(12).gap(5)
           .child(div().text_size(11).text_color(t.muted).child(this.lang()==='ko'?(discoveryOnly?'등록 안 됨, 워크스페이스 없음':'워크스페이스 없음'):(discoveryOnly?'Unregistered, no workspaces':'No workspaces')))
