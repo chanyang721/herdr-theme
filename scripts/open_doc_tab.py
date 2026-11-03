@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Open a local document in its project's 문서 tab instead of an external editor."""
 import argparse
+import fcntl
 import json
 import os
 from pathlib import Path
@@ -16,9 +17,12 @@ def normalized(value):
     return unicodedata.normalize('NFC', str(value)).lower()
 
 
-def choose_space(config, file, wanted=None):
-    """Return the space id whose document folders or pins own the file."""
-    spaces = config.get('spaces', {})
+def choose_space(config, file, wanted=None, live=None):
+    """Return the space id whose document folders or pins own the file.
+
+    live limits the choice to spaces that exist now; rules of removed spaces stay in the config.
+    """
+    spaces = {k: v for k, v in config.get('spaces', {}).items() if live is None or k in live}
     if wanted:
         for space_id, settings in spaces.items():
             if wanted in (space_id, settings.get('name')):
@@ -66,18 +70,27 @@ def main():
     if not (app/'mods'/MOD/'main.js').exists():
         parser.error('install the document tabs first: python3 scripts/install_doc_tabs.py --install')
     config = json.loads((app/'data/sixfold/project-docs-pins.json').read_text())
-    space_id = choose_space(config, file, args.space)
+    listing = json.loads(subprocess.check_output(['herdr-app', 'ls'], text=True))
+    live = {space['id'] for space in listing.get('spaces', []) if docs_tab(listing, space['id'])}
+    space_id = choose_space(config, file, args.space, live)
     if not space_id:
         status = json.loads(subprocess.check_output(['herdr-app', 'status'], text=True))
         space_id = status['space']
-    listing = json.loads(subprocess.check_output(['herdr-app', 'ls'], text=True))
     tab = docs_tab(listing, space_id)
     if not tab:
         raise SystemExit(f'No 문서 tab in space {space_id}; run scripts/install_doc_tabs.py --install')
     path = app/'data/sixfold'/REQUEST
-    tmp = path.with_suffix('.tmp')
-    tmp.write_text(json.dumps({'spaceId': space_id, 'path': str(file), 'at': time.time_ns() // 1_000_000}, ensure_ascii=False))
-    tmp.replace(path)
+    # One request per space, so opening documents in two spaces at once keeps both.
+    with path.with_suffix('.lock').open('a') as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        try:
+            requests = json.loads(path.read_text()).get('requests', {})
+        except (OSError, ValueError, AttributeError):
+            requests = {}
+        requests[space_id] = {'path': str(file), 'at': time.time_ns() // 1_000_000}
+        tmp = path.with_suffix('.tmp')
+        tmp.write_text(json.dumps({'version': 2, 'requests': requests}, ensure_ascii=False))
+        tmp.replace(path)
     if not args.no_show:
         subprocess.run(['herdr-app', 'do', 'tab.select', '--id', tab], check=True, capture_output=True, text=True)
     print(json.dumps({'space': space_id, 'tab': tab, 'file': str(file), 'shown': not args.no_show}, ensure_ascii=False))

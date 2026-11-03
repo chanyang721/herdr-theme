@@ -158,7 +158,7 @@ def copy_feature(repo, app_home):
             shutil.copy2(source_path, destination)
     scripts = app_home/'data/sixfold/doc-tabs'
     scripts.mkdir(parents=True, exist_ok=True)
-    for name in ('install_doc_tabs.py', 'resolve_doc_pins.py', 'collect_docs.py', 'core_api.py', 'render_mermaid.py', 'render_html.py'):
+    for name in ('install_doc_tabs.py', 'resolve_doc_pins.py', 'collect_docs.py', 'core_api.py', 'render_mermaid.py', 'render_html.py', 'open_doc_tab.py'):
         shutil.copy2(repo/'scripts'/name, scripts/name)
     try:
         compile_swift(repo/'scripts/render_html.swift', scripts/'render-html')
