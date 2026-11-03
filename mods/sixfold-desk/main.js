@@ -6,7 +6,7 @@ import { WORDS, counts, title, cycle, priority, readThrough, unreadCount } from 
 
 import { computerKind, computerStatus, tailscaleStatus, workspaceIdentity, workspacePinned } from './sidebar-identity.js';
 
-import { freshMessages, recentRoutes, simultaneousRoutes, crossMachine, followComputer, terminalMachine } from './flow.js';
+import { freshMessages, recentRoutes, simultaneousRoutes, crossMachine, followComputer, terminalMachine, machineHops, machineTraffic } from './flow.js';
 import { pipeline } from './pipeline.js';
 import { machineCounts, collaborations } from './collab.js';
 import { workflowNodes, delegationEvents, workflowStatus, sessionChildren, activeWorkflow } from './workflow.js';
@@ -410,6 +410,11 @@ export default class SixfoldDesk extends View {
     const collabColor = t.foreground;
     const collabNote = this.lang()==='ko' ? '같은 프로젝트 동시 작업 표시 · 메시지 전달 증거 아님' : 'Same project worked on at once · not evidence of messages';
     const collabText = project => `${project.name}: ${project.machines.map(m => this.computerLabel(m)).join(' ↔ ')}`;
+    // Sends between computers: counts per row for the last ten minutes, and the latest few below.
+    const sendEvents = (this.messageEvents ?? []).filter(event => !event.external);
+    const traffic = machineTraffic(sendEvents, machineOf, Date.now());
+    const hops = machineHops(sendEvents, machineOf, 4);
+    const sendNote = this.lang()==='ko' ? '전송 이벤트 · 읽음 확인 아님' : 'Send event, not a read receipt';
     const computerItems = (typeof herdrNative.machines === 'function' ? herdrNative.machines() : [{name:null,layout:'ready'}]).map(machine => {
       const name = machine.name;
       const agentCount = machineAgents.get(name) ?? { blocked: 0, done: 0, working: 0, idle: 0 };
@@ -418,34 +423,32 @@ export default class SixfoldDesk extends View {
       const machineSpaces = spaces().filter(space => (space.machine ?? null) === name);
       const selected = selectedComputer === (name === null ? 'local' : `remote:${name}`);
       const ready = machine.layout === 'ready';
-      const state = computerStatus(machine, this.lang());
+      const state = computerStatus(machine, this.lang(), window()?.platform);
       const config = name === null ? this.computers?.local : this.computers?.machines?.[name];
       const kind = name === null ? 'laptop' : computerKind(config?.os);
       const key = name === null ? 'local' : `remote:${name}`;
       let row = h_flex().id(`sf-computer-${key}`).h(38).flex_none().px(7).gap(6).items_center().rounded(4)
         .bg(selected ? t.selected : t.surface).hover(style => style.bg(t.hover))
-        .tooltip(`${displayName}${name === null ? '' : ` · ${name}`}\n${state}${name === null ? '' : (this.lang()==='ko'?' · Herdr 원격 등록됨':' · Registered in Herdr')}\n${['working','done','blocked','idle'].map(status => `${w[status]} ${agentCount[status]}`).join(' · ')}`)
+        .tooltip(`${displayName}${name === null ? '' : ` · ${name}`}\n${state}${name === null ? '' : (this.lang()==='ko'?' · Herdr 원격 등록됨':' · Registered in Herdr')}\n${['working','done','blocked','idle'].map(status => `${w[status]} ${agentCount[status]}`).join(' · ')}${sharedProjects.length ? `\n${sharedProjects.map(collabText).join('\n')}\n${collabNote}` : ''}`)
         .on_mouse_down('left', (_event, cx) => cx.stop_propagation())
         .on_click(() => this.selectComputer(key))
         .child(svg(`mods/sixfold-desk/icons/device-${kind}.svg`).size(14).flex_none().text_color(name===null||ready||machine.layout==='loading'?t.accent:t.dim).when(machine.layout==='loading',icon=>icon.opacity(0.5)))
         .child(v_flex().flex_1().min_w(0)
           .child(div().truncate().text_size(11).font_bold().child(displayName))
           .child(h_flex().min_w(0).gap(6).items_center()
-            .children(['working','done','blocked','idle'].filter(status => agentCount[status] > 0).map(status => this.badge(status, String(agentCount[status]), t, 9)))
+            .children(['working','done','blocked'].filter(status => agentCount[status] > 0).map(status => this.badge(status, String(agentCount[status]), t, 9)))
             .child(div().flex_1().min_w(0).truncate().text_size(9).text_color(t.muted).child(state))))
-        .when(sharedProjects.length > 0, el => el.child(div().flex_none().px(3).rounded(3).border(1).border_dashed().border_color(collabColor).opacity(0.7)
-          .text_size(9).text_color(collabColor).tooltip(`${sharedProjects.map(collabText).join('\n')}\n${collabNote}`)
-          .child(this.lang()==='ko' ? '협업 중' : 'Shared')))
         .child(div().flex_none().text_size(9).text_color(t.dim).child(String(machineSpaces.length)));
       const hop = remoteRoutes.find(item => item.hop.from === name || item.hop.to === name);
-      if (hop) {
-        const color = palette[hop.route.lane % palette.length];
-        const incoming = hop.hop.to === name;
-        row = row.border(1).border_color(color)
-          .when(motion, el => el.loop('opacity', { from: 0.55, to: 1, period: 900 }))
-          .child(div().flex_none().text_size(11).font_bold().text_color(color)
-            .tooltip(this.lang()==='ko' ? (incoming ? '다른 컴퓨터에서 메시지 수신' : '다른 컴퓨터로 메시지 전송') : (incoming ? 'Message from another computer' : 'Message to another computer'))
-            .child(incoming ? '⇣' : '⇡'));
+      const sent = traffic.get(name)?.sent ?? 0, received = traffic.get(name)?.received ?? 0;
+      if (hop || sent || received) {
+        const color = hop ? palette[hop.route.lane % palette.length] : t.muted;
+        const incoming = hop?.hop.to === name;
+        if (hop) row = row.border(1).border_color(color).when(motion, el => el.loop('opacity', { from: 0.55, to: 1, period: 900 }));
+        row = row.child(h_flex().flex_none().gap(3).text_size(10).font_bold().text_color(color)
+          .tooltip(`${hop ? (this.lang()==='ko' ? (incoming ? '지금 다른 컴퓨터에서 받는 중' : '지금 다른 컴퓨터로 보내는 중') : (incoming ? 'Receiving from another computer now' : 'Sending to another computer now')) + '\n' : ''}${this.lang()==='ko' ? `최근 10분 다른 컴퓨터와: 보냄 ${sent} · 받음 ${received}` : `Last 10 min with other computers: sent ${sent} · received ${received}`}\n${sendNote}`)
+          .when(sent > 0 || (hop && !incoming), el => el.child(`↑${sent || ''}`))
+          .when(received > 0 || incoming, el => el.child(`↓${received || ''}`)));
       }
       return {row, name, active:name===null || ready || machine.layout==='loading'};
     });
@@ -615,6 +618,26 @@ export default class SixfoldDesk extends View {
               .border_l(1).border_t(1).border_b(1).border_dashed().border_color(collabColor).opacity(0.6)
               .tooltip(`${collabText(project)}\n${collabNote}`);
           }).filter(Boolean)))
+        .when(collabs.length > 0 || hops.length > 0, el => el.child(v_flex().id('sf-machine-activity').flex_none().mx(7).mb(6).px(7).py(5).gap(3).rounded(4).bg(t.surface)
+          .child(div().text_size(9).font_bold().text_color(t.dim).child(this.lang()==='ko' ? '컴퓨터 간 활동' : 'ACROSS COMPUTERS'))
+          .children(collabs.map((project, index) => h_flex().id(`sf-collab-row-${index}`).gap(5).items_center().text_size(10)
+            .tooltip(`${collabText(project)}\n${collabNote}`)
+            .child(div().flex_none().px(3).rounded(3).border(1).border_dashed().border_color(collabColor).opacity(0.7).text_size(9).text_color(collabColor).child(this.lang()==='ko' ? '협업 중' : 'Shared'))
+            .child(div().flex_1().min_w(0).truncate().text_color(t.foreground).child(project.name))
+            .child(div().flex_none().text_size(9).text_color(t.muted).child(project.machines.map(m => this.computerLabel(m)).join(' ↔ ')))))
+          .children(hops.map(({event, hop}) => {
+            const live = remoteRoutes.some(item => item.route.source === event.source && item.route.target === event.target);
+            const here = hop.from === null ? 'out' : hop.to === null ? 'in' : 'via';
+            const short = address => { const p = panes().find(p => p.terminal === address); return p ? title(p) : address.split('/').pop(); };
+            const time = new Date(event.at).toTimeString().slice(0, 5);
+            return h_flex().id(`sf-hop-${event.id}`).gap(5).items_center().text_size(10)
+              .tooltip(`${label(event.source)} → ${label(event.target)}\n${new Date(event.at).toLocaleString()}${event.started === true ? (this.lang()==='ko' ? ' · 받은 쪽 작업 시작' : ' · target started working') : ''}\n${sendNote}`)
+              .child(div().flex_none().font_bold().text_color(live ? t.accent : t.muted).child(here === 'in' ? '↓' : here === 'out' ? '↑' : '⇄'))
+              .child(div().flex_none().font_bold().text_color(live ? t.foreground : t.muted).child(`${this.computerLabel(hop.from)} → ${this.computerLabel(hop.to)}`))
+              .child(div().flex_1().min_w(0).truncate().text_size(9).text_color(t.dim).child(`${short(event.source)} → ${short(event.target)}`))
+              .when(event.started === true, row => row.child(div().flex_none().text_size(9).text_color(t.done ?? t.muted).child('✓')))
+              .child(div().flex_none().text_size(9).text_color(t.dim).child(time));
+          }))))
         .child(section(`${discoveryOnly?selectedComputer.slice(10):this.computerLabel(selectedMachine)} · ${w.spaces}`)).child(workspaceTree)
         .when(workspaceList.length===0,e=>e.child(v_flex().id('sf-empty-workspaces').px(12).pb(12).gap(5)
           .child(div().text_size(11).text_color(t.muted).child(this.lang()==='ko'?(discoveryOnly?'등록 안 됨, 워크스페이스 없음':'워크스페이스 없음'):(discoveryOnly?'Unregistered, no workspaces':'No workspaces')))

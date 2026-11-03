@@ -4,6 +4,8 @@ import {computerKind, computerStatus, tailscaleStatus, workspaceIdentity, worksp
 
 test('network discovery never claims an SSH or Herdr connection', () => {
   assert.equal(computerStatus({name:null,layout:'ready'}),'이 Mac');
+  assert.equal(computerStatus({name:null,layout:'ready'},'ko','windows'),'이 컴퓨터');
+  assert.equal(computerStatus({name:null,layout:'ready'},'en','linux'),'This computer');
   assert.equal(computerStatus({name:'server',layout:'ready'}),'Herdr 원격 · 연결됨');
   assert.equal(computerStatus({name:'server',layout:'unavailable'}),'Herdr 원격 · 끊김');
   assert.equal(computerStatus({name:'server',layout:'loading'}),'Herdr 원격 · 연결 중');

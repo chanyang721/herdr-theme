@@ -10,8 +10,11 @@ export function computerKind(os, deviceName = '') {
   }
 }
 
-export function computerStatus(machine, lang = 'ko') {
-  if (machine.name == null) return lang === 'ko' ? '이 Mac' : 'This Mac';
+export function computerStatus(machine, lang = 'ko', platform = 'macos') {
+  if (machine.name == null) {
+    if (platform === 'macos') return lang === 'ko' ? '이 Mac' : 'This Mac';
+    return lang === 'ko' ? '이 컴퓨터' : 'This computer';
+  }
   const state = machine.layout === 'ready'
     ? (lang === 'ko' ? '연결됨' : 'Connected')
     : machine.layout === 'loading'
