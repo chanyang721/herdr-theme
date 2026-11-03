@@ -68,3 +68,32 @@ export function followComputer(state, focusKey, saved) {
   if (state.follow || !valid) return focusKey;
   return saved;
 }
+
+// Sends between computers as seen here, newest first.
+export function machineHops(events, machineOf, limit = 4) {
+  const result = [];
+  for (let index = events.length - 1; index >= 0 && result.length < limit; index--) {
+    const hop = crossMachine(events[index], machineOf);
+    if (hop) result.push({ event: events[index], hop });
+  }
+  return result;
+}
+
+// Per computer (null is this one): sends out to and in from other computers
+// within the last `windowMs`.
+export function machineTraffic(events, machineOf, now, windowMs = 10 * 60 * 1000) {
+  const traffic = new Map();
+  const add = (machine, key) => {
+    const count = traffic.get(machine) ?? { sent: 0, received: 0 };
+    count[key]++;
+    traffic.set(machine, count);
+  };
+  for (const event of events) {
+    if (!Number.isFinite(event.at) || now - event.at > windowMs) continue;
+    const hop = crossMachine(event, machineOf);
+    if (!hop) continue;
+    add(hop.from, 'sent');
+    add(hop.to, 'received');
+  }
+  return traffic;
+}

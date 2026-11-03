@@ -1,9 +1,19 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {computerKind, computerStatus, tailscaleStatus, workspaceIdentity, workspacePinned} from '../mods/sixfold-desk/sidebar-identity.js';
+import {computerKind, computerStatus, computerAlert, tailscaleStatus, workspaceIdentity, workspacePinned} from '../mods/sixfold-desk/sidebar-identity.js';
+
+test('a computer row has words only when its connection is not fine', () => {
+  assert.equal(computerAlert({name:null,layout:'ready'}),null);
+  assert.equal(computerAlert({name:'sub1',layout:'ready'}),null);
+  assert.equal(computerAlert({name:'sub1',layout:'loading'}),'연결 중');
+  assert.equal(computerAlert({name:'sub1',layout:'unavailable'}),'연결 끊김');
+  assert.equal(computerAlert({name:'sub1',layout:'unavailable'},'en'),'Disconnected');
+});
 
 test('network discovery never claims an SSH or Herdr connection', () => {
   assert.equal(computerStatus({name:null,layout:'ready'}),'이 Mac');
+  assert.equal(computerStatus({name:null,layout:'ready'},'ko','windows'),'이 컴퓨터');
+  assert.equal(computerStatus({name:null,layout:'ready'},'en','linux'),'This computer');
   assert.equal(computerStatus({name:'server',layout:'ready'}),'Herdr 원격 · 연결됨');
   assert.equal(computerStatus({name:'server',layout:'unavailable'}),'Herdr 원격 · 끊김');
   assert.equal(computerStatus({name:'server',layout:'loading'}),'Herdr 원격 · 연결 중');
