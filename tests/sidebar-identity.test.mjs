@@ -21,3 +21,8 @@ test('device and known workspace identities select local artwork with stable fal
   assert.deepEqual(['공통','PeaceMinusOne','Medihomes','Voice','Herdr','New project'].map(name=>workspaceIdentity({name})),
     ['hub','flower','medical','microphone','terminal',null]);
 });
+
+test('Share keeps the hub identity after renaming', () => {
+  assert.equal(workspaceIdentity({name:'Share'}), 'hub');
+  assert.equal(workspaceIdentity({id:'sp5b1f0e5ae362facabc5ac1ece5d08277',name:'Renamed'}), 'hub');
+});

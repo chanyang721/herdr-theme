@@ -57,6 +57,12 @@ class DocumentTabInstallTests(unittest.TestCase):
         config['spaces']['sp1']['custom'] = False
         self.assertTrue(existing['spaces']['sp1']['custom'])
 
+    def test_share_seed_uses_stable_identity_and_preserves_document_sources(self):
+        repo = Path(__file__).resolve().parents[1]
+        for space_id, name in [('other', 'Share'), ('sp5b1f0e5ae362facabc5ac1ece5d08277', 'Renamed')]:
+            config = installer.seed_space({'id': space_id, 'name': name}, {}, repo)
+            self.assertTrue(any(pin.get('path') == str(repo/'COMMON_ROUTING.md') for pin in config['pins']))
+
     def test_dates_follow_latest_in_exact_directory_and_keep_disk_unicode(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

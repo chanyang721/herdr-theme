@@ -26,6 +26,12 @@ def fixture():
 
 
 class RouteTests(unittest.TestCase):
+    def test_share_and_stable_space_id_survive_workspace_rename(self):
+        for space_id, name in [('common', 'Share'), ('sp5b1f0e5ae362facabc5ac1ece5d08277', 'Renamed')]:
+            spaces, live = fixture()
+            spaces[0].update(id=space_id, name=name)
+            self.assertEqual(route.candidates(spaces, live, 's2', 'Medihomes')[1], 'p2')
+
     def test_same_position_wins_then_busy_falls_back_to_same_agent_kind(self):
         spaces, live = fixture()
         self.assertEqual(route.candidates(spaces, live, 's2', '메디홈즈'),

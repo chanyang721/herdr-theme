@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 
 // Exercise the sidebar's rendered rows and their callbacks, with two machines
-// whose terminal IDs overlap. Remote IDs must stay qualified through navigation.
+// whose terminal IDs overlap. Listing a machine never changes terminal focus.
 test('computer selection scopes workspaces and agents and restores each selection', async()=>{
   const rows=new Map(),calls=[],state={};
   function element(){
@@ -53,28 +53,35 @@ test('computer selection scopes workspaces and agents and restores each selectio
     render();
     assert(rows.has('sf-space-home-a'));assert(rows.has('sf-space-home-b'));
     assert(!rows.has('sf-space-worker/a'));assert.deepEqual(order,['t1']);
-    rows.get('sf-computer-remote:worker').click();
-    assert.deepEqual(calls.at(-1),{command:'space.select',args:{id:'worker/a'}});
-    focus={space:'worker/b',tab:'worker/tb'};render();
+    const beforeSelection=calls.length;
+    rows.get('sf-computer-remote:worker').click();render();
+    assert.equal(state['sixfold.computing.selected'],'remote:worker');
     assert(rows.has('sf-space-worker/b'));assert(!rows.has('sf-space-home-b'));
     assert.deepEqual(order,['worker/t1']);
-    rows.get('sf-computer-local').click();
-    assert.deepEqual(calls.at(-1),{command:'space.select',args:{id:'home-b'}});
-    focus={space:'home-b',tab:'hb'};render();
-    rows.get('sf-computer-remote:worker').click();
-    assert.equal(calls.at(-1).args.id,'worker/b');
-    rows.get('sf-computer-remote:empty').click();
-    assert.equal(calls.at(-1).overlay.props.machine,'empty');
-    assert.equal(calls.at(-1).overlay.mod,'sixfold-new-space');
-    rows.get('sf-computer-remote:offline').click();
-    assert.deepEqual(calls.at(-1),{command:'app.settings',args:{section:'machines'}});
+    assert.deepEqual(focus,{space:'home-b',tab:'hb'});
+    // Recreate the view against persisted shared state to simulate a mod restart.
+    const restarted=new Sidebar();
+    assert.equal(restarted.selectedComputer(),'remote:worker');
+    // Even a native focus change cannot replace the explicitly chosen computer.
+    focus={space:'home-a',tab:'ha'};render();
+    assert(rows.has('sf-space-worker/a'));assert(!rows.has('sf-space-home-a'));
+    rows.get('sf-computer-local').click();render();
+    assert(rows.has('sf-space-home-b'));assert(!rows.has('sf-space-worker/b'));
+    rows.get('sf-computer-remote:empty').click();render();
+    assert(rows.has('sf-empty-workspaces'));assert(!rows.has('sf-space-home-a'));
+    rows.get('sf-computer-remote:offline').click();render();
+    assert.equal(state['sixfold.computing.selected'],'remote:offline');
+    assert(rows.has('sf-empty-workspaces'));
+    assert.equal(calls.length,beforeSelection,'computer clicks must not select spaces, open overlays, or connect');
     view.computers={tailscale:true};
     view.tailscalePeers=[{name:'desktop-test',host:'DESKTOP-TEST',ips:['100.1.2.3'],os:'windows',online:true}];
-    const beforeDiscovery=calls.length;
     render();
     assert(rows.has('sf-tailscale-desktop-test'));
-    assert.equal(rows.get('sf-tailscale-desktop-test').click,undefined);
-    assert.equal(calls.length,beforeDiscovery);
+    rows.get('sf-tailscale-desktop-test').click();render();
+    assert.equal(state['sixfold.computing.selected'],'tailscale:desktop-test');
+    assert(rows.has('sf-empty-workspaces'));assert(!rows.has('sf-space-home-a'));
+    assert(!rows.has('sf-new-space'),'unregistered peer cannot create a local workspace accidentally');
+    assert.equal(calls.length,beforeSelection);
     view.computers={tailscale:false};render();
     assert(!rows.has('sf-tailscale-desktop-test'));
     view.computers={local:{label:'My PC'},machines:{worker:{label:'Build',folder:'/projects'}}};
