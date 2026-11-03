@@ -232,3 +232,25 @@ test('html documents render as page images once and report renderer failures', a
   h.state.text = () => '<html>바뀜</html>'; h.view.load(h.cx); await h.flush();
   assert.match(h.view.bodyError, /설치되지 않았습니다/); assert.equal(h.view.blocks.length, 2, 'the last good page stays');
 });
+
+test('opened and recent tabs close; a closed recent comes back only as a newer version', async t => {
+  const recent = { ...document('r', '/docs/r.md', false), mtime: 10 };
+  const h = await harness({ documents: [document('a'), recent] }); t.after(() => h.view.close());
+  h.render(); assert.ok(!h.handlers.has('doc-close-a'), 'pinned tabs close with 고정 해제');
+  h.view.choose('r', h.cx); await h.flush(); h.render();
+  h.handlers.get('doc-close-r')(null, h.cx); await h.flush();
+  assert.deepEqual(h.view.documents.map(d => d.id), ['a']); assert.equal(h.view.selected, 'a');
+  assert.deepEqual(h.stored['sixfold.docs.closed.v1'], { Demo: { r: 10 } });
+  h.view.refresh(h.cx); await h.flush(); assert.deepEqual(h.view.documents.map(d => d.id), ['a']);
+  h.state.documents = [document('a'), { ...recent, mtime: 11 }]; h.view.refresh(h.cx); await h.flush();
+  assert.deepEqual(h.view.documents.map(d => d.id), ['a', 'r']);
+  h.view.reveal('/elsewhere/x.md'); h.render();
+  h.handlers.get('doc-close-opened-/elsewhere/x.md')(null, h.cx); await h.flush();
+  assert.equal(h.view.linked, null); assert.ok(!h.view.documents.some(d => d.opened));
+});
+
+test('a selected 열람 tab is shown again after the mod reloads', async t => {
+  const h = await harness({ selection: 'opened-/elsewhere/x.html' }); t.after(() => h.view.close());
+  assert.equal(h.view.selected, 'opened-/elsewhere/x.html');
+  assert.ok(h.view.documents.some(d => d.opened && d.path === '/elsewhere/x.html'));
+});

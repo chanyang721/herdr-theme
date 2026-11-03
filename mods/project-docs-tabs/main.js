@@ -10,6 +10,8 @@ const STATE = 'sixfold.docs.selection.v1';
 // scripts/open_doc_tab.py writes the latest open request; each space handles it once.
 const REQUEST = 'project-docs-open.json';
 const OPENED = 'sixfold.docs.opened.v1';
+// Recent documents closed per space, by id, with the version closed; a newer one comes back.
+const CLOSED = 'sixfold.docs.closed.v1';
 const isHtml = path => /\.html?$/i.test(path);
 const readable = path => /\.md$/i.test(path) || isHtml(path);
 export default class ProjectDocuments extends View {
@@ -22,6 +24,8 @@ export default class ProjectDocuments extends View {
     this.htmlScript = p.htmlScript || `${appHome()}/data/sixfold/doc-tabs/render_html.py`;
     this.documents = []; this.watchers = new Map(); this.generation = 0;
     this.selected = shared(STATE)?.[this.spaceId]; this.width = 800;
+    // A 열람 tab's id carries its path, so it survives a reload of this mod.
+    if (this.selected?.startsWith('opened-')) this.reveal(this.selected.slice('opened-'.length));
     this.refresh(cx);
     cx.timer.every(5000, cx => this.refresh(cx));
   }
@@ -39,7 +43,9 @@ export default class ProjectDocuments extends View {
         if (result.code !== 0) throw Error(result.stderr.trim() || result.stdout.trim() || '문서 목록 확인 실패');
         const data = JSON.parse(result.stdout);
         if (!Array.isArray(data.documents) || data.spaceId !== this.spaceId) throw Error('문서 목록 형식을 확인하세요.');
-        this.documents = data.documents; this.warnings = data.warnings || []; this.listError = null;
+        const closed = shared(CLOSED)?.[this.spaceId] || {};
+        this.documents = data.documents.filter(d => d.pinned || !(d.id in closed) || (d.mtime ?? 0) > closed[d.id]);
+        this.warnings = data.warnings || []; this.listError = null;
         if (this.linked) {
           const pinned = this.documents.find(d => d.path === this.linked.path);
           if (pinned) {
@@ -192,6 +198,20 @@ export default class ProjectDocuments extends View {
     });
   }
 
+  // Close a 열람 or 최근 tab; pinned ones are removed with 고정 해제.
+  dismiss(id, cx) {
+    const doc = this.documents.find(d => d.id === id);
+    if (!doc || doc.pinned) return;
+    if (doc.opened) this.linked = null;
+    else {
+      const all = shared(CLOSED) || {};
+      setShared(CLOSED, { ...all, [this.spaceId]: { ...(all[this.spaceId] || {}), [id]: doc.mtime ?? Date.now() } });
+    }
+    this.documents = this.documents.filter(d => d.id !== id);
+    if (this.selected === id) this.choose(this.documents[0]?.id, cx);
+    else cx.notify();
+  }
+
   // Select a listed document, or show an unlisted one as a temporary 열람 tab.
   reveal(path) {
     const existing = this.documents.find(d => d.path === path);
@@ -226,8 +246,12 @@ export default class ProjectDocuments extends View {
         .child(button('docs-refresh', '새로 고침', cx => this.refresh(cx)))
         .child(button('docs-settings', '고정 규칙 편집', cx => this.external('code', ['--reuse-window', this.config], cx))))
       .child(h_flex().id('docs-tabbar').h(this.documents.length > 4 ? 90 : 48).flex_none().flex_wrap().gap(4).p(8).overflow_y_scrollbar()
-        .children(this.documents.map(d => button(`doc-${d.id}`, `${d.pinned ? '◆' : d.opened ? '열람' : '최근'} ${d.label}`, cx => this.choose(d.id, cx))
-          .max_w(300).truncate().bg(d.id === this.selected ? t.selected : t.chrome))))
+        .children(this.documents.map(d => {
+          const tab = button(`doc-${d.id}`, `${d.pinned ? '◆' : d.opened ? '열람' : '최근'} ${d.label}`, cx => this.choose(d.id, cx))
+            .max_w(300).truncate().bg(d.id === this.selected ? t.selected : t.chrome);
+          return d.pinned ? tab : h_flex().flex_none().items_center().rounded(5).bg(d.id === this.selected ? t.selected : t.chrome)
+            .child(tab.pr(4)).child(button(`doc-close-${d.id}`, '×', cx => this.dismiss(d.id, cx)).px(6).text_color(t.muted));
+        })))
       .when(Boolean(this.listError), el => el.child(notice(`목록 확인 실패 · 마지막 목록 유지: ${this.listError}`)))
       .when(Boolean(this.warnings?.length), el => el.child(notice(`조회 주의: ${this.warnings.join(', ')}`)))
       .when(Boolean(this.actionError), el => el.child(notice(this.actionError)));
