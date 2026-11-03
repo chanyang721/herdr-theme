@@ -24,7 +24,7 @@ class InstallTests(unittest.TestCase):
             'layouts/sixfold.json': '{"owned":1}',
             'themes/sixfold-night.json': '{"color":"original"}',
             'themes/win98.json': '{"reference":1}',
-            **{f'scripts/{name}.py': '# helper\n' for name in ('workspace', 'core_api', 'balance_grid', 'collect_computers')},
+            **{f'scripts/{name}.py': '# helper\n' for name in ('workspace', 'core_api', 'balance_grid', 'collect_computers', 'route', 'collaborate', 'update_install')},
         }.items():
             p = self.repo/path
             p.parent.mkdir(parents=True, exist_ok=True)
