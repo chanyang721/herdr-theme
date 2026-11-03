@@ -31,6 +31,59 @@ def status_report(pane):
     return f'\x1b]7501;state={state}:app={agent}\x1b\\'.encode()
 
 
+class StreamBoundary:
+    """Track whether relayed output ends between escape sequences and characters.
+
+    Injecting a report inside a split sequence (for example between ``ESC[?100``
+    and ``6h``) cancels it in the outer terminal, so mouse or screen modes the
+    agent just set are silently lost.
+    """
+
+    def __init__(self):
+        self.state = 'ground'
+        self.utf8 = 0
+
+    def feed(self, data):
+        for byte in data:
+            if self.state == 'ground':
+                if self.utf8:
+                    self.utf8 = self.utf8 - 1 if 0x80 <= byte < 0xc0 else 0
+                    if self.utf8 or 0x80 <= byte < 0xc0:
+                        continue
+                if byte == 0x1b:
+                    self.state = 'esc'
+                elif 0xc0 <= byte < 0xe0:
+                    self.utf8 = 1
+                elif 0xe0 <= byte < 0xf0:
+                    self.utf8 = 2
+                elif 0xf0 <= byte < 0xf8:
+                    self.utf8 = 3
+            elif self.state == 'esc':
+                if byte == 0x5b:
+                    self.state = 'csi'
+                elif byte in (0x5d, 0x50, 0x58, 0x5e, 0x5f):
+                    self.state = 'string'
+                elif 0x20 <= byte < 0x30:
+                    self.state = 'esc'
+                else:
+                    self.state = 'ground'
+            elif self.state == 'csi':
+                if 0x40 <= byte <= 0x7e:
+                    self.state = 'ground'
+                elif byte == 0x1b:
+                    self.state = 'esc'
+            elif self.state == 'string':
+                if byte == 0x07:
+                    self.state = 'ground'
+                elif byte == 0x1b:
+                    self.state = 'string-esc'
+            elif self.state == 'string-esc':
+                self.state = 'ground' if byte == 0x5c else 'string'
+
+    def safe(self):
+        return self.state == 'ground' and not self.utf8
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--pane', required=True)
@@ -73,6 +126,8 @@ def main():
     last_report = None
     last_title = None
     next_check = 0
+    boundary = StreamBoundary()
+    pending = []
     try:
         tty.setraw(0)
         resize()
@@ -86,6 +141,10 @@ def main():
                 if not data:
                     break
                 os.write(1, data)
+                boundary.feed(data)
+            if pending and boundary.safe():
+                os.write(1, b''.join(pending))
+                pending.clear()
             if 0 in ready:
                 data = os.read(0, 65536)
                 if not data:
@@ -100,16 +159,16 @@ def main():
                     report = status_report(current)
                     title = ''.join(c for c in current.get('terminal_title_stripped', '') if c.isprintable())
                     if title and title != last_title:
-                        os.write(1, f'\x1b]0;{title}\x07'.encode())
+                        pending.append(f'\x1b]0;{title}\x07'.encode())
                         last_title = title
                     if report and report != last_report:
-                        os.write(1, report)
+                        pending.append(report)
                         last_report = report
                 except (OSError, ValueError, KeyError, subprocess.SubprocessError, RuntimeError):
                     # A lost source is a blocker, never a fabricated success.
                     report = b'\x1b]7501;state=blocked:app=sixfold-bridge\x1b\\'
                     if report != last_report:
-                        os.write(1, report)
+                        pending.append(report)
                         last_report = report
     except KeyboardInterrupt:
         pass
