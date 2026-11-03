@@ -77,6 +77,11 @@ class RouteTests(unittest.TestCase):
         live[-1]['status'] = 'done'
         self.assertNotIn('p2', route.candidates(spaces, live, 's2', 'Medihomes')[2])
 
+    def test_voice_and_recording_below_composer_are_protected(self):
+        for screen in ('❯\nvoice ● listening', '❯\n● REC',
+                       '› Ask Codex to do anything\nvoice ● listening'):
+            self.assertFalse(route.receiver_available(screen))
+
     def test_only_explicit_reply_requests_add_a_completion_report(self):
         spaces, live = fixture()
         for reply in (False, True):
