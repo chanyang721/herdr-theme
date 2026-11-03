@@ -147,12 +147,12 @@ by a color theme. No microphone permission is granted by installing Herdr Theme.
 
 ## Message flow
 
-There is no permanent message-history panel or idle pipeline. New sends show a brighter,
-thicker directional pipeline and a brief sender → recipient notice for about five seconds.
+There is no permanent message-history panel. The original pipeline appearance, speed and
+recent-route rendering are restored. New sends show a sender → recipient notice for about four seconds.
 Colors and lanes separate concurrent routes; repeated sends retain individual packets and
 show a grouped count. The notice shows at most two routes and an overflow count. Unresolved
 queued/error/held deliveries remain in a compact status row with full tooltip details.
-Motion off keeps a static directional indication until the same expiry timer clears it.
+Motion off disables travel. Further changes to the panel/temporary notice await user confirmation.
 
 With a Herdr app exposing `messageEvents()` and a core emitting `message_sent`,
 the sidebar reads successful sends from the app's bounded in-memory event list.

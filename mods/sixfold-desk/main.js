@@ -6,7 +6,7 @@ import { WORDS, counts, title, cycle, priority, readThrough, unreadCount } from 
 
 import { computerKind, computerStatus, tailscaleStatus, workspaceIdentity } from './sidebar-identity.js';
 
-import { freshMessages, simultaneousRoutes } from './flow.js';
+import { freshMessages, recentRoutes, simultaneousRoutes } from './flow.js';
 import { pipeline } from './pipeline.js';
 import { workflowNodes, delegationEvents, workflowStatus } from './workflow.js';
 import { watchDocs, currentDocs, docsSection, prepareDocsInput } from './docs.js';
@@ -264,7 +264,7 @@ export default class SixfoldDesk extends View {
       const same=this.activeFlows.filter(flow=>flow.source===event.source&&flow.target===event.target);
       const occupied = new Set(this.activeFlows.map(flow => flow.lane));
       const lane = same[0]?.lane ?? [0,1,2,3,4,5].find(value=>!occupied.has(value)) ?? this.activeFlows.length%6;
-      const travelMs=2600+(same.length%6)*220;
+      const travelMs=1600+(same.length%6)*180;
       const flow = { ...event, lane, travelMs, phase: 'start' };
       this.activeFlows.push(flow);
       cx.timer.after(60, cx => {
@@ -303,6 +303,8 @@ export default class SixfoldDesk extends View {
     const list = agents().filter(a => workspaceIds.has(a.space));
     const local = all.filter(p => p.tab === f?.tab);
     const total = counts(list);
+    const nodeIds = new Set([...facts.map(x=>x.address),...this.workflowNodes.map(x=>x.id)]);
+    const events = [...(this.messageEvents ?? []),...this.workflowEvents].filter(e=>nodeIds.has(e.source)&&nodeIds.has(e.target));
     const unseen = address => unreadCount(this.messageEvents,address,this.readMessages);
     const palette = [t.accent, t.ansi6, t.ansi5, t.ansi3, t.ansi2, t.ansi4];
     const flows = this.activeFlows;
@@ -317,7 +319,8 @@ export default class SixfoldDesk extends View {
       const s = spaces().find(s => s.tabs.some(tab => tab.id === p?.tab));
       return p ? `${s?.machine ? `${this.computerLabel(s.machine)} / ` : ''}${s?.name ?? ''} · ${title(p)}` : address === 'external' ? (this.lang() === 'ko' ? '외부' : 'External') : address;
     };
-    const paths = routes;
+    const history = recentRoutes(events);
+    const paths = flows.length ? routes : history.map((event, lane) => ({ ...event, lane, phase: 'history' }));
     if (role === 'pane') {
       const p = all.find(p => p.pane === props()?.pane);
       if (!p) return div();
