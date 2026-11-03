@@ -40,3 +40,19 @@ export function simultaneousRoutes(flows) {
   }
   return [...routes.values()].map(route=>({...route,phase:route.packets.every(p=>p.phase==='arrived')?'arrived':route.packets.every(p=>p.phase==='start')?'start':'travel'}));
 }
+
+// A route whose two ends live on different computers. `machineOf` returns the
+// endpoint's machine (null for this computer) or undefined when it is unknown.
+export function crossMachine(route, machineOf) {
+  const from = machineOf(route.source), to = machineOf(route.target);
+  return from !== undefined && to !== undefined && from !== to ? { from, to } : null;
+}
+
+// Follow focus onto another computer, but keep a manual pick until focus moves there.
+export function followComputer(state, focusKey, saved) {
+  const valid = typeof saved === 'string' && (saved === 'local' || /^(remote|tailscale):.+/.test(saved));
+  if (state.lastFocus !== undefined && state.lastFocus !== focusKey) state.follow = true;
+  state.lastFocus = focusKey;
+  if (state.follow || !valid) return focusKey;
+  return saved;
+}
