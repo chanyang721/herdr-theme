@@ -52,6 +52,16 @@
           }
         },
         {
+          "id": "session-pets",
+          "type": "block",
+          "size": {
+            "px": 16
+          },
+          "content": {
+            "mod": "session-pets"
+          }
+        },
+        {
           "id": "tabs",
           "type": "block",
           "size": {
