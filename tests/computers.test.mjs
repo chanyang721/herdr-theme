@@ -46,7 +46,7 @@ test('computer selection scopes workspaces and agents and restores each selectio
     .replace(/import \{[^}]*\} from '.\/docs.js';/,'const currentDocs=()=>null;const docsSection=()=>null;const prepareDocsInput=()=>{};')
     .replace(/import \{ watchAlerts, alertSection, visibleAlerts \} from '.\/alerts.js';/,'const visibleAlerts=()=>[];')
     .replace(/import .* from '.\/alert-inbox.js';/,'const workspaceAlertsRow=()=>null, hasWorkspaceAlerts=()=>false;')
-    .replace(/import \{ panePet \} from '.\/pets.js';/,'const panePet=()=>null;')
+    .replace(/import \{ panePet, petRunning, RUN_FRAME_MS, RUN_FRAMES \} from '.\/pets.js';/,'const panePet=()=>null,petRunning=()=>false,RUN_FRAME_MS=110,RUN_FRAMES=5;')
     .replace(/import \{ paneUsage \} from '.\/session-usage.js';/,'const paneUsage=()=>null;');
   for(const name of ['model','flow','workflow','pipeline','sidebar-identity'])source=source.replace(`'./${name}.js'`,JSON.stringify(new URL(`../mods/sixfold-desk/${name}.js`,import.meta.url).href));
   // A path is never painted in this test; avoid loading the native path builder.

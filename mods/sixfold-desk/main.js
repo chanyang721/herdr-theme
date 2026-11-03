@@ -12,7 +12,7 @@ import { workflowNodes, delegationEvents, workflowStatus, sessionChildren, activ
 import { watchDocs, currentDocs, docsSection, prepareDocsInput } from './docs.js';
 import { watchAlerts, alertSection, visibleAlerts } from './alerts.js';
 import { workspaceAlertsRow, hasWorkspaceAlerts, openInbox } from './alert-inbox.js';
-import { panePet } from './pets.js';
+import { panePet, petRunning, RUN_FRAME_MS, RUN_FRAMES } from './pets.js';
 import { paneUsage } from './session-usage.js';
 
 const hasPanel=node=>node?.id==='panel'||(node?.children||[]).some(hasPanel);
@@ -53,6 +53,18 @@ export default class SixfoldDesk extends View {
     this.collaborationScript = null;
     this.collaborationBusy = false;
     this.readMessages = {};
+    if (props()?.role === 'pane') {
+      // The header cat gallops frame by frame only while this pane's agent works; an idle
+      // header never redraws for it.
+      this.petFrame = 0;
+      cx.timer.every(RUN_FRAME_MS, cx => {
+        const pane = panes().find(x => x.pane === props()?.pane);
+        if (!petRunning(pane?.status, shared)) return;
+        this.petFrame = (this.petFrame + 1) % RUN_FRAMES;
+        cx.notify();
+      });
+      return;
+    }
     if (props()?.role !== 'sidebar') return;
     this.projectDocs=null;
     this.docsSpaces=new Set();this.docsHeights={};
@@ -315,6 +327,25 @@ export default class SixfoldDesk extends View {
     }
   }
 
+  paneHeader(all, t, w) {
+    const p = all.find(p => p.pane === props()?.pane);
+    if (!p) return div();
+    const index = all.filter(x => x.tab === p.tab).findIndex(x => x.pane === p.pane) + 1;
+    const style = paneHeaderStyle(p, t);
+    return div().size_full().bg(style.base).child(h_flex().id(`sixfold-head-${p.pane}`).size_full().items_center().gap(7).px(9)
+      .bg(style.background).text_size(11.5)
+      .border(1).border_color(style.border)
+      .on_click(() => run('pane.focus', { pane: p.pane }))
+      .child(div().flex_none().font_bold().text_color(p.focused ? t.accent : t.dim).child(String(index).padStart(2, '0')))
+      .child(div().flex_1().min_w(0).truncate().text_color(t.foreground).child(title(p)))
+      // Session usage sits in the middle: title and an equal spacer share the room around it.
+      .child(paneUsage(p, t, shared))
+      .child(div().flex_1().min_w(0))
+      // The cat is the status, so it stands beside the status badge.
+      .child(panePet(p,t,shared,this.petFrame||0))
+      .child(this.badge(p.status, p.status ? w[p.status] : '', t, 11, ['working', 'blocked'].includes(p.status) ? t.foreground : null)));
+  }
+
   render(cx) {
     const t = theme();
     const w = WORDS[this.lang()];
@@ -332,6 +363,8 @@ export default class SixfoldDesk extends View {
     const workspaceIds = new Set(workspaceList.map(space => space.id));
     const tabIds = new Set(workspaceList.flatMap(s=>s.tabs.map(tab=>tab.id)));
     const all = panes().filter(p=>tabIds.has(p.tab)).map(p => ({...p, title: facts.find(x=>x.address===p.terminal)?.labels?.['sixfold.title'] || p.title}));
+    // A pane header needs none of the sidebar's routing work, and redraws often while its cat runs.
+    if (role === 'pane') return this.paneHeader(all, t, w);
     const list = agents().filter(a => workspaceIds.has(a.space));
     const local = all.filter(p => p.tab === f?.tab);
     const total = counts(list);
@@ -357,23 +390,6 @@ export default class SixfoldDesk extends View {
     };
     const history = recentRoutes(events);
     const paths = flows.length ? routes : history.map((event, lane) => ({ ...event, lane, phase: 'history' }));
-    if (role === 'pane') {
-      const p = all.find(p => p.pane === props()?.pane);
-      if (!p) return div();
-      const index = all.filter(x => x.tab === p.tab).findIndex(x => x.pane === p.pane) + 1;
-      const style = paneHeaderStyle(p, t);
-      return div().size_full().bg(style.base).child(h_flex().id(`sixfold-head-${p.pane}`).size_full().items_center().gap(7).px(9)
-        .bg(style.background).text_size(11.5)
-        .border(1).border_color(style.border)
-        .on_click(() => run('pane.focus', { pane: p.pane }))
-        .child(div().flex_none().font_bold().text_color(p.focused ? t.accent : t.dim).child(String(index).padStart(2, '0')))
-        .child(panePet(p,t,shared))
-        .child(div().flex_1().min_w(0).truncate().text_color(t.foreground).child(title(p)))
-        // Session usage sits in the middle: title and an equal spacer share the room around it.
-        .child(paneUsage(p, t, shared))
-        .child(div().flex_1().min_w(0))
-        .child(this.badge(p.status, p.status ? w[p.status] : '', t, 11, ['working', 'blocked'].includes(p.status) ? t.foreground : null)));
-    }
     if (role === 'footer') {
       const p = all.find(p => p.pane === f?.pane);
       const linked = terminals().find(x => x.address === f?.terminal)?.labels?.['sixfold.source-pane'];
