@@ -81,6 +81,13 @@ default. Remote workspaces start with one terminal on that computer; an empty fo
 The folder picker is local only. Run authenticated agent CLIs inside remote terminals as needed.
 Remote selection and creation require Herdr app/core with machine-layout support (verified on 0.1.17).
 
+Local and connected/connecting Herdr computers remain full rows. Disconnected remotes and
+unregistered Tailscale peers start collapsed into one **Other N** row: up to three device icons
+with status dots (green online, gray offline, orange unknown), plus the remaining count.
+Tooltips show device names and exact status. Click **Other N** to expand a list capped at
+180 units high. Tailscale online does not imply a Herdr connection. Selecting a computer or
+toggling the list does not move terminal focus or initiate a connection.
+
 From the main computer, `hc send worker/t7 "your message"` sends to that computer's terminal;
 use its actual qualified address from `hc ls`. Selecting an agent's row lets you type directly.
 `hc send --wait` can observe the agent's next turn, but a successful send alone is not a read receipt.
