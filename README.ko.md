@@ -82,3 +82,9 @@ Separate mod recipes let you place document and usage tools in a personal layout
 Independent mod releases: [System Metrics](https://github.com/chanyang721/herdr-workspace-mods/tree/main/system-metrics) · [Project Document Viewer](https://github.com/chanyang721/herdr-workspace-mods/tree/main/document-viewer).
 
 Project document tracking: see [configuration and collector](docs/project-documents.md). The base theme uses full-width terminals; configured latest documents live in the left sidebar.
+
+## 반복 설치와 기기별 고정 설정
+
+`python3 scripts/install.py --home ~/.config/herdr-app --update`는 관리 mod와 helper를 갱신합니다. 개인 `settings.json`·기존 키 섹션·데이터는 보존하며, 직접 수정한 layout/theme도 보존합니다. 이전 설치 manifest가 없는 기존 layout/theme은 사용자 설정으로 취급합니다. mod는 전체 디렉터리를 staging한 뒤 교체합니다. `--update` 없는 첫 설치의 덮어쓰기 거부 동작은 유지합니다.
+
+`python3 scripts/seed_workspace_pins.py --home ~/.config/herdr-app --ensure-spaces`는 고정 설정 파일이 없을 때만 현재 컴퓨터의 Share·PeaceMinusOne·Medihomes를 찾아 실제 ID로 시드합니다. 없는 로컬 워크스페이스는 만들고 원래 선택 화면을 복원합니다. Herdr 앱이 실행 중이어야 하며 기존 `workspace-pins.local.json`은 내용에 관계없이 보존합니다. `--ensure-spaces`를 빼면 없는 워크스페이스를 만들지 않고 오류를 보고합니다. 테스트 시 `HERDR_APP_BIN`으로 앱 실행 파일을 대체할 수 있습니다.
