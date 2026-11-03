@@ -68,6 +68,15 @@ test('computer selection scopes workspaces and agents and restores each selectio
     assert.equal(calls.at(-1).overlay.mod,'sixfold-new-space');
     rows.get('sf-computer-remote:offline').click();
     assert.deepEqual(calls.at(-1),{command:'app.settings',args:{section:'machines'}});
+    view.computers={tailscale:true};
+    view.tailscalePeers=[{name:'desktop-test',host:'DESKTOP-TEST',ips:['100.1.2.3'],os:'windows',online:true}];
+    const beforeDiscovery=calls.length;
+    render();
+    assert(rows.has('sf-tailscale-desktop-test'));
+    assert.equal(rows.get('sf-tailscale-desktop-test').click,undefined);
+    assert.equal(calls.length,beforeDiscovery);
+    view.computers={tailscale:false};render();
+    assert(!rows.has('sf-tailscale-desktop-test'));
     view.computers={local:{label:'My PC'},machines:{worker:{label:'Build',folder:'/projects'}}};
     view.newWorkspace('worker');
     assert.deepEqual(calls.at(-1).overlay.props,{machine:'worker',machineLabel:'Build',folder:'/projects'});
