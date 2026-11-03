@@ -82,7 +82,7 @@ def seed_space(space, project_config, repo, user_home=None):
         folder = Path(space.get('folder', ''))
         sources = [(folder/'README.md', '음성·포커스 대기열')]
         if not folders: folders = [str(folder)] if folder.is_absolute() else []
-    elif name in ('공통', 'Common'):
+    elif space['id'] == 'sp5b1f0e5ae362facabc5ac1ece5d08277' or name.casefold() in ('share', '공통', 'common'):
         sources = [(repo/'COMMON_ROUTING.md', '프로젝트 작업 전달'), (repo/'README.ko.md', 'Herdr 사용 안내')]
         if not folders: folders = [str(repo/'docs')]
     else:

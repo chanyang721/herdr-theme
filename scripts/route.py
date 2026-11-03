@@ -44,8 +44,8 @@ def locate(spaces, address):
 
 def candidates(spaces, live, source, project):
     origin, _, slot = locate(spaces, source)
-    if origin['name'].casefold() not in ('공통', 'common'):
-        raise ValueError('공통 워크스페이스에서만 프로젝트 작업을 전달합니다.')
+    if origin['id'] != 'sp5b1f0e5ae362facabc5ac1ece5d08277' and origin['name'].casefold() not in ('share', '공통', 'common'):
+        raise ValueError('Share 워크스페이스에서만 프로젝트 작업을 전달합니다.')
     key = ALIASES.get(project.casefold(), project.casefold())
     targets = [s for s in spaces if s['name'].casefold() == key
                or Path(s.get('folder') or '').name.casefold() == key]
@@ -122,7 +122,7 @@ def dispatch(request, spaces, live):
         report = (f'이 작업의 결과 또는 막힌 점을 hc send {source} 명령으로 한 번 회신하세요.'
                   if request.get('reply') else
                   f'여러 갈래 작업은 이 세션의 서브에이전트로 처리하고, 사용자가 직접 결정해야 할 일이 생겼을 때만 hc send {source}로 알리세요. 진행·완료 보고는 보내지 마세요.')
-        text = (f'[공통 작업 전달 {request["id"]}] {source} → {project} / {target}\n'
+        text = (f'[Share 작업 전달 {request["id"]}] {source} → {project} / {target}\n'
                 f'{request["text"]}\n\n{report}\n'
                 '다른 pane으로 재배분하지 마세요.')
         argv = [HC, 'send', target, '--json', '--if', 'idle']
@@ -151,7 +151,7 @@ def source_address(explicit):
         for item in json.loads(path.read_text()).get('panes', []):
             if item.get('source') == pane:
                 return item['terminal']
-    raise ValueError('발신 위치가 없습니다. 공통 세션에서 실행하거나 --from 실제터미널ID를 지정하세요.')
+    raise ValueError('발신 위치가 없습니다. Share 세션에서 실행하거나 --from 실제터미널ID를 지정하세요.')
 
 
 def save_queue(requests):

@@ -44,7 +44,7 @@ export function alertSection(view, t) {
   const waiting = alerts.filter(item => item.status === 'needs-you').length;
   return v_flex().id('sf-alerts').flex_none().px(10).py(9).gap(4).bg(t.surface).border_t(1).border_color(t.border)
     .child(h_flex().gap(5).items_center()
-      .child(div().flex_1().text_size(10).font_bold().text_color(t.muted).child('공통 알림'))
+      .child(div().flex_1().text_size(10).font_bold().text_color(t.muted).child('Share 알림'))
       .child(div().text_size(10).text_color(t.accent).child(`확인 ${waiting}건`)))
     .children(alerts.map(item => h_flex().id(`sf-alert-${item.id}`).gap(5).items_center().px(6).py(4).rounded(4).bg(t.chrome)
       .tooltip(item.summary || item.text || item.title)

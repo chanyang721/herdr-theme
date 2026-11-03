@@ -217,6 +217,18 @@ export default class SixfoldDesk extends View {
     return config?.label || (machine === null ? (this.lang() === 'ko' ? '이 컴퓨터' : 'This computer') : machine);
   }
 
+  selectedComputer() {
+    const saved = shared('sixfold.computing.selected');
+    if (typeof saved === 'string' && (saved === 'local' || /^(remote|tailscale):.+/.test(saved))) return saved;
+    const machine = spaces().find(space => space.id === focused()?.space)?.machine;
+    return machine ? `remote:${machine}` : 'local';
+  }
+
+  selectComputer(key) {
+    // Listing another computer is independent of terminal focus and connectivity.
+    setShared('sixfold.computing.selected', key);
+  }
+
   newWorkspace(machine) {
     const config = machine === null ? this.computers?.local : this.computers?.machines?.[machine];
     openOverlay({mod:'sixfold-new-space',props:{machine, machineLabel:this.computerLabel(machine), folder:config?.folder},kind:'dialog',width:440,modal:true});
@@ -278,8 +290,13 @@ export default class SixfoldDesk extends View {
     const f = focused();
     const facts = terminals();
     const onlySpace = props()?.onlySpace;
-    const selectedMachine = spaces().find(space => space.id === f?.space)?.machine ?? null;
-    const workspaceList = spaces().filter(s => onlySpace ? s.id === onlySpace : (s.machine ?? null) === selectedMachine);
+    const selectedComputer = this.selectedComputer();
+    const discoveryOnly = selectedComputer.startsWith('tailscale:');
+    const selectedMachine = role === 'sidebar'
+      ? (selectedComputer.startsWith('remote:') ? selectedComputer.slice(7) : null)
+      : spaces().find(space => space.id === f?.space)?.machine ?? null;
+    const workspaceList = spaces().filter(s => onlySpace ? s.id === onlySpace
+      : (role !== 'sidebar' || !discoveryOnly) && (s.machine ?? null) === selectedMachine);
     const workspaceIds = new Set(workspaceList.map(space => space.id));
     const tabIds = new Set(workspaceList.flatMap(s=>s.tabs.map(tab=>tab.id)));
     const all = panes().filter(p=>tabIds.has(p.tab)).map(p => ({...p, title: facts.find(x=>x.address===p.terminal)?.labels?.['sixfold.title'] || p.title}));
@@ -354,7 +371,7 @@ export default class SixfoldDesk extends View {
       const name = machine.name;
       const displayName = this.computerLabel(name);
       const machineSpaces = spaces().filter(space => (space.machine ?? null) === name);
-      const selected = selectedMachine === name;
+      const selected = selectedComputer === (name === null ? 'local' : `remote:${name}`);
       const ready = machine.layout === 'ready';
       const state = computerStatus(machine, this.lang());
       const config = name === null ? this.computers?.local : this.computers?.machines?.[name];
@@ -364,32 +381,29 @@ export default class SixfoldDesk extends View {
         .bg(selected ? t.selected : t.surface).hover(style => style.bg(t.hover))
         .tooltip(`${displayName}${name === null ? '' : ` · ${name}`}\n${state}${name === null ? '' : (this.lang()==='ko'?' · Herdr 원격 등록됨':' · Registered in Herdr')}`)
         .on_mouse_down('left', (_event, cx) => cx.stop_propagation())
-        .on_click(() => {
-          const remembered = {...shared('sixfold.computing.last-spaces')};
-          if (f?.space) remembered[selectedMachine === null ? 'local' : `remote:${selectedMachine}`] = f.space;
-          setShared('sixfold.computing.last-spaces', remembered);
-          const existing = machineSpaces.find(space => space.id === remembered[key]) || machineSpaces[0];
-          if (!ready) run('app.settings', { section: 'machines' });
-          else if (existing) run('space.select', { id: existing.id });
-          else this.newWorkspace(name);
-        })
-        .child(svg(`mods/sixfold-desk/icons/device-${kind}.svg`).size(14).flex_none().text_color(t.muted))
+        .on_click(() => this.selectComputer(key))
+        .child(svg(`mods/sixfold-desk/icons/device-${kind}.svg`).size(14).flex_none().text_color(name===null||ready||machine.layout==='loading'?t.accent:t.dim).when(machine.layout==='loading',icon=>icon.opacity(0.5)))
         .child(v_flex().flex_1().min_w(0)
           .child(div().truncate().text_size(11).font_bold().child(displayName))
           .child(div().truncate().text_size(9).text_color(t.muted).child(state)))
-        .child(div().flex_none().text_size(9).text_color(t.dim).child(String(machineSpaces.length)))
-        .child(div().flex_none().text_size(9).text_color(ready ? t.done : t.blocked).child(ready ? '●' : '○'));
+        .child(div().flex_none().text_size(9).text_color(t.dim).child(String(machineSpaces.length)));
     });
     if(this.computers?.tailscale){
       for(const peer of this.tailscalePeers??[]){
         const state=tailscaleStatus(peer,this.lang());
-        computerRows.push(h_flex().id(`sf-tailscale-${peer.name}`).h(36).px(7).gap(6).items_center()
+        const registration=this.lang()==='ko'?'등록 안 됨, 워크스페이스 없음':'Unregistered, no workspaces';
+        const help=this.lang()==='ko'?'설정 → Machines에서 SSH 컴퓨터를 등록하세요.':'Register an SSH computer in Settings → Machines.';
+        computerRows.push(h_flex().id(`sf-tailscale-${peer.name}`).h(64).px(7).gap(6).items_center().rounded(4)
+          .bg(selectedComputer===`tailscale:${peer.name}`?t.selected:t.surface).hover(style=>style.bg(t.hover))
+          .on_mouse_down('left',(_event,cx)=>cx.stop_propagation())
+          .on_click(()=>this.selectComputer(`tailscale:${peer.name}`))
           .tooltip(`${peer.host} · ${(peer.ips??[]).join(', ')} · ${peer.os}\n${state}\n${this.lang()==='ko'?'목록 표시 전용 · Herdr 원격 미등록 · SSH 연결 확인 안 됨':'Discovery only · not registered in Herdr · SSH not verified'}`)
-          .child(svg(`mods/sixfold-desk/icons/device-${computerKind(peer.os, peer.name || peer.host)}.svg`).size(14).flex_none().text_color(t.muted))
+          .child(svg(`mods/sixfold-desk/icons/device-${computerKind(peer.os, peer.name || peer.host)}.svg`).size(14).flex_none().text_color(peer.online===true?t.foreground:t.dim))
           .child(v_flex().flex_1().min_w(0)
             .child(div().truncate().text_size(11).font_bold().child(peer.name))
-            .child(div().truncate().text_size(9).text_color(t.muted).child(state)))
-          .child(div().flex_none().text_size(9).text_color(peer.online===true?t.done:t.dim).child(peer.online===true?'●':'○')));
+            .child(div().truncate().text_size(9).text_color(t.muted).child(state))
+            .child(div().truncate().text_size(9).text_color(t.muted).child(registration))
+            .child(div().truncate().text_size(9).text_color(t.dim).tooltip(help).child(help))));
       }
       if(this.tailscaleError)computerRows.push(div().px(7).text_size(10).text_color(t.blocked)
         .child(this.lang()==='ko'?'Tailscale 상태 확인 불가':'Tailscale status unavailable'));
@@ -408,7 +422,7 @@ export default class SixfoldDesk extends View {
       }
       offset=row-3+(this.docsHeights?.[s.id]||0);
     }
-    const workspaceColor = s => { const saved=shared('space.colors')?.[s.id]; if(saved)return saved.startsWith('#')?saved:(t[saved]||t.accent); return s.name==='공통' ? t.accent : s.name==='PeaceMinusOne' ? t.ansi5 : s.name==='Medihomes' ? t.ansi6
+    const workspaceColor = s => { const saved=shared('space.colors')?.[s.id]; if(saved)return saved.startsWith('#')?saved:(t[saved]||t.accent); return s.id==='sp5b1f0e5ae362facabc5ac1ece5d08277' || ['공통','common','share'].includes(s.name?.toLowerCase()) ? t.accent : s.name==='PeaceMinusOne' ? t.ansi5 : s.name==='Medihomes' ? t.ansi6
       : [t.accent,t.ansi5,t.ansi6,t.ansi3,t.ansi2,t.ansi4][[...s.id].reduce((hash,c)=>(hash*31+c.charCodeAt(0))>>>0,0)%6]; };
     const workspaceMark = s => {
       const configured=this.workspaceIcons[s.id] || this.workspaceIcons[s.name];
@@ -502,7 +516,10 @@ export default class SixfoldDesk extends View {
       .child(v_flex().id('sf-scroll').flex_1().min_h(0).overflow_y_scrollbar().mode('always')
         .child(section(this.lang() === 'ko' ? '컴퓨팅' : 'COMPUTERS'))
         .child(v_flex().flex_none().px(7).pb(6).gap(3).children(computerRows))
-        .child(section(`${this.computerLabel(selectedMachine)} · ${w.spaces}`)).child(workspaceTree)
+        .child(section(`${discoveryOnly?selectedComputer.slice(10):this.computerLabel(selectedMachine)} · ${w.spaces}`)).child(workspaceTree)
+        .when(workspaceList.length===0,e=>e.child(v_flex().id('sf-empty-workspaces').px(12).pb(12).gap(5)
+          .child(div().text_size(11).text_color(t.muted).child(this.lang()==='ko'?(discoveryOnly?'등록 안 됨, 워크스페이스 없음':'워크스페이스 없음'):(discoveryOnly?'Unregistered, no workspaces':'No workspaces')))
+          .when(discoveryOnly,row=>row.child(div().text_size(10).text_color(t.dim).child(this.lang()==='ko'?'설정 → Machines에서 SSH 컴퓨터를 등록하세요.':'Register an SSH computer in Settings → Machines.')))))
         )
       .when(visibleAlerts(this.alerts).length>0, e=>e.child(alertSection(this,t)))
       .when(Boolean(last) || this.queuedRoutes.length > 0, e => e.child(v_flex().flex_none().px(10).py(9).gap(6).bg(t.surface).border_t(1).border_color(t.border)
@@ -546,6 +563,6 @@ export default class SixfoldDesk extends View {
       .child(h_flex().h(38).flex_none().px(7).items_center()
         .child(this.button('sf-settings',w.settings,()=>run('app.settings'),t))
         .child(div().flex_1())
-        .child(this.button('sf-new-space','+ Space',()=>this.newWorkspace(selectedMachine),t)));
+        .when(!discoveryOnly,e=>e.child(this.button('sf-new-space','+ Space',()=>this.newWorkspace(selectedMachine),t))));
   }
 }

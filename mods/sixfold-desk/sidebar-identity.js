@@ -29,7 +29,7 @@ export function tailscaleStatus(peer, lang = 'ko') {
 
 export function workspaceIdentity(space) {
   const name = String(space.name ?? '').trim().toLowerCase();
-  if (name === '공통' || name === 'common') return 'hub';
+  if (space.id === 'sp5b1f0e5ae362facabc5ac1ece5d08277' || name === 'share' || name === '공통' || name === 'common') return 'hub';
   if (name === 'peaceminusone' || name === 'pmo') return 'flower';
   if (name === 'medihomes') return 'medical';
   if (name === 'voice') return 'microphone';
