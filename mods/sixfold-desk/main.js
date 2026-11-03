@@ -11,6 +11,7 @@ import { pipeline } from './pipeline.js';
 import { workflowNodes, delegationEvents, workflowStatus } from './workflow.js';
 import { watchDocs, currentDocs, docsSection, prepareDocsInput } from './docs.js';
 import { watchAlerts, alertSection, visibleAlerts } from './alerts.js';
+import { alertBadge, openInbox } from './alert-inbox.js';
 
 const hasPanel=node=>node?.id==='panel'||(node?.children||[]).some(hasPanel);
 
@@ -204,6 +205,8 @@ export default class SixfoldDesk extends View {
           if(space){prepareDocsInput(this,space);this.docsSpaces.add(space.id);cx.notify();cx.timer.after(30,()=>this.docsInputs?.[space.id]?.focus());}
         } else if (command === 'language') {
           setShared('sixfold.language', this.lang() === 'ko' ? 'en' : 'ko');
+        } else if (command.startsWith('inbox-')) {
+          openInbox({project:command.slice(6)});
         }
         cx.notify();
       }
@@ -477,6 +480,7 @@ export default class SixfoldDesk extends View {
           .child(this.docsSpaces?.has(s.id)?'▾':'▸'))
         .child(workspaceMark(s))
         .child(div().flex_1().min_w(0).truncate().text_color(s.active?t.foreground:t.muted).child(s.name))
+        .child(alertBadge(`space-${s.id}`,t,{project:s.name}))
         .child(div().text_size(10).text_color(t.muted).child(String(members.length))))
       .children(members.map(p=>{
         const tab=s.tabs.find(tab=>tab.id===p.tab);
