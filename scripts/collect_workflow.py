@@ -2,6 +2,7 @@
 """Write data/sixfold/workflow.json: each agent's sub-agents, from recorded facts only."""
 import argparse
 import fcntl
+from functools import lru_cache
 import json
 import os
 from pathlib import Path
@@ -16,7 +17,7 @@ import uuid
 BASE = Path.home() / 'Library' / 'Application Support' / 'LukukuWatch'
 DATA = Path(os.environ.get('HERDR_APP_HOME', Path.home() / '.config' / 'herdr-app')) / 'data' / 'sixfold'
 OUTPUT = DATA / 'workflow.json'
-HC = 'hc'
+HC = shutil.which('hc') or str(Path.home() / '.local/share/herdr-sixfold/bin/hc')
 HERDR = shutil.which('herdr') or '/opt/homebrew/bin/herdr'
 BRIDGES = Path.home() / '.local' / 'state' / 'herdr-sixfold' / 'migration-map.local.json'
 CLAUDE = Path.home() / '.claude'
@@ -95,6 +96,61 @@ def identify(terminal, cache):
     return cache[address]
 
 
+def transcript_facts(path, kind, thread=None):
+    try:
+        info = Path(path).stat()
+    except OSError:
+        return None, None, ''
+    return _transcript_facts(str(path), kind, thread, info.st_mtime_ns, info.st_size)
+
+
+@lru_cache(maxsize=256)
+def _transcript_facts(path, kind, thread, modified, size):
+    """Read lifecycle facts, never treat a spawn link or silence as running."""
+    status, source, task = None, None, ''
+    try:
+        with Path(path).open() as stream:
+            for line in stream:
+                try:
+                    row = json.loads(line)
+                except ValueError:
+                    continue
+                payload = row.get('payload', {})
+                if kind == 'codex':
+                    if row.get('type') == 'event_msg':
+                        event = payload.get('type')
+                        # Forked transcripts include the parent's history. Reset at
+                        # the child's own settings marker before reading its turn.
+                        if event == 'thread_settings_applied' and payload.get('thread_id') == thread:
+                            status, source, task = None, None, ''
+                        if event in ('task_started', 'task_complete', 'turn_aborted'):
+                            status = {'task_started':'working', 'task_complete':'finished', 'turn_aborted':'interrupted'}[event]
+                            source = 'codex.' + event
+                        if event == 'user_message':
+                            task = payload.get('message') or task
+                    if row.get('type') == 'response_item' and payload.get('role') == 'user':
+                        text = '\n'.join(c.get('text', '') for c in payload.get('content', []) if isinstance(c, dict))
+                        if text and not text.startswith(('# AGENTS.md', '<environment_context>')):
+                            task = text
+                else:
+                    message = row.get('message', {})
+                    if row.get('type') == 'user' and not task:
+                        content = message.get('content', '')
+                        if isinstance(content, str):
+                            task = content
+                    if row.get('type') == 'assistant':
+                        reason = message.get('stop_reason')
+                        if reason == 'end_turn':
+                            status, source = 'finished', 'claude.end_turn'
+                        elif reason == 'tool_use':
+                            status, source = None, None
+                    if row.get('attachment', {}).get('hookEvent') == 'SubagentStop':
+                        status, source = 'finished', 'claude.SubagentStop'
+    except (OSError, TypeError):
+        pass
+    return status, source, next((line.strip()[:160] for line in task.splitlines() if line.strip()), '')
+
+
 def claude_children(session, terminal, now):
     nodes = []
     for meta in CLAUDE.glob(f'projects/*/{session}/subagents/*.meta.json'):
@@ -104,14 +160,16 @@ def claude_children(session, terminal, now):
             continue
         log = meta.with_name(meta.name.replace('.meta.json', '.jsonl'))
         active = (log if log.exists() else meta).stat().st_mtime
-        if data.get('finished'):
-            status, source = 'finished', 'meta.finished'
+        observed, observed_source, task = transcript_facts(log, 'claude')
+        if data.get('finished') or observed == 'finished':
+            status, source = 'finished', 'meta.finished' if data.get('finished') else observed_source
             if now - active > KEEP_SECONDS:
                 continue
         else:
             status, source = ('recent' if now - active < RECENT_SECONDS else 'quiet'), ESTIMATE
         nodes.append({'id': f'sub:{terminal}:{log.stem}', 'parent': terminal, 'terminal': terminal,
                       'label': data.get('description') or data.get('agentType') or log.stem,
+                      'task': data.get('description') or task, 'agentType': data.get('agentType') or '',
                       'status': status, 'statusSource': source, 'at': int(meta.stat().st_birthtime * 1000)})
     return nodes
 
@@ -119,21 +177,23 @@ def claude_children(session, terminal, now):
 def codex_children(connection, thread, parent, terminal, now):
     nodes = []
     rows = connection.execute(
-        'select e.child_thread_id, e.status, t.agent_nickname, t.agent_role, t.title, t.updated_at_ms, t.created_at_ms '
+        'select e.child_thread_id, e.status, t.agent_nickname, t.agent_role, t.title, t.updated_at_ms, t.created_at_ms, t.rollout_path, t.first_user_message '
         'from thread_spawn_edges e left join threads t on t.id = e.child_thread_id '
         'where e.parent_thread_id = ?', (thread,)).fetchall()
-    for child, edge, nickname, role, title, updated, created in rows:
+    for child, edge, nickname, role, title, updated, created, rollout, first_message in rows:
         active = (updated or 0) / 1000
-        if edge != 'open' and now - active > KEEP_SECONDS:
-            continue
-        # An open edge says the link exists, not that the helper is working.
-        recent = edge == 'open' and now - active < RECENT_SECONDS
+        observed, source, task = transcript_facts(rollout, 'codex', child) if rollout else (None, None, '')
+        status = 'closed' if edge != 'open' else observed or 'open'
         child_id = f'sub:{terminal}:{child}'
+        descendants = codex_children(connection, child, child_id, terminal, now)
+        if status in ('closed', 'finished', 'interrupted') and now - active > KEEP_SECONDS and not descendants:
+            continue
         nodes.append({'id': child_id, 'parent': parent, 'terminal': terminal,
                       'label': nickname or role or (title or child)[:60],
-                      'status': 'recent' if recent else edge, 'statusSource': ESTIMATE if recent else 'spawn-edge',
+                      'task': task or (first_message or title or '').split('\n')[0][:160],
+                      'status': status, 'statusSource': source if edge == 'open' and source else 'spawn-edge',
                       'at': created or 0})
-        nodes += codex_children(connection, child, child_id, terminal, now)
+        nodes += descendants
     return nodes
 
 

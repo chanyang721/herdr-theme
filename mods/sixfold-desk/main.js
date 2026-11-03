@@ -8,7 +8,7 @@ import { computerKind, computerStatus, tailscaleStatus, workspaceIdentity } from
 
 import { freshMessages, recentRoutes, simultaneousRoutes } from './flow.js';
 import { pipeline } from './pipeline.js';
-import { workflowNodes, delegationEvents, workflowStatus } from './workflow.js';
+import { workflowNodes, delegationEvents, workflowStatus, sessionChildren, activeWorkflow } from './workflow.js';
 import { watchDocs, currentDocs, docsSection, prepareDocsInput } from './docs.js';
 import { watchAlerts, alertSection, visibleAlerts } from './alerts.js';
 import { alertBadge, openInbox } from './alert-inbox.js';
@@ -429,9 +429,9 @@ export default class SixfoldDesk extends View {
       let row=offset+53;
       for (const p of members) {
         positions[p.terminal]=row;row+=30;
-        if(this.expandedAgents.has(p.terminal)) {
-          for(const node of this.workflowNodes.filter(node=>node.terminal===p.terminal).slice(0,12)) {
-            positions[node.id]=row;row+=24;
+        {
+          for(const node of sessionChildren(this.workflowNodes,p.terminal,this.expandedAgents.has(p.terminal))) {
+            positions[node.id]=row;row+=44;
           }
         }
       }
@@ -484,7 +484,9 @@ export default class SixfoldDesk extends View {
         .child(div().text_size(10).text_color(t.muted).child(String(members.length))))
       .children(members.map(p=>{
         const tab=s.tabs.find(tab=>tab.id===p.tab);
-        const children=this.workflowNodes.filter(node=>node.terminal===p.terminal);
+        const records=sessionChildren(this.workflowNodes,p.terminal,true);
+        const children=sessionChildren(this.workflowNodes,p.terminal,this.expandedAgents.has(p.terminal));
+        const activeCount=records.filter(activeWorkflow).length;
         return v_flex().gap(2).flex_none().child(h_flex().id(`sf-member-${p.pane}`).h(28).flex_none().px(7).gap(6).items_center().rounded(4).bg(p.focused?t.selected:t.chrome)
           .when(endpoint(p.terminal),e=>e.border(1).border_color(routeColor(p.terminal)))
           .tooltip(`${s.name} / ${tab.name} / ${title(p)}`)
@@ -495,21 +497,23 @@ export default class SixfoldDesk extends View {
           .child(icon(p,list.find(a=>a.address===p.terminal)?.program ?? p.program))
           .child(div().flex_1().min_w(0).truncate().text_size(11).child(title(p)))
           .when(unseen(p.terminal)>0,e=>e.child(div().px(4).rounded(3).bg(t.accent).text_color(t.background).text_size(10).tooltip(this.lang()==='ko'?`읽지 않은 메시지 ${unseen(p.terminal)}개`:`${unseen(p.terminal)} unread messages`).child(String(unseen(p.terminal)))))
-          .when(children.length>0,el=>el.child(div().id(`sf-children-${p.terminal}`).px(3).rounded(3).text_size(10).text_color(t.accent)
-            .tooltip(this.lang()==='ko'?'서브에이전트 기록 펼치기':'Expand subagents')
+          .when(records.length>0,el=>el.child(div().id(`sf-children-${p.terminal}`).px(3).rounded(3).text_size(10).text_color(t.accent)
+            .tooltip(this.lang()==='ko'?'완료·상태 미확인 기록 펼치기/접기':'Show/hide completed and unknown records')
             .on_mouse_down('left',(_event,cx)=>cx.stop_propagation())
             .on_mouse_up('left',(_event,cx)=>cx.stop_propagation())
             .on_click((_event,cx)=>{cx.stop_propagation();
               if(this.expandedAgents.has(p.terminal))this.expandedAgents.delete(p.terminal);else this.expandedAgents.add(p.terminal);
               cx.notify();
-            }).child(`${this.expandedAgents.has(p.terminal)?'▾':'▸'} ${children.length}`)))
+            }).child(`${this.expandedAgents.has(p.terminal)?'▾':'▸'} ${activeCount} · 기록 ${records.length-activeCount}`)))
           .child(this.badge(p.status,'',t)))
-          .when(this.expandedAgents.has(p.terminal),el=>el.children(children.slice(0,12).map(node=>h_flex().id(`sf-node-${node.id}`).h(22).flex_none().pl(12+Math.min(node.depth,4)*5).pr(5).gap(4).items_center().rounded(3)
+          .when(children.length>0,el=>el.children(children.map(node=>h_flex().id(`sf-node-${node.id}`).h(42).flex_none().pl(12+Math.min(node.depth,4)*5).pr(5).gap(4).items_center().rounded(3)
             .when(endpoint(node.id),el=>el.border(1).border_color(routeColor(node.id)))
-            .tooltip(`${node.label||node.id} · ${workflowStatus(node,this.lang())} · ${node.statusSource||'상태 출처 미확인'}`)
+            .tooltip(`${s.name} / ${title(p)} · ${node.label||node.id} · ${node.task||''} · ${workflowStatus(node,this.lang())} · ${node.statusSource||'상태 출처 미확인'}`)
             .on_click(()=>run('agent.focus',{terminal:p.terminal}))
             .child(div().text_size(10).text_color(t.dim).child('↳'))
-            .child(div().flex_1().min_w(0).truncate().text_size(10).text_color(t.muted).child(node.label||node.id))
+            .child(v_flex().flex_1().min_w(0).gap(2)
+              .child(div().truncate().text_size(10).text_color(t.muted).child(node.task||node.label||''))
+              .child(div().truncate().text_size(9).text_color(t.dim).child(`${s.name} / ${title(p)} · ${node.label||''}`)))
             .child(div().text_size(9).text_color(t.dim).child(workflowStatus(node,this.lang()))))));
 
       })).child(div().id(`sf-docs-height-${s.id}`).min_w(0)
