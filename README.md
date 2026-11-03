@@ -282,6 +282,17 @@ Subagents expand under their parent agent with `▸ N`; parents without children
 
 Set a local project icon with `python3 scripts/set_workspace_icon.py 'workspace ID or exact name' /path/to/icon.png`. SVG, PNG, JPEG and WebP are supported, with optional `--background '#ffffff'` and `--tint` for monochrome SVGs. Assets are copied under local `data/sixfold/icons/`, mapped in `workspace-icons.json`, and refreshed without a theme restart. Customer logos are not bundled in the public repository.
 
+## Workspace badges (extension point)
+
+Other mods and tools can put small badges beside a workspace's name in the sidebar, without changing the theme. Publish them in shared state `sixfold.workspace.badges`, or write `~/.config/herdr-app/data/sixfold/workspace-badges.json` (the sidebar watches it):
+
+```json
+{ "<machine>|<space id>": [ { "id": "open", "text": "! 2", "tone": "blocked", "tooltip": "Two open items",
+  "open": { "mod": "my-mod", "props": { "x": 1 }, "kind": "window", "key": "my-mod-x", "width": 800, "height": 600 } } ] }
+```
+
+`<machine>` is the remote machine's name, empty for this computer; `<space id>` has no machine prefix. Tones: `blocked`, `working`, `done`, `accent`, `dim`. A click opens `open` as an overlay of that mod, or runs `command` (`{"name": "my-mod.show", "args": {}}`). Up to four badges per workspace, twelve characters each; malformed entries are ignored. Shared state wins over the file for the same workspace.
+
 ## Optional document and usage tools
 
 Separate mod recipes let you place document and usage tools in a personal layout. [Project Document Viewer](extras/preview/README.md) adds saved-file Markdown preview and local HTML snapshots. [System Metrics](extras/system-metrics/RECIPE.md) adds a separate CPU/memory strip. Token history is available from [Insights](https://github.com/GaganSD/coding-agent-toolkit/tree/main/herdr-insights); subscription quotas come from [Usage Bar](https://github.com/berkeatac/herdr-usage-bar). These are optional, separate installs; account quotas are not per-agent token totals.

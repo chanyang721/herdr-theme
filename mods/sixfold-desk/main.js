@@ -15,6 +15,7 @@ import { watchAlerts, alertSection, visibleAlerts } from './alerts.js';
 import { workspaceAlertsRow, hasWorkspaceAlerts, openInbox } from './alert-inbox.js';
 import { panePet, petRunning, RUN_FRAME_MS, RUN_FRAMES } from './pets.js';
 import { paneUsage } from './session-usage.js';
+import { watchBadges, workspaceBadges } from './badges.js';
 
 const hasPanel=node=>node?.id==='panel'||(node?.children||[]).some(hasPanel);
 
@@ -79,6 +80,7 @@ export default class SixfoldDesk extends View {
     watchDocs(this,cx);
     this.alerts = [];
     watchAlerts(this, cx);
+    watchBadges(this, cx);
     // File notifications start a small number of finite native transitions.
     // No frame-by-frame JavaScript animation or old-message replay on reload.
     this.previousEvents = null;
@@ -638,6 +640,7 @@ export default class SixfoldDesk extends View {
           .tooltip(this.lang()==='ko'?'고정 워크스페이스 · workspace-pins.local.json':'Pinned workspace · workspace-pins.local.json')
           .child(svg('mods/sixfold-desk/icons/pin.svg').size(12).text_color(t.accent))))
         .child(div().flex_1().min_w(0).truncate().text_color(s.active?t.foreground:t.muted).child(s.name))
+        .child(workspaceBadges(this,s,t))
         .child(div().text_size(10).text_color(t.muted).child(String(members.length))))
       .child(workspaceAlertsRow(s,t))
       .children(members.map(p=>{
