@@ -1,10 +1,14 @@
 import { View, div, image } from 'gpui-kit';
 import { h_flex, v_flex } from 'gpui-base';
-import { theme, props, appHome, readTextFile, writeTextFile, shared, setShared, closeOverlay, exec } from 'herdr';
+import { theme, props, appHome, readTextFile, writeTextFile, shared, setShared, openOverlay, closeOverlay, exec } from 'herdr';
 
 export default class MentionInbox extends View {
   init(_props,cx) {
     this.items=[];
+    if(props()?.overlay && !props()?.window && !props()?.newMessages){
+      openOverlay({mod:'sixfold-slack-inbox',kind:'window',key:'slack-mentions',keep:true,width:760,height:620,props:{window:true}});
+      closeOverlay(props().overlay);
+    }
     let busy=false,previous;
     const refresh=cx=>{
       if(busy)return;
