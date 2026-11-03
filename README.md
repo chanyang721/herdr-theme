@@ -35,8 +35,48 @@ herdr-app do layout.switch --name sixfold
 
 The installer refuses to replace existing Herdr Theme files or an existing `layout:sixfold` key section.
 It preserves all other layouts, settings and key bindings. Switch back with the layout picker.
-To update an existing installation, review the Git diff and copy only this repository's installed files;
-`scripts/install.py` is deliberately an initial installer, not an overwriting updater.
+`scripts/install.py` is only the initial installer. **For every subsequent installation, use only
+`scripts/update_install.py`; never copy or rsync files into the running app by hand.** Review the diff
+and explicitly list the files to install:
+
+```sh
+python3 scripts/update_install.py mods/sixfold-desk/main.js mods/sixfold-desk/model.js
+```
+
+The updater locks `data/sixfold/install.lock`, builds complete affected mod trees outside `mods/`, runs
+native checks, keeps full backups under `backups/sixfold-update-*/`, then atomically exchanges each
+mod directory. Unlisted installed files stay in the candidate tree. Identical contents and modes are skipped to avoid unnecessary reloads. It requires macOS directory swap
+or Linux `renameat2` exchange; there is no partial-file fallback for mods. Layout/theme files explicitly
+listed are atomically replaced individually. Repository `scripts/<file>` installs into `scripts/sixfold/<file>`
+to match the initial installer; scripts are also replaced individually. It verifies `status.errors` stays empty for one second
+and that space, tab and focused pane are unchanged. Failed checks do not install; failed verification
+rolls back automatically. A later concurrent writer is preserved and reported as a rollback conflict.
+The receipt records before/after status, checksums and rollback results. No theme settings, tabs,
+terminal processes or app lifecycle commands are changed. A clean status is not a visual check: also
+inspect a native `herdr-app shot` after installation.
+
+Use a separate git worktree and branch per editing session. Only one designated session installs a
+reviewed candidate; all installers must honor the same lock. **Never duplicate an installed mod into
+`mods/*-recovery` or change layouts to point to a recovery clone.** Restore through the updater and
+keep backups outside `mods/`. For an authorized repair of an already broken app,
+`--allow-unhealthy-before` permits the initial errors; final errors must still become zero.
+`--verify-timeout 30` gives hot reload more time without restarting the app. The updater never quits
+or restarts Herdr or herdr-core; any necessary restart needs its own session-preservation verification.
+To install the updater itself, select `scripts/update_install.py` (destination `scripts/sixfold/update_install.py`).
+When running that installed copy, pass `--repo /path/to/reviewed-worktree`.
+This policy covers all updates to existing UI mod/layout code. Legacy `install_doc_tabs.py` and
+`install_preview.py` are feature provisioning tools, not alternate live-update paths: do not run them
+against the live app while the installation owner is deploying; prepare/review their assets separately
+and send existing mod/layout code updates through the updater.
+
+The manual macOS native regression probe runs in its own app/core home:
+
+```sh
+python3 tests/native_ui_reload.py --reloads 80 --install-smoke
+```
+
+It saves four synthetic theme shots, a missing-export/restore case, reload stress results,
+and two real directory-swap updates. Review the shots as well as its JSON receipt.
 
 ## Keys
 
@@ -66,7 +106,7 @@ python3 scripts/workspace.py "Example" /path/to/your/project
 rows and columns while retaining every existing pane ID and terminal address. It never restarts a program.
 The sidebar's **+ Space** and **Ctrl+Shift+N** open a name/folder dialog and create one tab with a 3×2 split: four Claude and two Codex sessions. Both CLIs and Python 3 must be installed. The workspace helper uses the same default; pass `--shells` for six plain shells (`--agents` remains compatible).
 
-For an existing installation, update `mods/sixfold-new-space`, `mods/sixfold-desk/main.js`, and the theme key bindings together. Copy `scripts/workspace.py`, `scripts/core_api.py`, and `scripts/balance_grid.py` to `~/.config/herdr-app/scripts/sixfold/`. The installer places these files there for new installations. Other layouts and explicit `space.new` commands retain Herdr's own behavior.
+For an existing installation, use `scripts/update_install.py` to install the reviewed files from `mods/sixfold-new-space`, `mods/sixfold-desk/main.js`, and `scripts/{workspace,core_api,balance_grid}.py` together. Script destinations match `~/.config/herdr-app/scripts/sixfold/`. The updater deliberately refuses `keys.json`; review any key migration separately without replacing other bindings. Other layouts and explicit `space.new` commands retain Herdr's own behavior.
 Agent authentication and workspace trust use the agents' own interfaces.
 
 ## Computers and remote agents
@@ -109,11 +149,11 @@ Optional friendly names and default folders live only in
 Machine keys match `hc machine ls`. Without this file, native machine names are shown. Labels reload
 live; the optional folder applies to new workspaces. Keep private addresses, paths and credentials
 out of Git. For an existing installation, update both `mods/sixfold-desk/main.js` and
-`mods/sixfold-new-space/main.js` together, then run `herdr-app check` on each folder.
+`mods/sixfold-new-space/main.js` together through `scripts/update_install.py`, which checks both candidate mods.
 
 For discovery without a remote connection, set `"tailscale": true` in that same local JSON object.
-Install `scripts/collect_computers.py` under `~/.config/herdr-app/scripts/sixfold/` and update
-`mods/sixfold-desk/main.js`. Every 15 seconds the sidebar reads **local** `tailscale status --json`;
+Use `scripts/update_install.py scripts/collect_computers.py mods/sixfold-desk/main.js`; the helper installs
+under `~/.config/herdr-app/scripts/sixfold/`. Every 15 seconds the sidebar reads **local** `tailscale status --json`;
 Windows, macOS and Linux peers appear with their Tailscale DNS hostname and online flag.
 These passive rows cannot open shells or workspaces. “Tailscale Online” is the local status report,
 not proof that SSH or Herdr is reachable. Failed reads mark retained peers unknown.

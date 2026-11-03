@@ -25,7 +25,15 @@ herdr-app do layout.switch --name sixfold
 ```
 
 기존 레이아웃과 다른 단축키는 보존합니다. 같은 이름의 테마가 이미 설치돼 있으면 덮어쓰지 않습니다.
-업데이트는 Git diff를 검토한 뒤 이 저장소의 파일만 적용합니다.
+초기 설치 이후 **설치는 `scripts/update_install.py`로만** 합니다. 실행 중 앱의 설치본에 직접 `cp`·`rsync`하지 않습니다. Git diff를 검토하고 반영할 파일을 명시합니다.
+
+```sh
+python3 scripts/update_install.py mods/sixfold-desk/main.js mods/sixfold-desk/model.js
+```
+
+이 스크립트는 설치 잠금(`data/sixfold/install.lock`)을 잡고, `mods/` 바깥 임시 폴더에 완성된 모드 트리를 만들어 네이티브 검사합니다. 원본 전체를 `backups/sixfold-update-*/`에 저장한 다음 macOS/Linux의 원자적 디렉터리 교환으로 교체합니다. `scripts/<파일>`은 초기 설치와 같은 `scripts/sixfold/<파일>`에 반영합니다. 미지정 설치 파일은 보존하고, 해시·권한이 같은 파일은 건너뛰어 불필요한 reload를 막습니다. 설치 후 오류 0건이 1초간 유지되고 워크스페이스·탭·포커스가 같아야 통과합니다. 검증 실패 시 자동 되돌리되 다른 작성자의 후속 변경은 덮어쓰지 않고 충돌로 보고합니다. 결과는 백업의 `receipt.json`에서 확인합니다. `status` 성공과 별도로 실제 shot도 확인합니다.
+
+편집 세션마다 별도 git worktree·브랜치를 쓰고, 지정한 세션 하나만 검토된 결과를 설치합니다. **모드 디렉터리를 `mods/*-recovery`로 복사하거나 레이아웃을 복구용 복제 모드로 연결하는 방식은 금지합니다.** 백업은 반드시 `mods/` 밖에 둡니다. 이미 깨진 앱의 승인된 복구에서는 `--allow-unhealthy-before`로 시작 오류만 허용할 수 있고, 최종 오류는 여전히 0이어야 합니다. `--verify-timeout 30`은 확인 시간을 늘립니다. 이 스크립트는 테마 설정·탭·실행 터미널을 바꾸거나 앱/core를 종료·재시작하지 않습니다. 자기 설치는 `scripts/update_install.py`를 지정하면 `scripts/sixfold/update_install.py`로 복사됩니다. 설치된 사본을 실행할 때에는 `--repo /검토한/worktree`를 명시합니다. 이 방침은 기존 UI 모드·레이아웃 코드 갱신에 적용합니다. 기존 `install_doc_tabs.py`·`install_preview.py`를 별도 실시간 갱신 수단으로 사용하지 말고, 설치 담당자가 배포하는 동안 실제 앱 대상으로 실행하지 않습니다. 해당 도구의 산출물도 별도 준비·검토 후 코드 갱신은 updater로 반영합니다.
 
 - Cmd+[ / Cmd+]: 같은 탭의 이전·다음 pane
 - Cmd+Option+1~6: 번호로 pane 선택
