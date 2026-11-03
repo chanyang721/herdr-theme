@@ -387,7 +387,7 @@ export default class SixfoldDesk extends View {
           .child(div().truncate().text_size(11).font_bold().child(displayName))
           .child(div().truncate().text_size(9).text_color(t.muted).child(state)))
         .child(div().flex_none().text_size(9).text_color(t.dim).child(String(machineSpaces.length)));
-      return {key, label:displayName, kind, state, row, active:name===null || ready || machine.layout==='loading', color:ready || name===null ? t.accent : t.dim};
+      return {row, active:name===null || ready || machine.layout==='loading'};
     });
     if(this.computers?.tailscale){
       for(const peer of this.tailscalePeers??[]){
@@ -401,37 +401,26 @@ export default class SixfoldDesk extends View {
           .child(v_flex().flex_1().min_w(0)
             .child(div().truncate().text_size(11).font_bold().child(peer.name))
             .child(div().truncate().text_size(9).text_color(t.muted).child(state)));
-        computerItems.push({key:`tailscale:${peer.name}`,label:peer.name,kind:computerKind(peer.os,peer.name || peer.host),state,row,active:false,
-          color:peer.online===true?t.ansi2:peer.online===false?t.dim:t.blocked});
+        computerItems.push({row,active:false});
       }
     }
     const activeComputers=computerItems.filter(item=>item.active);
     const otherComputers=computerItems.filter(item=>!item.active);
     const computersExpanded=shared('sixfold.computing.expanded')===true;
-    // Selected hidden devices stay visible in the bounded icon strip. Selection
-    // only scopes this sidebar; it never opens SSH or moves terminal focus.
-    const compactComputers=[...otherComputers].sort((a,b)=>Number(b.key===selectedComputer)-Number(a.key===selectedComputer)).slice(0,3);
     const computerRows=activeComputers.map(item=>item.row);
-    if(otherComputers.length){
-      computerRows.push(h_flex().id('sf-computers-summary').h(28).flex_none().px(7).gap(4).items_center()
-        .child(div().id('sf-computers-toggle').flex_1().min_w(0).truncate().py(5).text_size(10).text_color(t.muted)
-          .hover(style=>style.text_color(t.foreground))
-          .tooltip(this.lang()==='ko'?'미연결·미등록 컴퓨터 펼치기/접기 · 아이콘 색: 초록 온라인, 회색 오프라인, 주황 미확인':'Expand/collapse disconnected or unregistered computers · green: online, gray: offline, orange: unknown')
-          .on_mouse_down('left',(_event,cx)=>cx.stop_propagation())
-          .on_click(()=>setShared('sixfold.computing.expanded',!computersExpanded))
-          .child(`${computersExpanded?'▾':'▸'} ${this.lang()==='ko'?'기타':'Other'} ${otherComputers.length}`))
-        .children(compactComputers.map(item=>h_flex().id(`sf-compact-${item.key}`).w(23).h(24).flex_none().gap(2).items_center().justify_center().rounded(4)
-          .bg(item.key===selectedComputer?t.selected:t.surface).hover(style=>style.bg(t.hover))
-          .tooltip(`${item.label} · ${item.state}`)
-          .on_mouse_down('left',(_event,cx)=>cx.stop_propagation())
-          .on_click(()=>this.selectComputer(item.key))
-          .child(svg(`mods/sixfold-desk/icons/device-${item.kind}.svg`).size(12).text_color(item.key===selectedComputer?t.accent:t.muted))
-          .child(div().size(4).flex_none().rounded(2).bg(item.color))))
-        .when(otherComputers.length>compactComputers.length,e=>e.child(div().text_size(9).text_color(t.dim).child(`+${otherComputers.length-compactComputers.length}`))));
-      if(computersExpanded)computerRows.push(v_flex().id('sf-computers-other').max_h(180).flex_none().overflow_y_scroll().gap(3).children(otherComputers.map(item=>item.row)));
-    }
-    if(this.computers?.tailscale && this.tailscaleError)computerRows.push(div().px(7).text_size(10).text_color(t.blocked)
+    if(computersExpanded && otherComputers.length)computerRows.push(v_flex().id('sf-computers-other').max_h(180).flex_none().overflow_y_scroll().gap(3).children(otherComputers.map(item=>item.row)));
+    if(computersExpanded && this.computers?.tailscale && this.tailscaleError)computerRows.push(div().id('sf-computers-error').px(7).text_size(10).text_color(t.blocked)
       .child(this.lang()==='ko'?'Tailscale 상태 확인 불가':'Tailscale status unavailable'));
+    // Keep hidden devices out of the list entirely until explicitly expanded.
+    // The title's small disclosure is the only collapsed entry point.
+    const computerSection=h_flex().px(12).pt(13).pb(6).gap(3).items_center()
+      .child(div().text_size(10).font_bold().text_color(t.dim).child(this.lang()==='ko'?'컴퓨팅':'COMPUTERS'))
+      .when(otherComputers.length>0 || Boolean(this.computers?.tailscale && this.tailscaleError),e=>e.child(div().id('sf-computers-toggle').w(20).h(18).text_size(11).text_color(t.muted)
+        .hover(style=>style.text_color(t.foreground))
+        .tooltip(this.lang()==='ko'?'미연결·미등록 컴퓨터 펼치기/접기':'Show/hide disconnected or unregistered computers')
+        .on_mouse_down('left',(_event,cx)=>cx.stop_propagation())
+        .on_click(()=>setShared('sixfold.computing.expanded',!computersExpanded))
+        .child(computersExpanded?'▾':'▸')));
     const groups=workspaceList.map(s=>({s,members:priority(s.tabs.flatMap(tab=>all.filter(p=>p.tab===tab.id)))}));
     const positions={};let offset=0;
     for(const {s,members} of groups){
@@ -538,7 +527,7 @@ export default class SixfoldDesk extends View {
         .child(this.button('sf-language',w.language,()=>run('sixfold-desk.language'),t)))
       .child(h_flex().px(12).py(9).gap(12).flex_none().children(['blocked','done','working'].map(s => this.badge(s,String(total[s]),t))))
       .child(v_flex().id('sf-scroll').flex_1().min_h(0).overflow_y_scroll()
-        .child(section(this.lang() === 'ko' ? '컴퓨팅' : 'COMPUTERS'))
+        .child(computerSection)
         .child(v_flex().flex_none().px(7).pb(6).gap(3).children(computerRows))
         .child(section(`${discoveryOnly?selectedComputer.slice(10):this.computerLabel(selectedMachine)} · ${w.spaces}`)).child(workspaceTree)
         .when(workspaceList.length===0,e=>e.child(v_flex().id('sf-empty-workspaces').px(12).pb(12).gap(5)
