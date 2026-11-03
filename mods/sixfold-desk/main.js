@@ -513,7 +513,7 @@ export default class SixfoldDesk extends View {
         .child(div().flex_1().font_bold().text_size(14).child('Herdr Theme'))
         .child(this.button('sf-language',w.language,()=>run('sixfold-desk.language'),t)))
       .child(h_flex().px(12).py(9).gap(12).flex_none().children(['blocked','done','working'].map(s => this.badge(s,String(total[s]),t))))
-      .child(v_flex().id('sf-scroll').flex_1().min_h(0).overflow_y_scrollbar().mode('always')
+      .child(v_flex().id('sf-scroll').flex_1().min_h(0).overflow_y_scroll()
         .child(section(this.lang() === 'ko' ? '컴퓨팅' : 'COMPUTERS'))
         .child(v_flex().flex_none().px(7).pb(6).gap(3).children(computerRows))
         .child(section(`${discoveryOnly?selectedComputer.slice(10):this.computerLabel(selectedMachine)} · ${w.spaces}`)).child(workspaceTree)
