@@ -43,14 +43,17 @@ export function simultaneousRoutes(flows) {
 
 // A route whose two ends live on different computers. `machineOf` returns the
 // endpoint's machine (null for this computer) or undefined when it is unknown.
+// `far` is the other computer to name: the target, or the source when the target is here.
 export function crossMachine(route, machineOf) {
   const from = machineOf(route.source), to = machineOf(route.target);
-  return from !== undefined && to !== undefined && from !== to ? { from, to } : null;
+  return from !== undefined && to !== undefined && from !== to ? { from, to, far: to ?? from } : null;
 }
 
 // Follow focus onto another computer, but keep a manual pick until focus moves there.
+// A null focusKey (no focused space) is not a move and changes nothing.
 export function followComputer(state, focusKey, saved) {
   const valid = typeof saved === 'string' && (saved === 'local' || /^(remote|tailscale):.+/.test(saved));
+  if (focusKey === null) return state.follow && state.lastFocus !== undefined ? state.lastFocus : valid ? saved : 'local';
   if (state.lastFocus !== undefined && state.lastFocus !== focusKey) state.follow = true;
   state.lastFocus = focusKey;
   if (state.follow || !valid) return focusKey;

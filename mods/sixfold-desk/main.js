@@ -251,9 +251,10 @@ export default class SixfoldDesk extends View {
   }
 
   selectedComputer() {
-    const machine = spaces().find(space => space.id === focused()?.space)?.machine;
+    const space = focused()?.space;
+    const machine = spaces().find(s => s.id === space)?.machine;
     // Moving focus to another computer's session switches the list with it.
-    return followComputer(this.computerFollow ??= {}, machine ? `remote:${machine}` : 'local', shared('sixfold.computing.selected'));
+    return followComputer(this.computerFollow ??= {}, !space ? null : machine ? `remote:${machine}` : 'local', shared('sixfold.computing.selected'));
   }
 
   selectComputer(key) {
@@ -603,7 +604,7 @@ export default class SixfoldDesk extends View {
           .child(div().flex_none().text_color(palette[flow.lane%palette.length]).font_bold().child(flow.phase==='arrived'?'✓':'→'))
           .child(div().flex_1().min_w(0).truncate().text_color(t.foreground).child(`${label(flow.source)} → ${label(flow.target)}`))
           .when(Boolean(crossMachine(flow,machineOf)),row=>row.child(div().flex_none().px(4).rounded(3).border(1).border_color(palette[flow.lane%palette.length]).text_size(9).text_color(palette[flow.lane%palette.length])
-            .child(`⇄ ${this.computerLabel(crossMachine(flow,machineOf).to)}`)))
+            .child(`⇄ ${this.computerLabel(crossMachine(flow,machineOf).far)}`)))
           .when(flow.count>1,row=>row.child(div().text_color(palette[flow.lane%palette.length]).child(`×${flow.count}`)))))
         .when(routes.length>2,row=>row.child(div().text_size(9).text_color(t.muted).child(this.lang()==='ko'?`+${routes.length-2}개 경로 전송 중`:`+${routes.length-2} active routes`)))))
       .when(this.queuedRoutes.length>0,e=>e.child(h_flex().id('sf-delivery-status').flex_none().px(10).py(6).gap(5).items_center().border_t(1).border_color(t.border)
