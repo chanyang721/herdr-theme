@@ -28,6 +28,7 @@ async function harness({ documents = [document('a'), document('b')], selection, 
     readTextFile: async path => { if (path.endsWith('/project-docs-open.json')) return state.request ? JSON.stringify(state.request) : null; reads.push(path); return state.text(path); },
     exec: async (command, args) => {
       calls.push({ command, args });
+      if (command === 'osascript' && state.osascript) return state.osascript(args);
       if (command !== 'python3') return { code: 0, stdout: '', stderr: '' };
       if (args[0].endsWith('render_mermaid.py')) return state.mermaid ? state.mermaid(args) : { code: 0, stdout: '{"diagrams":[]}', stderr: '' };
       if (args[0].endsWith('render_html.py')) return state.html(args);
@@ -48,7 +49,7 @@ async function harness({ documents = [document('a'), document('b')], selection, 
   source = `const {${Object.keys(runtime).join(',')}} = globalThis[${JSON.stringify(key)}];\n${source}`;
   const { default: Panel } = await import('data:text/javascript;base64,' + Buffer.from(source).toString('base64'));
   delete globalThis[key];
-  const cx = { notify() {}, spawn: task => { const promise = task(cx); promise.catch(() => {}); return promise; }, timer: { every: (ms, callback) => timer.set(ms, callback) } };
+  const cx = { notify() {}, spawn: task => { const promise = task(cx); promise.catch(() => {}); return promise; }, timer: { every: (ms, callback) => timer.set(ms, callback), after: (ms, callback) => timer.set(`after-${ms}`, callback) } };
   const view = new Panel(); view.init({}, cx);
   const flush = async () => { for (let i = 0; i < 4; i++) await new Promise(resolve => setImmediate(resolve)); };
   const render = () => { handlers.clear(); labels.length = 0; view.render(cx); };
@@ -235,15 +236,43 @@ test('documents with mermaid render diagram images once and keep code with a not
 test('html documents render as page images once and report renderer failures', async t => {
   const h = await harness({ documents: [document('report', '/docs/report.html')] }); t.after(() => h.view.close());
   let runs = 0;
-  h.state.html = args => { runs++; assert.deepEqual(args.slice(1), ['--doc', '/docs/report.html', '--theme', 'dark']);
+  h.state.html = args => { runs++; assert.deepEqual(args.slice(1), ['--doc', '/docs/report.html', '--theme', 'dark', '--width', '760']);
     return { code: 0, stdout: JSON.stringify({ pages: [{ path: 'mods/project-docs-tabs/.cache/html-a-0.png', width: 960, height: 2000 }, { path: 'mods/project-docs-tabs/.cache/html-a-1.png', width: 960, height: 300 }] }), stderr: '' }; };
   h.state.text = () => '<html><body>표</body></html>'; h.view.load(h.cx); await h.flush();
   assert.equal(h.view.blocks.length, 2); assert.ok(h.view.blocks.every(b => b.media && b.diagram)); assert.equal(runs, 1);
   h.view.load(h.cx); await h.flush(); assert.equal(runs, 1, 'an unchanged page is not rendered again');
-  h.render(); assert.ok(h.labels.some(l => l.startsWith('HTML은')));
+  h.render(); assert.ok(h.labels.some(l => l.startsWith('HTML은'))); assert.ok(!h.handlers.has('docs-browser'), 'a static page has no browser banner');
   h.state.html = () => ({ code: 1, stdout: JSON.stringify({ error: 'HTML 렌더러가 설치되지 않았습니다.' }), stderr: '' });
   h.state.text = () => '<html>바뀜</html>'; h.view.load(h.cx); await h.flush();
   assert.match(h.view.bodyError, /설치되지 않았습니다/); assert.equal(h.view.blocks.length, 2, 'the last good page stays');
+});
+
+test('html renders at the pane width and redraws once the pane stops resizing', async t => {
+  const h = await harness({ documents: [document('report', '/docs/report.html')] }); t.after(() => h.view.close());
+  const widths = [];
+  h.state.html = args => { const width = Number(args.at(-1)); widths.push(width);
+    return { code: 0, stdout: JSON.stringify({ pages: [{ path: `w${width}.png`, width, height: 100 }] }), stderr: '' }; };
+  h.state.text = () => '<html>표</html>'; h.view.load(h.cx); await h.flush();
+  assert.deepEqual(widths, [760]);
+  h.view.width = 815; h.view.resized(h.cx); assert.ok(!h.timer.has('after-400'), 'a step under 40px keeps the picture');
+  h.view.width = 1030; h.view.resized(h.cx); h.view.width = 1100; h.view.resized(h.cx);
+  h.timer.get('after-400')(h.cx); await h.flush();
+  assert.deepEqual(widths, [760, 1040]); assert.equal(h.view.html.width, 1040);
+});
+
+test('html with clicks or popups shows a banner that opens the default browser', async t => {
+  const h = await harness({ documents: [document('report', '/docs/report.html')] }); t.after(() => h.view.close());
+  h.state.html = () => ({ code: 0, stdout: JSON.stringify({ pages: [{ path: 'a.png', width: 760, height: 100 }], interactive: ['펼침 영역', '입력 양식'], truncated: true }), stderr: '' });
+  h.state.osascript = () => ({ code: 0, stdout: '/Applications/Browser.app\n', stderr: '' });
+  h.state.text = () => '<details><summary>더</summary></details>'; h.view.load(h.cx); await h.flush();
+  h.render();
+  assert.ok(h.labels.includes('이 문서는 클릭·팝업이 있어 브라우저에서 여세요'));
+  assert.ok(h.labels.some(l => l.includes('펼침 영역, 입력 양식'))); assert.ok(h.labels.some(l => l.startsWith('긴 문서라')));
+  h.handlers.get('docs-browser')(null, h.cx); await h.flush();
+  assert.deepEqual(h.calls.at(-1), { command: 'open', args: ['-a', '/Applications/Browser.app', '/docs/report.html'] });
+  h.state.osascript = () => ({ code: 1, stdout: '', stderr: 'no handler' });
+  h.handlers.get('docs-browser')(null, h.cx); await h.flush();
+  assert.deepEqual(h.calls.at(-1), { command: 'open', args: ['/docs/report.html'] }, 'falls back to the system default');
 });
 
 test('opened and recent tabs close; a closed recent comes back only as a newer version', async t => {
