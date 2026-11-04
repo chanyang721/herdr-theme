@@ -106,7 +106,7 @@
               "id": "plan-usage",
               "type": "block",
               "size": {
-                "px": 540
+                "px": 660
               },
               "content": {
                 "mod": "plan-usage"
