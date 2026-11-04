@@ -128,6 +128,16 @@ Workspaces belong to the same project when their names match; a trailing `(compu
 
 The computer list separately draws up to four right-angle dashed pipes in a fixed right margin: for shared work, or for a pair of computers for **five minutes after their last send**. The ↑/↓ counts still cover the **last ten minutes**. A shared-work mark shows simultaneous activity on the same project; a send link shows a send event. Neither proves that a particular message was delivered or read.
 
+| One shared project · dark | One shared project · light |
+| --- | --- |
+| ![One shared Storefront project in the dark theme](docs/images/collab-single-dark.png) | ![One shared Storefront project in the light theme](docs/images/collab-single-light.png) |
+
+| Multiple project groups · dark | Multiple project groups · light |
+| --- | --- |
+| ![Several shared projects and an idle Notes partner in the dark theme](docs/images/collab-multi-dark.png) | ![Several shared projects and an idle Notes partner in the light theme](docs/images/collab-multi-light.png) |
+
+Native app captures on Windows 11, using `sixfold-night` / `sixfold-day` and demo workspaces. Only the `worker` computer and its sidebar data (including send events) are synthetic. In the multiple-group views, Notes has a partner but no shared work in progress, so its header keeps the partner name without an active border or badge.
+
 ### Sends between computers
 
 A send whose ends are on different computers runs its pipe from the visible row up to the top of the workspace list. The other computer's row lights up in the route colour with ⇡ (sent) or ⇣ (received), and the footer adds a ⇄ chip naming the far computer. An endpoint's computer comes from its terminal address (`machine/` prefix), so background remote terminals count too.
