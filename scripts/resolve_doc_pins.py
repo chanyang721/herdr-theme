@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-"""Read-only project document selection; only explicit pin commands write pin rules."""
+"""Read-only project document selection; only explicit pin commands write pin rules.
+
+The CLI prints ``catalog()``: pins first, then every document in the space's folders with
+its kind, version family and state, then the harness view. ``resolve()`` is the older
+pins-plus-recent selection that pin commands still validate against.
+"""
 import argparse
 from datetime import date, datetime, timedelta
 import fcntl
@@ -11,6 +16,7 @@ import re
 import unicodedata
 
 from collect_docs import EXTENSIONS, atomic_json, documents, is_archived
+import doc_catalog
 
 DEFAULT_KEYWORDS = ['결정', '확인요청', '확인 요청', '회신', '질의', '검토결과', '검토 결과']
 DATE_PREFIX = re.compile(r'^(\d{8}|\d{4}-\d{2}-\d{2})[_\- ]+(.+)$')
@@ -172,6 +178,65 @@ def resolve(config, space_id, today=None):
             'warnings': sorted(set(warnings)), 'watchRoots': sorted(set(roots))}
 
 
+def catalog(config, space_id, today=None, app_home=None):
+    """Everything the 문서 tab lists for one space; reads files, never changes them."""
+    today = today or date.today()
+    base = resolve(config, space_id, today)
+    settings = config['spaces'][space_id]
+    kinds = doc_catalog.kinds_for(config, settings)
+    days = int((settings.get('recent') or {}).get('highlightDays', doc_catalog.RECENT_DAYS))
+    warnings = list(base['warnings'])
+    approved = []
+    for entry in settings.get('folders', []):
+        root = Path(entry if isinstance(entry, str) else entry['path']).expanduser()
+        if root.is_absolute() and not root.is_symlink() and not is_archived(root):
+            approved.append(entry)
+    pins = [d for d in base['documents'] if d.get('pinned')]
+    rows = doc_catalog.build(documents(approved, warnings, include_archived=True), pins, kinds, today, days)
+    by_path = {row['path']: row for row in rows}
+    for pin in pins:
+        row = by_path.get(pin.get('path'))
+        if row:
+            pin.update({key: row[key] for key in ('kind', 'family', 'date', 'recent', 'folder') if key in row})
+            pin['versions'] = row.get('versions', [])
+            for other in rows:
+                if other.get('head') == row['id']:
+                    other['head'] = pin['id']
+            rows.remove(row)
+        elif pin.get('name'):
+            pin['kind'] = doc_catalog.classify(pin['name'], '', kinds)
+            if pin.get('mtime'):
+                stamp, _ = doc_catalog.document_date(pin['name'], (), pin['mtime'])
+                pin.update(date=stamp.isoformat(), recent=today - timedelta(days=max(0, days - 1)) <= stamp <= today)
+        pin.setdefault('kind', doc_catalog.OTHER['id'])
+    # A pinned head may be a different path than the catalog head; keep one head per family.
+    pinned_families = {pin.get('family') for pin in pins if pin.get('family')}
+    for row in rows:
+        if row['family'] in pinned_families and row['state'] == 'latest':
+            row['state'] = 'previous'
+            row['head'] = next(pin['id'] for pin in pins if pin.get('family') == row['family'])
+    rows.sort(key=lambda r: (r['date'], r['mtime'], r['id']), reverse=True)
+    override = (settings.get('harness') or {}).get('root')
+    root = doc_catalog.harness_root(space_id, app_home or app_home_default(), override)
+    harness, sections = [], []
+    if root:
+        known = {d['path']: d['id'] for d in pins + rows if d.get('path')}
+        harness, sections = doc_catalog.harness(root, known)
+    order = [kind['id'] for kind in kinds]
+    order.sort(key=lambda kind: doc_catalog.DISPLAY.index(kind) if kind in doc_catalog.DISPLAY else len(doc_catalog.DISPLAY))
+    order.append(doc_catalog.OTHER['id'])
+    labels = {kind['id']: kind['label'] for kind in kinds} | {doc_catalog.OTHER['id']: doc_catalog.OTHER['label']}
+    return {'version': 2, 'spaceId': space_id, 'name': base['name'], 'checkedAt': base['checkedAt'],
+            'documents': pins + rows + harness, 'warnings': sorted(set(warnings)),
+            'watchRoots': sorted(set(base['watchRoots'] + ([str(root)] if root else []))),
+            'kinds': [{'id': kind, 'label': labels[kind]} for kind in order], 'recentDays': days,
+            'harness': {'root': str(root), 'sections': sections} if root else None}
+
+
+def app_home_default():
+    return Path(os.environ.get('HERDR_APP_HOME', Path.home() / '.config/herdr-app'))
+
+
 def mutate(config, space_id, pin_path=None, unpin=None, pin_id=None):
     settings = config['spaces'][space_id]
     settings.setdefault('pins', [])
@@ -228,7 +293,7 @@ def main():
                 atomic_json(args.config, config)
         else:
             config = json.loads(args.config.read_text())
-        print(json.dumps(resolve(config, args.space), ensure_ascii=False))
+        print(json.dumps(catalog(config, args.space), ensure_ascii=False))
     except (OSError, ValueError, KeyError, TypeError) as error:
         parser.exit(1, str(error) + '\n')
 

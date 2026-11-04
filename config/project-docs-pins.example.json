@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "classify": {
+    "kinds": [
+      {"id": "reply", "label": "회신안", "terms": ["회신", "답변", "reply"]},
+      {"id": "structure", "label": "구조도", "terms": ["구조", "architecture"]},
+      {"id": "report", "label": "보고서", "terms": ["보고서", "견적", "report"]}
+    ]
+  },
+  "spaces": {
+    "sp-your-space-id": {
+      "name": "Project A",
+      "folders": ["~/work/projects/example/docs", {"path": "~/Documents/HerdrReports", "match": ["project-a"]}],
+      "pins": [
+        {"id": "architecture", "label": "전체 아키텍처", "kind": "file", "path": "/absolute/path/ARCHITECTURE.md"},
+        {"id": "overview", "label": "전체 구조(최신)", "kind": "latest", "root": "/absolute/path/reports", "topic": "ProjectA_overview.md", "recursive": false}
+      ],
+      "recent": {"highlightDays": 7},
+      "classify": {"kinds": [{"id": "reply", "label": "회신안", "terms": ["회신", "질의"]}]},
+      "harness": {"root": "/optional/manual/harness/view/folder"}
+    }
+  }
+}
