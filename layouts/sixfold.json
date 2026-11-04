@@ -83,6 +83,16 @@
               }
             },
             {
+              "id": "mcp-status",
+              "type": "block",
+              "size": {
+                "px": 150
+              },
+              "content": {
+                "mod": "mcp-status"
+              }
+            },
+            {
               "id": "plan-usage",
               "type": "block",
               "size": {
