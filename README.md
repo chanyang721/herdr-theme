@@ -2,11 +2,11 @@
 
 Coordinate coding agents across projects and computers from one live sidebar. See every workspace and agent, follow concurrent messages (including sends between computers), see which projects are being worked on from more than one computer, and keep CPU/RAM, MCP connections, account CLIs, plan limits and per-session token use in view — without leaving your current terminal.
 
-![Herdr Theme on Windows: two computers, shared work on Storefront, the monitor strip](preview.png)
+![Herdr Theme on Windows: two computers, shared work on Storefront, the monitor strip](preview.gif)
 
 [한국어](README.ko.md)
 
-The screenshots are of the real app on Windows 11 (Herdr app 0.1.12, core 0.1.17) with labelled demo workspaces; the second computer, "worker", is synthetic. The monitor strip shows this machine's real readings.
+The looping GIF and screenshots show the real app on Windows 11 with labelled demo workspaces. Only the second computer, "worker", and its sidebar data (including send events) are synthetic. The monitor strip shows this machine's real readings. The 12-second loop follows a send into the collaboration-border comet and back to breathing. [Still image](preview.png).
 
 ## What you get
 
