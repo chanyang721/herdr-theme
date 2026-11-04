@@ -93,6 +93,23 @@ class InstallTests(unittest.TestCase):
         self.assertEqual((self.home / ".claude/settings.json").read_text(), before)
         self.assertNotIn("plugin link", (self.home / "herdr.json.log").read_text().split("plugin link", 1)[1])
 
+    def test_moving_an_install_without_the_hook_does_not_add_it(self):
+        settings = self.home / ".claude/settings.json"
+        settings.write_text(json.dumps({"model": "kept"}))
+        result = self.run_install()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertNotIn("hooks", json.loads(settings.read_text()))
+        self.assertIn("hook is off", result.stdout)
+
+    def test_a_new_install_adds_the_hook(self):
+        self.db.write_text("{}")
+        (self.home / ".claude/settings.json").write_text("{}")
+        self.assertEqual(self.run_install().returncode, 0)
+        settings = json.loads((self.home / ".claude/settings.json").read_text())
+        commands = [h["command"] for e in settings["hooks"]["UserPromptSubmit"] for h in e["hooks"]]
+        self.assertEqual(len(commands), 1)
+        self.assertTrue(commands[0].endswith("/plugin/voice_submit_hook.py"))
+
     def test_check_fails_while_an_old_folder_is_linked(self):
         result = self.run_install("--check")
         self.assertEqual(result.returncode, 1)
