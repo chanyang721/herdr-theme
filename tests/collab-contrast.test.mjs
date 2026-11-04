@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readdir, readFile } from 'node:fs/promises';
 import { collabColor, onCollab, contrast, COLLAB_CONTRAST } from '../mods/sixfold-desk/collab.js';
+import { groupColors, paletteMode } from '../mods/sixfold-desk/collab-flow.js';
 
 // The tokens the app resolves for a theme file, as herdr-app's settings.rs `resolve` does
 // for the ones the collaboration colour is drawn over: `surface` is the palette background
@@ -12,9 +13,12 @@ function tokens(file) {
   const bg = file.background;
   const colors = file.colors ?? {};
   const isLight = light(bg);
+  const mix = (a, b, amount) => '#' + hex(a).map((c, i) => Math.round(c * (1 - amount) + hex(b)[i] * amount).toString(16).padStart(2, '0')).join('');
   return {
     background: colors.background ?? bg,
     surface: colors.surface ?? bg,
+    chrome: colors.chrome ?? mix(bg, isLight ? '#e8e8e2' : '#000000', isLight ? 0.6 : 0.32),
+    canvas: colors.canvas ?? mix(bg, isLight ? '#e8e8e2' : '#000000', isLight ? 0.2 : 0.16),
     selected: colors.selected ?? (isLight ? '#00000012' : '#ffffff17'),
     foreground: colors.foreground ?? (isLight ? '#1b1b1e' : '#eeeeef'),
   };
@@ -43,9 +47,26 @@ test('every shipped theme reads the partner name at 4.5:1 or more, on a plain an
   }
 });
 
+test('all four group colours read at 4.5:1 on every shipped theme, including overlays and badge text', async () => {
+  const dir = new URL('../themes/', import.meta.url);
+  for (const name of (await readdir(dir)).filter(name => name.endsWith('.json'))) {
+    const t = tokens(JSON.parse(await readFile(new URL(name, dir), 'utf8')));
+    const palette = [...groupColors(['Game', 'Docs', 'Shop', 'Platform'], paletteMode(t), t).values()];
+    assert.equal(new Set(palette.map(item => item.color)).size, 4, `${name}: four distinct colours`);
+    for (const {color} of palette) {
+      const grounds = [hex(t.surface), hex(t.chrome), hex(t.canvas), flatten(t.selected, t.surface), flatten(color + '1A', t.chrome)];
+      for (const ground of grounds) {
+        assert(contrast(hex(color), ground) >= COLLAB_CONTRAST, `${name}: ${color} on ${ground}`);
+      }
+      assert(contrast(hex(onCollab(color)), hex(color)) >= COLLAB_CONTRAST, `${name}: ${color} badge text`);
+    }
+  }
+});
+
 test('win98 grey gets a darker periwinkle, not the light one', () => {
   const t = { background: '#000000', surface: '#c0c0c0', foreground: '#000000' };
   const color = collabColor(t);
   assert.notEqual(color, '#A9B8FF');
+  assert.equal(color, '#3043AF', 'retain the corrected partner name colour');
   assert(contrast(hex(color), hex('#c0c0c0')) >= COLLAB_CONTRAST);
 });
