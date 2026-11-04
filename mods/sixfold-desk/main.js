@@ -9,8 +9,8 @@ import { computerKind, computerStatus, computerAlert, tailscaleStatus, workspace
 import { freshMessages, recentRoutes, simultaneousRoutes, crossMachine, followComputer, terminalMachine, machineHops, machineTraffic, trafficWake } from './flow.js';
 import { pipeline } from './pipeline.js';
 import { machineCounts, projectGroups, liveLinks, linkPalette, projectName, trackLinks, collabColor, spacePartners } from './collab.js';
-import { FLOW, groupColors, groupKey, paletteMode, flowColor } from './collab-flow.js';
-import { collabFlow } from './collab-flow-view.js';
+import { FLOW, groupColors, groupKey, paletteMode, breathPeriod, lastGroupSend, cometPlan } from './collab-flow.js';
+import { breathingBorder, borderComet } from './collab-flow-view.js';
 import { workflowNodes, delegationEvents, workflowStatus, sessionChildren, activeWorkflow } from './workflow.js';
 import { watchDocs, currentDocs, docsSection, prepareDocsInput } from './docs.js';
 import { watchAlerts, alertSection, visibleAlerts } from './alerts.js';
@@ -163,11 +163,8 @@ export default class SixfoldDesk extends View {
     });
     // ⑩ The flow around a collaborating workspace moves corner to corner by native
     // transitions; this steps it at each corner, only while some workspace collaborates.
-    this.flowStep = 0;
     cx.timer.every(FLOW.edgeMs, cx => {
-      if (!this.collabFlowing) return;
-      this.flowStep = (this.flowStep + 1) % 4;
-      cx.notify();
+      if (this.collabFlowing) cx.notify();
     });
     // Links also change with time alone: a send link ends five minutes after its last
     // send and an ended link leaves after its fade. Redraw when the next one is due.
@@ -334,11 +331,11 @@ export default class SixfoldDesk extends View {
   badge(status, text, t, size = 11, labelColor = null) {
     // Working uses the stock Herdr spinner (same asset, color and speed as the default agents list).
     const mark = status === 'working'
-      ? svg('mods/workspace-chrome/spinner.svg').size(size+1).flex_none().text_color(t.working).spin(900)
+      ? svg('mods/workspace-chrome/spinner.svg').size(size+1).flex_none().text_color(t.working).when(shared('sixfold.motion')!==false,e=>e.spin(900))
       // Idle: the same ring at rest, breathing slowly instead of turning.
       : status === 'idle'
       ? svg('mods/sixfold-desk/icons/idle.svg').size(size+1).flex_none().text_color(t.idle ?? t.dim)
-          .loop('opacity', { from: 0.35, to: 1, period: 2400 })
+          .when(shared('sixfold.motion')!==false,e=>e.loop('opacity', { from: 0.35, to: 1, period: 2400 }))
       : div().font_bold().child(marks[status] ?? '·');
     return h_flex().gap(5).items_center().text_size(size).text_color(t[status] ?? t.muted)
       .child(mark).child(labelColor ? div().text_color(labelColor).child(text) : text);
@@ -494,7 +491,8 @@ export default class SixfoldDesk extends View {
     // ⑩ With two or more groups working together now, each group has its own colour on both
     // sides (this computer's workspace and the partner's computer row); one group keeps ⑨'s.
     const colorOfGroup = groupColors(allGroups.filter(group => group.active).map(group => group.name), paletteMode(t));
-    const groupColor = name => colorOfGroup.get(groupKey(name)) ?? collab;
+    const groupColor = name => colorOfGroup.get(groupKey(name))?.color ?? collab;
+    const groupIndex = name => colorOfGroup.get(groupKey(name))?.index ?? 0;
     const hoverSpace = this.hoverSpace ? spaceList.find(space => space.id === this.hoverSpace) : null;
     const hoverPartners = new Set(hoverSpace ? (partnersOf(hoverSpace)?.partners ?? []) : []);
     const hoverColor = hoverSpace && partnersOf(hoverSpace) ? groupColor(partnersOf(hoverSpace).group.name) : collab;
@@ -505,6 +503,13 @@ export default class SixfoldDesk extends View {
     const sendEvents = (this.messageEvents ?? []).filter(event => !event.external);
     const traffic = machineTraffic(sendEvents, machineOf, Date.now());
     const hops = machineHops(sendEvents, machineOf, 32);
+    // ⑪ F: a group's newest send between this computer and its partners starts a comet on its
+    // border when the packet arrives (cometPlan); without motion nothing runs.
+    const comets = motion
+      ? cometPlan(new Map(allGroups.filter(group => group.active).map(group => [groupKey(group.name), lastGroupSend(group, hops)])), Date.now())
+      : { comets: new Map(), waking: null, flowing: false };
+    // Redraw at each corner only while a comet runs or is about to start (no frame timer).
+    this.collabFlowing = comets.flowing || comets.waking !== null;
     // Computers joined now (collab.js liveLinks). Each link keeps its slot (lane and
     // colour) while it lasts; a link that ends fades out, then leaves.
     const linkColors = linkPalette(t);
@@ -635,7 +640,6 @@ export default class SixfoldDesk extends View {
       return box.bg(workspaceColor(s)).child(svg(`mods/sixfold-desk/icons/ws-${workspaceIdentity(s,this.site)||'workspace'}.svg`).size(12).flex_none().text_color(t.background));
     };
     // ⑩ The flow timer steps only while some workspace here is worked on together now.
-    this.collabFlowing=motion&&groups.some(({s})=>{const m=spaceLink(s);return Boolean(m&&!m.gone);});
     const spaceRows=groups.map(({s,members})=>{ const mark=spaceLink(s), linked=mark && !mark.gone ? mark : null;
       // A partner on another computer always shows in the header (icon + its name, in the
       // collaboration colour). While worked on together now the box gets a 2px outline and
@@ -650,9 +654,15 @@ export default class SixfoldDesk extends View {
         .text_size(10).font_bold().text_color(t.background).opacity(mark.gone ? 0 : 1).when(motion,el=>el.transition('opacity',600))
         .tooltip(`${mark.partners.map(m => this.computerLabel(m)).join(', ')}${this.lang()==='ko' ? '과 협업 중' : ': worked on together now'}\n${collabNote}`)
         .child(`⇄${mark.partners.length > 1 ? mark.partners.length : ''}`) : null;
-      const outline = lit ? div().absolute().top(-1).left(-1).right(-1).bottom(-1).rounded(7).border(2).border_color(collab) : null;
+      // ⑪ While worked on together now: D, the border breathes in the group colour (static with
+      // motion off); F, after a message arrives a comet runs around it with the border as a faint
+      // track. Otherwise (hover) the plain 2px outline.
+      const groupName=partner?.group.name ?? mark?.lane.link.name;
+      const comet=linked ? comets.comets.get(groupKey(groupName)) : null;
       const size=this.boxSizes?.[s.id];
-      const flowView=linked&&size ? collabFlow({id:s.id,w:size.w,h:size.h,color:flowColor(collab,paletteMode(t)),step:this.flowStep??0,motion}) : null;
+      const outline = linked ? breathingBorder({id:s.id,color:collab,period:breathPeriod(groupIndex(groupName)),motion,dim:Boolean(comet&&size)})
+        : lit ? div().absolute().top(-1).left(-1).right(-1).bottom(-1).rounded(7).border(2).border_color(collab) : null;
+      const flowView=comet&&size ? borderComet({id:s.id,w:size.w,h:size.h,color:collab,step:comet.step,motion}) : null;
       const partnerTail = partner ? h_flex().id(`sf-partner-${s.id}`).flex_none().max_w(110).min_w(0).gap(3).items_center().text_size(12).font_normal().text_color(collab)
         .tooltip(partnerText)
         .child(svg(`mods/sixfold-desk/icons/device-${computerKind(this.computers?.machines?.[partner.partners[0]]?.os)}.svg`).size(14).flex_none().text_color(collab))
@@ -772,7 +782,7 @@ export default class SixfoldDesk extends View {
             if (rows.length < 2) return [];
             const right = laneRight(lane.slot), top = rowY(rows[0]), bottom = rowY(rows[rows.length - 1]);
             // ⑩ With two or more groups, a project's link takes its group's colour (both ends match).
-            const color = colorOfGroup.size > 1 && lane.link.name && colorOfGroup.has(groupKey(lane.link.name)) ? colorOfGroup.get(groupKey(lane.link.name)) : lane.colors.link;
+            const color = colorOfGroup.size > 1 && lane.link.name && colorOfGroup.has(groupKey(lane.link.name)) ? colorOfGroup.get(groupKey(lane.link.name)).color : lane.colors.link;
             const group = linkGroups.find(item => item.name === lane.link.name);
             const tip = group
               ? `${collabText(group)}\n${collabNote}`

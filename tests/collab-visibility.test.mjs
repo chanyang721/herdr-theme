@@ -41,7 +41,7 @@ async function sidebar(runtime) {
     .replace(/import \{ panePet, petRunning, RUN_FRAME_MS, RUN_FRAMES \} from '.\/pets.js';/, 'const panePet=()=>null,petRunning=()=>false,RUN_FRAME_MS=110,RUN_FRAMES=5;')
     .replace(/import \{ paneUsage \} from '.\/session-usage.js';/, 'const paneUsage=()=>null;').replace(/import \{ paneMeta, paneMetaChip, showPaneIndex, showTitle \} from '.\/pane-meta.js';/, 'const paneMeta=()=>null,paneMetaChip=()=>null,showPaneIndex=()=>false,showTitle=()=>true;')
     .replace(/import \{ watchBadges, workspaceBadges \} from '.\/badges.js';/, 'const watchBadges=()=>{},workspaceBadges=()=>null;');
-  source = source.replace("import { collabFlow } from './collab-flow-view.js';", 'const collabFlow=o=>{(globalThis.__flowCalls??=[]).push(o);return null;};');
+  source = source.replace("import { breathingBorder, borderComet } from './collab-flow-view.js';", 'const breathingBorder=o=>{(globalThis.__breathCalls??=[]).push(o);return div().absolute().top(-1).left(-1).right(-1).bottom(-1).rounded(7).border(2).border_color(o.color);},borderComet=o=>{(globalThis.__flowCalls??=[]).push(o);return null;};');
   for (const name of ['model', 'flow', 'workflow', 'sidebar-identity', 'collab', 'collab-flow']) source = source.replace(`'./${name}.js'`, JSON.stringify(new URL(`../mods/sixfold-desk/${name}.js`, import.meta.url).href));
   source = source.replace(/import \{ pipeline \} from [^;]+;/, 'const pipeline=()=>{throw Error("unexpected path");};');
   globalThis.__visRuntime = runtime;
@@ -134,9 +134,10 @@ test('hovering a workspace lights its partner computer row, and hovering that ro
   } finally { delete globalThis.__visRuntime; }
 });
 
-// ⑩ Two groups working together now: each has its own colour on its badge, and with motion on a
-// flow runs around each collaborating box (the view module is stubbed: calls are recorded).
-test('two collaborating groups get different colours, and a flow runs around each box while motion is on', async () => {
+// ⑪ Two groups working together now: each has its own colour; the borders breathe (D) on their own
+// periods, and a send between the computers starts a comet (F) on both. With motion off nothing
+// moves: no breathing loop, no comet. The view module is stubbed (calls recorded).
+test('two collaborating groups: own colours, breathing borders, and comets after a send; motion off keeps them still', async () => {
   const twoGroups = [
     { id: 'home', machine: null, name: 'Game', tabs: [{ id: 'h' }] },
     { id: 'docs', machine: null, name: 'Docs', tabs: [{ id: 'd' }] },
@@ -146,24 +147,54 @@ test('two collaborating groups get different colours, and a flow runs around eac
   const all = ['home', 'docs', 'worker/w', 'worker/d'].map(working);
   const make = motion => ({ ...runtime(all), spaces: () => twoGroups, shared: key => (key === 'sixfold.motion' ? motion : undefined) });
   const sizes = { home: { w: 190, h: 96 }, docs: { w: 190, h: 96 } };
+  const reset = () => { globalThis.__flowCalls = []; globalThis.__breathCalls = []; };
   try {
-    globalThis.__flowCalls = [];
-    let found = rows(view(await sidebar(make(true)), { boxSizes: sizes }));
+    reset();
+    let v = view(await sidebar(make(true)), { boxSizes: sizes });
+    let found = rows(v);
     const badge = id => found.get(`sf-space-mark-${id}`).calls.find(call => call[0] === 'bg')?.[1];
-    assert.ok(badge('home') && badge('docs'));
     assert.notEqual(badge('home'), badge('docs'), 'one colour per group');
-    const flows = globalThis.__flowCalls.filter(call => call.motion);
-    assert.deepEqual(flows.map(call => call.id).sort(), ['docs', 'home'], 'a flow for each collaborating box');
-    assert.ok(flows.every(call => call.w === 190 && call.h === 96));
-    globalThis.__flowCalls = [];
-    found = rows(view(await sidebar(make(false)), { boxSizes: sizes }));
-    assert.ok(globalThis.__flowCalls.every(call => !call.motion), 'motion off: no flow');
-  } finally { delete globalThis.__visRuntime; delete globalThis.__flowCalls; }
+    const breaths = globalThis.__breathCalls;
+    assert.deepEqual(breaths.map(call => call.id).sort(), ['docs', 'home'], 'both collaborating borders breathe');
+    assert.notEqual(breaths[0].period, breaths[1].period, 'on staggered periods');
+    assert.ok(breaths.every(call => call.motion && !call.dim));
+    assert.equal(globalThis.__flowCalls.length, 0, 'no comet without a message');
+    assert.equal(v.collabFlowing, false, 'and no corner timer');
+
+    reset();
+    const at = Date.now() - 1700;                       // the packet arrived 0.1 s ago
+    v = view(await sidebar(make(true)), { boxSizes: sizes, messageEvents: [{ id: 's1', seq: 1, source: 't1', target: 'worker/t1', at }] });
+    rows(v);
+    assert.deepEqual(globalThis.__flowCalls.map(call => call.id).sort(), ['docs', 'home'], 'a send between the computers runs a comet on each group');
+    assert.ok(globalThis.__flowCalls.every(call => call.step === 1 && call.w === 190));
+    assert.ok(globalThis.__breathCalls.every(call => call.dim), 'the border is the faint track while the comet runs');
+    assert.equal(v.collabFlowing, true);
+
+    reset();
+    v = view(await sidebar(make(false)), { boxSizes: sizes, messageEvents: [{ id: 's1', seq: 1, source: 't1', target: 'worker/t1', at }] });
+    rows(v);
+    assert.equal(globalThis.__flowCalls.length, 0, 'motion off: no comet');
+    assert.ok(globalThis.__breathCalls.every(call => call.motion === false), 'motion off: the border does not breathe');
+    assert.equal(v.collabFlowing, false);
+  } finally { delete globalThis.__visRuntime; delete globalThis.__flowCalls; delete globalThis.__breathCalls; }
 });
 
 test('a single collaborating group keeps ⑨\'s colour', async () => {
   try {
     const found = rows(view(await sidebar(runtime([working('home'), working('worker/w')]))));
     assert.equal(found.get('sf-space-mark-home').calls.find(call => call[0] === 'bg')?.[1], COLLAB_COLORS.dark);
-  } finally { delete globalThis.__visRuntime; }
+  } finally { delete globalThis.__visRuntime; delete globalThis.__breathCalls; }
+});
+
+test('motion off stops the stock spinner and the idle breathing too', async () => {
+  const source = await readFile(new URL('../mods/sixfold-desk/main.js', import.meta.url), 'utf8');
+  assert.match(source, /when\(shared\('sixfold\.motion'\)!==false,e=>e\.spin\(900\)\)/);
+  assert.match(source, /when\(shared\('sixfold\.motion'\)!==false,e=>e\.loop\('opacity'/);
+  const tabs = await readFile(new URL('../mods/sixfold-tabs/main.js', import.meta.url), 'utf8');
+  assert.match(tabs, /shared\("sixfold\.motion"\) !== false, e => e\.spin\(900\)/);
+  for (const text of [source, tabs]) {
+    for (const call of text.match(/\.(?:spin|loop)\(/g) ?? []) assert.ok(call);   // every one below is guarded
+    const unguarded = text.split('\n').filter(line => /\.(spin|loop)\(/.test(line) && !/motion/.test(line));
+    assert.deepEqual(unguarded, [], 'every loop and spin is behind sixfold.motion');
+  }
 });
