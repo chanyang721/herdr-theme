@@ -76,7 +76,7 @@
               "id": "system-metrics",
               "type": "block",
               "size": {
-                "px": 520
+                "px": 480
               },
               "content": {
                 "mod": "system-metrics"
@@ -86,7 +86,7 @@
               "id": "mcp-status",
               "type": "block",
               "size": {
-                "px": 360
+                "px": 440
               },
               "content": {
                 "mod": "mcp-status"
@@ -96,7 +96,7 @@
               "id": "plan-usage",
               "type": "block",
               "size": {
-                "px": 490
+                "px": 450
               },
               "content": {
                 "mod": "plan-usage"
