@@ -4,17 +4,23 @@ import { props, appHome, readTextFile, exec, watchFolder, theme, settings, share
 import { stageMarkdown } from './vendor/markdown.js';
 import { dirname, resolveLink } from './vendor/paths.js';
 import { mermaidFences, applyDiagrams } from './mermaid.js';
-import { treeSections, kindCounts, shortDate } from './tree.js';
+import { locations, locate, listTree, searchTree, kindCounts, foldersOf } from './tree.js';
+import { columnView } from './column-view.js';
+import { listView, breadcrumb, icon } from './finder.js';
 
 const LIMIT = 400000;
 const STATE = 'sixfold.docs.selection.v1';
 // scripts/open_doc_tab.py writes the latest open request; each space handles it once.
 const REQUEST = 'project-docs-open.json';
 const OPENED = 'sixfold.docs.opened.v1';
-// Which tree sections each space keeps open, as the person last left them.
-const TREE = 'sixfold.docs.tree.v1';
-// Below this pane width the tree sits above the document instead of beside it.
+// Per space: Finder view (column or list), location and open column path, as last left.
+const FINDER = 'sixfold.docs.finder.v1';
+// Below this pane width the browser sits above the document instead of beside it.
 const SIDE_BY_SIDE = 760;
+// Below this width the sidebar starts hidden (the toolbar button still shows it).
+const WITH_SIDEBAR = 1100;
+const COLUMN = 200;
+const LOCATION_ICONS = { docs: '🗂', harness: '🧭', opened: '👁', archived: '🗄' };
 const HARNESS_TAG = '하네스 생성물 · 읽기 전용';
 const isHtml = path => /\.html?$/i.test(path);
 const readable = path => /\.md$/i.test(path) || isHtml(path);
@@ -54,12 +60,14 @@ export default class ProjectDocuments extends View {
     this.htmlScript = p.htmlScript || `${appHome()}/data/sixfold/doc-tabs/render_html.py`;
     this.documents = []; this.watchers = new Map(); this.generation = 0;
     this.selected = shared(STATE)?.[this.spaceId]; this.width = 800; this.paneWidth = 1200;
-    this.kinds = []; this.harness = null; this.kindFilter = null; this.showArchive = false; this.treeHidden = false;
-    this.families = new Set(); this.query = '';
+    this.kinds = []; this.harness = null; this.kindFilter = null; this.kindMenu = false; this.sidebar = null;
+    const saved = shared(FINDER)?.[this.spaceId] || {};
+    this.view = saved.view === 'list' ? 'list' : 'column'; this.location = saved.location || 'docs'; this.colPath = saved.colPath || '';
+    this.expanded = new Set(); this.sort = { key: 'date', dir: -1 }; this.query = '';
     // Retained input state is made here, never while rendering.
     this.search = InputState?.new ? InputState.new({ placeholder: '이름·종류 검색' }) : null;
     this.search?.on('change', (_e, cx) => { this.query = this.search.value(); cx.notify(); });
-    this.search?.on('submit', (_e, cx) => { const first = this.visibleRows()[0]; if (first) this.choose(first.aliasOf || first.id, cx); });
+    this.search?.on('submit', (_e, cx) => { const first = searchTree(this.documents, this.query, this.kinds, this.kindFilter).children[0]; if (first) this.choose(first.docId, cx); });
     // A 열람 tab's id carries its path, so it survives a reload of this mod.
     if (this.selected?.startsWith('opened-')) this.reveal(this.selected.slice('opened-'.length));
     this.refresh(cx);
@@ -96,12 +104,14 @@ export default class ProjectDocuments extends View {
         if (typeof request?.path === 'string' && request.at > (shared(OPENED)?.[this.spaceId] ?? 0)) {
           setShared(OPENED, { ...(shared(OPENED) || {}), [this.spaceId]: request.at });
           this.reveal(request.path);
+          this.revealPending = true;
         }
         this.checkedAt = data.checkedAt;
         if (!this.documents.some(d => d.id === this.selected)) this.selected = this.documents.find(d => !d.aliasOf && d.state !== 'archived')?.id;
         if (this.selected && shared(STATE)?.[this.spaceId] !== this.selected) {
           setShared(STATE, { ...(shared(STATE) || {}), [this.spaceId]: this.selected });
         }
+        if (this.revealPending && this.selected) { this.revealPending = false; this.revealInBrowser(this.selected); }
         this.watch([dirname(this.config), ...(data.watchRoots || [])], cx);
         this.load(cx);
       } catch (error) { if (!this.closed) this.listError = String(error.message || error); }
@@ -136,7 +146,7 @@ export default class ProjectDocuments extends View {
 
   choose(id, cx) {
     id = this.documents.find(d => d.id === id)?.aliasOf || id;
-    this.selected = id; this.copied = null;
+    this.selected = id; this.copied = null; this.revealInBrowser(id);
     setShared(STATE, { ...(shared(STATE) || {}), [this.spaceId]: id });
     this.load(cx); this.refresh(cx); cx.notify();
   }
@@ -282,26 +292,37 @@ export default class ProjectDocuments extends View {
     else cx.notify();
   }
 
-  treeOptions() {
-    return { kinds: this.kinds, harness: this.harness, query: this.query, kind: this.kindFilter, archive: this.showArchive,
-      open: shared(TREE)?.[this.spaceId] || {}, families: this.families, selected: this.selected };
+  locs() { return locations(this.documents, { kinds: this.kinds, harness: this.harness, kind: this.kindFilter }); }
+
+  remember() {
+    setShared(FINDER, { ...(shared(FINDER) || {}), [this.spaceId]: { view: this.view, location: this.location, colPath: this.colPath } });
   }
 
-  // Documents in tree order, for Enter in the search box.
-  visibleRows() {
-    return treeSections(this.documents, this.treeOptions()).flatMap(s => s.rows).filter(r => r.doc).map(r => r.doc);
+  // Keeps the browser on the chosen document unless it is already showing it.
+  revealInBrowser(id) {
+    const locs = this.locs(), here = locs.find(l => l.key === this.location);
+    const entry = here?.entries.find(e => !e.dir && e.path === this.colPath);
+    if (entry && (entry.id === id || entry.doc?.head === id)) return;
+    const doc = this.documents.find(d => d.id === id);
+    const found = locate(locs, id) || (doc?.head && locate(locs, doc.head));
+    if (found) { this.location = found.key; this.colPath = found.path; this.remember(); }
   }
 
-  toggleSection(key, expanded, cx) {
-    const all = shared(TREE) || {};
-    setShared(TREE, { ...all, [this.spaceId]: { ...(all[this.spaceId] || {}), [key]: !expanded } });
-    cx.notify();
+  // Column view click: a folder opens the next column, a file shows in the viewer.
+  openPath(path, dir, cx) {
+    this.colPath = path; this.remember();
+    if (dir) return cx.notify();
+    const entry = this.locs().find(l => l.key === this.location)?.entries.find(e => e.path === path);
+    if (entry) this.choose(entry.id, cx); else cx.notify();
   }
 
-  toggleFamily(id, cx) {
-    if (this.families.has(id)) this.families.delete(id); else this.families.add(id);
-    cx.notify();
-  }
+  setLocation(key, cx) { this.location = key; this.colPath = ''; this.remember(); cx.notify(); }
+
+  setView(view, cx) { this.view = view; this.remember(); cx.notify(); }
+
+  toggleExpanded(id, cx) { if (this.expanded.has(id)) this.expanded.delete(id); else this.expanded.add(id); cx.notify(); }
+
+  sortBy(key, cx) { this.sort = { key, dir: this.sort.key === key ? -this.sort.dir : key === 'date' || key === 'size' ? -1 : 1 }; cx.notify(); }
 
   // Select a listed document, or show an unlisted one as a temporary 열람 tab.
   reveal(path) {
@@ -324,53 +345,40 @@ export default class ProjectDocuments extends View {
     } catch (error) { this.actionError = String(error.message || error); cx.notify(); }
   }
 
-  renderTree(t, button) {
-    const sections = treeSections(this.documents, this.treeOptions());
-    const today = new Date();
-    const chip = (id, label, on, action) => button(id, label, action).px(8).py(3).text_size(11)
-      .bg(on ? t.selected : t.chrome).border(1).border_color(on ? t.accent : t.border);
-    const counts = kindCounts(this.documents, this.kinds);
-    const archived = this.documents.filter(d => d.state === 'archived').length;
-    const row = r => {
-      if (r.heading) return div().pl(18).pt(4).pb(1).flex_none().text_size(11).text_color(t.muted).truncate().child(r.heading);
-      const d = r.doc, current = d.id === this.selected || (d.aliasOf && d.aliasOf === this.selected);
-      const previous = d.state === 'previous' || d.state === 'archived';
-      const kind = this.kinds.find(k => k.id === d.kind)?.label;
-      let line = h_flex().id(`doc-${d.id}`).flex_none().min_w(0).h(26).pl(6 + r.depth * 16).pr(4).gap(6).items_center().rounded(4)
-        .cursor_pointer().hover(s => s.bg(t.hover)).on_click((_e, cx) => this.choose(d.id, cx))
-        .border_l(2).border_color(current ? t.accent : t.canvas).bg(current ? t.selected : t.canvas)
-        .tooltip([d.name || d.label, d.folder, d.path].filter(Boolean).join('\n'))
-        .child(div().w(8).flex_none().text_size(9).text_color(t.accent).child(d.recent && !previous ? '●' : ''))
-        .child(div().flex_1().min_w(0).truncate().text_color(previous ? t.muted : t.foreground)
-          .when(current, el => el.font_semibold()).child(`${d.pinned ? '◆ ' : d.opened ? '열람 · ' : ''}${d.label}`))
-        .when(Boolean(d.pinned && kind), el => el.child(div().flex_none().text_size(10).text_color(t.muted).child(kind)))
-        .child(div().flex_none().text_size(11).text_color(t.muted).child(shortDate(d.date, today)));
-      if (r.versions) line = line.child(button(`doc-versions-${d.id}`, `${r.expanded ? '▾' : '▸'} 이전 ${r.versions}`,
-        cx => this.toggleFamily(d.id, cx)).px(5).py(1).text_size(10).text_color(t.muted));
-      if (d.opened) line = line.child(button(`doc-close-${d.id}`, '×', cx => this.dismiss(d.id, cx)).px(5).py(1).text_color(t.muted));
-      return line;
-    };
-    return v_flex().id('docs-tree').min_w(0).min_h(0).gap(4)
-      .child(h_flex().flex_none().gap(6).items_center().px(6)
-        .when(Boolean(this.search), el => el.child(div().flex_1().min_w(0).child(Input.new(this.search).w_full().h(28).text_size(12))))
-        .child(button('docs-query-clear', '지우기', cx => { this.search?.set_value(''); this.query = ''; cx.notify(); }).text_size(11).text_color(t.muted)))
-      .child(h_flex().id('docs-kinds').flex_none().flex_wrap().gap(4).px(6)
-        .child(chip('docs-kind-all', '전체', !this.kindFilter, cx => { this.kindFilter = null; cx.notify(); }))
-        .children(counts.map(k => chip(`docs-kind-${k.id}`, `${k.label} ${k.count}`, this.kindFilter === k.id,
-          cx => { this.kindFilter = this.kindFilter === k.id ? null : k.id; cx.notify(); })))
-        .when(archived > 0, el => el.child(chip('docs-archive', `보관 ${archived}`, this.showArchive,
-          cx => { this.showArchive = !this.showArchive; cx.notify(); }))))
-      .child(v_flex().id('docs-tree-rows').flex_1().min_h(0).overflow_y_scrollbar().px(4).pb(8).gap(1)
-        .when(!sections.length, el => el.child(div().px(8).py(6).text_size(12).text_color(t.muted)
-          .child(this.query ? '검색과 맞는 문서가 없습니다.' : '표시할 문서가 없습니다.')))
-        .children(sections.map(section => v_flex().flex_none().min_w(0)
-          .child(h_flex().id(`docs-section-${section.key}`).flex_none().h(26).px(6).gap(6).items_center().rounded(4)
-            .cursor_pointer().hover(s => s.bg(t.hover)).on_click((_e, cx) => this.toggleSection(section.key, section.expanded, cx))
-            .child(div().w(10).flex_none().text_size(10).text_color(t.muted).child(section.expanded ? '▾' : '▸'))
-            .child(div().flex_1().min_w(0).truncate().font_semibold().text_size(12).text_color(section.harness ? t.accent : t.foreground).child(section.label))
-            .when(section.recent && !section.expanded, el => el.child(div().flex_none().text_size(9).text_color(t.accent).child('●')))
-            .child(div().flex_none().px(6).rounded(8).bg(t.chrome).text_size(10).text_color(t.muted).child(String(section.count))))
-          .children(section.rows.map(row)))));
+  renderSidebar(t, locs) {
+    const item = (id, glyph, label, count, on, action) => h_flex().id(id).flex_none().min_w(0).h(24).px(8).gap(6).items_center().rounded(4)
+      .cursor_pointer().bg(on ? t.selected : t.chrome).hover(s => s.bg(on ? t.selected : t.hover)).on_click((_e, cx) => action(cx))
+      .when(on, el => el.border_l(2).border_color(t.accent)).tooltip(label)
+      .child(div().flex_none().text_size(12).child(glyph))
+      .child(div().flex_1().min_w(0).truncate().text_size(12).text_color(t.foreground).child(label))
+      .when(count != null, el => el.child(div().flex_none().text_size(10).text_color(t.muted).child(String(count))));
+    const heading = text => div().flex_none().px(8).pt(8).pb(2).text_size(11).font_semibold().text_color(t.muted).child(text);
+    const favorites = this.documents.filter(d => d.pinned);
+    return v_flex().id('docs-sidebar').w(184).flex_none().h_full().min_h(0).overflow_y_scrollbar().bg(t.chrome)
+      .border_r(1).border_color(t.border).px(4).pb(8).gap(1)
+      .child(heading('즐겨찾기'))
+      .when(!favorites.length, el => el.child(div().px(8).py(2).text_size(11).text_color(t.dim).child('고정한 문서 없음')))
+      .children(favorites.map(d => item(`docs-fav-${d.id}`, icon({ fileName: d.name }), d.label, null, d.id === this.selected, cx => this.choose(d.id, cx))))
+      .child(heading('위치'))
+      .children(locs.map(l => item(`docs-loc-${l.key}`, LOCATION_ICONS[l.key] || '📁', l.label, l.count, !this.query && l.key === this.location, cx => {
+        this.search?.set_value(''); this.query = ''; this.setLocation(l.key, cx);
+      })));
+  }
+
+  renderBrowser(t, locs, width) {
+    const isSelected = node => Boolean(node.docId) && node.docId === this.selected;
+    if (this.query.trim()) return listView(searchTree(this.documents, this.query, this.kinds, this.kindFilter), {
+      id: 'docs-search', expanded: this.expanded, sort: this.sort, isSelected, theme: t,
+      onOpen: (node, _depth, cx) => this.choose(node.docId, cx), onToggle: (id, cx) => this.toggleExpanded(id, cx), onSort: (key, cx) => this.sortBy(key, cx) });
+    const here = locs.find(l => l.key === this.location) || locs[0];
+    if (!here) return div().p(12).text_size(12).text_color(t.muted).child('표시할 문서가 없습니다.');
+    if (this.view === 'list') return listView(listTree(here, this.documents), {
+      id: `docs-list-${here.key}`, expanded: this.expanded, sort: this.sort, isSelected, theme: t,
+      onOpen: (node, _depth, cx) => node.folder ? this.toggleExpanded(node.id, cx) : this.choose(node.docId, cx),
+      onToggle: (id, cx) => this.toggleExpanded(id, cx), onSort: (key, cx) => this.sortBy(key, cx) });
+    return columnView({ id: `docs-col-${here.key}`, entries: here.entries, selected: here.key === this.location ? this.colPath : '', t,
+      onSelect: (path, dir, cx) => { if (here.key !== this.location) this.location = here.key; this.openPath(path, dir, cx); },
+      columnWidth: COLUMN, width, order: here.order, newestFirst: /./, label: entry => entry.dir ? entry.name : entry.title });
   }
 
   render(cx) {
@@ -380,27 +388,52 @@ export default class ProjectDocuments extends View {
     const t = theme(), doc = this.documents.find(d => d.id === this.selected);
     const button = (id, label, action) => div().id(id).px(10).py(6).flex_none().rounded(5).cursor_pointer().hover(s => s.bg(t.hover)).on_click((_e, cx) => action(cx)).child(label);
     const notice = text => div().px(16).py(6).flex_none().text_size(12).text_color(t.muted).child(text);
-    const listed = this.documents.filter(d => !d.aliasOf && !d.harness && d.state !== 'previous' && d.state !== 'archived').length;
+    const segment = (id, label, on, action) => div().id(id).px(10).py(4).flex_none().cursor_pointer().text_size(12)
+      .bg(on ? t.selected : t.chrome).text_color(on ? t.foreground : t.muted).hover(s => s.bg(on ? t.selected : t.hover)).on_click((_e, cx) => action(cx)).child(label);
+    const locs = this.locs();
     const side = this.paneWidth >= SIDE_BY_SIDE;
+    const sidebar = this.sidebar ?? this.paneWidth >= WITH_SIDEBAR;
+    const counts = kindCounts(this.documents, this.kinds);
+    const kindLabel = counts.find(k => k.id === this.kindFilter)?.label || this.kinds.find(k => k.id === this.kindFilter)?.label;
+    const here = locs.find(l => l.key === this.location) || locs[0];
+    const crumbRoot = { name: this.query.trim() ? '검색' : here?.label || '문서', folder: true };
+    const crumbs = this.query.trim() ? (doc ? [{ name: doc.label, fileName: doc.name }] : [])
+      : [...foldersOf(this.colPath, Boolean(here?.entries.find(e => e.path === this.colPath)?.dir)).map(p => ({ name: here?.entries.find(e => e.path === p)?.name || p.split('/').pop(), folder: true, path: p })),
+        ...(doc && here?.entries.some(e => e.path === this.colPath && !e.dir) ? [{ name: doc.label, fileName: doc.name }] : [])];
     let root = v_flex().id('project-documents').size_full().min_w(0).min_h(0).overflow_hidden().bg(t.canvas).text_color(t.foreground).text_size(13)
       .on_size_change((size, cx) => { if (Math.abs(this.paneWidth - size.width) > 1) { this.paneWidth = size.width; cx.notify(); } })
-      .child(h_flex().h(44).flex_none().px(8).gap(6).items_center().border_b(1).border_color(t.border)
-        .child(button('docs-tree-toggle', this.treeHidden ? '☰ 목록' : '◧ 목록', cx => { this.treeHidden = !this.treeHidden; cx.notify(); }))
-        .child(div().flex_1().min_w(0).truncate().font_semibold().child(`프로젝트 문서 · ${listed}개 · 읽기 전용`))
-        .child(button('docs-refresh', '새로 고침', cx => this.refresh(cx)))
-        .child(button('docs-settings', '분류 규칙 편집', cx => this.external('code', ['--reuse-window', this.config], cx))))
+      .child(h_flex().id('docs-toolbar').h(40).flex_none().px(8).gap(6).items_center().bg(t.chrome).border_b(1).border_color(t.border)
+        .child(button('docs-sidebar-toggle', '◧', cx => { this.sidebar = !sidebar; cx.notify(); }).tooltip('사이드바'))
+        .child(h_flex().flex_none().rounded(5).overflow_hidden().border(1).border_color(t.border)
+          .child(segment('docs-view-column', '▥ 열', this.view === 'column', cx => this.setView('column', cx)))
+          .child(segment('docs-view-list', '☰ 목록', this.view === 'list', cx => this.setView('list', cx))))
+        .child(button('docs-kind-menu', `종류: ${kindLabel || '전체'} ${this.kindMenu ? '▴' : '▾'}`, cx => { this.kindMenu = !this.kindMenu; cx.notify(); }).text_size(12))
+        .when(Boolean(this.search), el => el.child(div().flex_1().min_w(80).child(Input.new(this.search).w_full().h(26).text_size(12))))
+        .when(!this.search, el => el.child(div().flex_1()))
+        .when(Boolean(this.query), el => el.child(button('docs-query-clear', '✕', cx => { this.search?.set_value(''); this.query = ''; cx.notify(); }).text_color(t.muted)))
+        .child(button('docs-refresh', '새로 고침', cx => this.refresh(cx)).text_size(12))
+        .child(button('docs-settings', '분류 규칙', cx => this.external('code', ['--reuse-window', this.config], cx)).text_size(12)))
+      .when(this.kindMenu, el => el.child(h_flex().id('docs-kinds').flex_none().flex_wrap().gap(4).px(8).py(4).border_b(1).border_color(t.border)
+        .child(segment('docs-kind-all', '전체', !this.kindFilter, cx => { this.kindFilter = null; this.colPath = ''; cx.notify(); }).rounded(4))
+        .children(counts.map(k => segment(`docs-kind-${k.id}`, `${k.label} ${k.count}`, this.kindFilter === k.id,
+          cx => { this.kindFilter = this.kindFilter === k.id ? null : k.id; this.colPath = ''; cx.notify(); }).rounded(4)))))
+      .child(h_flex().flex_none().border_b(1).border_color(t.border).child(breadcrumb(crumbRoot, crumbs, { id: 'docs-path', theme: t,
+        onJump: (depth, cx) => { if (this.query.trim()) return; this.colPath = depth < 0 ? '' : crumbs[depth]?.path ?? this.colPath; this.remember(); cx.notify(); } })))
       .when(Boolean(this.listError), el => el.child(notice(`목록 확인 실패 · 마지막 목록 유지: ${this.listError}`)))
       .when(Boolean(this.warnings?.length), el => el.child(notice(`조회 주의: ${this.warnings.join(', ')}`)))
       .when(Boolean(this.actionError), el => el.child(notice(this.actionError)))
       .when(Boolean(this.copied), el => el.child(notice(this.copied)));
-    const tree = this.treeHidden ? null : this.renderTree(t, button);
+    const browserWidth = this.view === 'list' || this.query.trim() ? 480 : 2 * COLUMN + 24;
     const viewer = this.renderViewer(t, doc, button, notice);
     const body = side
       ? h_flex().flex_1().min_h(0).min_w(0).items_start()
-        .when(Boolean(tree), el => el.child(tree.w(320).flex_none().h_full().pt(8).border_r(1).border_color(t.border)))
+        .when(sidebar, el => el.child(this.renderSidebar(t, locs)))
+        .child(div().w(browserWidth).flex_none().h_full().min_h(0).border_r(1).border_color(t.border).child(this.renderBrowser(t, locs, browserWidth)))
         .child(viewer.flex_1().min_w(0).h_full())
       : v_flex().flex_1().min_h(0).min_w(0)
-        .when(Boolean(tree), el => el.child(tree.max_h(280).flex_none().pt(8).border_b(1).border_color(t.border)))
+        .child(h_flex().h(260).flex_none().min_w(0).border_b(1).border_color(t.border)
+          .when(sidebar, el => el.child(this.renderSidebar(t, locs)))
+          .child(div().flex_1().min_w(0).h_full().child(this.renderBrowser(t, locs, Math.max(COLUMN, this.paneWidth - (sidebar ? 184 : 0))))))
         .child(viewer.flex_1().min_h(0));
     return root.child(body);
   }
@@ -409,6 +442,8 @@ export default class ProjectDocuments extends View {
     let root = v_flex().id('docs-viewer').min_w(0).min_h(0).overflow_hidden();
     if (!doc) return root.child(notice(this.refreshing ? '문서 목록 확인 중…' : '문서가 없습니다. 분류 규칙 편집에서 문서 폴더나 고정 문서를 추가하세요.'));
     const kind = this.kinds.find(k => k.id === doc.kind)?.label;
+    const head = this.documents.find(d => d.id === (doc.head || doc.id));
+    const family = head ? [head, ...(head.versions || []).map(id => this.documents.find(d => d.id === id)).filter(Boolean)] : [doc];
     const state = doc.state === 'previous' ? '이전 버전' : doc.state === 'archived' ? '보관' : doc.harness ? HARNESS_TAG : null;
     root = root.child(h_flex().flex_none().px(8).pt(4).gap(4).items_center()
       .child(div().flex_1().min_w(0).truncate().font_semibold().tooltip(doc.path || doc.name || '').child(doc.name || doc.label))
@@ -416,8 +451,14 @@ export default class ProjectDocuments extends View {
         .child(button('docs-edit', 'VS Code', cx => this.external('code', ['--reuse-window', doc.path], cx)))
         .child(button('docs-copy-file', '파일 복사', cx => this.copy(doc.path, 'file', cx)))
         .when(/\.md$/i.test(doc.path), el => el.child(button('docs-copy-text', '본문 복사', cx => this.copy(doc.path, 'text', cx)))))
-      .when(!doc.harness, el => el.child(button('docs-pin', doc.pinned ? '고정 해제' : '고정', cx => this.action(doc.pinned ? ['--unpin', doc.id] : ['--pin', doc.path], cx)))))
+      .when(!doc.harness, el => el.child(button('docs-pin', doc.pinned ? '고정 해제' : '고정', cx => this.action(doc.pinned ? ['--unpin', doc.id] : ['--pin', doc.path], cx))))
+      .when(Boolean(doc.opened), el => el.child(button(`doc-close-${doc.id}`, '닫기', cx => this.dismiss(doc.id, cx)))))
       .child(notice([kind, state, doc.date, doc.path || doc.error || '경로 확인 필요'].filter(Boolean).join(' · ')))
+      .when(family.length > 1, el => el.child(h_flex().id('docs-versions').flex_none().flex_wrap().gap(4).px(12).pb(4)
+        .children(family.map((v, i) => div().id(`doc-version-${v.id}`).px(8).py(2).rounded(4).cursor_pointer().text_size(11)
+          .bg(v.id === doc.id ? t.selected : t.chrome).border(1).border_color(v.id === doc.id ? t.accent : t.border)
+          .text_color(v.id === doc.id ? t.foreground : t.muted).tooltip(v.name || v.label).on_click((_e, cx) => this.choose(v.id, cx))
+          .child(`${i ? '이전' : '최신'} ${v.date || ''}`)))))
       .child(notice(`${this.newVersion ? '새 날짜판 · ' : ''}${this.lastSuccess ? `본문 확인 ${new Date(this.lastSuccess).toLocaleTimeString()}` : '본문 확인 전'}${this.truncated ? ' · 400,000자까지 표시' : ''}`))
       .when(Boolean(this.bodyError), el => el.child(notice(`확인 실패 · ${this.bodyError}${this.blocks ? ' · 마지막 성공 본문 표시' : ''}`)))
       .when(Boolean(this.imageWarning), el => el.child(notice('일부 이미지를 읽을 수 없습니다.')))

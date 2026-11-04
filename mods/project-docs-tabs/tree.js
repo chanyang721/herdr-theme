@@ -1,9 +1,10 @@
-// Builds the 문서 tab's left tree from the resolver catalog. Pure: no host calls, so the
-// sections can be tested and rebuilt on every frame.
+// Turns the resolver catalog into Finder locations for the 문서 tab: column-view entries
+// (virtual POSIX paths) and list-view nodes. Pure: rebuilt on every frame, no host calls.
 
 const fold = value => String(value ?? '').normalize('NFC').toLocaleLowerCase();
-export const HARNESS_LABEL = '하네스';
 const OTHER = { id: 'other', label: '기타' };
+const extOf = path => { const m = /\.([^./]+)$/.exec(path || ''); return m ? `.${m[1].toLowerCase()}` : ''; };
+const safe = text => String(text).replace(/\//g, '∕');
 
 // Does the search text appear in what the row shows or where the file lives?
 export function matches(doc, query) {
@@ -13,85 +14,111 @@ export function matches(doc, query) {
   return q.split(/\s+/).every(word => text.includes(word));
 }
 
-// The short date shown at the end of a row: 11-04, or 2025-11-04 in another year.
+// The short date shown in rows: 11-04, or 2025-11-04 in another year.
 export function shortDate(iso, today = new Date()) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(iso || '')) return '';
   return iso.slice(0, 4) === String(today.getFullYear()) ? iso.slice(5) : iso;
 }
 
-/**
- * Sections in display order. Each has a stable key (for the open/closed memory), a label,
- * the number of documents it holds and rows. A row is { doc, depth, versions, expanded }
- * or { heading } for a sub-group such as a history month.
- *
- * options: kinds [{id,label}], harness {sections}, query, kind (filter id or null),
- * archive (show 보관), open (key → bool chosen by the person), families (Set of expanded
- * family heads), selected (id).
- */
-export function treeSections(documents, options = {}) {
-  const { kinds = [], harness = null, query = '', kind = null, archive = false, open = {}, families = new Set(), selected = null } = options;
-  const byId = new Map(documents.map(d => [d.id, d]));
-  const labels = new Map([...kinds, OTHER].map(k => [k.id, k.label]));
-  const withKind = d => ({ ...d, kindLabel: labels.get(d.kind) || '' });
-  const searching = Boolean(fold(query).trim());
-  const sections = [];
-  const isOpen = (key, fallback) => searching || (key in open ? open[key] : fallback);
-  // A head shows when it or one of its earlier versions matches; matching versions unfold it.
-  const versionsOf = d => (d.versions || []).map(id => byId.get(id)).filter(v => v && v.state !== 'archived');
-  const headRows = heads => {
-    const rows = [];
-    for (const head of heads) {
-      const versions = versionsOf(head);
-      const hitVersions = versions.filter(v => matches(withKind(v), query));
-      const hit = matches(withKind(head), query);
-      if (!hit && !hitVersions.length) continue;
-      const expanded = families.has(head.id) || versions.some(v => v.id === selected) || (searching && hitVersions.length > 0 && !hit);
-      rows.push({ doc: head, depth: 0, versions: versions.length, expanded });
-      if (expanded) for (const v of (searching && !hit ? hitVersions : versions)) rows.push({ doc: v, depth: 1, versions: 0, expanded: false });
-    }
-    return rows;
-  };
-  const push = (key, label, rows, fallback, extra = {}) => {
-    const count = rows.filter(r => r.doc && r.depth === 0).length;
-    if (!count) return;
-    const expanded = isOpen(key, fallback);
-    sections.push({ key, label, count, expanded, recent: rows.some(r => r.doc?.recent), rows: expanded ? rows : [], ...extra });
-  };
-
-  const kindOk = d => !kind || d.kind === kind;
-  const catalog = documents.filter(d => !d.harness);
-  push('pinned', '고정', headRows(catalog.filter(d => d.pinned && kindOk(d))), true);
-  push('opened', '열람', headRows(catalog.filter(d => d.opened)), true);
-  if (harness?.sections?.length && !kind) {
-    for (const section of harness.sections) {
-      const rows = [];
-      for (const group of section.groups) {
-        // Versioned harness documents list their newest link; older ones fold under it.
-        const docs = headRows(group.ids.map(id => byId.get(id)).filter(d => d && d.state !== 'previous'));
-        if (!docs.length) continue;
-        if (group.label) rows.push({ heading: group.label });
-        for (const r of docs) rows.push({ ...r, depth: r.depth + (group.label ? 1 : 0) });
-      }
-      const count = rows.filter(r => r.doc && r.doc.state !== 'previous').length;
-      if (!count) continue;
-      const key = `harness:${section.id}`, expanded = isOpen(key, section.id === 'status');
-      sections.push({ key, label: `${HARNESS_LABEL} · ${section.label}`, count, expanded, harness: true,
-        recent: false, rows: expanded ? rows : [] });
-    }
-  }
-  const heads = catalog.filter(d => !d.pinned && !d.opened && (d.state === 'latest' || !d.state) && kindOk(d));
-  for (const k of [...kinds.filter(k => k.id !== OTHER.id), OTHER]) {
-    const members = heads.filter(d => (d.kind || OTHER.id) === k.id);
-    push(`kind:${k.id}`, k.label, headRows(members), members.some(d => d.recent));
-  }
-  if (archive) {
-    const archived = catalog.filter(d => d.state === 'archived' && kindOk(d) && matches(withKind(d), query));
-    push('archived', '보관', archived.map(doc => ({ doc, depth: 0, versions: 0, expanded: false })), true);
-  }
-  return sections;
+// A file entry; its path sorts so that column-view's newest-first order is the order we want.
+function fileEntry(folder, doc, rank, kindLabel) {
+  const ext = extOf(doc.path || doc.name);
+  return { path: `${folder ? `${folder}/` : ''}${rank}_${doc.id}${ext}`, dir: false, id: doc.id, doc,
+    name: `${doc.label}${ext}`, title: `${doc.recent && doc.state !== 'previous' ? '● ' : ''}${doc.label}`,
+    date: doc.date, size: doc.size, kindLabel, muted: doc.state === 'previous' || doc.state === 'archived',
+    badge: doc.pinned ? '◆' : doc.versions?.length ? `${doc.versions.length + 1}판` : '' };
 }
 
-// Counts behind the kind filter chips; the archive count is separate.
+/**
+ * Sidebar locations, each { key, label, count, entries, order }.
+ * docs: kind folders holding the newest version of each document (pinned ones too, ◆).
+ * harness: 현황/기록/결정/주제 문서/기억 and their sub-groups. opened: 열람 files.
+ * archived: 보관 documents by kind. options: kinds, harness, kind (filter id or null).
+ */
+export function locations(documents, options = {}) {
+  const { kinds = [], harness = null, kind = null } = options;
+  const order = [...kinds.filter(k => k.id !== OTHER.id), OTHER];
+  const byId = new Map(documents.map(d => [d.id, d]));
+  const result = [];
+  const byKind = (docs, key, label) => {
+    const entries = [];
+    for (const k of order) {
+      if (kind && k.id !== kind) continue;
+      const members = docs.filter(d => (d.kind || OTHER.id) === k.id);
+      if (!members.length) continue;
+      entries.push({ path: safe(k.label), dir: true, name: k.label, badge: String(members.length) });
+      for (const d of members) entries.push(fileEntry(safe(k.label), d, `${d.date || '0000-00-00'}_${String(d.mtime ?? 0).padStart(14, '0')}`, k.label));
+    }
+    const count = entries.filter(e => !e.dir).length;
+    if (count) result.push({ key, label, count, entries, order: order.map(k => safe(k.label)) });
+  };
+  const catalog = documents.filter(d => !d.harness && !d.opened);
+  byKind(catalog.filter(d => d.pinned || d.state === 'latest' || !d.state), 'docs', '공간 문서');
+  if (harness?.sections?.length && !kind) {
+    const entries = [];
+    for (const section of harness.sections) {
+      entries.push({ path: safe(section.label), dir: true, name: section.label });
+      for (const group of section.groups) {
+        const folder = group.label ? `${safe(section.label)}/${safe(group.label)}` : safe(section.label);
+        if (group.label) entries.push({ path: folder, dir: true, name: group.label });
+        const docs = group.ids.map(id => byId.get(id)).filter(d => d && d.state !== 'previous');
+        // 현황·주제 문서·기억 keep the resolver's order; 기록·결정 list the newest first.
+        const fixed = !['history', 'decisions'].includes(section.id);
+        docs.forEach((d, i) => entries.push(fileEntry(folder, d, fixed ? String(9999 - i).padStart(4, '0') : d.date || '0000', section.label)));
+      }
+    }
+    result.push({ key: 'harness', label: '하네스', count: entries.filter(e => !e.dir).length, entries,
+      order: harness.sections.map(s => safe(s.label)), harness: true });
+  }
+  const opened = documents.filter(d => d.opened);
+  if (opened.length) result.push({ key: 'opened', label: '열람', count: opened.length,
+    entries: opened.map((d, i) => fileEntry('', d, String(9999 - i).padStart(4, '0'), '')), order: [] });
+  byKind(documents.filter(d => d.state === 'archived'), 'archived', '보관');
+  return result;
+}
+
+// Where a document sits: { key, path } of the first location listing it (aliases count).
+export function locate(locs, id) {
+  for (const loc of locs) {
+    const entry = loc.entries.find(e => !e.dir && (e.id === id || e.doc?.aliasOf === id));
+    if (entry) return { key: loc.key, path: entry.path };
+  }
+  return null;
+}
+
+// List-view tree for one location; a file with versions holds them as children.
+export function listTree(location, documents) {
+  const byId = new Map(documents.map(d => [d.id, d]));
+  const root = { id: '', name: location.label, folder: true, children: [] };
+  const nodes = new Map([['', root]]);
+  for (const entry of location.entries) {
+    const parent = entry.path.includes('/') ? entry.path.slice(0, entry.path.lastIndexOf('/')) : '';
+    const ext = extOf(entry.name).slice(1).toUpperCase();
+    const node = { id: entry.path, name: entry.dir ? entry.name : entry.title, fileName: entry.name, folder: entry.dir,
+      date: entry.date, size: entry.size, kind: entry.dir ? '폴더' : [entry.kindLabel, ext].filter(Boolean).join(' · '),
+      badge: entry.dir ? '' : entry.badge, muted: entry.muted, docId: entry.id, children: entry.dir ? [] : undefined };
+    if (!entry.dir) {
+      const versions = (entry.doc?.versions || []).map(id => byId.get(id)).filter(Boolean);
+      if (versions.length) node.children = versions.map(v => ({ id: `${entry.path}#${v.id}`, name: v.label, fileName: v.name,
+        date: v.date, size: v.size, kind: '이전 버전', muted: true, docId: v.id }));
+    }
+    nodes.set(entry.path, node);
+    (nodes.get(parent) || root).children.push(node);
+  }
+  return root;
+}
+
+// Search results across every location as one flat list-view root.
+export function searchTree(documents, query, kinds = [], kind = null) {
+  const labels = new Map([...kinds, OTHER].map(k => [k.id, k.label]));
+  const hits = documents.filter(d => !d.aliasOf && (!kind || d.kind === kind) && matches({ ...d, kindLabel: labels.get(d.kind) }, query));
+  return { id: '', name: `검색: ${query}`, folder: true, children: hits.map(d => ({ id: `hit/${d.id}`, docId: d.id,
+    name: `${d.pinned ? '◆ ' : ''}${d.label}${d.state === 'previous' ? ' (이전 버전)' : d.state === 'archived' ? ' (보관)' : ''}`,
+    fileName: d.name, date: d.date, size: d.size, muted: d.state === 'previous' || d.state === 'archived',
+    kind: d.harness ? '하네스' : labels.get(d.kind) || '문서' })) };
+}
+
+// Counts behind the kind filter; archived files and earlier versions are not counted.
 export function kindCounts(documents, kinds = []) {
   const counts = new Map();
   for (const d of documents) {
@@ -100,4 +127,11 @@ export function kindCounts(documents, kinds = []) {
     counts.set(id, (counts.get(id) || 0) + 1);
   }
   return [...kinds.filter(k => k.id !== OTHER.id), OTHER].filter(k => counts.get(k.id)).map(k => ({ ...k, count: counts.get(k.id) }));
+}
+
+// Folder chain of an entry path: 'a/b/c.md' → ['a', 'a/b']; a folder path includes itself.
+export function foldersOf(path, dir = false) {
+  const parts = String(path || '').split('/').filter(Boolean);
+  const count = dir ? parts.length : parts.length - 1;
+  return parts.slice(0, Math.max(0, count)).map((_, i) => parts.slice(0, i + 1).join('/'));
 }

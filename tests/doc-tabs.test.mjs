@@ -3,11 +3,21 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { resolveLink } from '../mods/project-docs-tabs/vendor/paths.js';
 import { mermaidFences, applyDiagrams } from '../mods/project-docs-tabs/mermaid.js';
-import { treeSections, kindCounts, shortDate, matches } from '../mods/project-docs-tabs/tree.js';
+import { locations, locate, listTree, searchTree, kindCounts, foldersOf, shortDate, matches } from '../mods/project-docs-tabs/tree.js';
 
 const document = (id, path = `/docs/${id}.md`, pinned = true) => ({ id, path, pinned, label: id, name: path.split('/').at(-1), status: 'ok' });
 const deferred = () => { let resolve, reject; const promise = new Promise((yes, no) => { resolve = yes; reject = no; }); return { promise, resolve, reject }; };
 let moduleId = 0;
+// Loads a mod file with its imports replaced by the given runtime names (GPUI stubs, siblings).
+async function load(file, runtime) {
+  const key = `__documentTabs${moduleId++}`; globalThis[key] = runtime;
+  let source = await readFile(new URL(`../mods/project-docs-tabs/${file}`, import.meta.url), 'utf8');
+  source = source.replace(/^import .*;\r?\n/gm, '');
+  source = `const {${Object.keys(runtime).join(',')}} = globalThis[${JSON.stringify(key)}];\n${source}`;
+  const module = await import('data:text/javascript;base64,' + Buffer.from(source).toString('base64'));
+  delete globalThis[key];
+  return module;
+}
 async function harness({ documents = [document('a'), document('b')], selection, lineEnding } = {}) {
   const handlers = new Map(), calls = [], reads = [], labels = [], timer = new Map(), watchers = new Map();
   const state = { documents, selected: selection, active: false, text: path => `본문 ${path}`, result: null, stage: async text => ({ blocks: [{ text }], files: [], unavailable: false }) };
@@ -23,7 +33,8 @@ async function harness({ documents = [document('a'), document('b')], selection, 
     } }); return proxy;
   }
   const runtime = {
-    View: class {}, div: element, image: element, v_flex: element, h_flex: element, treeSections, kindCounts, shortDate,
+    View: class {}, div: element, image: element, v_flex: element, h_flex: element, Button: { new: id => element().id(id) },
+    locations, locate, listTree, searchTree, kindCounts, foldersOf,
     InputState: { new: () => { const input = { text: '', events: {}, value: () => input.text, set_value: v => { input.text = v; }, on: (name, fn) => { input.events[name] = fn; return true; } }; state.input = input; return input; } },
     Input: { new: () => element() },
     TextView: { markdown: (_id, text) => { labels.push(text); return element(); } },
@@ -45,6 +56,9 @@ async function harness({ documents = [document('a'), document('b')], selection, 
     stageMarkdown: (...args) => state.stage(...args), dirname: path => path.slice(0, path.lastIndexOf('/')),
     resolveLink,
   };
+  const columns = await load('column-view.js', { div: element, v_flex: element, h_flex: element, Button: runtime.Button });
+  const finder = await load('finder.js', { div: element, v_flex: element, h_flex: element, entryIcon: columns.icon });
+  Object.assign(runtime, { columnView: columns.columnView, listView: finder.listView, breadcrumb: finder.breadcrumb, icon: finder.icon });
   const key = `__documentTabs${moduleId++}`; globalThis[key] = runtime;
   let source = await readFile(new URL('../mods/project-docs-tabs/main.js', import.meta.url), 'utf8');
   if (lineEnding) source = source.replace(/\r?\n/g, lineEnding);
@@ -200,14 +214,14 @@ test('an open request shows its file once in the matching space and leaves other
   assert.equal(opened.path, '/reports/new.md'); assert.equal(h.view.selected, opened.id);
 });
 
-test('per-space open requests are each shown in their own space and the tree groups pinned rows apart from kinds', async t => {
+test('per-space open requests are each shown in their own space and pinned ones are favorites', async t => {
   const h = await harness({ documents: [document('a'), document('r', '/reports/r.md', false), document('b')] }); t.after(() => h.view.close());
   h.state.request = { version: 2, requests: { Other: { path: '/docs/a.md', at: 9 }, Demo: { path: '/docs/b.md', at: 8 } } };
   h.view.refresh(h.cx); await h.flush();
   assert.equal(h.view.selected, 'b', 'a later request for another space must not hide this space\'s request');
   h.render();
-  assert.ok(h.labels.includes('고정') && h.labels.includes('기타'));
-  assert.ok(h.handlers.has('doc-a') && h.handlers.has('doc-b'), 'pinned rows are listed once in 고정');
+  assert.ok(h.labels.includes('즐겨찾기') && h.labels.includes('공간 문서'));
+  assert.ok(h.handlers.has('docs-fav-a') && h.handlers.has('docs-fav-b') && !h.handlers.has('docs-fav-r'), 'only pinned documents are favorites');
 });
 
 test('mermaid fences are found by exact code and unrendered diagrams stay as code', () => {
@@ -289,62 +303,86 @@ test('only 열람 rows close; listed catalog documents stay in the tree', async 
   assert.equal(h.view.linked, null); assert.ok(!h.view.documents.some(d => d.opened));
 });
 
-test('the tree folds sections, filters by kind and search, and remembers open sections per space', async t => {
-  const docs = [document('a'),
-    { ...document('new', '/docs/20261104_회신.md', false), state: 'latest', kind: 'reply', recent: true, versions: ['old'] },
-    { ...document('old', '/docs/20261101_회신.before-x.md', false), state: 'previous', kind: 'reply', head: 'new' },
-    { ...document('s', '/docs/구조.md', false), state: 'latest', kind: 'structure' },
-    { ...document('z', '/docs/_보관/z.md', false), state: 'archived', kind: 'other' }];
-  const h = await harness({ documents: docs }); t.after(() => h.view.close());
-  h.view.kinds = [{ id: 'reply', label: '회신안' }, { id: 'structure', label: '구조도' }, { id: 'other', label: '기타' }];
-  h.render();
-  assert.ok(h.handlers.has('doc-new'), 'a section with a recent document starts open');
-  assert.ok(!h.handlers.has('doc-s'), 'a section without recent documents starts folded');
-  assert.ok(!h.handlers.has('doc-old'), 'earlier versions are folded under the latest');
-  assert.ok(!h.handlers.has('doc-z') && h.handlers.has('docs-archive'), '보관 is hidden until asked');
-  h.handlers.get('doc-versions-new')(null, h.cx); h.render(); assert.ok(h.handlers.has('doc-old'));
-  h.handlers.get('docs-section-kind:structure')(null, h.cx); h.render(); assert.ok(h.handlers.has('doc-s'));
-  assert.deepEqual(h.stored['sixfold.docs.tree.v1'], { Demo: { 'kind:structure': true } });
-  h.handlers.get('docs-kind-structure')(null, h.cx); h.render();
-  assert.ok(h.handlers.has('doc-s') && !h.handlers.has('doc-new'), 'kind filter keeps only that kind');
-  h.handlers.get('docs-kind-all')(null, h.cx);
-  h.handlers.get('docs-archive')(null, h.cx); h.render(); assert.ok(h.handlers.has('doc-z'));
-  h.state.input.text = '구조'; h.state.input.events.change({}, h.cx); h.render();
-  assert.ok(h.handlers.has('doc-s') && !h.handlers.has('doc-new'));
-  h.state.input.events.submit({}, h.cx); await h.flush(); assert.equal(h.view.selected, 's');
+const catalogDocs = () => [document('a'),
+  { ...document('new', '/docs/20261104_회신.md', false), state: 'latest', kind: 'reply', recent: true, versions: ['old'], date: '2026-11-04', size: 1200 },
+  { ...document('old', '/docs/20261101_회신.before-x.md', false), state: 'previous', kind: 'reply', head: 'new', date: '2026-11-01' },
+  { ...document('s', '/docs/구조.html', false), state: 'latest', kind: 'structure', date: '2026-10-01' },
+  { ...document('z', '/docs/_보관/z.pdf', false), state: 'archived', kind: 'other', date: '2026-09-01' }];
+const KINDS = [{ id: 'reply', label: '회신안' }, { id: 'structure', label: '구조도' }, { id: 'other', label: '기타' }];
+
+test('column view: folders open the next column, files open in the viewer, the path bar follows', async t => {
+  const h = await harness({ documents: catalogDocs() }); t.after(() => h.view.close());
+  h.view.kinds = KINDS; h.render();
+  assert.ok(h.handlers.has('docs-loc-docs') && h.handlers.has('docs-loc-archived'), 'sidebar lists 공간 문서 and 보관');
+  assert.ok(h.handlers.has('docs-fav-a'), 'pinned documents are favorites');
+  assert.ok(h.handlers.has('docs-col-docs-c0-회신안'), 'kind folders form the first column');
+  assert.ok(!h.labels.includes('● new'), 'files stay closed until their folder opens');
+  h.handlers.get('docs-col-docs-c0-회신안')(null, h.cx); h.render();
+  assert.equal(h.view.colPath, '회신안'); assert.ok(h.labels.includes('● new'), 'recent documents are marked');
+  assert.ok(!h.labels.includes('old'), 'earlier versions are not separate rows');
+  const file = [...h.handlers.keys()].find(k => k.startsWith('docs-col-docs-c1-회신안/'));
+  h.handlers.get(file)(null, h.cx); await h.flush(); h.render();
+  assert.equal(h.view.selected, 'new'); assert.equal(h.view.bodyText, '본문 /docs/20261104_회신.md');
+  assert.ok(h.handlers.has('doc-version-old'), 'the viewer offers earlier versions');
+  h.handlers.get('doc-version-old')(null, h.cx); await h.flush(); assert.equal(h.view.selected, 'old');
+  h.render(); assert.ok(h.handlers.has('docs-path-1'), 'the path bar shows the folder');
+  h.handlers.get('docs-path-0')(null, h.cx); assert.equal(h.view.colPath, '');
+  assert.deepEqual(h.stored['sixfold.docs.finder.v1'].Demo, { view: 'column', location: 'docs', colPath: '' });
 });
 
-test('harness rows that link to a listed document select that document', async t => {
+test('list view sorts by column, unfolds folders and versions; search and kind filter live in the toolbar', async t => {
+  const h = await harness({ documents: catalogDocs() }); t.after(() => h.view.close());
+  h.view.kinds = KINDS; h.render();
+  h.handlers.get('docs-view-list')(null, h.cx); h.render();
+  assert.ok(h.handlers.has('docs-list-docs-sort-size') && h.labels.includes('수정일 ▼'));
+  h.handlers.get('docs-list-docs-row-회신안')(null, h.cx); h.render();
+  const head = [...h.handlers.keys()].find(k => k.startsWith('docs-list-docs-toggle-회신안/'));
+  h.handlers.get(head)(null, h.cx); h.render(); assert.ok(h.labels.includes('이전 버전'));
+  h.handlers.get('docs-list-docs-sort-name')(null, h.cx); h.render(); assert.ok(h.labels.includes('이름 ▲'));
+  h.handlers.get('docs-kind-menu')(null, h.cx); h.render();
+  h.handlers.get('docs-kind-structure')(null, h.cx); h.render();
+  assert.ok(!h.handlers.has('docs-list-docs-row-회신안') && h.handlers.has('docs-list-docs-row-구조도'));
+  h.handlers.get('docs-kind-all')(null, h.cx);
+  h.state.input.text = '회신'; h.state.input.events.change({}, h.cx); h.render();
+  assert.ok(h.handlers.has('docs-search-row-hit/new') && h.handlers.has('docs-search-row-hit/old'), 'search covers earlier versions');
+  h.state.input.events.submit({}, h.cx); await h.flush(); assert.equal(h.view.selected, 'new');
+  h.handlers.get('docs-loc-archived')(null, h.cx); h.render();
+  assert.equal(h.view.query, ''); assert.ok(h.handlers.has('docs-list-archived-row-기타'));
+});
+
+test('harness location and favorites; a harness link selects the listed document', async t => {
   const docs = [document('a'), { id: 'h1', path: '/h/README.md', name: 'README.md', label: '한눈에 보기', harness: true, section: 'status', status: 'ok' },
     { id: 'h2', path: '/docs/a.md', name: 'a.md', label: 'a', harness: true, section: 'docs', aliasOf: 'a', status: 'ok' }];
   const h = await harness({ documents: docs, selection: 'h1' }); t.after(() => h.view.close());
   h.view.harness = { sections: [{ id: 'status', label: '현황', groups: [{ label: '', ids: ['h1'] }] }, { id: 'docs', label: '주제 문서', groups: [{ label: '고정', ids: ['h2'] }] }] };
-  h.render(); assert.ok(h.handlers.has('doc-h1')); assert.ok(h.labels.includes('하네스 · 현황'));
+  h.view.revealInBrowser('h1'); h.render();
+  assert.equal(h.view.location, 'harness'); assert.ok(h.labels.includes('한눈에 보기'));
   assert.ok(!h.handlers.has('docs-pin'), 'generated harness files are not pinned');
-  h.handlers.get('docs-section-harness:docs')(null, h.cx); h.render();
-  h.handlers.get('doc-h2')(null, h.cx); await h.flush(); assert.equal(h.view.selected, 'a');
+  h.view.openPath('주제 문서', true, h.cx); h.view.openPath('주제 문서/고정', true, h.cx); h.render();
+  const alias = [...h.handlers.keys()].find(k => k.startsWith('docs-col-harness-c2-'));
+  h.handlers.get(alias)(null, h.cx); await h.flush(); assert.equal(h.view.selected, 'a');
 });
 
-test('versioned harness documents show the newest link with older ones folded', () => {
-  const docs = [{ id: 'n', label: '구조', harness: true, versions: ['o'] }, { id: 'o', label: '구조 old', harness: true, state: 'previous', head: 'n' }];
-  const harness = { sections: [{ id: 'docs', label: '주제 문서', groups: [{ label: '주제', ids: ['n', 'o'] }] }] };
-  const [section] = treeSections(docs, { harness, open: { 'harness:docs': true } });
-  assert.equal(section.count, 1);
-  assert.deepEqual(section.rows.map(r => r.heading || `${r.doc.id}:${r.versions}`), ['주제', 'n:1']);
-  const unfolded = treeSections(docs, { harness, open: { 'harness:docs': true }, families: new Set(['n']) })[0];
-  assert.deepEqual(unfolded.rows.filter(r => r.doc).map(r => [r.doc.id, r.depth]), [['n', 1], ['o', 2]]);
-});
-
-test('tree helpers: search words, short dates and kind counts', () => {
+test('tree helpers: search words, dates, locations and list nodes', () => {
   assert.ok(matches({ label: '견적 회신안', folder: '프로젝트' }, '회신 프로젝트'));
   assert.ok(!matches({ label: '견적' }, '구조'));
   assert.ok(matches({ label: 'A\u0301'.normalize('NFD') }, 'Á'));
   assert.equal(shortDate('2026-11-04', new Date(2026, 10, 4)), '11-04');
-  assert.equal(shortDate('2025-11-04', new Date(2026, 10, 4)), '2025-11-04');
-  const docs = [{ id: 'a', kind: 'reply', state: 'latest' }, { id: 'b', kind: 'reply', state: 'previous' }, { id: 'c', pinned: true }];
-  assert.deepEqual(kindCounts(docs, [{ id: 'reply', label: '회신안' }]).map(k => [k.id, k.count]), [['reply', 1], ['other', 1]]);
-  const sections = treeSections(docs, { kinds: [{ id: 'reply', label: '회신안' }], open: { 'kind:reply': true } });
-  assert.deepEqual(sections.map(s => s.key), ['pinned', 'kind:reply']);
+  const docs = catalogDocs();
+  assert.deepEqual(kindCounts(docs, KINDS).map(k => [k.id, k.count]), [['reply', 1], ['structure', 1], ['other', 1]]);
+  const locs = locations(docs, { kinds: KINDS });
+  assert.deepEqual(locs.map(l => [l.key, l.count]), [['docs', 3], ['archived', 1]]);
+  assert.equal(locate(locs, 'z').key, 'archived');
+  const tree = listTree(locs[0], docs);
+  const reply = tree.children.find(n => n.name === '회신안').children[0];
+  assert.deepEqual([reply.badge, reply.children.map(c => c.docId)], ['2판', ['old']]);
+  assert.deepEqual(foldersOf('a/b/c.md'), ['a', 'a/b']); assert.deepEqual(foldersOf('a/b', true), ['a', 'a/b']);
+  assert.deepEqual(searchTree(docs, '구조', KINDS).children.map(n => n.docId), ['s']);
+});
+
+test('the column view is the byte-identical shared copy', async () => {
+  const text = await readFile(new URL('../mods/project-docs-tabs/column-view.js', import.meta.url), 'utf8');
+  assert.match(text.split('\n')[0], /^export const COLUMN_VIEW_VERSION = \d+;$/);
 });
 
 test('a selected 열람 tab is shown again after the mod reloads', async t => {
