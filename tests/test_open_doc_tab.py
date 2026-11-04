@@ -14,8 +14,8 @@ class ChooseSpaceTests(unittest.TestCase):
 
     def test_keyword_rule_beats_bare_folder(self):
         with tempfile.TemporaryDirectory() as root:
-            folder=Path(root).resolve();doc=folder/'20261103_메디홈즈_회신.md';doc.write_text('x')
-            config={'spaces':{'share':{'folders':[str(folder)]},'medi':{'folders':[{'path':str(folder),'match':['메디홈즈']}]}}}
-            self.assertEqual(choose_space(config,doc,live={'share','medi'}),'medi')
+            folder=Path(root).resolve();doc=folder/'20261103_프로젝트비_회신.md';doc.write_text('x')
+            config={'spaces':{'share':{'folders':[str(folder)]},'pb':{'folders':[{'path':str(folder),'match':['프로젝트비']}]}}}
+            self.assertEqual(choose_space(config,doc,live={'share','pb'}),'pb')
 
 if __name__=='__main__':unittest.main()

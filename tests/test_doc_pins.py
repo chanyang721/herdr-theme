@@ -36,14 +36,14 @@ class PinTests(unittest.TestCase):
         self.config['spaces']['sp']['pins'].append({'id': 'always', 'label': '구조', 'kind': 'latest', 'root': str(root or self.root), 'topic': topic})
 
     def test_latest_date_beats_mtime_and_preserves_topic_id(self):
-        old = self.file('20261029_메디홈즈_구조.md')
-        fresh = self.file('20261102_메디홈즈_구조.md')
+        old = self.file('20261029_프로젝트비_구조.md')
+        fresh = self.file('20261102_프로젝트비_구조.md')
         os.utime(old, (2_000_000_000, 2_000_000_000))
-        self.latest('메디홈즈_구조.md')
+        self.latest('프로젝트비_구조.md')
         row = self.rows()[0]
         self.assertEqual(row['path'], str(fresh))
         self.assertEqual(row['id'], 'always')
-        newest = self.file('20261102_메디홈즈_구조.md', 'updated')
+        newest = self.file('20261102_프로젝트비_구조.md', 'updated')
         self.assertEqual(self.rows()[0]['path'], str(newest))
         self.assertEqual(old.read_text(), 'original')
 
@@ -115,10 +115,10 @@ class PinTests(unittest.TestCase):
         self.assertNotIn('20261103_회신-future.md', names)
 
     def test_unicode_topic_and_recent_keyword_normalization(self):
-        target = self.file('20261102_메디홈즈_회신.md')
-        self.latest('메디홈즈_회신.md')
+        target = self.file('20261102_프로젝트비_회신.md')
+        self.latest('프로젝트비_회신.md')
         import unicodedata
-        self.config['spaces']['sp']['pins'][0]['topic'] = unicodedata.normalize('NFD', '메디홈즈_회신.md')
+        self.config['spaces']['sp']['pins'][0]['topic'] = unicodedata.normalize('NFD', '프로젝트비_회신.md')
         self.assertEqual(self.rows()[0]['path'], str(target))
 
     def test_missing_source_warning_is_not_an_empty_success(self):

@@ -59,19 +59,40 @@ class DocumentTabInstallTests(unittest.TestCase):
 
     def test_share_seed_uses_stable_identity_and_preserves_document_sources(self):
         repo = Path(__file__).resolve().parents[1]
-        for space_id, name in [('other', 'Share'), ('sp5b1f0e5ae362facabc5ac1ece5d08277', 'Renamed')]:
-            config = installer.seed_space({'id': space_id, 'name': name}, {}, repo)
+        site = {**installer.site_config.DEFAULTS, 'hub_space_ids': ['sp-share']}
+        for space_id, name in [('other', 'Share'), ('sp-share', 'Renamed')]:
+            config = installer.seed_space({'id': space_id, 'name': name}, {}, repo, site=site)
             self.assertTrue(any(pin.get('path') == str(repo/'COMMON_ROUTING.md') for pin in config['pins']))
+
+    def test_project_documents_come_from_the_machine_local_site_config(self):
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            (home/'docs').mkdir()
+            (home/'docs/ARCH.md').write_text('# arch')
+            (home/'20261101_ProjectB_overview.md').write_text('# b')
+            site = {**installer.site_config.DEFAULTS, 'doc_tabs': {
+                'Project A': {'sources': [{'path': '~/docs/ARCH.md', 'label': '구조'}], 'folders': ['~/docs']},
+                'Project B': {'topics': [{'root': '~', 'suffix': 'ProjectB_overview.md', 'label': '개요'}],
+                              'folders': [{'path': '~', 'match': ['projectb']}]}}}
+            a = installer.seed_space({'id': 'a', 'name': 'Project A'}, {}, Path('/repo'), home, site)
+            self.assertEqual([(p['label'], p['path']) for p in a['pins']], [('구조', str(home/'docs/ARCH.md'))])
+            self.assertEqual(a['folders'], [str(home/'docs')])
+            b = installer.seed_space({'id': 'b', 'name': 'Project B'}, {}, Path('/repo'), home, site)
+            self.assertEqual((b['pins'][0]['kind'], b['pins'][0]['label']), ('latest', '개요'))
+            self.assertEqual(b['folders'], [{'path': str(home), 'match': ['projectb']}])
+            # Without the local file a project name seeds only its generic README fallback.
+            self.assertEqual(installer.seed_space({'id': 'a', 'name': 'Project A'}, {}, Path('/repo'), home,
+                                                  installer.site_config.DEFAULTS)['pins'], [])
 
     def test_dates_follow_latest_in_exact_directory_and_keep_disk_unicode(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            name = '20261027_메디홈즈_전체구조_착수전_정리.md'.encode().decode()
+            name = '20261027_프로젝트비_전체구조_착수전_정리.md'.encode().decode()
             path = root/name
             path.write_text('# 구조')
             pin = installer.file_pin(path, '구조')
             self.assertEqual(pin['kind'], 'latest')
-            self.assertEqual(pin['topic'], '메디홈즈_전체구조_착수전_정리.md')
+            self.assertEqual(pin['topic'], '프로젝트비_전체구조_착수전_정리.md')
             self.assertEqual(pin['root'], str(root))
             self.assertFalse(pin['recursive'])
             (root/'archive.md').write_text('# archive')

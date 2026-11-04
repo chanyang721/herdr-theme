@@ -6,8 +6,12 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import sys
 import tempfile
 import unicodedata
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import site_config  # noqa: E402
 
 EXTENSIONS={'.md','.html','.htm','.pdf','.docx','.xlsx'}
 OWNER='herdr-project-docs-v1'
@@ -106,7 +110,7 @@ def collect(config,index,pins=None):
     for space,settings in data['spaces'].items():
         folders=settings.get('folders',[])
         if not isinstance(folders,list):raise ValueError('folders must be an array')
-        target=Path(settings.get('target',str(Path.home()/'Documents/LukukuProjects'/space))).expanduser()
+        target=Path(settings.get('target',str(site_config.folder('projects_dir')/space))).expanduser()
         warnings=[]
         items=documents(folders,warnings,include_archived=True)
         problem=owned_links(target,[item for item in items if not item['archived']])
