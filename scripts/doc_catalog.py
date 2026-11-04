@@ -6,6 +6,7 @@ tab lists files. Project-specific words belong in the local rule file
 (``project-docs-pins.json`` → ``classify``), not in this module.
 """
 from datetime import date, datetime, timedelta
+import functools
 import hashlib
 import json
 import os
@@ -170,6 +171,7 @@ def build(items, pins, kinds, today=None, recent_days=RECENT_DAYS):
             'family': 'fam-' + hashlib.sha256('\0'.join(
                 [item['sourceRoot'], key] + ([] if dated else [str(relative.parent)])).encode()).hexdigest()[:16],
             'date': stamp.isoformat(), 'dated': dated, 'recent': since <= stamp <= today, 'mtime': item['mtime'],
+            'size': item.get('size'),
             'folder': str(relative.parent) if str(relative.parent) != '.' else '', 'pinned': False, 'status': 'ok',
             'state': 'archived' if item.get('archived') else 'latest', 'before': before, 'variant': variant,
         }
@@ -228,10 +230,10 @@ def _files(folder):
                 target = path.resolve(strict=True)
                 if not target.is_file():
                     continue
-                mtime = target.stat().st_mtime_ns // 1_000_000
+                info = target.stat()
             except (OSError, RuntimeError):
                 continue
-            found.append((path, target, mtime))
+            found.append((path, target, info.st_mtime_ns // 1_000_000, info.st_size))
     return found
 
 
@@ -241,13 +243,13 @@ def harness(root, known_paths=None):
     root = Path(root)
     rows, sections = [], []
 
-    def row(path, target, mtime, section, group='', label=None):
+    def add(path, target, mtime, section, group='', label=None, size=None):
         relative = path.relative_to(root)
         alias = known_paths.get(str(target))
         entry = {'id': 'harness-' + hashlib.sha256(nfc(relative).encode()).hexdigest()[:16], 'path': str(target),
                  'name': path.name, 'label': label or LABELS.get(fold(path.name)) or label_of(path.name),
                  'section': section, 'group': group, 'status': 'ok', 'pinned': False, 'harness': True,
-                 'mtime': mtime, 'relative': str(relative)}
+                 'mtime': mtime, 'size': size, 'relative': str(relative)}
         stamp = next((parse_date(part) for part in reversed(relative.parts) if parse_date(part)), None)
         if stamp:
             entry['date'] = stamp.isoformat()
@@ -256,8 +258,10 @@ def harness(root, known_paths=None):
         rows.append(entry)
         return entry
 
+    row = add
     status = []
-    for path, target, mtime in _files(root):
+    for path, target, mtime, size in _files(root):
+        row = functools.partial(add, size=size)
         relative = path.relative_to(root)
         top = relative.parts[0] if len(relative.parts) > 1 else ''
         if not top or top == 'context':

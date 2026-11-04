@@ -49,6 +49,7 @@ class CatalogTests(unittest.TestCase):
         self.assertEqual(len(head['versions']), 2)
         self.assertEqual(rows['20261101_데모_견적_회신안.md']['state'], 'archived')
         self.assertTrue(head['recent'])
+        self.assertEqual(head['size'], len('본문'.encode()))
 
     def test_undated_same_names_in_two_folders_stay_separate(self):
         self.file('a/README.md')

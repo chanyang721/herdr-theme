@@ -62,7 +62,7 @@ def documents(folders,warnings=None,include_archived=False):
                     if not path.is_file():continue
                     info=path.stat();source=str(path.resolve())
                 except OSError:continue
-                found[source]={'path':source,'name':name,'mtime':info.st_mtime_ns//1000000,
+                found[source]={'path':source,'name':name,'mtime':info.st_mtime_ns//1000000,'size':info.st_size,
                                'archived':archived,'folder':str(Path(source).parent),
                                'sourceRoot':str(root.resolve()),'relativePath':str(path.relative_to(root))}
     return sorted(found.values(),key=lambda item:(-item['mtime'],item['path']))
