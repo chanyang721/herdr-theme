@@ -1,17 +1,21 @@
 import { View, div, image } from 'gpui-kit';
-import { v_flex, h_flex, TextView } from 'gpui-base';
+import { v_flex, h_flex, TextView, InputState, Input } from 'gpui-base';
 import { props, appHome, readTextFile, exec, watchFolder, theme, settings, shared, setShared, spaces, panes } from 'herdr';
 import { stageMarkdown } from './vendor/markdown.js';
 import { dirname, resolveLink } from './vendor/paths.js';
 import { mermaidFences, applyDiagrams } from './mermaid.js';
+import { treeSections, kindCounts, shortDate } from './tree.js';
 
 const LIMIT = 400000;
 const STATE = 'sixfold.docs.selection.v1';
 // scripts/open_doc_tab.py writes the latest open request; each space handles it once.
 const REQUEST = 'project-docs-open.json';
 const OPENED = 'sixfold.docs.opened.v1';
-// Recent documents closed per space, by id, with the version closed; a newer one comes back.
-const CLOSED = 'sixfold.docs.closed.v1';
+// Which tree sections each space keeps open, as the person last left them.
+const TREE = 'sixfold.docs.tree.v1';
+// Below this pane width the tree sits above the document instead of beside it.
+const SIDE_BY_SIDE = 760;
+const HARNESS_TAG = '하네스 생성물 · 읽기 전용';
 const isHtml = path => /\.html?$/i.test(path);
 const readable = path => /\.md$/i.test(path) || isHtml(path);
 // Puts the file itself (as Finder Cmd+C does) or its UTF-8 text on the general pasteboard.
@@ -40,17 +44,6 @@ function run() {
 // Same steps as render_html.py, so a pane resize re-renders only at 40px steps; rounding
 // down keeps the picture at 1:1 instead of shrinking it a little.
 export const htmlWidth = width => Math.min(2000, Math.max(320, Math.floor(width / 40) * 40));
-const HOME = /^\/Users\/[^/]+/;
-// Groups tabs by the folder that holds each file, in first-seen order (pinned first, as listed).
-export function folderGroups(documents) {
-  const groups = new Map();
-  for (const d of documents) {
-    const folder = d.path ? dirname(d.path) : '';
-    if (!groups.has(folder)) groups.set(folder, { label: folder ? folder.replace(HOME, '~') : '경로 확인 필요', documents: [] });
-    groups.get(folder).documents.push(d);
-  }
-  return [...groups.values()];
-}
 export default class ProjectDocuments extends View {
   init(_props, cx) {
     const p = props() || {};
@@ -60,7 +53,13 @@ export default class ProjectDocuments extends View {
     this.mermaidScript = p.mermaidScript || `${appHome()}/data/sixfold/doc-tabs/render_mermaid.py`;
     this.htmlScript = p.htmlScript || `${appHome()}/data/sixfold/doc-tabs/render_html.py`;
     this.documents = []; this.watchers = new Map(); this.generation = 0;
-    this.selected = shared(STATE)?.[this.spaceId]; this.width = 800;
+    this.selected = shared(STATE)?.[this.spaceId]; this.width = 800; this.paneWidth = 1200;
+    this.kinds = []; this.harness = null; this.kindFilter = null; this.showArchive = false; this.treeHidden = false;
+    this.families = new Set(); this.query = '';
+    // Retained input state is made here, never while rendering.
+    this.search = InputState?.new ? InputState.new({ placeholder: '이름·종류 검색' }) : null;
+    this.search?.on('change', (_e, cx) => { this.query = this.search.value(); cx.notify(); });
+    this.search?.on('submit', (_e, cx) => { const first = this.visibleRows()[0]; if (first) this.choose(first.aliasOf || first.id, cx); });
     // A 열람 tab's id carries its path, so it survives a reload of this mod.
     if (this.selected?.startsWith('opened-')) this.reveal(this.selected.slice('opened-'.length));
     this.refresh(cx);
@@ -80,8 +79,8 @@ export default class ProjectDocuments extends View {
         if (result.code !== 0) throw Error(result.stderr.trim() || result.stdout.trim() || '문서 목록 확인 실패');
         const data = JSON.parse(result.stdout);
         if (!Array.isArray(data.documents) || data.spaceId !== this.spaceId) throw Error('문서 목록 형식을 확인하세요.');
-        const closed = shared(CLOSED)?.[this.spaceId] || {};
-        this.documents = data.documents.filter(d => d.pinned || !(d.id in closed) || (d.mtime ?? 0) > closed[d.id]);
+        this.documents = data.documents.slice();
+        this.kinds = Array.isArray(data.kinds) ? data.kinds : []; this.harness = data.harness || null; this.recentDays = data.recentDays || 7;
         this.warnings = data.warnings || []; this.listError = null;
         if (this.linked) {
           const pinned = this.documents.find(d => d.path === this.linked.path);
@@ -99,7 +98,7 @@ export default class ProjectDocuments extends View {
           this.reveal(request.path);
         }
         this.checkedAt = data.checkedAt;
-        if (!this.documents.some(d => d.id === this.selected)) this.selected = this.documents[0]?.id;
+        if (!this.documents.some(d => d.id === this.selected)) this.selected = this.documents.find(d => !d.aliasOf && d.state !== 'archived')?.id;
         if (this.selected && shared(STATE)?.[this.spaceId] !== this.selected) {
           setShared(STATE, { ...(shared(STATE) || {}), [this.spaceId]: this.selected });
         }
@@ -136,6 +135,7 @@ export default class ProjectDocuments extends View {
   }
 
   choose(id, cx) {
+    id = this.documents.find(d => d.id === id)?.aliasOf || id;
     this.selected = id; this.copied = null;
     setShared(STATE, { ...(shared(STATE) || {}), [this.spaceId]: id });
     this.load(cx); this.refresh(cx); cx.notify();
@@ -272,18 +272,35 @@ export default class ProjectDocuments extends View {
     });
   }
 
-  // Close a 열람 or 최근 tab; pinned ones are removed with 고정 해제.
+  // Close a 열람 row. Listed documents stay in the tree; pinned ones change with 고정 해제.
   dismiss(id, cx) {
     const doc = this.documents.find(d => d.id === id);
-    if (!doc || doc.pinned) return;
-    if (doc.opened) this.linked = null;
-    else {
-      const all = shared(CLOSED) || {};
-      setShared(CLOSED, { ...all, [this.spaceId]: { ...(all[this.spaceId] || {}), [id]: doc.mtime ?? Date.now() } });
-    }
+    if (!doc?.opened) return;
+    this.linked = null;
     this.documents = this.documents.filter(d => d.id !== id);
-    if (this.selected === id) this.choose(this.documents[0]?.id, cx);
+    if (this.selected === id) this.choose(this.documents.find(d => !d.aliasOf && d.state !== 'archived')?.id, cx);
     else cx.notify();
+  }
+
+  treeOptions() {
+    return { kinds: this.kinds, harness: this.harness, query: this.query, kind: this.kindFilter, archive: this.showArchive,
+      open: shared(TREE)?.[this.spaceId] || {}, families: this.families, selected: this.selected };
+  }
+
+  // Documents in tree order, for Enter in the search box.
+  visibleRows() {
+    return treeSections(this.documents, this.treeOptions()).flatMap(s => s.rows).filter(r => r.doc).map(r => r.doc);
+  }
+
+  toggleSection(key, expanded, cx) {
+    const all = shared(TREE) || {};
+    setShared(TREE, { ...all, [this.spaceId]: { ...(all[this.spaceId] || {}), [key]: !expanded } });
+    cx.notify();
+  }
+
+  toggleFamily(id, cx) {
+    if (this.families.has(id)) this.families.delete(id); else this.families.add(id);
+    cx.notify();
   }
 
   // Select a listed document, or show an unlisted one as a temporary 열람 tab.
@@ -307,6 +324,55 @@ export default class ProjectDocuments extends View {
     } catch (error) { this.actionError = String(error.message || error); cx.notify(); }
   }
 
+  renderTree(t, button) {
+    const sections = treeSections(this.documents, this.treeOptions());
+    const today = new Date();
+    const chip = (id, label, on, action) => button(id, label, action).px(8).py(3).text_size(11)
+      .bg(on ? t.selected : t.chrome).border(1).border_color(on ? t.accent : t.border);
+    const counts = kindCounts(this.documents, this.kinds);
+    const archived = this.documents.filter(d => d.state === 'archived').length;
+    const row = r => {
+      if (r.heading) return div().pl(18).pt(4).pb(1).flex_none().text_size(11).text_color(t.muted).truncate().child(r.heading);
+      const d = r.doc, current = d.id === this.selected || (d.aliasOf && d.aliasOf === this.selected);
+      const previous = d.state === 'previous' || d.state === 'archived';
+      const kind = this.kinds.find(k => k.id === d.kind)?.label;
+      let line = h_flex().id(`doc-${d.id}`).flex_none().min_w(0).h(26).pl(6 + r.depth * 16).pr(4).gap(6).items_center().rounded(4)
+        .cursor_pointer().hover(s => s.bg(t.hover)).on_click((_e, cx) => this.choose(d.id, cx))
+        .border_l(2).border_color(current ? t.accent : t.canvas).bg(current ? t.selected : t.canvas)
+        .tooltip([d.name || d.label, d.folder, d.path].filter(Boolean).join('\n'))
+        .child(div().w(8).flex_none().text_size(9).text_color(t.accent).child(d.recent && !previous ? '●' : ''))
+        .child(div().flex_1().min_w(0).truncate().text_color(previous ? t.muted : t.foreground)
+          .when(current, el => el.font_semibold()).child(`${d.pinned ? '◆ ' : d.opened ? '열람 · ' : ''}${d.label}`))
+        .when(Boolean(d.pinned && kind), el => el.child(div().flex_none().text_size(10).text_color(t.muted).child(kind)))
+        .child(div().flex_none().text_size(11).text_color(t.muted).child(shortDate(d.date, today)));
+      if (r.versions) line = line.child(button(`doc-versions-${d.id}`, `${r.expanded ? '▾' : '▸'} 이전 ${r.versions}`,
+        cx => this.toggleFamily(d.id, cx)).px(5).py(1).text_size(10).text_color(t.muted));
+      if (d.opened) line = line.child(button(`doc-close-${d.id}`, '×', cx => this.dismiss(d.id, cx)).px(5).py(1).text_color(t.muted));
+      return line;
+    };
+    return v_flex().id('docs-tree').min_w(0).min_h(0).gap(4)
+      .child(h_flex().flex_none().gap(6).items_center().px(6)
+        .when(Boolean(this.search), el => el.child(div().flex_1().min_w(0).child(Input.new(this.search).w_full().h(28).text_size(12))))
+        .child(button('docs-query-clear', '지우기', cx => { this.search?.set_value(''); this.query = ''; cx.notify(); }).text_size(11).text_color(t.muted)))
+      .child(h_flex().id('docs-kinds').flex_none().flex_wrap().gap(4).px(6)
+        .child(chip('docs-kind-all', '전체', !this.kindFilter, cx => { this.kindFilter = null; cx.notify(); }))
+        .children(counts.map(k => chip(`docs-kind-${k.id}`, `${k.label} ${k.count}`, this.kindFilter === k.id,
+          cx => { this.kindFilter = this.kindFilter === k.id ? null : k.id; cx.notify(); })))
+        .when(archived > 0, el => el.child(chip('docs-archive', `보관 ${archived}`, this.showArchive,
+          cx => { this.showArchive = !this.showArchive; cx.notify(); }))))
+      .child(v_flex().id('docs-tree-rows').flex_1().min_h(0).overflow_y_scrollbar().px(4).pb(8).gap(1)
+        .when(!sections.length, el => el.child(div().px(8).py(6).text_size(12).text_color(t.muted)
+          .child(this.query ? '검색과 맞는 문서가 없습니다.' : '표시할 문서가 없습니다.')))
+        .children(sections.map(section => v_flex().flex_none().min_w(0)
+          .child(h_flex().id(`docs-section-${section.key}`).flex_none().h(26).px(6).gap(6).items_center().rounded(4)
+            .cursor_pointer().hover(s => s.bg(t.hover)).on_click((_e, cx) => this.toggleSection(section.key, section.expanded, cx))
+            .child(div().w(10).flex_none().text_size(10).text_color(t.muted).child(section.expanded ? '▾' : '▸'))
+            .child(div().flex_1().min_w(0).truncate().font_semibold().text_size(12).text_color(section.harness ? t.accent : t.foreground).child(section.label))
+            .when(section.recent && !section.expanded, el => el.child(div().flex_none().text_size(9).text_color(t.accent).child('●')))
+            .child(div().flex_none().px(6).rounded(8).bg(t.chrome).text_size(10).text_color(t.muted).child(String(section.count))))
+          .children(section.rows.map(row)))));
+  }
+
   render(cx) {
     const active = spaces().some(s => s.id === this.spaceId && s.active) && panes().some(p => p.mod === 'project-docs-tabs' && p.tab === spaces().find(s => s.id === this.spaceId)?.tabs.find(t => t.active)?.id);
     if (active && !this.active) this.refresh(cx);
@@ -314,33 +380,44 @@ export default class ProjectDocuments extends View {
     const t = theme(), doc = this.documents.find(d => d.id === this.selected);
     const button = (id, label, action) => div().id(id).px(10).py(6).flex_none().rounded(5).cursor_pointer().hover(s => s.bg(t.hover)).on_click((_e, cx) => action(cx)).child(label);
     const notice = text => div().px(16).py(6).flex_none().text_size(12).text_color(t.muted).child(text);
+    const listed = this.documents.filter(d => !d.aliasOf && !d.harness && d.state !== 'previous' && d.state !== 'archived').length;
+    const side = this.paneWidth >= SIDE_BY_SIDE;
     let root = v_flex().id('project-documents').size_full().min_w(0).min_h(0).overflow_hidden().bg(t.canvas).text_color(t.foreground).text_size(13)
+      .on_size_change((size, cx) => { if (Math.abs(this.paneWidth - size.width) > 1) { this.paneWidth = size.width; cx.notify(); } })
       .child(h_flex().h(44).flex_none().px(8).gap(6).items_center().border_b(1).border_color(t.border)
-        .child(div().flex_1().font_semibold().child('프로젝트 문서 · 읽기 전용'))
+        .child(button('docs-tree-toggle', this.treeHidden ? '☰ 목록' : '◧ 목록', cx => { this.treeHidden = !this.treeHidden; cx.notify(); }))
+        .child(div().flex_1().min_w(0).truncate().font_semibold().child(`프로젝트 문서 · ${listed}개 · 읽기 전용`))
         .child(button('docs-refresh', '새로 고침', cx => this.refresh(cx)))
-        .child(button('docs-settings', '고정 규칙 편집', cx => this.external('code', ['--reuse-window', this.config], cx))))
-      .child(v_flex().id('docs-tabbar').max_h(this.documents.length > 4 ? 220 : 120).flex_none().gap(6).p(8).overflow_y_scrollbar()
-        .children(folderGroups(this.documents).map(group => v_flex().flex_none().gap(3)
-          .child(div().text_size(11).text_color(t.muted).truncate().child(`${group.label} (${group.documents.length})`))
-          .child(h_flex().flex_none().flex_wrap().gap(4).children(group.documents.map(d => {
-            const tab = button(`doc-${d.id}`, `${d.pinned ? '◆' : d.opened ? '열람' : '최근'} ${d.label}`, cx => this.choose(d.id, cx))
-              .max_w(300).truncate().bg(d.id === this.selected ? t.selected : t.chrome);
-            return d.pinned ? tab : h_flex().flex_none().items_center().rounded(5).bg(d.id === this.selected ? t.selected : t.chrome)
-              .child(tab.pr(4)).child(button(`doc-close-${d.id}`, '×', cx => this.dismiss(d.id, cx)).px(6).text_color(t.muted));
-          }))))))
+        .child(button('docs-settings', '분류 규칙 편집', cx => this.external('code', ['--reuse-window', this.config], cx))))
       .when(Boolean(this.listError), el => el.child(notice(`목록 확인 실패 · 마지막 목록 유지: ${this.listError}`)))
       .when(Boolean(this.warnings?.length), el => el.child(notice(`조회 주의: ${this.warnings.join(', ')}`)))
       .when(Boolean(this.actionError), el => el.child(notice(this.actionError)))
       .when(Boolean(this.copied), el => el.child(notice(this.copied)));
-    if (!doc) return root.child(notice(this.refreshing ? '문서 목록 확인 중…' : '고정 문서가 없습니다. 고정 규칙 편집에서 문서를 추가하세요.'));
-    root = root.child(h_flex().flex_none().px(8).gap(4).items_center()
-      .child(div().flex_1().min_w(0).truncate().child(doc.name || doc.label))
+    const tree = this.treeHidden ? null : this.renderTree(t, button);
+    const viewer = this.renderViewer(t, doc, button, notice);
+    const body = side
+      ? h_flex().flex_1().min_h(0).min_w(0).items_start()
+        .when(Boolean(tree), el => el.child(tree.w(320).flex_none().h_full().pt(8).border_r(1).border_color(t.border)))
+        .child(viewer.flex_1().min_w(0).h_full())
+      : v_flex().flex_1().min_h(0).min_w(0)
+        .when(Boolean(tree), el => el.child(tree.max_h(280).flex_none().pt(8).border_b(1).border_color(t.border)))
+        .child(viewer.flex_1().min_h(0));
+    return root.child(body);
+  }
+
+  renderViewer(t, doc, button, notice) {
+    let root = v_flex().id('docs-viewer').min_w(0).min_h(0).overflow_hidden();
+    if (!doc) return root.child(notice(this.refreshing ? '문서 목록 확인 중…' : '문서가 없습니다. 분류 규칙 편집에서 문서 폴더나 고정 문서를 추가하세요.'));
+    const kind = this.kinds.find(k => k.id === doc.kind)?.label;
+    const state = doc.state === 'previous' ? '이전 버전' : doc.state === 'archived' ? '보관' : doc.harness ? HARNESS_TAG : null;
+    root = root.child(h_flex().flex_none().px(8).pt(4).gap(4).items_center()
+      .child(div().flex_1().min_w(0).truncate().font_semibold().tooltip(doc.path || doc.name || '').child(doc.name || doc.label))
       .when(Boolean(doc.path), el => el.child(button('docs-open', '기본 앱', cx => this.external('open', [doc.path], cx)))
         .child(button('docs-edit', 'VS Code', cx => this.external('code', ['--reuse-window', doc.path], cx)))
         .child(button('docs-copy-file', '파일 복사', cx => this.copy(doc.path, 'file', cx)))
         .when(/\.md$/i.test(doc.path), el => el.child(button('docs-copy-text', '본문 복사', cx => this.copy(doc.path, 'text', cx)))))
-      .child(button('docs-pin', doc.pinned ? '고정 해제' : '고정', cx => this.action(doc.pinned ? ['--unpin', doc.id] : ['--pin', doc.path], cx))))
-      .child(notice(doc.path || doc.error || '경로 확인 필요'))
+      .when(!doc.harness, el => el.child(button('docs-pin', doc.pinned ? '고정 해제' : '고정', cx => this.action(doc.pinned ? ['--unpin', doc.id] : ['--pin', doc.path], cx)))))
+      .child(notice([kind, state, doc.date, doc.path || doc.error || '경로 확인 필요'].filter(Boolean).join(' · ')))
       .child(notice(`${this.newVersion ? '새 날짜판 · ' : ''}${this.lastSuccess ? `본문 확인 ${new Date(this.lastSuccess).toLocaleTimeString()}` : '본문 확인 전'}${this.truncated ? ' · 400,000자까지 표시' : ''}`))
       .when(Boolean(this.bodyError), el => el.child(notice(`확인 실패 · ${this.bodyError}${this.blocks ? ' · 마지막 성공 본문 표시' : ''}`)))
       .when(Boolean(this.imageWarning), el => el.child(notice('일부 이미지를 읽을 수 없습니다.')))

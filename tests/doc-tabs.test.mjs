@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { resolveLink } from '../mods/project-docs-tabs/vendor/paths.js';
 import { mermaidFences, applyDiagrams } from '../mods/project-docs-tabs/mermaid.js';
+import { treeSections, kindCounts, shortDate, matches } from '../mods/project-docs-tabs/tree.js';
 
 const document = (id, path = `/docs/${id}.md`, pinned = true) => ({ id, path, pinned, label: id, name: path.split('/').at(-1), status: 'ok' });
 const deferred = () => { let resolve, reject; const promise = new Promise((yes, no) => { resolve = yes; reject = no; }); return { promise, resolve, reject }; };
@@ -22,7 +23,9 @@ async function harness({ documents = [document('a'), document('b')], selection, 
     } }); return proxy;
   }
   const runtime = {
-    View: class {}, div: element, image: element, v_flex: element, h_flex: element,
+    View: class {}, div: element, image: element, v_flex: element, h_flex: element, treeSections, kindCounts, shortDate,
+    InputState: { new: () => { const input = { text: '', events: {}, value: () => input.text, set_value: v => { input.text = v; }, on: (name, fn) => { input.events[name] = fn; return true; } }; state.input = input; return input; } },
+    Input: { new: () => element() },
     TextView: { markdown: (_id, text) => { labels.push(text); return element(); } },
     props: () => ({ spaceId: 'Demo' }), appHome: () => '/app',
     readTextFile: async path => { if (path.endsWith('/project-docs-open.json')) return state.request ? JSON.stringify(state.request) : null; reads.push(path); return state.text(path); },
@@ -197,14 +200,14 @@ test('an open request shows its file once in the matching space and leaves other
   assert.equal(opened.path, '/reports/new.md'); assert.equal(h.view.selected, opened.id);
 });
 
-test('per-space open requests are each shown in their own space and the tab list is grouped by folder', async t => {
+test('per-space open requests are each shown in their own space and the tree groups pinned rows apart from kinds', async t => {
   const h = await harness({ documents: [document('a'), document('r', '/reports/r.md', false), document('b')] }); t.after(() => h.view.close());
   h.state.request = { version: 2, requests: { Other: { path: '/docs/a.md', at: 9 }, Demo: { path: '/docs/b.md', at: 8 } } };
   h.view.refresh(h.cx); await h.flush();
   assert.equal(h.view.selected, 'b', 'a later request for another space must not hide this space\'s request');
   h.render();
-  const folders = h.labels.filter(label => /\(\d+\)$/.test(label));
-  assert.deepEqual(folders, ['/docs (2)', '/reports (1)']);
+  assert.ok(h.labels.includes('고정') && h.labels.includes('기타'));
+  assert.ok(h.handlers.has('doc-a') && h.handlers.has('doc-b'), 'pinned rows are listed once in 고정');
 });
 
 test('mermaid fences are found by exact code and unrendered diagrams stay as code', () => {
@@ -275,20 +278,63 @@ test('html with clicks or popups shows a banner that opens the default browser',
   assert.deepEqual(h.calls.at(-1), { command: 'open', args: ['/docs/report.html'] }, 'falls back to the system default');
 });
 
-test('opened and recent tabs close; a closed recent comes back only as a newer version', async t => {
-  const recent = { ...document('r', '/docs/r.md', false), mtime: 10 };
-  const h = await harness({ documents: [document('a'), recent] }); t.after(() => h.view.close());
-  h.render(); assert.ok(!h.handlers.has('doc-close-a'), 'pinned tabs close with 고정 해제');
-  h.view.choose('r', h.cx); await h.flush(); h.render();
-  h.handlers.get('doc-close-r')(null, h.cx); await h.flush();
-  assert.deepEqual(h.view.documents.map(d => d.id), ['a']); assert.equal(h.view.selected, 'a');
-  assert.deepEqual(h.stored['sixfold.docs.closed.v1'], { Demo: { r: 10 } });
-  h.view.refresh(h.cx); await h.flush(); assert.deepEqual(h.view.documents.map(d => d.id), ['a']);
-  h.state.documents = [document('a'), { ...recent, mtime: 11 }]; h.view.refresh(h.cx); await h.flush();
-  assert.deepEqual(h.view.documents.map(d => d.id), ['a', 'r']);
+test('only 열람 rows close; listed catalog documents stay in the tree', async t => {
+  const listed = { ...document('r', '/docs/r.md', false), state: 'latest', kind: 'other', mtime: 10 };
+  const h = await harness({ documents: [document('a'), listed] }); t.after(() => h.view.close());
+  h.render(); assert.ok(!h.handlers.has('doc-close-a'), 'pinned rows close with 고정 해제');
+  assert.ok(!h.handlers.has('doc-close-r'), 'catalog rows have no close button');
+  h.view.dismiss('r', h.cx); assert.deepEqual(h.view.documents.map(d => d.id), ['a', 'r']);
   h.view.reveal('/elsewhere/x.md'); h.render();
   h.handlers.get('doc-close-opened-/elsewhere/x.md')(null, h.cx); await h.flush();
   assert.equal(h.view.linked, null); assert.ok(!h.view.documents.some(d => d.opened));
+});
+
+test('the tree folds sections, filters by kind and search, and remembers open sections per space', async t => {
+  const docs = [document('a'),
+    { ...document('new', '/docs/20261104_회신.md', false), state: 'latest', kind: 'reply', recent: true, versions: ['old'] },
+    { ...document('old', '/docs/20261101_회신.before-x.md', false), state: 'previous', kind: 'reply', head: 'new' },
+    { ...document('s', '/docs/구조.md', false), state: 'latest', kind: 'structure' },
+    { ...document('z', '/docs/_보관/z.md', false), state: 'archived', kind: 'other' }];
+  const h = await harness({ documents: docs }); t.after(() => h.view.close());
+  h.view.kinds = [{ id: 'reply', label: '회신안' }, { id: 'structure', label: '구조도' }, { id: 'other', label: '기타' }];
+  h.render();
+  assert.ok(h.handlers.has('doc-new'), 'a section with a recent document starts open');
+  assert.ok(!h.handlers.has('doc-s'), 'a section without recent documents starts folded');
+  assert.ok(!h.handlers.has('doc-old'), 'earlier versions are folded under the latest');
+  assert.ok(!h.handlers.has('doc-z') && h.handlers.has('docs-archive'), '보관 is hidden until asked');
+  h.handlers.get('doc-versions-new')(null, h.cx); h.render(); assert.ok(h.handlers.has('doc-old'));
+  h.handlers.get('docs-section-kind:structure')(null, h.cx); h.render(); assert.ok(h.handlers.has('doc-s'));
+  assert.deepEqual(h.stored['sixfold.docs.tree.v1'], { Demo: { 'kind:structure': true } });
+  h.handlers.get('docs-kind-structure')(null, h.cx); h.render();
+  assert.ok(h.handlers.has('doc-s') && !h.handlers.has('doc-new'), 'kind filter keeps only that kind');
+  h.handlers.get('docs-kind-all')(null, h.cx);
+  h.handlers.get('docs-archive')(null, h.cx); h.render(); assert.ok(h.handlers.has('doc-z'));
+  h.state.input.text = '구조'; h.state.input.events.change({}, h.cx); h.render();
+  assert.ok(h.handlers.has('doc-s') && !h.handlers.has('doc-new'));
+  h.state.input.events.submit({}, h.cx); await h.flush(); assert.equal(h.view.selected, 's');
+});
+
+test('harness rows that link to a listed document select that document', async t => {
+  const docs = [document('a'), { id: 'h1', path: '/h/README.md', name: 'README.md', label: '한눈에 보기', harness: true, section: 'status', status: 'ok' },
+    { id: 'h2', path: '/docs/a.md', name: 'a.md', label: 'a', harness: true, section: 'docs', aliasOf: 'a', status: 'ok' }];
+  const h = await harness({ documents: docs, selection: 'h1' }); t.after(() => h.view.close());
+  h.view.harness = { sections: [{ id: 'status', label: '현황', groups: [{ label: '', ids: ['h1'] }] }, { id: 'docs', label: '주제 문서', groups: [{ label: '고정', ids: ['h2'] }] }] };
+  h.render(); assert.ok(h.handlers.has('doc-h1')); assert.ok(h.labels.includes('하네스 · 현황'));
+  assert.ok(!h.handlers.has('docs-pin'), 'generated harness files are not pinned');
+  h.handlers.get('docs-section-harness:docs')(null, h.cx); h.render();
+  h.handlers.get('doc-h2')(null, h.cx); await h.flush(); assert.equal(h.view.selected, 'a');
+});
+
+test('tree helpers: search words, short dates and kind counts', () => {
+  assert.ok(matches({ label: '견적 회신안', folder: '프로젝트' }, '회신 프로젝트'));
+  assert.ok(!matches({ label: '견적' }, '구조'));
+  assert.ok(matches({ label: 'A\u0301'.normalize('NFD') }, 'Á'));
+  assert.equal(shortDate('2026-11-04', new Date(2026, 10, 4)), '11-04');
+  assert.equal(shortDate('2025-11-04', new Date(2026, 10, 4)), '2025-11-04');
+  const docs = [{ id: 'a', kind: 'reply', state: 'latest' }, { id: 'b', kind: 'reply', state: 'previous' }, { id: 'c', pinned: true }];
+  assert.deepEqual(kindCounts(docs, [{ id: 'reply', label: '회신안' }]).map(k => [k.id, k.count]), [['reply', 1], ['other', 1]]);
+  const sections = treeSections(docs, { kinds: [{ id: 'reply', label: '회신안' }], open: { 'kind:reply': true } });
+  assert.deepEqual(sections.map(s => s.key), ['pinned', 'kind:reply']);
 });
 
 test('a selected 열람 tab is shown again after the mod reloads', async t => {
