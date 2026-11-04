@@ -321,7 +321,7 @@ Claude Code 의 음성 설정(`voice`, `language`)은 남긴다. 되돌리려면
 
 예전에 따로 받은 `herdr-focus-queue` 폴더를 플러그인으로 연결해 쓰던 Mac 은 `python3 voice/install.py` 한 번으로 옮겨진다.
 
-- herdr 플러그인 연결, Claude hook, Codex LaunchAgent, 앱 연동이 새 복사본으로 바뀐다. hook 은 한 번의 쓰기로 바뀌므로 검사가 빠지거나 두 번 도는 전송이 없다.
+- herdr 플러그인 연결, Claude hook, Codex LaunchAgent, 앱 연동이 새 복사본으로 바뀐다. hook 은 한 번의 쓰기로 바뀌므로 검사가 빠지거나 두 번 도는 전송이 없다. 원래 hook 을 넣지 않았던 설치는 옮긴 뒤에도 넣지 않는다(`./focusq voice-hook` 으로 추가).
 - 목소리 데이터(`~/.local/state/herdr/plugins/local.focus-queue`)는 그대로 쓴다.
 - 이미 떠 있는 음성 연결은 끊지 않는다. Codex LaunchAgent 만 새 경로로 다시 뜬다(음소거 상태는 유지).
 - 예전 버전은 자동 전송 마이크 목록이 코드에 있었다. 옮긴 뒤에는 사용자 설정이 비어 있으면 자동 전송하지 않으므로, 쓰던 헤드셋으로 `voice-enroll` 을 다시 하거나 `auto_send_devices` 에 이름을 넣는다. 손으로 고정했던 기준값은 `devices.<마이크>.threshold` 로 옮긴다.
