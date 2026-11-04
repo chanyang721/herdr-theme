@@ -29,6 +29,17 @@ function run(args) {
   if (!ok) throw new Error('클립보드에 넣지 못했습니다.');
   return 'ok';
 }`;
+// Finds the default web browser (the https handler), so HTML opens there even when
+// .html files are set to open in an editor.
+const MAC_BROWSER = String.raw`
+ObjC.import('AppKit');
+function run() {
+  var app = $.NSWorkspace.sharedWorkspace.URLForApplicationToOpenURL($.NSURL.URLWithString('https://example.com'));
+  return app.isNil() ? '' : app.path.js;
+}`;
+// Same steps as render_html.py, so a pane resize re-renders only at 40px steps; rounding
+// down keeps the picture at 1:1 instead of shrinking it a little.
+export const htmlWidth = width => Math.min(2000, Math.max(320, Math.floor(width / 40) * 40));
 const HOME = /^\/Users\/[^/]+/;
 // Groups tabs by the folder that holds each file, in first-seen order (pinned first, as listed).
 export function folderGroups(documents) {
@@ -134,7 +145,7 @@ export default class ProjectDocuments extends View {
     const doc = this.documents.find(d => d.id === this.selected);
     const key = doc ? (!doc.path && this.lastId === doc.id ? this.bodyKey : `${doc.id}:${doc.path}`) : null;
     if (this.bodyKey !== key) {
-      this.bodyKey = key; this.blocks = null; this.bodyText = null; this.bodyError = null;
+      this.bodyKey = key; this.blocks = null; this.bodyText = null; this.bodyError = null; this.html = null;
       this.lastSuccess = null; this.newVersion = Boolean(this.lastPath && doc?.path && this.lastPath !== doc.path && this.lastId === doc.id);
     }
     const generation = ++this.generation;
@@ -153,10 +164,12 @@ export default class ProjectDocuments extends View {
         if (text.includes('\0')) throw Error('텍스트 문서가 아닙니다.');
         const look = `${settings()?.dark ? 'dark' : 'light'}:${theme().canvas}`;
         if (isHtml(doc.path)) {
-          if (text !== this.bodyText || look !== this.diagramLook) {
-            const pages = await this.page(doc.path, look);
+          // Rendered at the pane's own width so text keeps its size instead of being scaled down.
+          const width = htmlWidth(this.width - 40);
+          if (text !== this.bodyText || look !== this.diagramLook || width !== this.html?.width) {
+            const html = await this.page(doc.path, look, width);
             if (!current()) return;
-            this.bodyText = text; this.diagramLook = look; this.blocks = pages; this.imageWarning = null; this.truncated = false;
+            this.bodyText = text; this.diagramLook = look; this.blocks = html.blocks; this.html = html; this.imageWarning = null; this.truncated = false;
           }
           this.bodyError = null; this.lastSuccess = Date.now();
           return;
@@ -195,13 +208,35 @@ export default class ProjectDocuments extends View {
   }
 
   // HTML reports are drawn by WebKit as the browser shows them, then laid out as image tiles.
-  async page(path, look) {
+  async page(path, look, width) {
     this.diagramError = null;
-    const run = await exec('python3', [this.htmlScript, '--doc', path, '--theme', look.split(':')[0]]);
+    const run = await exec('python3', [this.htmlScript, '--doc', path, '--theme', look.split(':')[0], '--width', String(width)]);
     let data = {};
     try { data = JSON.parse(run.stdout || '{}'); } catch {}
     if (run.code !== 0 || !Array.isArray(data.pages)) throw Error(data.error || run.stderr.trim() || 'HTML 렌더링 실패');
-    return data.pages.map(media => ({ media, diagram: true }));
+    return { blocks: data.pages.map(media => ({ media, diagram: true })), width,
+      interactive: Array.isArray(data.interactive) ? data.interactive : [], truncated: Boolean(data.truncated) };
+  }
+
+  // Waits for the pane to stop resizing before drawing the HTML again at the new width.
+  resized(cx) {
+    const doc = this.documents.find(d => d.id === this.selected);
+    if (!doc?.path || !isHtml(doc.path) || !this.html || htmlWidth(this.width - 40) === this.html.width) return;
+    const token = this.resizeToken = {};
+    cx.timer.after(400, cx => { if (!this.closed && this.resizeToken === token) this.load(cx); });
+  }
+
+  browser(path, cx) {
+    cx.spawn(async cx => {
+      try {
+        const found = await exec('osascript', ['-l', 'JavaScript', '-e', MAC_BROWSER]);
+        const app = found.code === 0 ? found.stdout.trim() : '';
+        const result = await exec('open', app ? ['-a', app, path] : [path]);
+        if (result.code !== 0) throw Error(result.stderr.trim() || '브라우저를 열지 못했습니다.');
+        this.actionError = null;
+      } catch (error) { this.actionError = `브라우저 열기 실패 · ${String(error.message || error)}`; }
+      cx.notify();
+    });
   }
 
   action(args, cx) {
@@ -311,10 +346,21 @@ export default class ProjectDocuments extends View {
       .when(Boolean(this.imageWarning), el => el.child(notice('일부 이미지를 읽을 수 없습니다.')))
       .when(Boolean(this.diagramError), el => el.child(notice(this.diagramError)));
     if (doc.path && !readable(doc.path)) return root.child(notice('PDF·Word·Excel 문서는 기본 앱으로 여세요.'));
-    if (doc.path && isHtml(doc.path)) root = root.child(notice('HTML은 브라우저 화면 그대로 표시 · 글자 복사와 링크는 기본 앱에서'));
+    if (doc.path && isHtml(doc.path)) {
+      if (this.html?.interactive.length) root = root.child(h_flex().id('docs-html-interactive').flex_none().mx(8).my(4).px(12).py(8).gap(8).items_center()
+        .rounded(6).border(1).border_color(t.border).bg(t.selected)
+        .child(v_flex().flex_1().min_w(0)
+          .child(div().font_semibold().child('이 문서는 클릭·팝업이 있어 브라우저에서 여세요'))
+          .child(div().text_size(12).text_color(t.muted).truncate().child(`여기서는 그림으로만 표시 · ${this.html.interactive.join(', ')}`)))
+        .child(button('docs-browser', '브라우저로 열기', cx => this.browser(doc.path, cx)).font_semibold().border(1).border_color(t.border).bg(t.chrome)));
+      else root = root.child(notice('HTML은 브라우저 화면 그대로 그림으로 표시 · 글자 복사와 링크는 기본 앱에서'));
+      if (this.html?.truncated) root = root.child(notice('긴 문서라 앞부분 40,000px까지 표시 · 전체는 브라우저에서'));
+    }
     if (!this.blocks) return root.child(notice(this.loading ? '문서 읽는 중…' : '본문을 표시할 수 없습니다.'));
-    return root.child(v_flex().id(`docs-body-${this.bodyKey}`).flex_1().min_h(0).min_w(0).overflow_y_scrollbar().p(20).gap(12)
-      .on_size_change((size, cx) => { if (Math.abs(this.width - size.width) > 1) { this.width = size.width; cx.notify(); } })
+    // HTML tiles are one page cut in slices, so they sit edge to edge without a gap.
+    const tiles = Boolean(this.html);
+    return root.child(v_flex().id(`docs-body-${this.bodyKey}`).flex_1().min_h(0).min_w(0).overflow_y_scrollbar().p(20).gap(tiles ? 0 : 12)
+      .on_size_change((size, cx) => { if (Math.abs(this.width - size.width) > 1) { this.width = size.width; this.resized(cx); cx.notify(); } })
       .children(this.blocks.map((block, index) => block.media
         ? image(block.media.path).w(Math.min(block.media.width, Math.max(1, this.width - 40))).h(Math.min(block.media.width, Math.max(1, this.width - 40)) * block.media.height / block.media.width).flex_none()
         : TextView.markdown(`docs-markdown-${this.bodyKey}-${index}`, block.text).selectable(true).scrollable(false).w_full().flex_none().text_size(14).text_color(t.foreground)

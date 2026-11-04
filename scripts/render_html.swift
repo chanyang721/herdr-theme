@@ -4,20 +4,21 @@ import Foundation
 
 // Render one local HTML report to PNG tiles in an ephemeral WebKit view.
 // usage: render-html SOURCE OUTPUT_PREFIX THEME WIDTH
-// Writes OUTPUT_PREFIX-0.png, -1.png, ... at 2x and prints {"tiles":[{"width","height"}]} in CSS pixels.
+// Writes OUTPUT_PREFIX-0.png, -1.png, ... at 2x and prints {"tiles":[{"width","height"}],"truncated"} in CSS pixels.
 let args=CommandLine.arguments
 if args.count<5 { fputs("usage: render-html SOURCE OUTPUT_PREFIX THEME WIDTH\n",stderr); exit(2) }
 let source=URL(fileURLWithPath:args[1]).standardizedFileURL
 let prefix=args[2]
 let dark=args[3]=="dark"
 let width=min(2000,max(320,Double(args[4]) ?? 960))
-let tileHeight=2000.0, maxHeight=40000.0
+let tileHeight=2000.0, maxHeight=40000.0, waitCap=8000.0
 let app=NSApplication.shared
 app.setActivationPolicy(.prohibited)
 
 final class Renderer: NSObject, WKNavigationDelegate {
     let view: WKWebView
     var completed=false
+    var truncated=false
     override init() {
         let config=WKWebViewConfiguration()
         config.websiteDataStore = .nonPersistent()
@@ -39,22 +40,57 @@ final class Renderer: NSObject, WKNavigationDelegate {
         decisionHandler(action.targetFrame?.isMainFrame == false || action.request.url?.standardizedFileURL==source ? .allow : .cancel)
     }
     func webView(_ webView:WKWebView,didFinish navigation:WKNavigation!){
-        // Give fonts and chart animations time to settle before measuring.
-        let script="await document.fonts.ready; await new Promise(r=>setTimeout(r,1500)); return document.documentElement.scrollHeight;"
-        view.callAsyncJavaScript(script,arguments:[:],in:nil,in:.page){result in
+        // Waits for a settled page: fonts, images and network quiet, no DOM changes for a moment,
+        // a floor for chart animations, then two frames
+        // (capped, since a view outside a window may never draw a frame). Gives up waiting after waitCap.
+        let settle="""
+        const start=performance.now(), now=()=>performance.now();
+        let changed=now(), count=-1, network=now();
+        new MutationObserver(()=>{changed=now()}).observe(document,{subtree:true,childList:true,attributes:true,characterData:true});
+        await Promise.race([document.fonts.ready,new Promise(r=>setTimeout(r,waitCap))]);
+        while(now()-start<waitCap){
+          const n=performance.getEntriesByType('resource').length;
+          if(n!==count){count=n;network=now();}
+          const t=now();
+          if(document.readyState==='complete'&&[...document.images].every(i=>i.complete)&&t-network>=quiet&&t-changed>=quiet&&t-start>=floor) break;
+          await new Promise(r=>setTimeout(r,100));
+        }
+        await new Promise(r=>{requestAnimationFrame(()=>requestAnimationFrame(r));setTimeout(r,200)});
+        // A page laid out by viewport height would grow without end once the view is stretched
+        // to the whole document, so vh lengths are pinned to the first viewport in pixels.
+        const vh=innerHeight/100, pin=text=>text.replace(/(-?\\d*\\.?\\d+)[sdl]?vh\\b/g,(m,n)=>`${parseFloat(n)*vh}px`);
+        const fix=style=>{for(const name of [...style]){const value=style.getPropertyValue(name);if(/vh\\b/.test(value))style.setProperty(name,pin(value),style.getPropertyPriority(name));}};
+        const walk=rules=>{for(const rule of rules){if(rule.style)fix(rule.style);if(rule.cssRules)walk(rule.cssRules);}};
+        for(const sheet of document.styleSheets){try{walk(sheet.cssRules)}catch{}}
+        for(const el of document.querySelectorAll('[style]'))fix(el.style);
+        return (()=>{const e=document.documentElement,b=document.body;if(e.scrollHeight>e.clientHeight||!b)return e.scrollHeight;const s=getComputedStyle(b);return Math.ceil(Math.max(0,...[...b.children].map(c=>c.getBoundingClientRect().bottom))+parseFloat(s.paddingBottom)+parseFloat(s.marginBottom))})();
+        """
+        view.callAsyncJavaScript(settle,arguments:["waitCap":waitCap,"quiet":500,"floor":1000],in:nil,in:.page){result in
             switch result {
             case .failure(let error): self.fail(error.localizedDescription)
-            case .success(let value):
-                let height=min(maxHeight,max(1,(value as? NSNumber)?.doubleValue ?? 1))
-                self.view.setFrameSize(NSSize(width:width,height:height))
-                DispatchQueue.main.asyncAfter(deadline:.now()+0.5){self.capture(height:height,index:0,tiles:[])}
+            case .success(let value): self.stretch(to:(value as? NSNumber)?.doubleValue ?? 1,rounds:3)
             }
+        }
+    }
+    // Sizes the view to the document, then measures again: content that follows the view size
+    // (charts, late images) can still change the height, so a few rounds settle it.
+    func stretch(to measured:Double,rounds:Int){
+        // A page shorter than the view reports the view height as scrollHeight (quirks-mode bodies
+        // fill it too), so such a page is measured by where its content ends.
+        let height=min(maxHeight,max(1,measured.rounded(.up)))
+        view.setFrameSize(NSSize(width:width,height:height))
+        let measure="await new Promise(r=>{requestAnimationFrame(()=>requestAnimationFrame(r));setTimeout(r,200)}); await new Promise(r=>setTimeout(r,300)); return (()=>{const e=document.documentElement,b=document.body;if(e.scrollHeight>e.clientHeight||!b)return e.scrollHeight;const s=getComputedStyle(b);return Math.ceil(Math.max(0,...[...b.children].map(c=>c.getBoundingClientRect().bottom))+parseFloat(s.paddingBottom)+parseFloat(s.marginBottom))})();"
+        view.callAsyncJavaScript(measure,arguments:[:],in:nil,in:.page){result in
+            let next=((try? result.get()) as? NSNumber)?.doubleValue ?? height
+            if rounds>1 && abs(min(maxHeight,next)-height)>1 { self.stretch(to:next,rounds:rounds-1); return }
+            self.truncated=next>maxHeight
+            self.capture(height:height,index:0,tiles:[])
         }
     }
     func capture(height:Double,index:Int,tiles:[[String:Double]]){
         let top=Double(index)*tileHeight
         if top>=height {
-            if let data=try? JSONSerialization.data(withJSONObject:["tiles":tiles]),let text=String(data:data,encoding:.utf8){print(text)}
+            if let data=try? JSONSerialization.data(withJSONObject:["tiles":tiles,"truncated":truncated] as [String:Any]),let text=String(data:data,encoding:.utf8){print(text)}
             completed=true;exit(0)
         }
         let slice=min(tileHeight,height-top)
