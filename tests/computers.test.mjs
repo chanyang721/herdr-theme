@@ -105,13 +105,13 @@ test('computer selection scopes workspaces and agents and restores each selectio
     assert.equal(calls.length,beforeSelection);
     rows.get('sf-computers-toggle').click();render();
     assert(!rows.has('sf-computers-other'));
-    assert(!rows.has('sf-tailscale-desktop-test'),'online but unregistered peers stay hidden');
+    assert(rows.has('sf-tailscale-desktop-test'),'online Tailscale peers stay listed while collapsed');
     assert(!rows.has('sf-compact-tailscale:desktop-test'));
     view.tailscalePeers.push(...Array.from({length:10},(_,i)=>({name:`offline-${i}`,os:'ios',online:false})));
     view.tailscalePeers.push({name:'unknown',os:'linux',online:null});
     render();
     assert.equal([...rows.keys()].filter(key=>key.startsWith('sf-compact-')).length,0,'collapsed devices have no icons regardless of count or selection');
-    assert(![...rows.keys()].some(key=>key.startsWith('sf-tailscale-')));
+    assert.deepEqual([...rows.keys()].filter(key=>key.startsWith('sf-tailscale-')),['sf-tailscale-desktop-test'],'offline and unknown peers stay folded');
     assert.equal(calls.length,beforeSelection);
     view.tailscaleError=true;render();
     assert(!rows.has('sf-computers-summary'));

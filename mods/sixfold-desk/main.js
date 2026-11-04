@@ -544,7 +544,8 @@ export default class SixfoldDesk extends View {
           .child(v_flex().flex_1().min_w(0)
             .child(div().truncate().text_size(11).font_bold().child(peer.name))
             .child(div().truncate().text_size(9).text_color(t.muted).child(state)));
-        computerItems.push({row,active:false});
+        // Online Tailscale peers stay listed while collapsed; offline ones fold away.
+        computerItems.push({row,active:peer.online===true});
       }
     }
     const activeComputers=computerItems.filter(item=>item.active);
