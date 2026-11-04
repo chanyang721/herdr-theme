@@ -158,6 +158,9 @@ def copy_feature(repo, app_home):
     for name in ('install_doc_tabs.py', 'resolve_doc_pins.py', 'doc_catalog.py', 'collect_docs.py', 'core_api.py', 'render_mermaid.py', 'render_html.py', 'open_doc_tab.py',
                  'site_config.py', 'file_lock.py', 'desktop.py'):
         shutil.copy2(repo/'scripts'/name, scripts/name)
+    if sys.platform != 'darwin':
+        return  # Native WebKit renderers are optional macOS components.
+    (app_home/'data/sixfold/doc-tabs').mkdir(parents=True, exist_ok=True)
     try:
         compile_swift(repo/'scripts/render_html.swift', app_home/'data/sixfold/doc-tabs/render-html')
     except RuntimeError as error:
