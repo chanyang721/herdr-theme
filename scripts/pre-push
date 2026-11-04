@@ -12,6 +12,8 @@ checks() {
 
 # ---- shared part --------------------------------------------------------------
 set -u
+# Tests make their own repos; git's hook variables must not point them at this one.
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_PREFIX GIT_COMMON_DIR GIT_OBJECT_DIRECTORY
 if [ "${SKIP_PREPUSH_TESTS:-}" = 1 ]; then
   echo "pre-push: SKIP_PREPUSH_TESTS=1, checks skipped" >&2
   exit 0
