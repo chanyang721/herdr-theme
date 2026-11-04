@@ -1,0 +1,249 @@
+#!/usr/bin/env python3
+"""focusq - install and toggle the herdr focus-queue plugin.
+
+  ./focusq setup      everything at once: tools, plugin, F8 key, voice gate
+                      (--enroll also records 45 s of your voice right away)
+  ./focusq install    link the plugin and set Claude Code's voice key (F8, tap mode)
+  ./focusq enable     turn the plugin on
+  ./focusq disable    turn the plugin off (panes keep their current voice state)
+  ./focusq status     show whether the plugin is linked and enabled
+  ./focusq uninstall  unlink the plugin and remove the F8 voice binding
+
+  ./focusq voice-setup   install the voice gate (install runs this when uv exists)
+  ./focusq voice-enroll  enroll your voice for the current microphone (needed for auto-send)
+  ./focusq voice-test    show live scores for each spoken segment
+  ./focusq voice-off     forget the voiceprint (no auto-send until you enroll again)
+  ./focusq voice-hook    add only the submit hook to Claude Code's settings (install does this too)
+  ./focusq voice-crosscheck  check that your voice fails on other people's devices
+"""
+import glob
+import json
+import os
+import shutil
+import subprocess
+import sys
+import time
+
+PLUGIN_ID = "local.focus-queue"
+ROOT = os.path.dirname(os.path.realpath(__file__))
+CLAUDE_DIR = os.path.expanduser("~/.claude")
+SETTINGS = os.path.join(CLAUDE_DIR, "settings.json")
+KEYBINDINGS = os.path.join(CLAUDE_DIR, "keybindings.json")
+VOICE_KEY = "f8"
+VOICE_HOME = os.path.expanduser("~/.local/share/herdr-focus-queue")
+VOICE_PYTHON = os.path.join(VOICE_HOME, "venv", "bin", "python")
+STATE_DIR = os.path.expanduser("~/.local/state/herdr/plugins/local.focus-queue")
+VOICEPRINT = os.path.join(STATE_DIR, "voiceprint.json")
+MODEL_URLS = [
+    "https://github.com/k2-fsa/sherpa-onnx/releases/download/speaker-recongition-models/"
+    "3dspeaker_speech_eres2net_base_sv_zh-cn_3dspeaker_16k.onnx",
+    "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/silero_vad.onnx",
+]
+
+
+def herdr(*args):
+    binary = shutil.which("herdr")
+    if not binary:
+        sys.exit("herdr is not installed: brew install herdr")
+    result = subprocess.run([binary, *args], capture_output=True, text=True)
+    if result.returncode != 0:
+        sys.exit(f"herdr {' '.join(args)} failed: {result.stderr.strip() or result.stdout.strip()}")
+    try:
+        return json.loads(result.stdout).get("result", {})
+    except ValueError:
+        return {}
+
+
+def plugin():
+    plugins = herdr("plugin", "list", "--json").get("plugins", [])
+    return next((item for item in plugins if item.get("plugin_id") == PLUGIN_ID), None)
+
+
+def edit_json(path, change):
+    """Apply change() to a JSON file, keeping a timestamped backup."""
+    data = {}
+    if os.path.exists(path):
+        with open(path) as handle:
+            data = json.load(handle)
+    before = json.dumps(data, sort_keys=True)
+    change(data)
+    if json.dumps(data, sort_keys=True) == before:
+        return False
+    if os.path.exists(path):
+        shutil.copy2(path, f"{path}.focusq-{time.strftime('%Y%m%d%H%M%S')}.bak")
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w") as handle:
+        json.dump(data, handle, ensure_ascii=False, indent=2)
+        handle.write("\n")
+    return True
+
+
+def chat_bindings(data):
+    blocks = data.setdefault("bindings", [])
+    block = next((item for item in blocks if item.get("context") == "Chat"), None)
+    if block is None:
+        block = {"context": "Chat", "bindings": {}}
+        blocks.append(block)
+    return block.setdefault("bindings", {})
+
+
+def set_voice(data):
+    data["voiceEnabled"] = True
+    data["voice"] = {**data.get("voice", {}), "enabled": True, "mode": "tap"}
+    data.setdefault("language", "korean")
+
+
+SUBMIT_HOOK = f"/usr/bin/python3 {os.path.join(ROOT, 'voice_submit_hook.py')}"
+
+
+def submit_hooks(data):
+    return data.setdefault("hooks", {}).setdefault("UserPromptSubmit", [])
+
+
+def set_submit_hook(data):
+    """Every prompt passes voice_submit_hook.py, which refuses dictation the
+    voice gate did not hear the user say."""
+    entries = submit_hooks(data)
+    if not any(hook.get("command") == SUBMIT_HOOK for entry in entries for hook in entry.get("hooks", [])):
+        entries.append({"hooks": [{"type": "command", "command": SUBMIT_HOOK}]})
+
+
+def remove_submit_hook(data):
+    entries = submit_hooks(data)
+    entries[:] = [entry for entry in entries
+                  if not any(hook.get("command") == SUBMIT_HOOK for hook in entry.get("hooks", []))]
+
+
+def install():
+    current = plugin()
+    if current and os.path.realpath(os.path.dirname(current.get("manifest_path", ""))) != ROOT:
+        herdr("plugin", "unlink", PLUGIN_ID)
+    herdr("plugin", "link", ROOT)
+    # A new link is already enabled. Enabling needs a running herdr server,
+    # which a fresh Mac does not have yet, so only ask when it is off.
+    if not (plugin() or {}).get("enabled"):
+        herdr("plugin", "enable", PLUGIN_ID)
+    edit_json(SETTINGS, set_voice)
+    edit_json(SETTINGS, set_submit_hook)
+    edit_json(KEYBINDINGS, lambda data: chat_bindings(data).__setitem__(VOICE_KEY, "voice:pushToTalk"))
+    subprocess.run([sys.executable, os.path.join(ROOT, "install_codex_focus.py")], check=True)
+    print("installed: plugin linked and enabled, Claude Code voice on F8 (tap mode)")
+    if shutil.which("uv"):
+        voice_setup()
+    else:
+        print("voice check skipped: install uv (brew install uv) and run ./focusq voice-setup")
+    print("restart running Claude Code sessions to pick up the F8 voice key")
+
+
+def uninstall():
+    subprocess.run([sys.executable, os.path.join(ROOT, "install_codex_focus.py"), "--uninstall"], check=True)
+    if plugin():
+        herdr("plugin", "unlink", PLUGIN_ID)
+    edit_json(KEYBINDINGS, lambda data: chat_bindings(data).pop(VOICE_KEY, None))
+    edit_json(SETTINGS, remove_submit_hook)
+    print("uninstalled: plugin unlinked, F8 voice binding and submit hook removed (voice settings kept)")
+
+
+def status():
+    current = plugin()
+    if not current:
+        print("not installed: run ./focusq install")
+        return
+    state = "enabled" if current.get("enabled") else "disabled"
+    print(f"{state}  {current.get('manifest_path')}")
+
+
+def voice_setup():
+    uv = shutil.which("uv")
+    if not uv:
+        sys.exit("uv is not installed: brew install uv")
+    if not os.path.exists(VOICE_PYTHON):
+        subprocess.run([uv, "venv", "-q", "--python", "3.12", os.path.dirname(os.path.dirname(VOICE_PYTHON))],
+                       check=True)
+    subprocess.run([uv, "pip", "install", "-q", "--python", VOICE_PYTHON, "numpy", "sounddevice", "sherpa-onnx"],
+                   check=True)
+    models = os.path.join(VOICE_HOME, "models")
+    os.makedirs(models, exist_ok=True)
+    for url in MODEL_URLS:
+        target = os.path.join(models, url.rsplit("/", 1)[1])
+        if not os.path.exists(target):
+            subprocess.run(["curl", "-fsSL", "-o", target, url], check=True)
+    print(f"voice check ready in {VOICE_HOME}: your voice is learned from the dictations you send")
+
+
+def setup(enroll=False):
+    """Install what is missing; the voice is then learned from sent dictations."""
+    for tool in ("herdr", "uv"):
+        if not shutil.which(tool):
+            if not shutil.which("brew"):
+                sys.exit(f"{tool} is not installed and Homebrew is missing: https://brew.sh")
+            subprocess.run(["brew", "install", tool], check=True)
+    install()  # also sets up the voice gate, now that uv is there
+    if os.path.exists(VOICEPRINT):
+        print("voice: already learned on this machine; it keeps learning from what you send")
+    elif not enroll:
+        print("voice: learned on this machine from the dictations you send. After about 30 s of them your")
+        print("       voice is sent without the send word and other voices are not (./focusq setup --enroll to start now)")
+    else:
+        # Enrolling from a Claude pane would dictate the speech into that pane.
+        print("\n목소리를 학습합니다. 에이전트가 없는 셸 pane 에서 실행 중이어야 합니다.")
+        env = {**os.environ, "HERDR_PLUGIN_STATE_DIR": STATE_DIR}
+        subprocess.run([VOICE_PYTHON, os.path.join(ROOT, "voicegate.py"), "enroll"], env=env, check=True)
+        print("voice: voiceprint saved; it keeps learning from the dictations you send")
+
+
+def voicegate(*args):
+    if not os.path.exists(VOICE_PYTHON):
+        sys.exit("run ./focusq voice-setup first")
+    env = {**os.environ, "HERDR_PLUGIN_STATE_DIR": STATE_DIR}
+    subprocess.run(["pkill", "-f", "voicegate.py serve"])  # reload the voiceprint on next use
+    os.execve(VOICE_PYTHON, [VOICE_PYTHON, os.path.join(ROOT, "voicegate.py"), *args], env)
+
+
+def voice_off():
+    subprocess.run(["pkill", "-f", "voicegate.py serve"])
+    for name in ("voiceprint*.json", "voice-segments.jsonl", "voice-pool*.jsonl", "voice-confirmed.jsonl"):
+        for path in glob.glob(os.path.join(STATE_DIR, name)) + [os.path.join(STATE_DIR, "voiceprint.json")]:
+            if os.path.lexists(path):
+                os.remove(path)
+    print("voiceprint removed: it is learned again from the dictations you send")
+
+
+def main():
+    command = sys.argv[1] if len(sys.argv) > 1 else "status"
+    if command == "setup":
+        setup(enroll="--enroll" in sys.argv[2:])
+    elif command == "install":
+        install()
+    elif command == "uninstall":
+        uninstall()
+    elif command in ("enable", "disable"):
+        if not plugin():
+            sys.exit("not installed: run ./focusq install")
+        herdr("plugin", command, PLUGIN_ID)
+        status()
+    elif command == "status":
+        status()
+    elif command == "voice-setup":
+        voice_setup()
+        print("now run ./focusq voice-enroll")
+    elif command == "voice-enroll":
+        voicegate("enroll", *sys.argv[2:])
+    elif command == "voice-test":
+        voicegate("tail")
+    elif command == "voice-hook":
+        changed = edit_json(SETTINGS, set_submit_hook)
+        print(f"submit hook {'added to' if changed else 'already in'} {SETTINGS}: {SUBMIT_HOOK}")
+    elif command == "voice-off":
+        voice_off()
+    elif command == "voice-crosscheck":
+        if not os.path.exists(VOICE_PYTHON):
+            sys.exit("run ./focusq voice-setup first")
+        env = {**os.environ, "HERDR_PLUGIN_STATE_DIR": STATE_DIR}
+        os.execve(VOICE_PYTHON, [VOICE_PYTHON, "-I", os.path.join(ROOT, "tests", "check_other_device.py")], env)
+    else:
+        sys.exit(__doc__)
+
+
+if __name__ == "__main__":
+    main()

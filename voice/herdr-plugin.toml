@@ -1,0 +1,15 @@
+id = "local.focus-queue"
+name = "Focus Queue"
+version = "0.2.0"
+min_herdr_version = "0.9.0"
+description = "Focus panes that finish, but wait while the focused pane is waiting for your input; voice follows focus"
+platforms = ["macos"]
+
+# Runtime commands run with the plugin directory as their working directory.
+[[events]]
+on = "pane.agent_status_changed"
+command = ["/usr/bin/python3", "focus_queue.py"]
+
+[[events]]
+on = "pane.focused"
+command = ["/usr/bin/python3", "focus_queue.py"]
