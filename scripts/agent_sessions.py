@@ -5,6 +5,7 @@ sleep). Everything here fails closed: when a fact cannot be read it is reported 
 unverified, never as "no work".
 """
 import json
+import os
 from pathlib import Path
 import re
 import sqlite3
@@ -319,6 +320,7 @@ def close_report_message(config):
             '{"judgments": [{"situation": "무엇을 판단했나", "expected": "예상", "actual": "실제", "error": "MATCHED|PARTIAL|WRONG"}]} '
             "(판단 1~5개, 선택: cause·surprise·pattern_candidates). "
             f"2) {python} {script} close-report --done \"이 세션이 한 일\" --remaining \"남은 일\" --experience <그 파일> 를 실행합니다. "
+            "확정한 결정은 --decision \"…\"(여러 번), 만들거나 고친 문서는 --doc <파일>(여러 번, 원본은 그대로)을 붙입니다. "
             "3) 고객·회사·제품 이름 대신 워크스페이스 id를 씁니다. 거부되면 문장을 고쳐 다시 실행합니다. "
             "다른 세션에 보고하지 말고, 보고 id만 한 줄로 답하고 끝내세요. 승인은 사람이 기억함에서 합니다.")
 
@@ -342,6 +344,42 @@ def harness_close_status(config, item, since, *, runner=None):
     if value.get('ok') and value.get('report_id'):
         return True, {'report_id': value['report_id'], 'task_id': value.get('task_id')}
     return False, 'no close report yet'
+
+
+def self_core_id():
+    """This computer's herdr-core id (the machine half of a harness workspace id)."""
+    try:
+        return json.loads(run(['hc', 'server', 'status', '--json']))['core']['id']
+    except (OSError, RuntimeError, ValueError, KeyError, subprocess.TimeoutExpired):
+        return None
+
+
+def harness_archive(config, data, *, runner=None):
+    """(ok, detail): `harness.py archive --file F` keeps how the space looked (local only)."""
+    import tempfile
+    harness = config.get('harness') or {}
+    python, script = harness.get('python'), harness.get('script')
+    if not python or not script:
+        return False, 'harness not configured'
+    if not data.get('workspace_id') or data['workspace_id'].startswith('None-'):
+        return False, 'machine id unknown'
+    fd, path = tempfile.mkstemp(prefix='space-archive-', suffix='.json')
+    try:
+        with os.fdopen(fd, 'w') as stream:
+            json.dump(data, stream, ensure_ascii=False)
+        runner = runner or (lambda a: subprocess.run([str(v) for v in a], capture_output=True, text=True, timeout=60))
+        try:
+            result = runner([python, script, 'archive', '--file', path])
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            return False, f'harness call failed: {exc}'
+        if result.returncode != 0:
+            return False, 'harness refused: ' + ((result.stderr or result.stdout or '').strip().splitlines() or ['?'])[-1][:240]
+        try:
+            return True, json.loads((result.stdout or '').strip().splitlines()[-1])['archive']
+        except (ValueError, IndexError, KeyError):
+            return False, 'harness output unreadable'
+    finally:
+        os.unlink(path)
 
 
 def utc_iso(epoch):

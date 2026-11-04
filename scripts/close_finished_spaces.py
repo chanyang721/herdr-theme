@@ -116,6 +116,12 @@ class Live:
     def close_status(self, config, item, since):
         return agent_sessions.harness_close_status(config, item, since)
 
+    def archive(self, config, data):
+        return agent_sessions.harness_archive(config, data)
+
+    def machine(self):
+        return agent_sessions.self_core_id()
+
     def close(self, space_id, config=None):
         if not (config or {}).get('space_close_enabled'):
             raise RuntimeError('space.close refused: workspaces are kept (space_close_enabled is off)')
@@ -133,6 +139,24 @@ def fixed(space, config):
     if space.get('name', '').casefold() in {x.casefold() for x in config.get('fixed_names', [])}:
         return True
     return any(item.get('id') == space.get('id') and item.get('machine') == space.get('machine') for item in config.get('fixed_spaces', []))
+
+
+SLEEP_LABEL = 'sixfold.sleep'
+
+
+def slept_session(terminal, space):
+    """The session a slept pane holds (sleep label + the resume stub in the foreground), else None."""
+    label = (terminal.get('labels') or {}).get(SLEEP_LABEL) or ''
+    fg = terminal.get('foreground')
+    argv = (fg.get('argv') or []) if isinstance(fg, dict) else []
+    if ':' not in label or not any(str(a).endswith('session_sleep_stub.py') for a in argv):
+        return None
+    provider, sid = label.split(':', 1)
+    if provider not in ('claude', 'codex') or not re.fullmatch(r'[0-9a-f-]{36}', sid):
+        return None
+    return {'address': terminal.get('address'), 'app': 'claude-code' if provider == 'claude' else 'codex', 'session_id': sid,
+            'space_id': space['id'], 'space_name': space.get('name'), 'title': (terminal.get('labels') or {}).get('sixfold.title'),
+            'cwd': terminal.get('cwd'), 'turn': terminal.get('turn'), 'slept': True}
 
 
 def inspect(space, snapshot, adapter, config):
@@ -157,6 +181,13 @@ def inspect(space, snapshot, adapter, config):
         if not terminal:
             reasons.append(f'{address}: terminal evidence unavailable')
             continue
+        slept = slept_session(terminal, space)
+        if slept:
+            # Already suspended by the sleep observer: the agent exited after its own park record,
+            # the pane runs only the resume stub. Nothing can be pending in it.
+            sessions.append(slept)
+            evidence.append([address, terminal.get('pid'), 'slept', slept['session_id']])
+            continue
         agent = (terminal.get('status') or {}).get('app')
         state = (terminal.get('status') or {}).get('state')
         if terminal.get('reported') and agent in AGENTS and state == 'blocked':
@@ -171,7 +202,8 @@ def inspect(space, snapshot, adapter, config):
         if not valid:
             reasons.append(f'{address}: {why}')
         jobs_ok, jobs_reason, jobs_fingerprint = adapter.backend(terminal, config, valid)
-        if not jobs_ok:
+        child = 'inherited child session' in (jobs_reason or '')
+        if not jobs_ok and not (child and valid and config.get('_manual')):
             reasons.append(f'{address}: {jobs_reason}')
         text = adapter.screen(address)
         if DECISION.search(text):
@@ -184,6 +216,12 @@ def inspect(space, snapshot, adapter, config):
             sessions.append({'address': address, 'app': agent, 'session_id': mapping['session_id'], 'space_id': space['id'],
                              'space_name': space.get('name'), 'title': terminal.get('title'), 'cwd': terminal.get('cwd'),
                              'turn': terminal.get('turn')})
+        elif child and config.get('_manual'):
+            # No session file or transcript (started inside another Claude): it is archived as a
+            # pane that reopens as a new session with the workspace memory injected.
+            sessions.append({'address': address, 'app': agent, 'session_id': None, 'space_id': space['id'],
+                             'space_name': space.get('name'), 'title': terminal.get('title'), 'cwd': terminal.get('cwd'),
+                             'turn': terminal.get('turn'), 'no_resume': True})
         else:
             reasons.append(f'{address}: session id unverified (harness record impossible)')
         evidence.append([address, terminal.get('pid'), terminal.get('status_ms'), terminal.get('turn'), pids, jobs_fingerprint, hashlib.sha256(text.encode()).hexdigest()])
@@ -191,6 +229,30 @@ def inspect(space, snapshot, adapter, config):
     return {'id': space['id'], 'name': space['name'], 'safe': not reasons, 'reasons': reasons, 'fingerprint': fingerprint,
             'folders': sorted({t.get('cwd') for a, t in all_terms.items() if a in addresses and t.get('cwd')} | ({space['folder']} if space.get('folder') else set())),
             'summary': '\n'.join('\n'.join(s.splitlines()[-8:]) for s in screens)[:2400], 'sessions': sessions}
+
+
+def archive_of(space, item, parked, snapshot, adapter):
+    """The harness archive of a space about to close: what reopening needs, nothing more."""
+    machine = adapter.machine() if hasattr(adapter, 'machine') else agent_sessions.self_core_id()
+    sessions = {s['address']: s for s, _ in parked}
+    tabs = []
+    for tab in space.get('tabs', []):
+        panes = []
+        for t in tab.get('terminals', []):
+            address = t.get('terminal')
+            s = sessions.get(address, {})
+            term = snapshot['terminals'].get(address) or {}
+            pane = {'address': address, 'agent': s.get('app') or t.get('app'), 'cwd': s.get('cwd') or term.get('cwd'),
+                    'last_state': 'slept' if s.get('slept') else t.get('status'),
+                    'git': s.get('git') or (adapter.git(term.get('cwd')) if hasattr(adapter, 'git') else None)}
+            if s.get('session_id'):
+                pane['session_id'] = s['session_id']
+            if s.get('title'):
+                pane['title'] = str(s['title'])[:120]
+            panes.append(pane)
+        tabs.append({'name': tab.get('name'), 'panes': panes})
+    return {'workspace_id': f"{machine}-{space['id'].split('/')[-1]}", 'name': space.get('name'), 'space_id': space['id'],
+            'folder': space.get('folder'), 'tabs': tabs, 'reason': 'unused: every pane idle/done/slept and reported'}
 
 
 def git_info(folder):
@@ -247,18 +309,21 @@ def cycle(adapter, config, state, now, *, apply=False, only_space=None, report_d
         quiet = now - since
         item.update(quiet_seconds=quiet, action='keep')
         tracking[space['id']] = {'since': since, 'fingerprint': item.get('fingerprint'), 'decision_notified_at': old.get('decision_notified_at', 0)}
-        if item['safe'] and quiet >= config.get('idle_seconds', 600):
+        manual = bool(config.get('_manual'))
+        if item['safe'] and (quiet >= config.get('idle_seconds', 21600) or manual):
             item['action'] = 'would_close'
-            if apply and not config.get('space_close_enabled'):
+            # manual: the person asked for this space by name (--only-space --now): no quiet window,
+            # trial or switch; every safety check, close report and the archive still apply.
+            if apply and not config.get('space_close_enabled') and not manual:
                 # User rule (2026-11-04): a workspace is never removed and always keeps a pane.
                 # Closing even a temporary space waits for the person's explicit answer
                 # (`space_close_enabled: true`); until then the candidate is only reported.
                 item['action'] = 'keep'
                 item['reasons'].append('space close held: workspaces are kept until the person enables it')
-            elif apply and not trial_ok:
+            elif apply and not trial_ok and not manual:
                 item['action'] = 'keep'
                 item['reasons'].append('30-minute dry-run review not complete')
-            elif apply and not reviewed:
+            elif apply and not reviewed and not manual:
                 item['action'] = 'keep'
                 item['reasons'].append('dry-run review not recorded')
             elif apply:
@@ -276,6 +341,13 @@ def cycle(adapter, config, state, now, *, apply=False, only_space=None, report_d
                         # report in time keeps the whole space (fail-closed).
                         waiting = []
                         for session in item.get('sessions', []):
+                            if session.get('slept'):
+                                continue   # it reported (or was parked) when it was put to sleep
+                            if session.get('no_resume'):
+                                # it cannot be resumed, but it can still answer: ask it like any other
+                                session = {**session, 'session_id': session.get('session_id') or ''}
+                                if not session['session_id']:
+                                    continue
                             decision, detail = agent_sessions.report_gate(reports, session, adapter, config, now)
                             if decision == 'ready':
                                 session['report_task_id'] = detail.get('task_id')
@@ -288,6 +360,9 @@ def cycle(adapter, config, state, now, *, apply=False, only_space=None, report_d
                         parked, refused = [], None
                         for session in item.get('sessions', []):
                             session = {**session, 'git': adapter.git(session.get('cwd'))} if hasattr(adapter, 'git') else session
+                            if not session.get('session_id'):
+                                parked.append((session, 'no session id: archived only'))
+                                continue
                             ok, detail = adapter.park(config, session, 'close_requested', reason='space closed: idle and finished')
                             if not ok:
                                 refused = f"{session['address']}: {detail}"; break
@@ -297,8 +372,15 @@ def cycle(adapter, config, state, now, *, apply=False, only_space=None, report_d
                             item['harness'] = [d for _, d in parked]
                             result.append(item); continue
                         item['harness'] = [d for _, d in parked]
+                        # How to bring the space back (name, folder, tabs, sessions, git) goes to the
+                        # harness before anything closes; no archive, no close.
+                        ok, detail = adapter.archive(config, archive_of(space, item, parked, check, adapter))
+                        if not ok:
+                            item['action'] = 'keep'; item['reasons'].append(f'harness archive failed: {detail}')
+                            result.append(item); continue
+                        item['archive'] = detail
                         item['record'] = record_space(item, report_dir, now)
-                        adapter.close(space['id'], config)
+                        adapter.close(space['id'], {**config, 'space_close_enabled': True} if manual else config)
                         after = adapter.snapshot()
                         if any(s['id'] == space['id'] for s in after['spaces']):
                             raise RuntimeError('space.close not confirmed')
@@ -307,7 +389,8 @@ def cycle(adapter, config, state, now, *, apply=False, only_space=None, report_d
                         item['action'] = 'closed'
                         del tracking[space['id']]
                         for session, _ in parked:
-                            adapter.park(config, session, 'closed', reason='space closed')
+                            if session.get('session_id'):
+                                adapter.park(config, session, 'closed', reason='space closed')
         elif item['safe']:
             item['reasons'].append('idle/output-stable observation window incomplete')
         if item['action'] == 'would_close' and not apply and hasattr(adapter, 'park'):
@@ -342,6 +425,9 @@ def main():
     group.add_argument('--dry-run', action='store_true')
     group.add_argument('--apply', action='store_true')
     parser.add_argument('--only-space')
+    parser.add_argument('--now', action='store_true',
+                        help='with --apply --only-space: the person asked to archive and close this space now '
+                             '(no quiet window or trial; every safety check, the close reports and the archive still apply)')
     parser.add_argument('--app', default=shutil.which('herdr-app') or 'herdr-app')
     parser.add_argument('--core', default=shutil.which('herdr-core') or shutil.which('hc') or 'hc')
     args = parser.parse_args()
@@ -356,6 +442,10 @@ def main():
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except BlockingIOError:
         print(json.dumps({'action': 'skip', 'reason': 'another cleanup observer is running'})); return
+    if args.now:
+        if not (args.apply and args.only_space):
+            parser.error('--now needs --apply and --only-space')
+        config = {**config, '_manual': True}
     state = load(args.state, {})
     observer_hash = observer_sha256(Path(__file__).parent)
     if state.get('observer_sha256') != observer_hash:

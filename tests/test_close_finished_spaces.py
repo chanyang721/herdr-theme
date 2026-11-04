@@ -85,6 +85,19 @@ class FakeLive:
     def notify(self, address, message):
         self.notifications.append((address, message))
 
+    archives = None
+    archive_error = None
+
+    def archive(self, config, data):
+        assert not self.closed, 'archive must precede space.close'
+        if self.archive_error:
+            return False, self.archive_error
+        self.archives = (self.archives or []) + [data]
+        return True, 'ARCH.json'
+
+    def machine(self):
+        return 'm' * 32
+
     reported = False
 
     def request_report(self, address, text):
@@ -414,3 +427,74 @@ for _name, _test in list(vars(HarnessRecordTests).items()):
     if _name.startswith('test_'):
         setattr(CleanupPolicyTests, _name, _test)
 del HarnessRecordTests
+
+
+class ArchiveBeforeCloseTests(CleanupPolicyTests.__base__):
+    """Archive → close: fixed spaces never, slept panes count as idle, the person's --now path."""
+    setUp = CleanupPolicyTests.setUp
+    target = CleanupPolicyTests.target
+    inspect = CleanupPolicyTests.inspect
+    ready_state = CleanupPolicyTests.ready_state
+    cycle = CleanupPolicyTests.cycle
+
+    def test_archive_names_tabs_sessions_and_git_before_close(self):
+        result = self.cycle()
+        self.assertEqual(result['results'][0]['action'], 'closed')
+        a = self.live.archives[0]
+        self.assertEqual((a['workspace_id'], a['name'], a['folder']), ('m' * 32 + '-temporary', 'Temporary work', '/fixture/worktree'))
+        pane = a['tabs'][0]['panes'][0]
+        self.assertEqual((pane['address'], pane['agent'], pane['session_id']), ('t-test', 'codex', '11111111-2222-3333-4444-555555555555'))
+        self.assertEqual(pane['git']['uncommitted'], 1)
+        self.assertEqual(result['results'][0]['archive'], 'ARCH.json')
+
+    def test_failed_archive_keeps_the_space(self):
+        self.live.archive_error = 'harness refused: x'
+        result = self.cycle()
+        self.assertEqual((result['results'][0]['action'], self.live.closed), ('keep', []))
+        self.assertTrue(any('harness archive failed' in r for r in result['results'][0]['reasons']))
+
+    def test_fixed_spaces_are_never_archived_or_closed_even_when_the_person_asks_now(self):
+        for name in ('Share', 'share', 'PROJECT A'):
+            self.live.data['spaces'][1]['name'] = name
+            self.config['_manual'] = True
+            result = self.cycle()
+            self.assertEqual((result['results'][0]['action'], self.live.closed, self.live.archives), ('keep', [], None))
+            self.assertIn('fixed workspace', result['results'][0]['reasons'])
+        self.live.data['spaces'][1]['name'] = 'Renamed'
+        self.config['fixed_spaces'] = [{'id': 'temporary', 'machine': None}]
+        self.config['_manual'] = False
+        self.assertEqual(self.cycle()['results'][0]['action'], 'keep')
+        self.assertEqual(self.live.closed, [])
+
+    def test_slept_pane_counts_as_idle_and_is_archived_with_its_session(self):
+        sid = '22222222-3333-4444-5555-666666666666'
+        self.live.data['terminals']['t-test'] = {
+            'address': 't-test', 'state': 'live', 'pid': 100, 'reported': True, 'status': None, 'cwd': '/fixture/worktree',
+            'labels': {'sixfold.sleep': f'claude:{sid}', 'sixfold.title': '절전 · 문서'},
+            'foreground': {'pid': 300, 'argv': ['python3', '/x/session_sleep_stub.py', '/x/t.json']}}
+        item = self.inspect()
+        self.assertTrue(item['safe'], item['reasons'])
+        result = self.cycle()
+        self.assertEqual(result['results'][0]['action'], 'closed')
+        pane = self.live.archives[0]['tabs'][0]['panes'][0]
+        self.assertEqual((pane['agent'], pane['session_id'], pane['last_state']), ('claude-code', sid, 'slept'))
+
+    def test_a_sleep_label_without_the_stub_is_not_trusted(self):
+        self.live.data['terminals']['t-test']['labels'] = {'sixfold.sleep': 'claude:22222222-3333-4444-5555-666666666666'}
+        self.live.data['terminals']['t-test']['status'] = {'app': 'claude-code', 'state': 'working'}
+        self.assertFalse(self.inspect()['safe'])
+
+    def test_now_skips_the_quiet_window_and_the_switch_but_not_the_safety_checks(self):
+        self.config.update(space_close_enabled=False, _manual=True, reviewed_observer_sha256='other')
+        result = self.cycle(self.ready_state(quiet=0))
+        self.assertEqual(result['results'][0]['action'], 'closed')
+        self.live.data = snapshot()
+        self.live.closed = []
+        self.live.data['terminals']['t-test']['status']['state'] = 'working'
+        self.assertEqual(self.cycle(self.ready_state(quiet=0))['results'][0]['action'], 'keep')
+        self.assertEqual(self.live.closed, [])
+
+    def test_default_idle_window_is_six_hours(self):
+        del self.config['idle_seconds']
+        self.assertEqual(self.cycle(self.ready_state(quiet=21599))['results'][0]['action'], 'keep')
+        self.assertEqual(self.cycle(self.ready_state(quiet=21600))['results'][0]['action'], 'closed')
