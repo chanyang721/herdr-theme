@@ -498,3 +498,42 @@ class ArchiveBeforeCloseTests(CleanupPolicyTests.__base__):
         del self.config['idle_seconds']
         self.assertEqual(self.cycle(self.ready_state(quiet=21599))['results'][0]['action'], 'keep')
         self.assertEqual(self.cycle(self.ready_state(quiet=21600))['results'][0]['action'], 'closed')
+
+
+class DecisionScreenTests(unittest.TestCase):
+    """2026-11-04 false alarm: 'Blocked by auto mode' while a Monitor ran was reported as a user decision."""
+    SCREEN = ('⏺ Bash(kill 4242)\n  ⎿  Blocked by auto mode · /permissions to review\n'
+              '⏺ Monitor(Slack collector health)\n  ⎿  Monitor started · task bfpugik7k · timeout 1800s\n  ⎿  Allowed by auto mode\n'
+              '✻ Worked for 3m 42s · done 오후 5:29 · 1 monitor still running\n'
+              '────────\n❯ \n────────\n  ⏵⏵ auto mode on · 1 monitor\n')
+
+    def test_auto_mode_lines_are_not_a_user_decision(self):
+        self.assertFalse(cleanup.decision_pending(self.SCREEN))
+        self.assertFalse(cleanup.decision_pending('⎿  Blocked by auto mode · /permissions to review\n❯ \n'))
+
+    def test_a_running_monitor_or_shell_is_in_progress(self):
+        self.assertTrue(cleanup.background_running(self.SCREEN))
+        self.assertTrue(cleanup.background_running('done · 2 shells still running\n❯ \n'))
+        self.assertFalse(cleanup.background_running('✻ Worked for 3s · done 오후 5:29\n❯ \n'))
+
+    def test_real_questions_still_count(self):
+        self.assertTrue(cleanup.decision_pending('Do you want to proceed?\n❯ 1. Yes\n  2. No\n'))
+        self.assertTrue(cleanup.decision_pending('사용자 승인 대기: 배포 범위\n'))
+
+
+class DecisionCycleTests(CleanupPolicyTests.__base__):
+    setUp = CleanupPolicyTests.setUp
+    target = CleanupPolicyTests.target
+    inspect = CleanupPolicyTests.inspect
+    ready_state = CleanupPolicyTests.ready_state
+    cycle = CleanupPolicyTests.cycle
+
+    def test_monitor_running_keeps_the_space_in_progress_without_a_notice(self):
+        self.config.update(user_approved_apply=True, reviewed_observer_sha256='test')
+        self.live.text = DecisionScreenTests.SCREEN
+        result = self.cycle()
+        reasons = result['results'][0]['reasons']
+        self.assertEqual((result['results'][0]['action'], self.live.closed), ('keep', []))
+        self.assertTrue(any('in progress' in r for r in reasons), reasons)
+        self.assertFalse(any('user decision pending' in r for r in reasons), reasons)
+        self.assertEqual(self.live.notifications, [])

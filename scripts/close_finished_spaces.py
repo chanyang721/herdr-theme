@@ -20,6 +20,27 @@ import site_config  # noqa: E402
 
 BASE = site_config.folder('state_dir')
 DECISION = re.compile(r'승인\s*대기|확인\s*필요|결정\s*대기|사용자.{0,12}(?:확인|승인).{0,8}(?:대기|기다)|awaiting\s+(?:approval|confirmation)|waiting\s+for\s+(?:your|user)\s+(?:approval|confirmation)|allow\s+(?:once|always)', re.I)
+# The agent's own command refused or let through by Claude's auto mode: a log line, not a question.
+AUTO_MODE = re.compile(r'(?:Blocked|Allowed)\s+by\s+auto\s+mode|/permissions\s+to\s+review', re.I)
+# A real question for the person: Claude's permission dialog or a question with numbered choices.
+PROMPTED = re.compile(r'Do you want to (?:proceed|make this edit|create|run|allow)\b|❯\s*1\.\s*Yes\b', re.I)
+# Background work the agent still owns (Claude footer "· 1 monitor still running", "· 2 shells").
+RUNNING = re.compile(r'\b\d+\s+(?:monitors?|shells?|background\s+(?:tasks?|shells?|jobs?))(?:\s+still\s+running)?\b', re.I)
+
+
+def decision_pending(text):
+    """A question, approval or input the person must answer; auto-mode log lines are not one."""
+    lines = [l for l in text.splitlines() if not AUTO_MODE.search(l)]
+    rest = '\n'.join(lines)
+    return bool(DECISION.search(rest) or PROMPTED.search(rest))
+
+
+def background_running(text):
+    """The agent's footer still counts a monitor or background shell: the session is in progress."""
+    tail = '\n'.join(text.splitlines()[-8:])
+    return bool(RUNNING.search(tail))
+
+
 PLACEHOLDERS = {'', 'Ask Codex to do anything', 'Write tests for @filename', 'Implement {feature}', 'Find and fix a bug in @filename', 'Explain this codebase', 'Improve documentation in @filename', 'Summarize recent commits', 'Use /skills to list available skills'}
 AGENTS = agent_sessions.AGENTS
 
@@ -206,7 +227,9 @@ def inspect(space, snapshot, adapter, config):
         if not jobs_ok and not (child and valid and config.get('_manual')):
             reasons.append(f'{address}: {jobs_reason}')
         text = adapter.screen(address)
-        if DECISION.search(text):
+        if background_running(text):
+            reasons.append(f'{address}: in progress: a monitor or background shell is still running')
+        elif decision_pending(text):
             reasons.append(f'{address}: user decision pending')
         if not empty_prompt(text, agent):
             reasons.append(f'{address}: empty input unverified')
