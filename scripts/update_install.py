@@ -104,6 +104,8 @@ def exchange_directories(left, right):
 def tree_digest(directory):
     entries = []
     for item in sorted(directory.rglob('*')):
+        if any(part in ('__pycache__', '.cache') for part in item.relative_to(directory).parts):
+            continue  # Python imports and rendered previews are runtime data, not another code writer.
         if item.is_symlink():
             entries.append((str(item.relative_to(directory)), 'symlink', os.readlink(item)))
         elif item.is_file():

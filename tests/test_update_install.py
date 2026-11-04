@@ -36,6 +36,8 @@ if sys.argv[1]=='check':
  if config.get('check_fail') or (candidate=='needs-dependency' and not (stage/'required.js').exists()):sys.exit(3)
  print('check passed')
 elif sys.argv[1]=='status':
+ if current=='new' and config.get('runtime_cache'):
+  cache=home/'mods/example/__pycache__';cache.mkdir(exist_ok=True);(cache/'helper.cpython.pyc').write_bytes(b'compiled')
  errors=['broken'] if config.get('unhealthy') or (current=='old' and config.get('pre_errors')) or (current!='old' and config.get('post_fail')) else []
  if current=='new' and config.get('concurrent'):
   target.write_text('other writer');errors=['broken']
@@ -73,6 +75,13 @@ else:sys.exit(4)
         self.assertEqual((backup / 'mods/example/unlisted.js').read_text(), 'preserve me')
         check = next(call for call in self.calls() if call['argv'][0] == 'check')
         self.assertEqual(check['installed'], 'old')
+
+    def test_import_cache_created_during_reload_is_not_a_concurrent_code_edit(self):
+        self.configure(runtime_cache=True)
+        self.install()
+        self.assertEqual(self.receipt()['phase'], 'verified')
+        self.assertEqual((self.target / 'main.js').read_text(), 'new')
+        self.assertTrue((self.target / '__pycache__/helper.cpython.pyc').is_file())
         self.assertFalse(Path(check['argv'][1]).is_relative_to(self.home / 'mods'))
         self.assertEqual(self.receipt()['phase'], 'verified')
 
