@@ -42,9 +42,9 @@ for sha in $shas; do
   if [ "$sha" = "$head" ] && [ -z "$(git status --porcelain --untracked-files=no)" ]; then
     dir=$top
   else
-    tmp="$common/prepush-$sha"
-    git worktree remove --force "$tmp" >/dev/null 2>&1
-    git worktree add -q --detach "$tmp" "$sha" || { echo "pre-push: cannot check out $sha" >&2; exit 1; }
+    # A fresh folder per run: two pushes of the same commit must not share or remove each other's.
+    tmp=$(mktemp -d "$common/prepush-XXXXXX") || { echo "pre-push: cannot make a temporary folder" >&2; exit 1; }
+    git worktree add -q --detach "$tmp" "$sha" || { rmdir "$tmp" 2>/dev/null; tmp=''; echo "pre-push: cannot check out $sha" >&2; exit 1; }
     dir=$tmp
   fi
   echo "pre-push: checking $(git log -1 --format='%h %s' "$sha")" >&2
