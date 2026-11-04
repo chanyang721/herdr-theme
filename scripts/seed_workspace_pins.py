@@ -4,10 +4,12 @@ import argparse
 import json
 import os
 import subprocess
+import sys
 from contextlib import contextmanager
 from pathlib import Path
 
-NAMES = ('Share', 'PeaceMinusOne', 'Medihomes')
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import site_config  # noqa: E402
 
 
 
@@ -42,7 +44,7 @@ def seed(app_home, ensure_spaces=False, command='herdr-app'):
         available = spaces()
         original = None
         pins = []
-        for name in NAMES:
+        for name in site_config.load(app=app_home).get('fixed_space_names', []):
             matches = [s for s in available if s.get('machine') is None and
                        str(s.get('name', '')).casefold() == name.casefold() and
                        isinstance(s.get('id'), str) and s['id']]

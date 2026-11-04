@@ -17,6 +17,9 @@ class SeedPinsTests(unittest.TestCase):
         self.addCleanup(self.tmp.cleanup)
         self.home = Path(self.tmp.name)/'app'
         self.target = self.home/'data/sixfold/workspace-pins.local.json'
+        # The seeded names are machine-local (site.local.json), not repository constants.
+        self.target.parent.mkdir(parents=True, exist_ok=True)
+        (self.target.parent/'site.local.json').write_text(json.dumps({'fixed_space_names': ['Share', 'Project A', 'Project B']}))
         self.calls = []
         self.available = [{'id': 'remote-share', 'name': 'Share', 'machine': 'remote'},
                           {'id': 'local-share', 'name': 'Share', 'machine': None}]
@@ -45,8 +48,8 @@ class SeedPinsTests(unittest.TestCase):
             self.assertEqual(len(self.calls), before)
         self.assertEqual(json.loads(self.target.read_text()), {'spaces': [
             {'id': 'local-share', 'machine': None},
-            {'id': 'generated-PeaceMinusOne', 'machine': None},
-            {'id': 'generated-Medihomes', 'machine': None},
+            {'id': 'generated-Project A', 'machine': None},
+            {'id': 'generated-Project B', 'machine': None},
         ]})
         creates = [c for c in self.calls if c[1:3] == ['do', 'space.new']]
         self.assertEqual(len(creates), 2)
@@ -54,7 +57,7 @@ class SeedPinsTests(unittest.TestCase):
         self.assertEqual(restores, [['fake-herdr', 'do', 'pane.focus', '--pane', 'pane-original']]*2)
 
     def test_existing_manual_configuration_is_preserved_without_contacting_app(self):
-        self.target.parent.mkdir(parents=True)
+        self.target.parent.mkdir(parents=True, exist_ok=True)
         self.target.write_text('manual even if invalid JSON')
         with patch.object(seed.subprocess, 'run', side_effect=AssertionError('must not contact app')):
             self.assertFalse(seed.seed(self.home, True))
@@ -62,7 +65,7 @@ class SeedPinsTests(unittest.TestCase):
 
     def test_missing_space_without_ensure_does_not_write_partial_configuration(self):
         with patch.object(seed.subprocess, 'run', self.fake_app):
-            with self.assertRaisesRegex(ValueError, 'PeaceMinusOne'):
+            with self.assertRaisesRegex(ValueError, 'Project A'):
                 seed.seed(self.home)
         self.assertFalse(self.target.exists())
         self.assertFalse(any(c[1] == 'do' for c in self.calls))

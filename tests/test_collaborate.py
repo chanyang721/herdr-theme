@@ -31,7 +31,8 @@ class CollaborateTests(unittest.TestCase):
         self.addCleanup(self.temp.cleanup)
         self.data = Path(self.temp.name)
         self.patchers = [patch.object(c, 'DATA', self.data), patch.object(c, 'snapshot', side_effect=fixture),
-                         patch.dict(os.environ, {'HC_TERMINAL_ID': 'origin'})]
+                         patch.dict(os.environ, {'HC_TERMINAL_ID': 'origin'}),
+                         patch.object(c.site_config, 'load', return_value={**c.site_config.DEFAULTS, 'hub_space_ids': ['sp-share']})]
         for p in self.patchers:
             p.start()
             self.addCleanup(p.stop)
@@ -198,7 +199,7 @@ class CollaborateTests(unittest.TestCase):
         c.atomic(self.data / 'collaboration.json', {'exclude_spaces': []})
         with patch.dict(os.environ, {'HC_TERMINAL_ID': 's'}), self.assertRaises(ValueError):
             self.add('share-task')
-        self.assertIn('sp5b1f0e5ae362facabc5ac1ece5d08277', c.config()['exclude_spaces'])
+        self.assertIn('sp-share', c.config()['exclude_spaces'])
 
     def test_closed_batch_rejects_new_tasks_but_existing_id_remains_idempotent(self):
         task = self.add('a')

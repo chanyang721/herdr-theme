@@ -10,13 +10,21 @@ from unittest.mock import patch
 spec = importlib.util.spec_from_file_location('route', Path(__file__).parents[1] / 'scripts/route.py')
 route = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(route)
+# Machine-local names come from site.local.json; tests never read this computer's file.
+SITE = {**route.site_config.DEFAULTS, 'hub_space_ids': ['sp-share'], 'project_aliases': {'비': 'project b'}}
+
+
+def setUpModule():
+    patcher = patch.object(route.site_config, 'load', return_value=SITE)
+    patcher.start()
+    unittest.addModuleCleanup(patcher.stop)
 
 
 def fixture():
     spaces = [
         {'id': 'common', 'name': '공통', 'folder': '/common', 'tabs': [
             {'active': True, 'terminals': [{'terminal': 's0'}, {'terminal': 's1'}, {'terminal': 's2'}]}]},
-        {'id': 'project', 'name': 'Medihomes', 'folder': '/medihomes', 'tabs': [
+        {'id': 'project', 'name': 'Project B', 'folder': '/project-b', 'tabs': [
             {'active': True, 'terminals': [{'terminal': 'p0'}, {'terminal': 'p1'}, {'terminal': 'p2'}]}]},
     ]
     live = [{'address': address, 'agent': agent, 'state': 'live', 'status': status}
@@ -27,25 +35,25 @@ def fixture():
 
 class RouteTests(unittest.TestCase):
     def test_share_and_stable_space_id_survive_workspace_rename(self):
-        for space_id, name in [('common', 'Share'), ('sp5b1f0e5ae362facabc5ac1ece5d08277', 'Renamed')]:
+        for space_id, name in [('common', 'Share'), ('sp-share', 'Renamed')]:
             spaces, live = fixture()
             spaces[0].update(id=space_id, name=name)
-            self.assertEqual(route.candidates(spaces, live, 's2', 'Medihomes')[1], 'p2')
+            self.assertEqual(route.candidates(spaces, live, 's2', 'Project B')[1], 'p2')
 
     def test_same_position_wins_then_busy_falls_back_to_same_agent_kind(self):
         spaces, live = fixture()
-        self.assertEqual(route.candidates(spaces, live, 's2', '메디홈즈'),
-                         ('Medihomes', 'p2', ['p2', 'p1', 'p0']))
+        self.assertEqual(route.candidates(spaces, live, 's2', '비'),
+                         ('Project B', 'p2', ['p2', 'p1', 'p0']))
         live[-1]['status'] = 'working'
-        self.assertEqual(route.candidates(spaces, live, 's2', 'Medihomes')[2], ['p1', 'p0'])
+        self.assertEqual(route.candidates(spaces, live, 's2', 'Project B')[2], ['p1', 'p0'])
 
     def test_all_busy_or_blocked_returns_no_target_instead_of_interrupting(self):
         spaces, live = fixture()
         for entry in live:
             entry['status'] = 'blocked' if entry['address'] == 'p0' else 'working'
-        self.assertEqual(route.candidates(spaces, live, 's2', 'Medihomes')[2], [])
+        self.assertEqual(route.candidates(spaces, live, 's2', 'Project B')[2], [])
         with patch.object(route, 'call') as call:
-            result = route.dispatch({'id': 'test', 'source': 's2', 'project': 'Medihomes', 'text': 'hi'}, spaces, live)
+            result = route.dispatch({'id': 'test', 'source': 's2', 'project': 'Project B', 'text': 'hi'}, spaces, live)
         self.assertEqual(result['state'], 'queued')
         call.assert_not_called()
 
@@ -62,7 +70,7 @@ class RouteTests(unittest.TestCase):
             return 0, {'started': True}
 
         with patch.object(route, 'call', side_effect=call):
-            result = route.dispatch({'id': 'test', 'source': 's2', 'project': 'Medihomes', 'text': 'hi'}, spaces, live)
+            result = route.dispatch({'id': 'test', 'source': 's2', 'project': 'Project B', 'text': 'hi'}, spaces, live)
         self.assertEqual(sent, [('p1', 's2')])
         self.assertTrue(result['fallback'])
 
@@ -75,7 +83,7 @@ class RouteTests(unittest.TestCase):
         self.assertTrue(route.receiver_available('• 완료했습니다.\n\n› Ask Codex to do anything'))
         spaces, live = fixture()
         live[-1]['status'] = 'done'
-        self.assertNotIn('p2', route.candidates(spaces, live, 's2', 'Medihomes')[2])
+        self.assertNotIn('p2', route.candidates(spaces, live, 's2', 'Project B')[2])
 
     def test_voice_and_recording_below_composer_are_protected(self):
         for screen in ('❯\nvoice ● listening', '❯\n● REC',
@@ -94,7 +102,7 @@ class RouteTests(unittest.TestCase):
                 sent.append(argv[-1])
                 return 0, {'started': True}
             with patch.object(route, 'call', side_effect=call):
-                route.dispatch({'id': 'test', 'source': 's2', 'project': 'Medihomes',
+                route.dispatch({'id': 'test', 'source': 's2', 'project': 'Project B',
                                 'text': 'hi', 'reply': reply}, spaces, live)
             self.assertEqual('한 번 회신하세요' in sent[0], reply)
             self.assertEqual('진행·완료 보고는 보내지 마세요' in sent[0], not reply)
@@ -107,7 +115,7 @@ class RouteTests(unittest.TestCase):
     def test_sent_request_is_removed_before_a_failed_refresh(self):
         with tempfile.TemporaryDirectory() as directory:
             data = Path(directory)
-            request = {'id': 'one', 'source': 's2', 'project': 'Medihomes', 'text': 'hi'}
+            request = {'id': 'one', 'source': 's2', 'project': 'Project B', 'text': 'hi'}
             (data / 'routing-queue.json').write_text(json.dumps({'requests': [request]}))
             with patch.object(route, 'DATA', data), patch.object(route, 'QUEUE', data / 'routing-queue.json'), \
                  patch.object(sys, 'argv', ['route.py', '--drain']), \
@@ -129,7 +137,7 @@ class RouteTests(unittest.TestCase):
                     self.assertTrue(json.loads(queue.read_text())['requests'][0]['hold'])
                     raise error
                 with patch.object(route, 'DATA', data), patch.object(route, 'QUEUE', queue), \
-                     patch.object(sys, 'argv', ['route.py', 'Medihomes', 'hi', '--from', 's2']), \
+                     patch.object(sys, 'argv', ['route.py', 'Project B', 'hi', '--from', 's2']), \
                      patch.object(route, 'snapshot', return_value=fixture()), \
                      patch.object(route, 'dispatch', side_effect=uncertain) as dispatch:
                     with self.assertRaises(type(error)):
@@ -156,7 +164,7 @@ class RouteTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             route.candidates(spaces, live, 's2', 'another project')
         with self.assertRaises(ValueError):
-            route.candidates(spaces, live, 'p2', 'Medihomes')
+            route.candidates(spaces, live, 'p2', 'Project B')
 
     def test_uncertain_send_is_not_retried_to_a_second_agent(self):
         spaces, live = fixture()
@@ -166,7 +174,7 @@ class RouteTests(unittest.TestCase):
             (1, {'error': {'kind': 'connection_lost'}}),
         ]) as call:
             with self.assertRaisesRegex(ValueError, '중복 전송'):
-                route.dispatch({'id': 'test', 'source': 's2', 'project': 'Medihomes', 'text': 'hi'}, spaces, live)
+                route.dispatch({'id': 'test', 'source': 's2', 'project': 'Project B', 'text': 'hi'}, spaces, live)
         self.assertEqual(call.call_count, 3)
 
 
