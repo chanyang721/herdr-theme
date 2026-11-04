@@ -37,7 +37,8 @@ for (const native of [false,true]) test(`background messages refresh through ${n
   source = source.replace(/import \{ h_flex, v_flex \} from 'gpui-base';/, '');
   source = source.replace(/import \* as herdrNative from 'herdr';/, 'const herdrNative = globalThis.__sixfoldTest;');
   source = source.replace(/import \{([^}]+)\} from 'herdr';/, 'const {$1} = globalThis.__sixfoldTest;');
-  for (const name of ['model','flow','workflow','sidebar-identity','collab']) source = source.replace(`'./${name}.js'`,JSON.stringify(new URL(`../mods/sixfold-desk/${name}.js`,import.meta.url).href));
+  source = source.replace("import { collabFlow } from './collab-flow-view.js';", 'const collabFlow=o=>{(globalThis.__flowCalls??=[]).push(o);return null;};');
+  for (const name of ['model','flow','workflow','sidebar-identity','collab', 'collab-flow']) source = source.replace(`'./${name}.js'`,JSON.stringify(new URL(`../mods/sixfold-desk/${name}.js`,import.meta.url).href));
   source = source.replace(/import \{ watchDocs, currentDocs, docsSection, prepareDocsInput \} from '.\/docs.js';/, 'const watchDocs=()=>{};');
   source = source.replace(/import \{ pipeline \} from '.\/pipeline.js';/, '');
   source = source.replace(/import .* from '.\/alert-inbox.js';/,'const workspaceAlertsRow=()=>null, hasWorkspaceAlerts=()=>false;');

@@ -41,7 +41,8 @@ async function sidebar(runtime) {
     .replace(/import \{ panePet, petRunning, RUN_FRAME_MS, RUN_FRAMES \} from '.\/pets.js';/, 'const panePet=()=>null,petRunning=()=>false,RUN_FRAME_MS=110,RUN_FRAMES=5;')
     .replace(/import \{ paneUsage \} from '.\/session-usage.js';/, 'const paneUsage=()=>null;').replace(/import \{ paneMeta, paneMetaChip, showPaneIndex, showTitle \} from '.\/pane-meta.js';/, 'const paneMeta=()=>null,paneMetaChip=()=>null,showPaneIndex=()=>false,showTitle=()=>true;')
     .replace(/import \{ watchBadges, workspaceBadges \} from '.\/badges.js';/, 'const watchBadges=()=>{},workspaceBadges=()=>null;');
-  for (const name of ['model', 'flow', 'workflow', 'sidebar-identity', 'collab']) source = source.replace(`'./${name}.js'`, JSON.stringify(new URL(`../mods/sixfold-desk/${name}.js`, import.meta.url).href));
+  source = source.replace("import { collabFlow } from './collab-flow-view.js';", 'const collabFlow=o=>{(globalThis.__flowCalls??=[]).push(o);return null;};');
+  for (const name of ['model', 'flow', 'workflow', 'sidebar-identity', 'collab', 'collab-flow']) source = source.replace(`'./${name}.js'`, JSON.stringify(new URL(`../mods/sixfold-desk/${name}.js`, import.meta.url).href));
   source = source.replace(/import \{ pipeline \} from [^;]+;/, 'const pipeline=()=>{throw Error("unexpected path");};');
   globalThis.__visRuntime = runtime;
   source += `\n// load ${++loads}`;
@@ -130,5 +131,39 @@ test('hovering a workspace lights its partner computer row, and hovering that ro
     found = rows(view(Sidebar, { hoverComputer: 'worker' }));
     assert(outlined(found.get('sf-space-home'), COLLAB_COLORS.dark), 'the partner workspace lights up');
     assert(!outlined(found.get('sf-space-solo'), COLLAB_COLORS.dark));
+  } finally { delete globalThis.__visRuntime; }
+});
+
+// ⑩ Two groups working together now: each has its own colour on its badge, and with motion on a
+// flow runs around each collaborating box (the view module is stubbed: calls are recorded).
+test('two collaborating groups get different colours, and a flow runs around each box while motion is on', async () => {
+  const twoGroups = [
+    { id: 'home', machine: null, name: 'Game', tabs: [{ id: 'h' }] },
+    { id: 'docs', machine: null, name: 'Docs', tabs: [{ id: 'd' }] },
+    { id: 'worker/w', machine: 'worker', name: 'Game (worker)', tabs: [{ id: 'worker/tw' }] },
+    { id: 'worker/d', machine: 'worker', name: 'Docs', tabs: [{ id: 'worker/td' }] },
+  ];
+  const all = ['home', 'docs', 'worker/w', 'worker/d'].map(working);
+  const make = motion => ({ ...runtime(all), spaces: () => twoGroups, shared: key => (key === 'sixfold.motion' ? motion : undefined) });
+  const sizes = { home: { w: 190, h: 96 }, docs: { w: 190, h: 96 } };
+  try {
+    globalThis.__flowCalls = [];
+    let found = rows(view(await sidebar(make(true)), { boxSizes: sizes }));
+    const badge = id => found.get(`sf-space-mark-${id}`).calls.find(call => call[0] === 'bg')?.[1];
+    assert.ok(badge('home') && badge('docs'));
+    assert.notEqual(badge('home'), badge('docs'), 'one colour per group');
+    const flows = globalThis.__flowCalls.filter(call => call.motion);
+    assert.deepEqual(flows.map(call => call.id).sort(), ['docs', 'home'], 'a flow for each collaborating box');
+    assert.ok(flows.every(call => call.w === 190 && call.h === 96));
+    globalThis.__flowCalls = [];
+    found = rows(view(await sidebar(make(false)), { boxSizes: sizes }));
+    assert.ok(globalThis.__flowCalls.every(call => !call.motion), 'motion off: no flow');
+  } finally { delete globalThis.__visRuntime; delete globalThis.__flowCalls; }
+});
+
+test('a single collaborating group keeps ⑨\'s colour', async () => {
+  try {
+    const found = rows(view(await sidebar(runtime([working('home'), working('worker/w')]))));
+    assert.equal(found.get('sf-space-mark-home').calls.find(call => call[0] === 'bg')?.[1], COLLAB_COLORS.dark);
   } finally { delete globalThis.__visRuntime; }
 });

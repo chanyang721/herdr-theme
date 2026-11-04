@@ -9,6 +9,8 @@ import { computerKind, computerStatus, computerAlert, tailscaleStatus, workspace
 import { freshMessages, recentRoutes, simultaneousRoutes, crossMachine, followComputer, terminalMachine, machineHops, machineTraffic, trafficWake } from './flow.js';
 import { pipeline } from './pipeline.js';
 import { machineCounts, projectGroups, liveLinks, linkPalette, projectName, trackLinks, collabColor, spacePartners } from './collab.js';
+import { FLOW, groupColors, groupKey, paletteMode, flowColor } from './collab-flow.js';
+import { collabFlow } from './collab-flow-view.js';
 import { workflowNodes, delegationEvents, workflowStatus, sessionChildren, activeWorkflow } from './workflow.js';
 import { watchDocs, currentDocs, docsSection, prepareDocsInput } from './docs.js';
 import { watchAlerts, alertSection, visibleAlerts } from './alerts.js';
@@ -157,6 +159,14 @@ export default class SixfoldDesk extends View {
     cx.timer.every(LINK_FLOW_MS, cx => {
       if (!this.linkFlowing) return;
       this.linkFlowEnd = !this.linkFlowEnd;
+      cx.notify();
+    });
+    // ⑩ The flow around a collaborating workspace moves corner to corner by native
+    // transitions; this steps it at each corner, only while some workspace collaborates.
+    this.flowStep = 0;
+    cx.timer.every(FLOW.edgeMs, cx => {
+      if (!this.collabFlowing) return;
+      this.flowStep = (this.flowStep + 1) % 4;
       cx.notify();
     });
     // Links also change with time alone: a send link ends five minutes after its last
@@ -481,8 +491,13 @@ export default class SixfoldDesk extends View {
     // colour; hovering one side highlights the other (this.hoverSpace / this.hoverComputer).
     const collab = collabColor(t);
     const partnersOf = space => spacePartners(allGroups, space, labelOf);
+    // ⑩ With two or more groups working together now, each group has its own colour on both
+    // sides (this computer's workspace and the partner's computer row); one group keeps ⑨'s.
+    const colorOfGroup = groupColors(allGroups.filter(group => group.active).map(group => group.name), paletteMode(t));
+    const groupColor = name => colorOfGroup.get(groupKey(name)) ?? collab;
     const hoverSpace = this.hoverSpace ? spaceList.find(space => space.id === this.hoverSpace) : null;
     const hoverPartners = new Set(hoverSpace ? (partnersOf(hoverSpace)?.partners ?? []) : []);
+    const hoverColor = hoverSpace && partnersOf(hoverSpace) ? groupColor(partnersOf(hoverSpace).group.name) : collab;
     const collabs = linkGroups.filter(group => group.active);
     const collabNote = this.lang()==='ko' ? '같은 프로젝트 동시 작업 표시 · 메시지 전달 증거 아님' : 'Same project worked on at once · not evidence of messages';
     const collabText = project => `${project.name}: ${project.machines.map((m, i) => `${this.computerLabel(m)}${project.working[i] ? ` ●${project.working[i]}` : ''}`).join(' · ')}`;
@@ -530,7 +545,7 @@ export default class SixfoldDesk extends View {
       const key = name === null ? 'local' : `remote:${name}`;
       const partnerLit = hoverPartners.has(name);
       let row = h_flex().id(`sf-computer-${key}`).relative().h(COMPUTER_ROW).flex_none().px(7).gap(6).items_center().rounded(4)
-        .bg(partnerLit ? collab + '1A' : selected ? t.selected : t.surface).hover(style => style.bg(t.hover))
+        .bg(partnerLit ? hoverColor + '1A' : selected ? t.selected : t.surface).hover(style => style.bg(t.hover))
         .on_hover((hovered, cx) => { const next = hovered ? name : (this.hoverComputer === name ? undefined : this.hoverComputer); if (next !== this.hoverComputer) { this.hoverComputer = next; cx.notify(); } })
         .tooltip(`${displayName}${name === null ? '' : ` · ${name}`}\n${state}${name === null ? '' : (this.lang()==='ko'?' · Herdr 원격 등록됨':' · Registered in Herdr')}\n${['working','done','blocked','idle'].map(status => `${w[status]} ${agentCount[status]}`).join(' · ')}${sharedProjects.length ? `\n${sharedProjects.map(collabText).join('\n')}\n${collabNote}` : ''}`)
         .on_mouse_down('left', (_event, cx) => cx.stop_propagation())
@@ -544,7 +559,7 @@ export default class SixfoldDesk extends View {
             .child(div().flex_1().min_w(0).truncate().text_size(9).text_color(machine.layout === 'loading' ? t.muted : t.blocked).child(computerAlert(machine, this.lang()) ?? ''))))
         .child(div().flex_none().text_size(9).text_color(t.dim).child(String(machineSpaces.length)))
         // Drawn over the row (absolute), so the 2px outline moves nothing.
-        .when(partnerLit, el => el.child(div().absolute().top(0).left(0).right(0).bottom(0).rounded(4).border(2).border_color(collab)));
+        .when(partnerLit, el => el.child(div().absolute().top(0).left(0).right(0).bottom(0).rounded(4).border(2).border_color(hoverColor)));
       const hop = remoteRoutes.find(item => item.hop.from === name || item.hop.to === name);
       const sent = traffic.get(name)?.sent ?? 0, received = traffic.get(name)?.received ?? 0;
       if (hop || sent || received) {
@@ -619,6 +634,8 @@ export default class SixfoldDesk extends View {
           ? svg(icon.path).size(14).text_color(workspaceColor(s)) : image(icon.path).w(14).h(14));
       return box.bg(workspaceColor(s)).child(svg(`mods/sixfold-desk/icons/ws-${workspaceIdentity(s,this.site)||'workspace'}.svg`).size(12).flex_none().text_color(t.background));
     };
+    // ⑩ The flow timer steps only while some workspace here is worked on together now.
+    this.collabFlowing=motion&&groups.some(({s})=>{const m=spaceLink(s);return Boolean(m&&!m.gone);});
     const spaceRows=groups.map(({s,members})=>{ const mark=spaceLink(s), linked=mark && !mark.gone ? mark : null;
       // A partner on another computer always shows in the header (icon + its name, in the
       // collaboration colour). While worked on together now the box gets a 2px outline and
@@ -628,17 +645,22 @@ export default class SixfoldDesk extends View {
       const partnerNames=partner ? partner.partners.map(m => this.computerLabel(m)) : [];
       const partnerText=partner ? `${partnerNames.map((label, i) => `${label} · ${partner.group.name}${partner.working[i] ? ` · ${w.working} ${partner.working[i]}` : ''}`).join('\n')}\n${collabNote}` : '';
       const lit=Boolean(linked) || (this.hoverComputer !== undefined && Boolean(partner?.partners.includes(this.hoverComputer)));
+      const collab=groupColor(partner?.group.name ?? mark?.lane.link.name);
       const markView = mark ? h_flex().id(`sf-space-mark-${s.id}`).absolute().top(-8).right(10).h(15).px(5).items_center().rounded(4).bg(collab)
         .text_size(10).font_bold().text_color(t.background).opacity(mark.gone ? 0 : 1).when(motion,el=>el.transition('opacity',600))
         .tooltip(`${mark.partners.map(m => this.computerLabel(m)).join(', ')}${this.lang()==='ko' ? '과 협업 중' : ': worked on together now'}\n${collabNote}`)
         .child(`⇄${mark.partners.length > 1 ? mark.partners.length : ''}`) : null;
       const outline = lit ? div().absolute().top(-1).left(-1).right(-1).bottom(-1).rounded(7).border(2).border_color(collab) : null;
+      const size=this.boxSizes?.[s.id];
+      const flowView=linked&&size ? collabFlow({id:s.id,w:size.w,h:size.h,color:flowColor(collab,paletteMode(t)),step:this.flowStep??0,motion}) : null;
       const partnerTail = partner ? h_flex().id(`sf-partner-${s.id}`).flex_none().max_w(110).min_w(0).gap(3).items_center().text_size(12).font_normal().text_color(collab)
         .tooltip(partnerText)
         .child(svg(`mods/sixfold-desk/icons/device-${computerKind(this.computers?.machines?.[partner.partners[0]]?.os)}.svg`).size(14).flex_none().text_color(collab))
         .child(div().min_w(0).truncate().child(`${partnerNames[0]}${partnerNames.length > 1 ? ` +${partnerNames.length - 1}` : ''}`)) : null;
       return v_flex().id(`sf-space-${s.id}`).relative().ml(7).mr(LINK_MARGIN).mb(12).gap(2).flex_none().rounded(6).border(1).border_color(workspacePinned(s,this.workspacePins)?t.accent:t.border)
       .when(lit,e=>e.bg(collab+'1A'))
+      // ⑩ The box's size, for the flow drawn along its border.
+      .on_size_change((size,cx)=>{const prev=this.boxSizes?.[s.id];if(!prev||prev.w!==size.width||prev.h!==size.height){this.boxSizes={...this.boxSizes,[s.id]:{w:size.width,h:size.height}};cx.notify();}})
       .on_hover((hovered,cx)=>{const next=hovered?s.id:(this.hoverSpace===s.id?null:this.hoverSpace);if(next!==this.hoverSpace){this.hoverSpace=next;cx.notify();}})
       .when(this.dragSpace && this.overSpace===s.id && this.dragSpace!==s.id,e=>e.border_t(2).border_color(t.accent))
       .on_mouse_move((_event,cx)=>{
@@ -714,7 +736,9 @@ export default class SixfoldDesk extends View {
 
       })).child(div().id(`sf-docs-height-${s.id}`).min_w(0)
         .on_size_change((size,cx)=>{const height=size.height/(settings().zoom||1);this.docsHeights??={};if(Math.abs((this.docsHeights[s.id]||0)-height)>1){this.docsHeights[s.id]=height;cx.notify();}})
-        .child(docsSection(this,t,s))).when(Boolean(outline),e=>e.child(outline)).when(Boolean(markView),e=>e.child(markView));});
+        .child(docsSection(this,t,s))).when(Boolean(outline),e=>e.child(outline))
+      // ⑩ While worked on together now (and motion is on), a flow runs around the border.
+      .when(Boolean(flowView),e=>e.child(flowView)).when(Boolean(markView),e=>e.child(markView));});
     const workspaceTree=v_flex().relative().flex_none().children(spaceRows)
       .children(paths.filter(flow => positions[flow.source] !== undefined && positions[flow.target] !== undefined).map(flow => {
         const from=positions[flow.source], to=positions[flow.target];
@@ -747,7 +771,8 @@ export default class SixfoldDesk extends View {
             const rows = lane.link.machines.map(rowIndex).filter(index => index >= 0).sort((a, b) => a - b);
             if (rows.length < 2) return [];
             const right = laneRight(lane.slot), top = rowY(rows[0]), bottom = rowY(rows[rows.length - 1]);
-            const color = lane.colors.link;
+            // ⑩ With two or more groups, a project's link takes its group's colour (both ends match).
+            const color = colorOfGroup.size > 1 && lane.link.name && colorOfGroup.has(groupKey(lane.link.name)) ? colorOfGroup.get(groupKey(lane.link.name)) : lane.colors.link;
             const group = linkGroups.find(item => item.name === lane.link.name);
             const tip = group
               ? `${collabText(group)}\n${collabNote}`
