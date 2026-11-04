@@ -14,6 +14,9 @@ import tempfile
 import time
 from datetime import datetime, timezone
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import workspace_mods  # noqa: E402
+
 if sys.platform == 'win32':
     import msvcrt
 else:
@@ -204,7 +207,31 @@ def input_files(repo, home, names):
     return files
 
 
-def update(repo, home, names, cli='herdr-app', verify_timeout=10, allow_unhealthy_before=False):
+def is_junction(path):
+    """A Windows junction redirects like a symlink but is not reported as one before Python 3.12."""
+    check = getattr(os.path, 'isjunction', None)
+    return bool(check and check(path))
+
+
+def pinned_inputs(pairs, home):
+    """Pinned Workspace Mods files ((source, Path('mods/<name>/...'))) as update entries, with the
+    same target checks as listed files: no symlinked or junctioned path inside the app home."""
+    out = []
+    for source, relative in pairs:
+        if relative.parts[0] != 'mods' or len(relative.parts) < 3 or '..' in relative.parts or relative.is_absolute():
+            raise InstallError(f'Unsupported Workspace Mods target: {relative}')
+        if not source.is_file() or source.is_symlink():
+            raise InstallError(f'Not a regular Workspace Mods file: {source}')
+        target = home / relative
+        if any(parent.is_symlink() or is_junction(parent) for parent in [target, *target.parents] if parent != home.parent):
+            raise InstallError(f'Symlink installation targets are refused: {relative}')
+        if target.exists() and not target.is_file():
+            raise InstallError(f'Not a regular installation target: {relative}')
+        out.append((relative, source.read_bytes(), source.stat().st_mode & 0o777))
+    return out
+
+
+def update(repo, home, names, cli='herdr-app', verify_timeout=10, allow_unhealthy_before=False, extra=()):
     repo, home = repo.resolve(), home.resolve()
     if not home.is_dir():
         raise InstallError('Existing app home required; use install.py for the initial install')
@@ -217,6 +244,11 @@ def update(repo, home, names, cli='herdr-app', verify_timeout=10, allow_unhealth
             raise InstallError('Another installation holds the lock; do not copy files manually') from error
         env = {**os.environ, 'HERDR_APP_HOME': str(home)}
         files = input_files(repo, home, names)
+        theirs = pinned_inputs(extra, home)
+        clash = {relative for relative, _, _ in files} & {relative for relative, _, _ in theirs}
+        if clash:
+            raise InstallError(f'Listed files clash with the pinned Workspace Mods: {sorted(map(str, clash))}')
+        files += theirs
         before = read_status(cli, env)
         if before['errors'] and not allow_unhealthy_before:
             raise InstallError('App already reports errors; diagnose first or use --allow-unhealthy-before for an authorized repair')
@@ -380,8 +412,12 @@ def install_voice(repo, home):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('files', nargs='+', help='Explicit repository-relative files; existing unlisted files are preserved. '
+    parser.add_argument('files', nargs='*', help='Explicit repository-relative files; existing unlisted files are preserved. '
                         '"voice" (or any voice/... file) installs the voice plugin as one unit with voice/install.py')
+    parser.add_argument('--without-workspace-mods', action='store_true',
+                        help='Leave Herdr Workspace Mods as installed (default: bring them to the version pinned in workspace-mods.lock.json)')
+    parser.add_argument('--workspace-mods-source', type=Path,
+                        help='A local Herdr Workspace Mods checkout already at the pinned commit (default: fetch it)')
     parser.add_argument('--home', type=Path, default=Path(os.environ.get('HERDR_APP_HOME', Path.home() / '.config/herdr-app')))
     parser.add_argument('--repo', type=Path, default=Path(__file__).resolve().parents[1], help='Reviewed source worktree (required when running an installed copy)')
     parser.add_argument('--cli', default='herdr-app')
@@ -395,8 +431,19 @@ def main():
             raise InstallError('Run from a source worktree, or pass --repo /path/to/reviewed-worktree')
         app_files = [name for name in args.files if Path(name).parts[:1] != ('voice',)]
         voice = len(app_files) != len(args.files)
+        pin, extra = None, []
+        # The voice plugin installs as its own unit: a voice-only run leaves the app's mods alone.
+        if not args.without_workspace_mods and (app_files or not voice):
+            try:
+                pin, _, extra = workspace_mods.pinned_files(args.repo, args.workspace_mods_source)
+            except workspace_mods.PinError as error:
+                raise InstallError(f'Herdr Workspace Mods: {error}; pass --without-workspace-mods to skip them') from error
+        if not app_files and not extra and not voice:
+            parser.error('list files to install (or leave out --without-workspace-mods)')
         backup = update(args.repo, args.home, app_files, args.cli,
-                        args.verify_timeout, args.allow_unhealthy_before) if app_files else None
+                        args.verify_timeout, args.allow_unhealthy_before, extra) if app_files or extra else None
+        if pin:
+            workspace_mods.record(args.home, pin)
         if voice:
             install_voice(args.repo, args.home)
     except (InstallError, subprocess.SubprocessError, OSError, ValueError) as error:

@@ -1,0 +1,13 @@
+{
+  "repository": "https://github.com/chanyang721/herdr-workspace-mods.git",
+  "tag": "v2026.11.04",
+  "commit": "ebfee7614d2cef20b5185937e7084a4cdf8e39b6",
+  "mods": {
+    "agent-usage": "agent-usage/mods/agent-usage",
+    "cli-status": "cli-status/mods/cli-status",
+    "mcp-status": "mcp-status/mods/mcp-status",
+    "plan-usage": "plan-usage/mods/plan-usage",
+    "system-metrics": "system-metrics/mods/system-metrics"
+  },
+  "document_viewer": "document-viewer/scripts/install_preview.py"
+}
