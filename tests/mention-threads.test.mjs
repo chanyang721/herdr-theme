@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {threadGroups,threadKey,readable} from '../mods/sixfold-slack-inbox/model.js';
-const item={id:'slack:C1:100.1',channel:'C1',channel_name:'#project',project:'Medihomes',at:'2026-11-03T12:00:00+09:00',text:'<@U0C65183V1U>\n합계를 확인해 주세요',link:'https://lukukuworkspace.slack.com/archives/C1/p1001?thread_ts=90.1&cid=C1'};
+const item={id:'slack:C1:100.1',channel:'C1',channel_name:'#project',project:'Project B',at:'2026-11-03T12:00:00+09:00',text:'<@U00000001>\n합계를 확인해 주세요',link:'https://example.slack.com/archives/C1/p1001?thread_ts=90.1&cid=C1'};
 test('multiple tagged replies form one thread; identical ts in another channel stays separate',()=>{
  const newer={...item,id:'slack:C1:101.1',at:'2026-11-03T13:00:00+09:00'};
  const groups=threadGroups([item,item,newer,{...item,id:'slack:C2:100.1',channel:'C2'}]);
@@ -21,5 +21,7 @@ test('explicit parent is authoritative, and top-level messages have distinct thr
  assert.notEqual(threadKey({...item,link:''}),threadKey({...item,link:'',id:'slack:C1:101.1'}));
 });
 test('Slack display markup is readable without losing its content',()=>{
- assert.equal(readable('<@U1|김훈기> &amp; <https://example.com|자료>'),'@김훈기 & 자료');
+ assert.equal(readable('<@U1|홍길동> &amp; <https://example.com|자료>'),'@홍길동 & 자료');
+ assert.equal(readable('<@U00000001> 확인',{U00000001:'나'}),'@나 확인');
+ assert.equal(readable('<@U00000001> 확인'),'<@U00000001> 확인');
 });

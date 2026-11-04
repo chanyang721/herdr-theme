@@ -28,13 +28,18 @@ test('device and known workspace identities select local artwork with stable fal
     ['laptop','desktop','tablet','phone','phone','computer','computer']);
   assert.equal(computerKind('iOS','ipad-pro-12-9-gen-3'),'tablet');
   assert.equal(computerKind('iOS','iphone-14-plus'),'phone');
-  assert.deepEqual(['공통','PeaceMinusOne','Medihomes','Voice','Herdr','New project'].map(name=>workspaceIdentity({name})),
+  const site={workspaces:{'project a':{icon:'flower'},'project b':{icon:'medical'}}};
+  assert.deepEqual(['공통','Project A','Project B','Voice','Herdr','New project'].map(name=>workspaceIdentity({name},site)),
     ['hub','flower','medical','microphone','terminal',null]);
+  // Without the machine-local file, project names carry no special mark.
+  assert.equal(workspaceIdentity({name:'Project A'}), null);
+  assert.equal(workspaceIdentity({name:'Project A'},{workspaces:{'project a':{icon:'../x'}}}), null);
 });
 
 test('Share keeps the hub identity after renaming', () => {
   assert.equal(workspaceIdentity({name:'Share'}), 'hub');
-  assert.equal(workspaceIdentity({id:'sp5b1f0e5ae362facabc5ac1ece5d08277',name:'Renamed'}), 'hub');
+  assert.equal(workspaceIdentity({id:'sp-share',name:'Renamed'},{hub_space_ids:['sp-share']}), 'hub');
+  assert.equal(workspaceIdentity({id:'sp-share',name:'Renamed'}), null);
 });
 
 test('workspace pins use configured stable IDs and machines rather than names',()=>{

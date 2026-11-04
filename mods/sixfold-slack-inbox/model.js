@@ -1,5 +1,6 @@
-export function readable(text='') {
-  return text.replace(/<@[^>|]+\|([^>]+)>/g,'@$1').replace(/<@U0C65183V1U>/g,'@이찬양')
+// `names`: Slack user ID -> display name, from the machine-local site.local.json.
+export function readable(text='',names={}) {
+  return text.replace(/<@[^>|]+\|([^>]+)>/g,'@$1').replace(/<@([A-Z0-9]+)>/g,(tag,id)=>names?.[id]?`@${names[id]}`:tag)
     .replace(/<(https?:[^>|]+)\|([^>]+)>/g,'$2').replace(/&amp;/g,'&').replace(/&gt;/g,'>').replace(/&lt;/g,'<');
 }
 export function threadKey(item) {

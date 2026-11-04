@@ -55,21 +55,21 @@ class InstallTests(unittest.TestCase):
         self.assertFalse((self.home/'.config/herdr-app').exists(),'never writes app files')
 
     def test_existing_settings_are_preserved(self):
-        base=self.home/'Library/Application Support/LukukuWatch';base.mkdir(parents=True)
+        base=self.home/'Library/Application Support/HerdrSixfold';base.mkdir(parents=True)
         existing={'fixed_names':['Custom'], 'fixed_spaces':[{'id':'stable'}], 'notify_terminal':'local-review'}
         (base/'close-finished-spaces.json').write_text(json.dumps(existing))
         with patch.object(installer.subprocess,'run',self.launchctl):installer.install(self.home,self.source,execute=True)
         self.assertEqual(json.loads((base/'close-finished-spaces.json').read_text()),existing)
 
     def test_apply_refuses_missing_or_unobserved_trial(self):
-        base=self.home/'Library/Application Support/LukukuWatch';base.mkdir(parents=True)
+        base=self.home/'Library/Application Support/HerdrSixfold';base.mkdir(parents=True)
         (base/'close-finished-spaces-state.json').write_text(json.dumps({'trial':{'started_at':0,'samples':7}}))
         with self.assertRaises(ValueError):installer.install(self.home,self.source,apply=True,execute=True)
         self.assertFalse((self.home/'Library/LaunchAgents').exists())
 
     def test_apply_switch_requires_current_code_and_finished_review_window(self):
         import hashlib
-        base=self.home/'Library/Application Support/LukukuWatch';base.mkdir(parents=True)
+        base=self.home/'Library/Application Support/HerdrSixfold';base.mkdir(parents=True)
         code_hash=hashlib.sha256(b'# fixture observer\n# fixture evidence\n').hexdigest()  # agent_sessions.py absent in this fixture
         (base/'close-finished-spaces-state.json').write_text(json.dumps({'observer_sha256':code_hash,'last_at':2000,'trial':{'started_at':0,'samples':7,'error_count':0}}))
         with patch.object(installer.time,'time',lambda:2000),patch.object(installer.subprocess,'run',self.launchctl):
@@ -81,7 +81,7 @@ class InstallTests(unittest.TestCase):
 
     def test_user_approved_apply_needs_one_recorded_dry_run_of_the_current_code(self):
         import hashlib
-        base=self.home/'Library/Application Support/LukukuWatch';base.mkdir(parents=True)
+        base=self.home/'Library/Application Support/HerdrSixfold';base.mkdir(parents=True)
         code_hash=hashlib.sha256(b'# fixture observer\n# fixture evidence\n').hexdigest()
         state=base/'close-finished-spaces-state.json'
         state.write_text(json.dumps({'observer_sha256':'older','last_at':2000,'trial':{'started_at':1900,'samples':1,'error_count':0}}))
@@ -100,7 +100,7 @@ class InstallTests(unittest.TestCase):
         (local/'config.json').write_text(json.dumps({'repo_path':str(repo)}))
         self.assertEqual(installer.detect_harness(self.home)['script'],str(repo/'runtime/harness.py'))
         with patch.object(installer.subprocess,'run',self.launchctl):installer.install(self.home,self.source,execute=True)
-        config=json.loads((self.home/'Library/Application Support/LukukuWatch/close-finished-spaces.json').read_text())
+        config=json.loads((self.home/'Library/Application Support/HerdrSixfold/close-finished-spaces.json').read_text())
         self.assertEqual(config['harness']['script'],str(repo/'runtime/harness.py'))
 
 if __name__=='__main__':unittest.main()

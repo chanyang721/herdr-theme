@@ -1,0 +1,27 @@
+{
+  "label_prefix": "local.herdr-sixfold",
+  "state_dir": "~/Library/Application Support/HerdrSixfold",
+  "reports_dir": "~/Documents/HerdrReports",
+  "projects_dir": "~/Documents/HerdrProjects",
+  "hub_space_ids": ["sp-your-share-workspace-id"],
+  "fixed_space_names": ["Share", "Project A", "Project B"],
+  "project_aliases": {"pa": "project a", "에이": "project a"},
+  "workspaces": {
+    "project a": {"icon": "flower", "color": "ansi5", "alert_color": "ansi6"},
+    "project b": {"icon": "medical", "color": "ansi6", "alert_color": "ansi5"}
+  },
+  "slack": {
+    "workspace_url": "https://example.slack.com",
+    "user_names": {"U00000000": "Me"}
+  },
+  "doc_tabs": {
+    "Project A": {
+      "sources": [{"path": "~/work/projects/example/docs/ARCHITECTURE.md", "label": "전체 아키텍처"}],
+      "folders": ["~/work/projects/example/docs", {"path": "~/Documents/HerdrReports", "match": ["project-a"]}]
+    },
+    "Project B": {
+      "topics": [{"root": "~/Documents/HerdrReports", "suffix": "ProjectB_overview.md", "label": "전체 구조"}],
+      "folders": [{"path": "~/Documents/HerdrReports", "match": ["project-b"]}]
+    }
+  }
+}

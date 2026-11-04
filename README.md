@@ -301,6 +301,16 @@ Independent mod releases: [System Metrics](https://github.com/chanyang721/herdr-
 
 Project document tracking: see [configuration and collector](docs/project-documents.md). The base theme uses full-width terminals; configured latest documents live in the left sidebar.
 
+## Machine-local names and paths (`site.local.json`)
+
+Project names and aliases, sidebar marks and colours, the Slack workspace URL and mention
+names, report/state folders, the LaunchAgent label prefix and document-tab seeds differ per
+person and organisation, so they live in `~/.config/herdr-app/data/sixfold/site.local.json`
+(follows `HERDR_APP_HOME`), never in the repository. Copy `config/site.example.json` to start.
+Without the file the generic defaults apply (`local.herdr-sixfold` labels,
+`~/Library/Application Support/HerdrSixfold`, `~/Documents/HerdrReports`). `*.local.json` is
+git-ignored.
+
 ## Pinned workspace markers
 
 Configure `~/.config/herdr-app/data/sixfold/workspace-pins.local.json` with

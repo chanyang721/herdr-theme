@@ -16,8 +16,9 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import agent_sessions  # noqa: E402
+import site_config  # noqa: E402
 
-BASE = Path.home() / 'Library/Application Support/LukukuWatch'
+BASE = site_config.folder('state_dir')
 DECISION = re.compile(r'승인\s*대기|확인\s*필요|결정\s*대기|사용자.{0,12}(?:확인|승인).{0,8}(?:대기|기다)|awaiting\s+(?:approval|confirmation)|waiting\s+for\s+(?:your|user)\s+(?:approval|confirmation)|allow\s+(?:once|always)', re.I)
 PLACEHOLDERS = {'', 'Ask Codex to do anything', 'Write tests for @filename', 'Implement {feature}', 'Find and fix a bug in @filename', 'Explain this codebase', 'Improve documentation in @filename', 'Summarize recent commits', 'Use /skills to list available skills'}
 AGENTS = agent_sessions.AGENTS
@@ -324,7 +325,7 @@ def cycle(adapter, config, state, now, *, apply=False, only_space=None, report_d
             'trial_ready': trial_ok, 'results': result, 'focus': initial_focus}
 
 
-OBSERVER_FILES = ('close_finished_spaces.py', 'space_job_evidence.py', 'agent_sessions.py')
+OBSERVER_FILES = ('close_finished_spaces.py', 'space_job_evidence.py', 'agent_sessions.py', 'site_config.py')
 
 
 def observer_sha256(folder):
@@ -336,7 +337,7 @@ def main():
     parser.add_argument('--config', type=Path, default=BASE / 'close-finished-spaces.json')
     parser.add_argument('--state', type=Path, default=BASE / 'close-finished-spaces-state.json')
     parser.add_argument('--log', type=Path, default=BASE / 'close-finished-spaces.jsonl')
-    parser.add_argument('--report-dir', type=Path, default=Path.home() / 'Documents/LukukuReports/워크스페이스-기록')
+    parser.add_argument('--report-dir', type=Path, default=site_config.folder('reports_dir') / '워크스페이스-기록')
     group = parser.add_mutually_exclusive_group()
     group.add_argument('--dry-run', action='store_true')
     group.add_argument('--apply', action='store_true')

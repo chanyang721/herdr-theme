@@ -66,8 +66,8 @@ test('workspace document sections stay collapsed until requested and folders ope
 test('NFC/NFD filename search expands matching folders and Enter opens first match in its background workspace',async()=>{
   for(const filenameForm of ['NFC','NFD'])for(const queryForm of ['NFC','NFD']){
     const h=await sidebar();h.setActive('Other');
-    const file=doc(`/docs/${'메디홈즈-보고서.md'.normalize(filenameForm)}`,30);h.view.projectDocs.spaces.Demo.files=[file,doc('/docs/unrelated.md')];h.render('Demo');
-    const input=h.view.docsInputs.Demo;input.text='메디홈즈'.normalize(queryForm);input.events.change({},h.cx);h.render('Demo');
+    const file=doc(`/docs/${'프로젝트비-보고서.md'.normalize(filenameForm)}`,30);h.view.projectDocs.spaces.Demo.files=[file,doc('/docs/unrelated.md')];h.render('Demo');
+    const input=h.view.docsInputs.Demo;input.text='프로젝트비'.normalize(queryForm);input.events.change({},h.cx);h.render('Demo');
     assert.equal([...h.handlers.keys()].filter(k=>k.startsWith('sf-doc-Demo')).length,1);
     input.events.submit({},h.cx);await h.flush();assert.deepEqual(h.calls.at(-1),{command:'python3',args:['/app/data/sixfold/doc-tabs/open_doc_tab.py',file.path,'--space','Demo']});
     h.render('Other');const other=h.view.docsInputs.Other;assert.notEqual(input,other);assert.equal(h.view.docsQueries.Other,undefined);
@@ -126,14 +126,14 @@ test('native search state survives collapse and reopen without being created dur
 
 test('workspace IDs resolve exact project names, empty indexes and ID overrides',async()=>{
   const h=await sidebar();
-  for(const [id,name,files] of [['sp-med','Medihomes',[]],['sp-pmo','PeaceMinusOne',[doc('/pmo/docs/guide.md')]]]){
+  for(const [id,name,files] of [['sp-b','Project B',[]],['sp-a','Project A',[doc('/pa/docs/guide.md')]]]){
     h.view.projectDocs.spaces[name]={folder:'/project',files,warning:'source_unavailable'};
     h.prepare(id);h.view.docsSpaces.add(id);h.render(id,name);
     assert.ok(h.labels.includes('문서 폴더 조회 확인 필요'));
     assert.equal(h.labels.includes('문서가 없습니다.'),files.length===0);
     assert.equal(h.handlers.has(`sf-docs-folder-${id}-0`),files.length>0);
   }
-  h.view.projectDocs.spaces['sp-med']={folder:'/id-specific',files:[doc('/id-specific/guide.md')]};
-  h.render('sp-med','Medihomes');assert.ok(h.handlers.has('sf-docs-folder-sp-med-0'));
+  h.view.projectDocs.spaces['sp-b']={folder:'/id-specific',files:[doc('/id-specific/guide.md')]};
+  h.render('sp-b','Project B');assert.ok(h.handlers.has('sf-docs-folder-sp-b-0'));
   assert.equal(h.labels.includes('문서가 없습니다.'),false);
 });

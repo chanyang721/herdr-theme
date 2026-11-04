@@ -57,13 +57,13 @@ class DocumentTests(unittest.TestCase):
             for match_form in ('NFC','NFD'):
                 with self.subTest(filename=filename_form,match=match_form),tempfile.TemporaryDirectory() as root:
                     folder=Path(root)
-                    name=unicodedata.normalize(filename_form,'메디홈즈-보고서-PMO.md')
+                    name=unicodedata.normalize(filename_form,'프로젝트비-보고서-PB.md')
                     original=folder/name;original.write_text('original document')
                     original_names=os.listdir(folder)
-                    term=unicodedata.normalize(match_form,'메디홈즈')
+                    term=unicodedata.normalize(match_form,'프로젝트비')
                     rows=documents([{'path':str(folder),'match':[term]}])
                     self.assertEqual(len(rows),1)
-                    self.assertEqual(unicodedata.normalize('NFC',rows[0]['name']),'메디홈즈-보고서-PMO.md')
+                    self.assertEqual(unicodedata.normalize('NFC',rows[0]['name']),'프로젝트비-보고서-PB.md')
                     self.assertEqual(Path(rows[0]['path']).read_text(),'original document')
                     self.assertEqual(os.listdir(folder),original_names)
                     self.assertEqual(documents([{'path':str(folder),'match':'다른프로젝트'}]),[])

@@ -3,10 +3,14 @@
 Share 워크스페이스 에이전트는 특정 프로젝트의 작업을 직접 처리하기 전에 해당 프로젝트 pane으로 전달한다.
 
 ```sh
-python3 /Users/lukuku1006/work/projects/herdr-sixfold/scripts/route.py --enable
-python3 /Users/lukuku1006/work/projects/herdr-sixfold/scripts/route.py PeaceMinusOne '사용자가 요청한 작업 원문과 범위'
-python3 /Users/lukuku1006/work/projects/herdr-sixfold/scripts/route.py Medihomes '사용자가 요청한 작업 원문과 범위'
+python3 ~/work/projects/herdr-theme/scripts/route.py --enable
+python3 ~/work/projects/herdr-theme/scripts/route.py "Project A" '사용자가 요청한 작업 원문과 범위'
+python3 ~/work/projects/herdr-theme/scripts/route.py "Project B" '사용자가 요청한 작업 원문과 범위'
 ```
+
+경로는 이 저장소를 받아 둔 위치로 바꾼다. 프로젝트 별칭(`project_aliases`)과 이름이 바뀌어도 Share로 인정할
+공간 ID(`hub_space_ids`)는 저장소가 아니라 이 기기의 `~/.config/herdr-app/data/sixfold/site.local.json`에
+둔다(예시: `config/site.example.json`).
 
 - 실제 발신 pane은 `HC_TERMINAL_ID`, 기존 TUI는 `HERDR_PANE_ID`와 로컬 연결표에서 읽는다. 위치를 추측하거나 다른 발신자로 가장하지 않는다.
 - 프로젝트의 활성 탭에서 같은 위치를 먼저 선택한다. 작업 중·승인 대기·done·초안·REC·응답 끝의 질문이 있는 pane은 건드리지 않고, 같은 종류의 빈 에이전트, 다른 빈 에이전트 순으로 대체한다.

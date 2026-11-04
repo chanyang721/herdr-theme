@@ -38,10 +38,12 @@ import time
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import agent_sessions  # noqa: E402
 import close_finished_spaces as spaces  # noqa: E402
+import site_config  # noqa: E402
 
-BASE = Path.home() / 'Library/Application Support/LukukuWatch'
+BASE = site_config.folder('state_dir')
 VOICE = re.compile(r'(?:🎙|🎤|\bListening\b|\brecording\b|녹음\s*중|받아쓰는\s*중|음성\s*입력\s*중)', re.I)
-OBSERVER_FILES = ('sleep_idle_sessions.py', 'agent_sessions.py', 'space_job_evidence.py', 'close_finished_spaces.py', 'session_sleep_stub.py')
+OBSERVER_FILES = ('sleep_idle_sessions.py', 'agent_sessions.py', 'space_job_evidence.py', 'close_finished_spaces.py', 'session_sleep_stub.py',
+                  'site_config.py')
 SLEEP_LABEL, TITLE_LABEL = 'sixfold.sleep', 'sixfold.title'
 
 

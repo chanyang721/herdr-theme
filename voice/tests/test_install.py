@@ -78,7 +78,7 @@ class InstallTests(unittest.TestCase):
         self.assertTrue(settings["voice"]["enabled"])
         integration = self.home / ".config/herdr-app/data/sixfold/voice-integration.json"
         self.assertEqual(json.loads(integration.read_text())["script"], f"{target}/focus_queue.py")
-        plist = self.home / "Library/LaunchAgents/co.lukuku.herdr-codex-focus.plist"
+        plist = self.home / "Library/LaunchAgents/local.herdr-sixfold.herdr-codex-focus.plist"
         self.assertIn(f"{target}/codex_focus.py", plistlib.loads(plist.read_bytes())["ProgramArguments"])
         self.assertIn("all voice entry points run", result.stdout)
         # Nothing of this home's own voice state is created by installing.

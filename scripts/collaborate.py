@@ -13,11 +13,12 @@ import time
 import uuid
 
 import route
+import site_config
 
 APP_HOME = Path(os.environ.get('HERDR_APP_HOME', Path.home() / '.config/herdr-app'))
 DATA = APP_HOME / 'data/sixfold'
 DEFAULTS = {'enabled': True, 'pending_count': 2, 'oldest_seconds': 600, 'active_count': 3,
-            'exclude_spaces': ['share', '공통', 'common', 'sp5b1f0e5ae362facabc5ac1ece5d08277']}
+            'exclude_spaces': ['share', '공통', 'common']}
 ID = re.compile(r'^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$')
 
 
@@ -35,7 +36,8 @@ def config():
         raise ValueError('enabled는 boolean이어야 합니다.')
     if not isinstance(result['exclude_spaces'], list) or not all(isinstance(x, str) for x in result['exclude_spaces']):
         raise ValueError('exclude_spaces는 문자열 배열이어야 합니다.')
-    result['exclude_spaces'] = sorted(set(DEFAULTS['exclude_spaces']) | {x.casefold() for x in result['exclude_spaces']})
+    result['exclude_spaces'] = sorted(set(DEFAULTS['exclude_spaces']) | set(site_config.load().get('hub_space_ids', []))
+                                      | {x.casefold() for x in result['exclude_spaces']})
     for key in ('pending_count', 'oldest_seconds', 'active_count'):
         if not isinstance(result[key], int) or isinstance(result[key], bool) or result[key] < 1:
             raise ValueError(f'invalid {key}')

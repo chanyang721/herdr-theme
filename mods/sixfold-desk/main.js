@@ -4,7 +4,7 @@ import * as herdrNative from 'herdr';
 import { agents, panes, spaces, terminals, focused, props, theme, run, shared, setShared, setAgentOrder, nextCommand, exec, window, layout, readTextFile, writeTextFile, appHome, openOverlay, settings } from 'herdr';
 import { WORDS, counts, title, cycle, priority, readThrough, unreadCount } from './model.js';
 
-import { computerKind, computerStatus, computerAlert, tailscaleStatus, workspaceIdentity, workspacePinned } from './sidebar-identity.js';
+import { computerKind, computerStatus, computerAlert, tailscaleStatus, workspaceIdentity, workspaceLocal, workspacePinned } from './sidebar-identity.js';
 
 import { freshMessages, recentRoutes, simultaneousRoutes, crossMachine, followComputer, terminalMachine, machineHops, machineTraffic, trafficWake } from './flow.js';
 import { pipeline } from './pipeline.js';
@@ -48,6 +48,7 @@ export default class SixfoldDesk extends View {
     this.workspaceIcons = {};
     this.workspacePins = {spaces:[]};
     this.computers = {};
+    this.site = {};
     this.tailscalePeers = [];
     this.tailscaleError = null;
     this.workflowNodes = [];
@@ -101,10 +102,15 @@ export default class SixfoldDesk extends View {
           const iconText = await readTextFile(`${appHome()}/data/sixfold/workspace-icons.json`).catch(()=>null) || '{}';
           const pinText = await readTextFile(`${appHome()}/data/sixfold/workspace-pins.local.json`).catch(()=>null) || '{"spaces":[]}';
           const computerText = await readTextFile(`${appHome()}/data/sixfold/computers.local.json`).catch(()=>null) || '{}';
-          const snapshot = JSON.stringify([text, routing, collaborationText, queue, workflowText, iconText, computerText, pinText, terminals().map(item=>item.address)]);
+          const siteText = await readTextFile(`${appHome()}/data/sixfold/site.local.json`).catch(()=>null) || '{}';
+          const snapshot = JSON.stringify([text, routing, collaborationText, queue, workflowText, iconText, computerText, pinText, siteText, terminals().map(item=>item.address)]);
           if (snapshot === this.messageSnapshot) return;
           const events = JSON.parse(text).events ?? [];
           try { this.workspaceIcons = JSON.parse(iconText); } catch { /* Keep the last valid icons. */ }
+          try {
+            const site = JSON.parse(siteText);
+            if (site && typeof site === 'object' && !Array.isArray(site)) this.site = site;
+          } catch { /* Machine-local names and colours survive partial writes. */ }
           try {
             const pins=JSON.parse(pinText);
             if(pins && Array.isArray(pins.spaces))this.workspacePins=pins;
@@ -584,7 +590,7 @@ export default class SixfoldDesk extends View {
       }
       offset=row-3+(this.docsHeights?.[s.id]||0);
     }
-    const workspaceColor = s => { const saved=shared('space.colors')?.[s.id]; if(saved)return saved.startsWith('#')?saved:(t[saved]||t.accent); return s.id==='sp5b1f0e5ae362facabc5ac1ece5d08277' || ['공통','common','share'].includes(s.name?.toLowerCase()) ? t.accent : s.name==='PeaceMinusOne' ? t.ansi5 : s.name==='Medihomes' ? t.ansi6
+    const workspaceColor = s => { const saved=shared('space.colors')?.[s.id]; if(saved)return saved.startsWith('#')?saved:(t[saved]||t.accent); const local=workspaceLocal(s,this.site)?.color; return workspaceIdentity(s,this.site)==='hub' ? t.accent : local ? (local.startsWith('#')?local:(t[local]||t.accent))
       : [t.accent,t.ansi5,t.ansi6,t.ansi3,t.ansi2,t.ansi4][[...s.id].reduce((hash,c)=>(hash*31+c.charCodeAt(0))>>>0,0)%6]; };
     const workspaceMark = s => {
       const configured=this.workspaceIcons[s.id] || this.workspaceIcons[s.name];
@@ -593,7 +599,7 @@ export default class SixfoldDesk extends View {
       if(icon?.path)return box.bg(icon.background||t.surface).child(
         icon.path.toLowerCase().endsWith('.svg') && icon.tint
           ? svg(icon.path).size(14).text_color(workspaceColor(s)) : image(icon.path).w(14).h(14));
-      return box.bg(workspaceColor(s)).child(svg(`mods/sixfold-desk/icons/ws-${workspaceIdentity(s)||'workspace'}.svg`).size(12).flex_none().text_color(t.background));
+      return box.bg(workspaceColor(s)).child(svg(`mods/sixfold-desk/icons/ws-${workspaceIdentity(s,this.site)||'workspace'}.svg`).size(12).flex_none().text_color(t.background));
     };
     const spaceRows=groups.map(({s,members})=>{ const mark=spaceLink(s), linked=mark && !mark.gone ? mark : null;
       // A small ⇄ sits on the top border (drawn over it, the box does not move), with the

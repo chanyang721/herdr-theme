@@ -7,14 +7,17 @@ import os
 import re
 from pathlib import Path
 import subprocess
+import sys
 import time
 import uuid
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import site_config  # noqa: E402
 
 APP_HOME = Path(os.environ.get('HERDR_APP_HOME', Path.home() / '.config/herdr-app'))
 DATA = APP_HOME / 'data/sixfold'
 QUEUE = DATA / 'routing-queue.json'
 HC = 'hc'
-ALIASES = {'pmo': 'peaceminusone', '피마원': 'peaceminusone', '메디홈즈': 'medihomes'}
 # Only idle has an atomic hc send guard. Done may be awaiting a user answer.
 READY = {'idle'}
 
@@ -44,9 +47,11 @@ def locate(spaces, address):
 
 def candidates(spaces, live, source, project):
     origin, _, slot = locate(spaces, source)
-    if origin['id'] != 'sp5b1f0e5ae362facabc5ac1ece5d08277' and origin['name'].casefold() not in ('share', '공통', 'common'):
+    site = site_config.load()
+    if not site_config.is_hub(origin, site):
         raise ValueError('Share 워크스페이스에서만 프로젝트 작업을 전달합니다.')
-    key = ALIASES.get(project.casefold(), project.casefold())
+    aliases = {str(k).casefold(): str(v).casefold() for k, v in site.get('project_aliases', {}).items()}
+    key = aliases.get(project.casefold(), project.casefold())
     targets = [s for s in spaces if s['name'].casefold() == key
                or Path(s.get('folder') or '').name.casefold() == key]
     if len(targets) != 1 or targets[0]['id'] == origin['id']:

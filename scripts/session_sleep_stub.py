@@ -93,7 +93,8 @@ def clear_labels(address):
 
 def record_resumed(ticket):
     """Best effort: a failed record never keeps the person from their session."""
-    config = Path(ticket.get('config') or Path.home() / 'Library/Application Support/LukukuWatch/sleep-idle-sessions.json')
+    # The installed stub sits in the observer's state folder next to its config.
+    config = Path(ticket.get('config') or Path(__file__).resolve().parent / 'sleep-idle-sessions.json')
     try:
         harness = json.loads(config.read_text()).get('harness') or {}
         if harness.get('python') and harness.get('script'):
