@@ -143,7 +143,14 @@ Project document tracking: see [configuration and collector](docs/project-docume
   칸·증거 지문). 절전 중 포커스가 그 칸으로 오면 중단하고, 다른 곳으로 옮겨졌으면 그 주기의 나머지 절전만
   다음 주기로 미룹니다.
 
-apply에서는 직전 재확인 → 하네스 `park --event suspended` 기록(실패하면 중단) → `/exit` 입력 → 셸 복귀
+apply에서는 먼저 **세션 정리 보고**를 받습니다: 관찰기가 그 세션에 `[세션 정리 보고 요청]` 메시지를 넣으면
+세션이 스스로 `harness.py close-report --done --remaining --experience FILE`을 실행합니다(task가 없으면 세션
+task를 만들어 묶음). 다음 주기부터 `close-status`로 요청 이후의 final report를 확인하고, 답한 뒤 2분
+그대로이면 20분을 다시 기다리지 않고 절전합니다. `close_report.timeout_seconds`(기본 15분) 안에 보고가
+없으면 절전하지 않고 `retry_seconds`(기본 1시간) 뒤 다시 묻습니다(fail-closed). 요청 뒤 사람이 그 세션과
+더 일하면(턴 증가) 보고를 새로 받습니다. 관찰기는 accept하지 않습니다 — 보고는 기억함 **승인 대기**에서
+사람이 수락합니다. 공간 정리도 닫기 전에 공간의 세션마다 같은 보고를 받습니다.
+그다음 직전 재확인 → 하네스 `park --event suspended --task-id <보고 task> --mask` 기록(실패하면 중단) → `/exit` 입력 → 셸 복귀
 확인 → 칸에서 `session_sleep_stub.py` 실행 → 라벨 `sixfold.sleep`, 머리줄 `sixfold.title=절전 · …`
 순서입니다. 하네스 기록은 회사 org에 denylist가 없으면 `harness-local/history-outbox/` 로컬 초안으로
 남고(하네스 WORKSPACE-HISTORY 경계) denylist가 생긴 뒤 `history-observe`가 등록합니다. 칸은 남습니다. 그 칸에서 Enter를 누르면 같은 세션을 원래 옵션 그대로 이어 열고

@@ -107,6 +107,14 @@ class Live:
     def git(self, folder):
         return agent_sessions.git_brief(folder)
 
+    def request_report(self, address, text):
+        # Without a caller terminal, hc pastes the text as it is (no <hc> wrapper).
+        env = {k: v for k, v in os.environ.items() if k not in ('HC_TERMINAL_ID', 'HC_SCOPE')}
+        return agent_sessions.run([self.core, 'send', address, text], env=env, timeout=30)
+
+    def close_status(self, config, item, since):
+        return agent_sessions.harness_close_status(config, item, since)
+
     def close(self, space_id, config=None):
         if not (config or {}).get('space_close_enabled'):
             raise RuntimeError('space.close refused: workspaces are kept (space_close_enabled is off)')
@@ -173,7 +181,8 @@ def inspect(space, snapshot, adapter, config):
         mapping = adapter.mapping(terminal, config) if hasattr(adapter, 'mapping') else None
         if mapping and mapping.get('session_id'):
             sessions.append({'address': address, 'app': agent, 'session_id': mapping['session_id'], 'space_id': space['id'],
-                             'space_name': space.get('name'), 'title': terminal.get('title'), 'cwd': terminal.get('cwd')})
+                             'space_name': space.get('name'), 'title': terminal.get('title'), 'cwd': terminal.get('cwd'),
+                             'turn': terminal.get('turn')})
         else:
             reasons.append(f'{address}: session id unverified (harness record impossible)')
         evidence.append([address, terminal.get('pid'), terminal.get('status_ms'), terminal.get('turn'), pids, jobs_fingerprint, hashlib.sha256(text.encode()).hexdigest()])
@@ -225,6 +234,7 @@ def cycle(adapter, config, state, now, *, apply=False, only_space=None, report_d
     trial_ok = (now - trial['started_at'] >= config.get('trial_seconds', 1800) and trial['samples'] >= 7 or approved and trial['samples'] >= 2) and trial['error_count'] == 0
     reviewed = approved or isinstance(config.get('reviewed_dry_run_at'), (int, float)) and config['reviewed_dry_run_at'] >= trial['started_at'] + config.get('trial_seconds', 1800) and config.get('reviewed_observer_sha256') == state.get('observer_sha256')
     result, tracking = [], {}
+    reports = dict(state.get('reports') or {})
     initial_focus = focus(snapshot['status'])
     for space in snapshot['spaces']:
         if only_space and space['id'] != only_space:
@@ -261,6 +271,18 @@ def cycle(adapter, config, state, now, *, apply=False, only_space=None, report_d
                     if not latest['safe'] or latest.get('fingerprint') != item.get('fingerprint'):
                         item['action'] = 'keep'; item['reasons'].append('evidence changed before close')
                     else:
+                        # Each session reports itself first (close-report); any session without a
+                        # report in time keeps the whole space (fail-closed).
+                        waiting = []
+                        for session in item.get('sessions', []):
+                            decision, detail = agent_sessions.report_gate(reports, session, adapter, config, now)
+                            if decision == 'ready':
+                                session['report_task_id'] = detail.get('task_id')
+                            elif decision != 'off':
+                                waiting.append(f"{session['address']}: {decision}" + (f' ({detail})' if isinstance(detail, str) else ''))
+                        if waiting:
+                            item['action'] = 'keep'; item['reasons'].append('close report: ' + '; '.join(waiting))
+                            result.append(item); continue
                         # Harness first: no record, no close (each agent session in the space).
                         parked, refused = [], None
                         for session in item.get('sessions', []):
@@ -296,7 +318,8 @@ def cycle(adapter, config, state, now, *, apply=False, only_space=None, report_d
                 adapter.notify(config['notify_terminal'], f'[자동 정리 보류·사용자 결정 필요] {item["name"]}: 승인/확인 대기 문구가 있어 공간을 유지했습니다. 직접 확인해 주세요.')
                 tracking[space['id']]['decision_notified_at'] = now
         result.append(item)
-    state.update(last_at=now, spaces=tracking, trial=trial)
+    live = {t['terminal'] for sp in snapshot['spaces'] for tab in sp.get('tabs', []) for t in tab.get('terminals', [])}
+    state.update(last_at=now, spaces=tracking, trial=trial, reports={a: e for a, e in reports.items() if a in live})
     return {'at': dt.datetime.fromtimestamp(now).astimezone().isoformat(), 'mode': 'apply' if apply else 'dry-run', 'trial': trial,
             'trial_ready': trial_ok, 'results': result, 'focus': initial_focus}
 

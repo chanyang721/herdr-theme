@@ -49,6 +49,7 @@ class FakeLive:
         self.exits = True
         self.jobs = (True, '', 'jobs')
         self.raw = ''
+        self.reported = False
 
     def snapshot(self):
         return copy.deepcopy(self.data)
@@ -69,6 +70,13 @@ class FakeLive:
     def park(self, config, item, event, reason=None):
         self.calls.append(('park', event, item['address']))
         return (True, 'REC1') if self.park_ok else (False, 'harness refused: denylist')
+
+    def request_report(self, address, text):
+        self.calls.append(('ask', address, text))
+
+    def close_status(self, config, item, since):
+        self.calls.append(('status', item['address'], since))
+        return (True, {'report_id': 'REP1', 'task_id': 'TASK1'}) if self.reported else (False, 'no close report yet')
 
     def keys(self, address, *keys):
         self.calls.append(('keys', address, ''.join(k if len(k) == 1 else f'<{k}>' for k in keys)))
@@ -95,7 +103,7 @@ class SleepTests(unittest.TestCase):
         self.paths = {'notes': root / 'notes', 'tickets': root / 'tickets', 'stub': root / 'session_sleep_stub.py'}
         self.live = FakeLive()
         self.config = {'idle_seconds': 1200, 'exclude_addresses': ['t3'], 'user_approved_apply': True,
-                       'reviewed_observer_sha256': 'code'}
+                       'reviewed_observer_sha256': 'code', 'close_report': {'enabled': False}}
         self.mapping = patch.object(agent_sessions, 'session_mapping', lambda t, c=None: ({'session_id': SID}, ''))
         self.mapping.start()
         self.addCleanup(self.mapping.stop)
@@ -275,6 +283,110 @@ class SleepTests(unittest.TestCase):
         got = self.run_cycle()
         self.assertEqual(got['t12']['action'], 'asleep')
         self.assertEqual(self.live.calls, [])
+
+
+class CloseReportTests(unittest.TestCase):
+    """Before it sleeps, the session reports itself (close-report); the observer only asks and checks."""
+    state, run_cycle = SleepTests.state, SleepTests.run_cycle
+
+    def setUp(self):
+        SleepTests.setUp(self)
+        self.config['close_report'] = {'timeout_seconds': 900, 'retry_seconds': 3600, 'settle_seconds': 120}
+
+    def answer(self, state, minutes=3, turn_delta=1):
+        """The session answered the request: one more turn, idle again since `minutes`."""
+        t = self.live.data['terminals']['t12']
+        t['turn'] += turn_delta
+        t['status_ms'] = (NOW - minutes * 60) * 1000
+        for r in sleep.cycle(self.live, self.config, state, NOW - minutes * 60 + 1, apply=False, paths=self.paths)['results']:
+            if r['address'] == 't12' and r.get('fingerprint'):
+                state['sessions']['t12'] = {'since': NOW - minutes * 60, 'fingerprint': r['fingerprint']}
+        state['last_at'] = NOW - 60
+
+    def test_first_cycle_asks_and_does_not_sleep(self):
+        state = self.state()
+        got = self.run_cycle(state)['t12']
+        self.assertEqual(got['action'], 'report_requested')
+        asks = [c for c in self.live.calls if c[0] == 'ask' and c[1] == 't12']
+        self.assertEqual(len(asks), 1)
+        self.assertTrue(asks[0][2].startswith(agent_sessions.REPORT_MARK))
+        self.assertIn('close-report', asks[0][2])
+        self.assertFalse([c for c in self.live.calls if c[0] in ('park', 'keys', 'label') and 't12' in c])
+        self.assertEqual(state['reports']['t12']['session_id'], SID)
+
+    def test_after_the_report_the_session_sleeps_without_another_twenty_minutes(self):
+        state = self.state()
+        self.run_cycle(state)
+        self.live.calls.clear(); self.live.reported = True
+        self.answer(state)
+        got = self.run_cycle(state)['t12']
+        self.assertEqual(got['action'], 'slept', got['reasons'])
+        steps = [c[0] for c in self.live.calls if 't12' in c]
+        self.assertEqual(steps[:3], ['status', 'park', 'keys'])
+        self.assertNotIn('ask', steps)
+        self.assertEqual(got['close_report'], 'REP1')
+        self.assertNotIn('t12', state['reports'])
+
+    def test_no_report_within_the_limit_keeps_the_session_and_does_not_ask_again_at_once(self):
+        state = self.state()
+        self.run_cycle(state)
+        state['reports']['t12']['requested_at'] = NOW - 901
+        self.answer(state)
+        got = self.run_cycle(state)['t12']
+        self.assertEqual(got['action'], 'keep')
+        self.assertTrue(any('fail-closed' in r for r in got['reasons']), got['reasons'])
+        self.assertFalse([c for c in self.live.calls if c[0] in ('park', 'keys', 'label') and 't12' in c])
+        self.live.calls.clear()
+        state['last_at'] = NOW - 60
+        got = sleep.cycle(self.live, self.config, state, NOW + 60, apply=True, paths=self.paths)
+        self.assertFalse([c for c in self.live.calls if c[0] == 'ask' and c[1] == 't12'])
+
+    def test_waiting_within_the_limit_keeps_it(self):
+        state = self.state()
+        self.run_cycle(state)
+        self.answer(state)
+        got = self.run_cycle(state)['t12']
+        self.assertEqual(got['action'], 'keep')
+        self.assertIn('waiting for the session close report', got['reasons'])
+
+    def test_work_after_the_request_needs_a_new_report(self):
+        state = self.state()
+        self.run_cycle(state)
+        self.live.reported = True
+        self.answer(state, turn_delta=3)   # the person kept working with it
+        got = self.run_cycle(state)['t12']
+        self.assertNotEqual(got['action'], 'slept')
+
+    def test_typed_input_still_blocks_even_with_a_report(self):
+        state = self.state()
+        self.run_cycle(state)
+        self.live.reported = True
+        self.answer(state)
+        self.live.text = EMPTY.replace('❯ ', '❯ 이어서')
+        got = self.run_cycle(state)['t12']
+        self.assertEqual(got['action'], 'keep')
+        self.assertFalse([c for c in self.live.calls if c[0] in ('keys', 'label') and 't12' in c])
+
+    def test_park_carries_the_report_task_and_masks(self):
+        argv = []
+        class R:
+            returncode, stdout, stderr = 0, '{"id": "X"}', ''
+        agent_sessions.harness_park({'harness': {'python': 'py', 'script': 'h.py'}},
+                                    {'address': 't12', 'app': 'claude-code', 'session_id': SID, 'report_task_id': 'TASK1'},
+                                    'suspended', runner=lambda a: argv.extend(a) or R())
+        self.assertIn('--mask', argv)
+        self.assertEqual(argv[argv.index('--task-id') + 1], 'TASK1')
+
+    def test_close_status_parses_the_harness_answer(self):
+        class R:
+            returncode, stdout, stderr = 0, '{"ok": true, "report_id": "R", "task_id": "T"}', ''
+        item = {'address': 't12', 'app': 'claude-code', 'session_id': SID}
+        cfg = {'harness': {'python': 'py', 'script': 'h.py'}}
+        self.assertEqual(agent_sessions.harness_close_status(cfg, item, 'S', runner=lambda a: R()),
+                         (True, {'report_id': 'R', 'task_id': 'T'}))
+        R.stdout = '{"ok": false}'
+        self.assertEqual(agent_sessions.harness_close_status(cfg, item, 'S', runner=lambda a: R())[0], False)
+        self.assertEqual(agent_sessions.harness_close_status({}, item, 'S')[0], False)
 
 
 class EvidenceTests(unittest.TestCase):

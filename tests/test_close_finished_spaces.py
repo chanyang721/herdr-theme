@@ -85,6 +85,14 @@ class FakeLive:
     def notify(self, address, message):
         self.notifications.append((address, message))
 
+    reported = False
+
+    def request_report(self, address, text):
+        self.notifications.append(('ask', address))
+
+    def close_status(self, config, item, since):
+        return (True, {'report_id': 'REP1', 'task_id': 'TASK1'}) if self.reported else (False, 'no close report yet')
+
 
 class CleanupPolicyTests(unittest.TestCase):
     def setUp(self):
@@ -96,7 +104,8 @@ class CleanupPolicyTests(unittest.TestCase):
         self.config = {'idle_seconds': 600, 'trial_seconds': 1800, 'max_sample_gap_seconds': 660,
                        'fixed_names': ['Share', 'PeaceMinusOne', 'Medihomes'], 'fixed_spaces': [],
                        'reviewed_dry_run_at': NOW, 'reviewed_observer_sha256': 'test', 'notify_terminal': 'review-session',
-                       'space_close_enabled': True}   # the close path itself; the default hold is tested below
+                       'space_close_enabled': True,   # the close path itself; the default hold is tested below
+                       'close_report': {'enabled': False}}   # the session's own report is tested in CloseReportSpaceTests
         self.git_mock = patch.object(cleanup, 'git_info', lambda folder: {'folder': folder, 'remaining_uncommitted': ' M work.py', 'worktrees': 'fixture worktree'})
         self.git_mock.start()
         self.addCleanup(self.git_mock.stop)

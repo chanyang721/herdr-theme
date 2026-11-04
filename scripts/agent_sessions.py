@@ -274,6 +274,10 @@ def harness_park(config, item, event, *, dry_run=False, reason=None, runner=None
         argv += ['--space-id', item['space_id']]
     if reason:
         argv += ['--reason', _clean(reason, 280)]
+    if item.get('report_task_id'):
+        argv += ['--task-id', item['report_task_id']]
+    # Observer text names spaces and panes: denylisted terms become [가림] in the record.
+    argv.append('--mask')
     if dry_run:
         argv.append('--dry-run')
     runner = runner or (lambda a: subprocess.run([str(v) for v in a], capture_output=True, text=True, timeout=60))
@@ -297,3 +301,90 @@ def harness_park(config, item, event, *, dry_run=False, reason=None, runner=None
     if dry_run:
         return bool(value.get('ok')), 'harness would accept' if value.get('ok') else 'harness refused'
     return (True, value['id']) if isinstance(value, dict) and value.get('id') else (False, 'harness record id missing')
+
+
+# --- the session's own report before it is put to sleep or its space is closed ---------------
+# HARNESS-MAPPING A3: the session that did the work writes its final report and experience
+# (`harness.py close-report`); the observer only asks, waits within a limit and checks with
+# `close-status`. No report in time → nothing is cleaned up (fail-closed). Nothing is accepted.
+
+REPORT_MARK = '[세션 정리 보고 요청]'
+
+
+def close_report_message(config):
+    harness = config.get('harness') or {}
+    python, script = harness.get('python', 'python3'), harness.get('script', 'harness.py')
+    return (f"{REPORT_MARK} 관찰기가 이 세션을 곧 정리(절전)합니다. 새 작업은 시작하지 말고 아래만 하세요. "
+            "1) 레포 밖 임시 파일(예: $TMPDIR/experience-close.json)에 experience JSON을 씁니다: "
+            '{"judgments": [{"situation": "무엇을 판단했나", "expected": "예상", "actual": "실제", "error": "MATCHED|PARTIAL|WRONG"}]} '
+            "(판단 1~5개, 선택: cause·surprise·pattern_candidates). "
+            f"2) {python} {script} close-report --done \"이 세션이 한 일\" --remaining \"남은 일\" --experience <그 파일> 를 실행합니다. "
+            "3) 고객·회사·제품 이름 대신 워크스페이스 id를 씁니다. 거부되면 문장을 고쳐 다시 실행합니다. "
+            "다른 세션에 보고하지 말고, 보고 id만 한 줄로 답하고 끝내세요. 승인은 사람이 기억함에서 합니다.")
+
+
+def harness_close_status(config, item, since, *, runner=None):
+    """(ok, detail): ok with {report_id, task_id} when the session wrote a final report since `since`."""
+    harness = config.get('harness') or {}
+    python, script = harness.get('python'), harness.get('script')
+    if not python or not script:
+        return False, 'harness not configured'
+    argv = [python, script, 'close-status', item['address'], '--provider', provider(item['app']),
+            '--session-id', item['session_id'], '--since', since]
+    runner = runner or (lambda a: subprocess.run([str(v) for v in a], capture_output=True, text=True, timeout=60))
+    try:
+        result = runner(argv)
+        value = json.loads((result.stdout or '').strip().splitlines()[-1])
+    except (OSError, subprocess.TimeoutExpired, ValueError, IndexError) as exc:
+        return False, f'close-status unavailable: {exc}'[:240]
+    if result.returncode != 0 or not isinstance(value, dict):
+        return False, 'close-status refused'
+    if value.get('ok') and value.get('report_id'):
+        return True, {'report_id': value['report_id'], 'task_id': value.get('task_id')}
+    return False, 'no close report yet'
+
+
+def utc_iso(epoch):
+    import datetime as _dt
+    return _dt.datetime.fromtimestamp(epoch, _dt.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+
+
+def report_gate(entries, item, adapter, config, now):
+    """(decision, detail) for one session about to be cleaned up; `entries` is the observer state
+    {address: {...}} and is updated in place.
+
+      off       close reports are switched off (config close_report.enabled false)
+      requested the request was just typed into the session; wait for its answer
+      waiting   asked, no report yet, still within timeout_seconds
+      failed    no report within timeout_seconds: kept; asked again after retry_seconds
+      ready     a final report since the request: detail = {report_id, task_id}
+
+    A report counts only while the session has done at most `turns` turns since the request
+    (the answer itself); work after it means the report is stale and a new one is asked."""
+    cfg = config.get('close_report') or {}
+    if cfg.get('enabled', True) is False:
+        return 'off', None
+    timeout, retry, turns = cfg.get('timeout_seconds', 900), cfg.get('retry_seconds', 3600), cfg.get('turns', 1)
+    address, sid, turn = item['address'], item['session_id'], item.get('turn')
+    entry = entries.get(address)
+    if entry and entry.get('session_id') != sid:
+        entry = None
+    if entry and isinstance(turn, int) and isinstance(entry.get('turn'), int) and turn > entry['turn'] + turns:
+        entry = None   # the person worked with it after the request
+    if entry and entry.get('failed_at'):
+        if now - entry['failed_at'] < retry:
+            return 'failed', f"no close report (asked {int((now - entry['requested_at']) // 60)} minutes ago): kept, asks again later"
+        entry = None
+    if entry is None:
+        entries.pop(address, None)
+        adapter.request_report(address, close_report_message(config))
+        entries[address] = {'session_id': sid, 'requested_at': now, 'since': utc_iso(now - 5), 'turn': turn}
+        return 'requested', None
+    ok, detail = adapter.close_status(config, item, entry['since'])
+    if ok:
+        entry['report'] = detail
+        return 'ready', detail
+    if now - entry['requested_at'] >= timeout:
+        entry['failed_at'] = now
+        return 'failed', f'no close report within {timeout // 60} minutes: kept (fail-closed)'
+    return 'waiting', detail

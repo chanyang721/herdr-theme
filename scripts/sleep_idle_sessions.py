@@ -7,7 +7,12 @@ or decision text, no voice input, no subagent terminal, only idle helper
 processes, no background job, outside the visible workspace and focused pane,
 and not an excluded address. Then, in order, with a fresh recheck first:
 
-  1. the harness keeps its context (`harness.py park --event suspended`);
+  0. the session writes its own final report and experience: the observer types a
+     `[세션 정리 보고 요청]` message, and sleeps it only after `harness.py close-status`
+     finds that report (within close_report.timeout_seconds; otherwise it is kept and
+     asked again after retry_seconds). The report waits for the person's acceptance in
+     the memory window; nothing here accepts. close_report.enabled false skips this step.
+  1. the harness keeps its context (`harness.py park --event suspended --task-id …`);
      no record, no sleep
   2. `/exit` is typed into the agent and the shell must come back
   3. the pane runs session_sleep_stub.py: Enter resumes the same session
@@ -88,6 +93,12 @@ class Live(spaces.Live):
         if not data:
             raise RuntimeError('styled screen unavailable')
         return data.decode('utf-8', 'replace')
+
+    def request_report(self, address, text):
+        return self.type_line(address, text)
+
+    def close_status(self, config, item, since):
+        return agent_sessions.harness_close_status(config, item, since)
 
     def park_check(self, config, item):
         return agent_sessions.harness_park(config, item, 'suspended', dry_run=True)
@@ -182,7 +193,8 @@ def inspect(address, space, snapshot, adapter, config, tab=None):
         return item
     app = (terminal.get('status') or {}).get('app')
     state = (terminal.get('status') or {}).get('state')
-    item.update(app=app, title=terminal.get('title'), cwd=terminal.get('cwd'), status_ms=terminal.get('status_ms'))
+    item.update(app=app, title=terminal.get('title'), cwd=terminal.get('cwd'), status_ms=terminal.get('status_ms'),
+                turn=terminal.get('turn'))
     shell = Path(str((terminal.get('argv') or [''])[0])).name
     if shell not in agent_sessions.SHELLS:
         # /exit would end the terminal program itself and could take the pane (and a space's
@@ -231,7 +243,7 @@ def note(item, notes_dir, now):
     """Local-only detail (screen tail, folder, git): never synced, kept beside the observer."""
     path = Path(notes_dir) / f"{dt.datetime.fromtimestamp(now):%Y%m%d}-{item['address']}-{item['session_id'][:8]}.json"
     path.parent.mkdir(parents=True, exist_ok=True)
-    keep = {k: item.get(k) for k in ('address', 'space_name', 'space_id', 'app', 'session_id', 'title', 'cwd', 'git', 'screen_tail', 'harness', 'argv')}
+    keep = {k: item.get(k) for k in ('address', 'space_name', 'space_id', 'app', 'session_id', 'title', 'cwd', 'git', 'screen_tail', 'harness', 'argv', 'close_report')}
     keep['at'] = dt.datetime.fromtimestamp(now).astimezone().isoformat()
     path.write_text(json.dumps(keep, ensure_ascii=False, indent=2) + '\n')
     path.chmod(0o600)
@@ -297,6 +309,8 @@ def cycle(adapter, config, state, now, *, apply=False, paths=None):
     approved = bool(config.get('user_approved_apply')) and config.get('reviewed_observer_sha256') == state.get('observer_sha256')
     ready = approved and trial['samples'] >= 2 and trial['error_count'] == 0
     idle = config.get('idle_seconds', 1200)
+    reports = {a: e for a, e in (state.get('reports') or {}).items() if a in pane_of(snapshot)}
+    settle = (config.get('close_report') or {}).get('settle_seconds', 120)
     initial_focus = spaces.focus(snapshot['status'])
     results, tracking, slept = [], {}, 0
     stop_reason = None
@@ -311,7 +325,10 @@ def cycle(adapter, config, state, now, *, apply=False, paths=None):
         if safe:
             tracking[address] = {'since': since, 'fingerprint': item.get('fingerprint')}
             status_age = (now * 1000 - (item.get('status_ms') or now * 1000)) / 1000
-            if quiet < idle or status_age < idle:
+            asked = reports.get(address) or {}
+            answering = (asked.get('session_id') == item.get('session_id') and not asked.get('failed_at')
+                         and quiet >= settle and status_age >= settle)
+            if (quiet < idle or status_age < idle) and not answering:
                 item['reasons'].append(f'unchanged for {int(min(quiet, status_age) // 60)} of {idle // 60} minutes')
             else:
                 item['action'] = 'would_sleep'
@@ -341,10 +358,19 @@ def cycle(adapter, config, state, now, *, apply=False, paths=None):
                         item['action'] = 'keep'; item['reasons'].append('evidence changed before sleep')
                     else:
                         before = spaces.focus(check['status'])
-                        item['action'] = sleep_one(item, adapter, config, paths, now)
+                        decision, detail = agent_sessions.report_gate(reports, item, adapter, config, now)
+                        if decision == 'ready':
+                            item['close_report'], item['report_task_id'] = detail['report_id'], detail.get('task_id')
+                        if decision in ('ready', 'off'):
+                            item['action'] = sleep_one(item, adapter, config, paths, now)
+                        else:
+                            item['action'] = 'report_requested' if decision == 'requested' else 'keep'
+                            item['reasons'].append({'requested': 'asked the session for its close report',
+                                                    'waiting': 'waiting for the session close report'}.get(decision, detail))
                         if item['action'] == 'slept':
                             slept += 1
                             tracking.pop(address, None)
+                            reports.pop(address, None)
                             after = adapter.snapshot()
                             if focused_terminal(after) == address:
                                 raise RuntimeError('focus moved to the slept pane; further sleeps stopped')
@@ -353,7 +379,7 @@ def cycle(adapter, config, state, now, *, apply=False, paths=None):
                                 item['focus_moved'] = True
         item.pop('argv', None)
         results.append(item)
-    state.update(last_at=now, sessions=tracking, trial=trial)
+    state.update(last_at=now, sessions=tracking, trial=trial, reports=reports)
     return {'at': dt.datetime.fromtimestamp(now).astimezone().isoformat(), 'mode': 'apply' if apply else 'dry-run',
             'trial': trial, 'apply_ready': ready, 'focus': initial_focus, 'results': results}
 
