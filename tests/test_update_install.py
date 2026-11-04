@@ -75,6 +75,8 @@ else:sys.exit(4)
         self.assertEqual((backup / 'mods/example/unlisted.js').read_text(), 'preserve me')
         check = next(call for call in self.calls() if call['argv'][0] == 'check')
         self.assertEqual(check['installed'], 'old')
+        self.assertFalse(Path(check['argv'][1]).is_relative_to(self.home / 'mods'))
+        self.assertEqual(self.receipt()['phase'], 'verified')
 
     def test_import_cache_created_during_reload_is_not_a_concurrent_code_edit(self):
         self.configure(runtime_cache=True)
@@ -82,8 +84,6 @@ else:sys.exit(4)
         self.assertEqual(self.receipt()['phase'], 'verified')
         self.assertEqual((self.target / 'main.js').read_text(), 'new')
         self.assertTrue((self.target / '__pycache__/helper.cpython.pyc').is_file())
-        self.assertFalse(Path(check['argv'][1]).is_relative_to(self.home / 'mods'))
-        self.assertEqual(self.receipt()['phase'], 'verified')
 
     def test_missing_selected_dependency_fails_before_installation(self):
         (self.source / 'main.js').write_text('needs-dependency')
