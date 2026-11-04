@@ -501,6 +501,20 @@ export default class SixfoldDesk extends View {
     const colorOfGroup = groupColors(allGroups.filter(group => group.active).map(group => group.name), paletteMode(t), t);
     const groupColor = name => colorOfGroup.get(groupKey(name))?.color ?? collab;
     const groupIndex = name => colorOfGroup.get(groupKey(name))?.index ?? 0;
+    // A cross-computer message enters the receiving workspace in its group colour.
+    // Local routes and sends outside that workspace's active partners keep their palette.
+    const workspaceFlowColor = flow => {
+      const fallback = palette[flow.lane % palette.length];
+      const hop = crossMachine(flow, machineOf);
+      if (!hop) return fallback;
+      const agent = agentList.find(item => item.address === flow.target);
+      const pane = panes().find(item => item.terminal === flow.target);
+      const recipient = spaceList.find(space => space.id === agent?.space)
+        ?? spaceList.find(space => space.tabs.some(tab => tab.id === pane?.tab));
+      if (!recipient || (recipient.machine ?? null) !== hop.to) return fallback;
+      const partner = partnersOf(recipient);
+      return partner?.active && partner.activePartners.includes(hop.from) ? groupColor(partner.group.name) : fallback;
+    };
     const hoverSpace = this.hoverSpace ? spaceList.find(space => space.id === this.hoverSpace) : null;
     const hoverPartners = new Set(hoverSpace ? (partnersOf(hoverSpace)?.partners ?? []) : []);
     const hoverColor = hoverSpace && partnersOf(hoverSpace) ? groupColor(partnersOf(hoverSpace).group.name) : collab;
@@ -765,7 +779,7 @@ export default class SixfoldDesk extends View {
     const workspaceTree=v_flex().relative().flex_none().children(spaceRows)
       .children(paths.filter(flow => positions[flow.source] !== undefined && positions[flow.target] !== undefined).map(flow => {
         const from=positions[flow.source], to=positions[flow.target];
-        return pipeline({id:flow.id,width:37-flow.lane*5,from,to,color:palette[flow.lane],phase:flow.phase,packets:flow.packets,motion})
+        return pipeline({id:flow.id,width:37-flow.lane*5,from,to,color:workspaceFlowColor(flow),phase:flow.phase,packets:flow.packets,motion})
           .right(3+flow.lane*5);
       }))
       // The far end is on another computer: run the pipe up to the top of this list,
@@ -773,7 +787,7 @@ export default class SixfoldDesk extends View {
       .children(remoteRoutes.filter(({route}) => (positions[route.source] === undefined) !== (positions[route.target] === undefined)).map(({route}) => {
         const outgoing = positions[route.source] !== undefined;
         const row = outgoing ? positions[route.source] : positions[route.target];
-        return pipeline({id:`${route.id}-hop`,width:37-route.lane*5,from:outgoing?row:0,to:outgoing?0:row,color:palette[route.lane%palette.length],phase:route.phase,packets:route.packets,motion})
+        return pipeline({id:`${route.id}-hop`,width:37-route.lane*5,from:outgoing?row:0,to:outgoing?0:row,color:workspaceFlowColor(route),phase:route.phase,packets:route.packets,motion})
           .right(3+route.lane*5);
       }));
     return v_flex().id('sixfold-sidebar').size_full().bg(t.chrome).text_color(t.foreground)

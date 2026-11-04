@@ -59,6 +59,7 @@ test('all four group colours read at 4.5:1 on every shipped theme, including ove
         assert(contrast(hex(color), ground) >= COLLAB_CONTRAST, `${name}: ${color} on ${ground}`);
       }
       assert(contrast(hex(onCollab(color)), hex(color)) >= COLLAB_CONTRAST, `${name}: ${color} badge text`);
+      assert(contrast(flatten(color + 'F2', t.chrome), hex(t.chrome)) >= 3, `${name}: active workspace curve at 95% opacity reads at 3:1`);
     }
   }
 });

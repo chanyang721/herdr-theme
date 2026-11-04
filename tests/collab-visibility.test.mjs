@@ -44,7 +44,7 @@ async function sidebar(runtime) {
     .replace(/import \{ watchBadges, workspaceBadges \} from '.\/badges.js';/, 'const watchBadges=()=>{},workspaceBadges=()=>null;');
   source = source.replace("import { breathingBorder, borderComet } from './collab-flow-view.js';", 'const breathingBorder=o=>{(globalThis.__breathCalls??=[]).push(o);return div().absolute().top(-1).left(-1).right(-1).bottom(-1).rounded(7).border(2).border_color(o.color);},borderComet=o=>{(globalThis.__flowCalls??=[]).push(o);return null;};');
   for (const name of ['model', 'flow', 'workflow', 'sidebar-identity', 'collab', 'collab-flow']) source = source.replace(`'./${name}.js'`, JSON.stringify(new URL(`../mods/sixfold-desk/${name}.js`, import.meta.url).href));
-  source = source.replace(/import \{ pipeline \} from [^;]+;/, 'const pipeline=()=>{throw Error("unexpected path");};');
+  source = source.replace(/import \{ pipeline \} from [^;]+;/, 'const pipeline=o=>{(globalThis.__pipelineCalls??=[]).push(o);return div();};');
   globalThis.__visRuntime = runtime;
   source += `\n// load ${++loads}`;
   const { default: Sidebar } = await import('data:text/javascript;base64,' + Buffer.from(source).toString('base64'));
@@ -95,6 +95,53 @@ const text = node => (node?.nodes ?? []).flatMap(child => typeof child === 'stri
 const has = (node, ...call) => node.calls.some(item => JSON.stringify(item) === JSON.stringify(call));
 // The 2px outline drawn over a box: an absolute child with border 2 in the colour.
 const outlined = (node, color) => node.nodes.some(child => child?.calls && has(child, 'absolute') && has(child, 'border', 2) && has(child, 'border_color', color));
+
+test('workspace curves enter the receiver group colour only for its active cross-computer partners', async () => {
+  const inventory = [
+    {id:'home',name:'Game',machine:null,tabs:[{id:'h'}]},
+    {id:'docs',name:'Docs',machine:null,tabs:[{id:'d'}]},
+    {id:'worker/w',name:'Game',machine:'worker',tabs:[{id:'worker/w'}]},
+    {id:'worker/d',name:'Docs',machine:'worker',tabs:[{id:'worker/d'}]},
+    {id:'solo',name:'Solo',machine:null,tabs:[{id:'s'}]},
+    {id:'worker/solo',name:'Remote only',machine:'worker',tabs:[{id:'worker/s'}]},
+    {id:'other/w',name:'Game',machine:'other',tabs:[{id:'other/w'}]},
+    {id:'stray/w',name:'Unrelated',machine:'stray',tabs:[{id:'stray/w'}]},
+  ];
+  const addresses = ['t1','t3','worker/t1','worker/t3','t2','worker/t2','other/t1','stray/t1'];
+  const members = inventory.map((space,i)=>({pane:'p'+i,tab:space.tabs[0].id,terminal:addresses[i],title:'Session',status:'working'}));
+  const allAgents = inventory.map((space,i)=>({...working(space.id),address:addresses[i]}));
+  let active = allAgents, shownComputer = 'local';
+  const rt = {...runtime([]),spaces:()=>inventory,panes:()=>members,terminals:()=>addresses.map(address=>({address})),agents:()=>active,
+    theme:()=>({background:'#111a23',accent:'#00AABB',ansi6:'#114455'}),shared:key=>key==='sixfold.computing.selected'?shownComputer:undefined,
+    machines:()=>[null,'worker','other','stray'].map(name=>({name,layout:'ready'}))};
+  try {
+    const Sidebar = await sidebar(rt);
+    const curve = (source,target,lane=0) => {
+      globalThis.__pipelineCalls=[];
+      const found=rows(view(Sidebar,{activeFlows:[{id:'send',source,target,lane,at:Date.now(),phase:'travel'}]}));
+      assert.equal(globalThis.__pipelineCalls.length,1,'one visible workspace curve');
+      return {color:globalThis.__pipelineCalls[0].color,found};
+    };
+    const badgeColor = (found,id)=>found.get('sf-space-mark-'+id).calls.find(call=>call[0]==='bg')[1];
+    let result=curve('worker/t1','t1');
+    assert.equal(result.color,badgeColor(result.found,'home'),'incoming shared project matches its border');
+    result=curve('t1','worker/t3');
+    assert.equal(result.color,badgeColor(result.found,'docs'),'outgoing flow follows the receiver project colour');
+    assert.notEqual(result.color,badgeColor(result.found,'home'),'the sender project does not choose the colour');
+    assert.equal(curve('t1','t3',1).color,'#114455','same computer keeps its lane palette even between active groups');
+    assert.equal(curve('t1','worker/t2').color,'#00AABB','remote non-collaboration keeps its palette');
+    assert.equal(curve('stray/t1','t1').color,'#00AABB','unrelated computer is not a partner of the active receiver');
+    active=allAgents.filter(agent=>agent.space!=='worker/w'&&agent.space!=='other/w');
+    assert.equal(curve('worker/t1','t1').color,'#00AABB','a shared name without active collaboration keeps its palette');
+    active=[...allAgents.filter(agent=>agent.address!=='t1'),{...working('home'),address:'home-helper'}];
+    result=curve('worker/t1','t1');
+    assert.equal(result.color,badgeColor(result.found,'home'),'a recipient without agent metadata resolves through its pane');
+    active=allAgents;
+    shownComputer='remote:worker';
+    result=curve('worker/t1','other/t1');
+    assert.equal(result.color,badgeColor(result.found,'worker/w'),'a remote-to-remote pair uses the receiving group colour too');
+  } finally { delete globalThis.__visRuntime; delete globalThis.__pipelineCalls; delete globalThis.__breathCalls; delete globalThis.__flowCalls; }
+});
 
 test('idle partner: the header shows the partner computer in the collaboration colour, nothing else', async () => {
   try {
