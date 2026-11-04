@@ -582,7 +582,9 @@ export default class SixfoldDesk extends View {
         .on_mouse_down('left',(_event,cx)=>cx.stop_propagation())
         .on_click(()=>setShared('sixfold.computing.expanded',!computersExpanded))
         .child(computersExpanded?'▾':'▸')));
-    const groups=workspaceList.map(s=>({s,members:priority(s.tabs.flatMap(tab=>all.filter(p=>p.tab===tab.id)))}));
+    // A workspace's rows are its terminals; a mod pane (document tabs, a usage panel) has no
+    // terminal and is not a session, so it gets no row and no count.
+    const groups=workspaceList.map(s=>({s,members:priority(s.tabs.flatMap(tab=>all.filter(p=>p.tab===tab.id&&p.terminal)))}));
     const positions={};let offset=0;
     for(const {s,members} of groups){
       let row=offset+53+(hasWorkspaceAlerts(s.name)?26:0);
