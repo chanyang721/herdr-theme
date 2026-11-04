@@ -153,15 +153,59 @@ export function trackLinks(seen, links, now, motion = true, slots = 4) {
   return { lanes: [...seen.values()].sort((a, b) => a.slot - b.slot), wake: wakes.length ? Math.min(...wakes) : null };
 }
 
-// The collaboration colour (periwinkle): readable on the sidebar in both themes
-// (5:1 or more on dark and light grounds), apart from the accent and the amber
-// "needs you". Chosen by how light the theme's background is.
+// The collaboration colour (periwinkle), apart from the accent and the amber "needs you".
+// Text in it must read at 4.5:1 or more on whatever it is drawn over (`ground`: a header's
+// surface or selected colour, which may be a translucent overlay on the surface). Of the
+// two periwinkles the one that reads better is used; when neither reaches 4.5:1 (win98's
+// grey, say) it is darkened or lightened until it does, else the theme's foreground.
 export const COLLAB_COLORS = { dark: '#A9B8FF', light: '#3346B8' };
-export function collabColor(t) {
-  const hex = /^#([0-9a-f]{6})/i.exec(String(t?.background ?? t?.chrome ?? '').trim())?.[1];
-  if (!hex) return COLLAB_COLORS.dark;
-  const [r, g, b] = [0, 2, 4].map(i => parseInt(hex.slice(i, i + 2), 16) / 255);
-  return 0.2126 * r + 0.7152 * g + 0.0722 * b > 0.5 ? COLLAB_COLORS.light : COLLAB_COLORS.dark;
+export const COLLAB_CONTRAST = 4.5;
+
+function rgba(value) {
+  const hex = /^#([0-9a-f]{3,8})$/i.exec(String(value ?? '').trim())?.[1];
+  if (!hex || ![3, 4, 6, 8].includes(hex.length)) return null;
+  const full = hex.length <= 4 ? [...hex].map(c => c + c).join('') : hex;
+  const parts = [0, 2, 4].map(i => parseInt(full.slice(i, i + 2), 16));
+  return [...parts, full.length === 8 ? parseInt(full.slice(6, 8), 16) / 255 : 1];
+}
+
+// An opaque colour for `value` drawn over `base` (alpha composited), as [r, g, b].
+function over(value, base) {
+  const top = rgba(value), under = base ? over(base) : [0, 0, 0];
+  if (!top) return under;
+  return [0, 1, 2].map(i => Math.round(top[i] * top[3] + under[i] * (1 - top[3])));
+}
+
+function luminance([r, g, b]) {
+  const lin = c => { const v = c / 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; };
+  return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+}
+
+export function contrast(a, b) {
+  const [x, y] = [luminance(a), luminance(b)].sort((m, n) => n - m);
+  return (x + 0.05) / (y + 0.05);
+}
+
+const toHex = rgb => '#' + rgb.map(c => Math.round(c).toString(16).padStart(2, '0')).join('').toUpperCase();
+
+export function collabColor(t, ground = t?.surface) {
+  const base = t?.surface ?? t?.background;
+  const back = over(ground ?? base, ground && ground !== base ? base : null);
+  const options = [COLLAB_COLORS.dark, COLLAB_COLORS.light].map(color => ({ color, rgb: rgba(color).slice(0, 3) }))
+    .map(item => ({ ...item, ratio: contrast(item.rgb, back) })).sort((a, b) => b.ratio - a.ratio);
+  if (options[0].ratio >= COLLAB_CONTRAST) return options[0].color;
+  const target = luminance(back) > 0.18 ? [0, 0, 0] : [255, 255, 255];
+  for (let step = 1; step <= 20; step++) {
+    const rgb = options[0].rgb.map((c, i) => c + (target[i] - c) * step / 20);
+    if (contrast(rgb, back) >= COLLAB_CONTRAST) return toHex(rgb);
+  }
+  return t?.foreground ?? options[0].color;
+}
+
+// Text on a filled collaboration badge: black or white, whichever reads better.
+export function onCollab(color) {
+  const rgb = rgba(color)?.slice(0, 3) ?? [169, 184, 255];
+  return contrast(rgb, [0, 0, 0]) >= contrast(rgb, [255, 255, 255]) ? '#000000' : '#FFFFFF';
 }
 
 // A workspace's partners: the other computers with a space of the same project
@@ -172,5 +216,11 @@ export function spacePartners(groups, space, labelOf = () => null) {
   const group = groups.find(item => item.name.normalize('NFC').toLowerCase() === name && item.machines.includes(machine));
   if (!group) return null;
   const partners = group.machines.filter(other => other !== machine);
-  return partners.length ? { group, partners, working: partners.map(other => group.working[group.machines.indexOf(other)]) } : null;
+  if (!partners.length) return null;
+  const working = partners.map(other => group.working[group.machines.indexOf(other)]);
+  // Worked on together now: agents working here and on at least one partner. This is the
+  // card's own state, apart from the pipe lanes (which are capped at four).
+  const here = group.working[group.machines.indexOf(machine)] > 0;
+  const activePartners = here ? partners.filter((_other, index) => working[index] > 0) : [];
+  return { group, partners, working, active: activePartners.length > 0, activePartners };
 }

@@ -8,7 +8,7 @@ import { computerKind, computerStatus, computerAlert, tailscaleStatus, workspace
 
 import { freshMessages, recentRoutes, simultaneousRoutes, crossMachine, followComputer, terminalMachine, machineHops, machineTraffic, trafficWake } from './flow.js';
 import { pipeline } from './pipeline.js';
-import { machineCounts, projectGroups, liveLinks, linkPalette, projectName, trackLinks, collabColor, spacePartners } from './collab.js';
+import { machineCounts, projectGroups, liveLinks, linkPalette, projectName, trackLinks, collabColor, onCollab, spacePartners } from './collab.js';
 import { workflowNodes, delegationEvents, workflowStatus, sessionChildren, activeWorkflow } from './workflow.js';
 import { watchDocs, currentDocs, docsSection, prepareDocsInput } from './docs.js';
 import { watchAlerts, alertSection, visibleAlerts } from './alerts.js';
@@ -619,7 +619,7 @@ export default class SixfoldDesk extends View {
           ? svg(icon.path).size(14).text_color(workspaceColor(s)) : image(icon.path).w(14).h(14));
       return box.bg(workspaceColor(s)).child(svg(`mods/sixfold-desk/icons/ws-${workspaceIdentity(s,this.site)||'workspace'}.svg`).size(12).flex_none().text_color(t.background));
     };
-    const spaceRows=groups.map(({s,members})=>{ const mark=spaceLink(s), linked=mark && !mark.gone ? mark : null;
+    const spaceRows=groups.map(({s,members})=>{ const mark=spaceLink(s);
       // A partner on another computer always shows in the header (icon + its name, in the
       // collaboration colour). While worked on together now the box gets a 2px outline and
       // a 10% tint, and a filled ⇄ badge sits on its top edge; all drawn over the box, so
@@ -627,15 +627,21 @@ export default class SixfoldDesk extends View {
       const partner=partnersOf(s);
       const partnerNames=partner ? partner.partners.map(m => this.computerLabel(m)) : [];
       const partnerText=partner ? `${partnerNames.map((label, i) => `${label} · ${partner.group.name}${partner.working[i] ? ` · ${w.working} ${partner.working[i]}` : ''}`).join('\n')}\n${collabNote}` : '';
-      const lit=Boolean(linked) || (this.hoverComputer !== undefined && Boolean(partner?.partners.includes(this.hoverComputer)));
-      const markView = mark ? h_flex().id(`sf-space-mark-${s.id}`).absolute().top(-8).right(10).h(15).px(5).items_center().rounded(4).bg(collab)
-        .text_size(10).font_bold().text_color(t.background).opacity(mark.gone ? 0 : 1).when(motion,el=>el.transition('opacity',600))
-        .tooltip(`${mark.partners.map(m => this.computerLabel(m)).join(', ')}${this.lang()==='ko' ? '과 협업 중' : ': worked on together now'}\n${collabNote}`)
-        .child(`⇄${mark.partners.length > 1 ? mark.partners.length : ''}`) : null;
+      // Worked on together now comes from the project itself (spacePartners), not from the
+      // pipe lanes, which hold at most four links; a lane only lets an ended badge fade out.
+      const sharing=partner?.active ? partner.activePartners : null;
+      const badgePartners=sharing ?? (mark?.gone ? mark.partners : null);
+      const lit=Boolean(sharing) || (this.hoverComputer !== undefined && Boolean(partner?.partners.includes(this.hoverComputer)));
+      const markView = badgePartners ? h_flex().id(`sf-space-mark-${s.id}`).absolute().top(-8).right(10).h(15).px(5).items_center().rounded(4).bg(collab)
+        .text_size(10).font_bold().text_color(onCollab(collab)).opacity(sharing ? 1 : 0).when(motion,el=>el.transition('opacity',600))
+        .tooltip(`${badgePartners.map(m => this.computerLabel(m)).join(', ')}${this.lang()==='ko' ? '과 협업 중' : ': worked on together now'}\n${collabNote}`)
+        .child(`⇄${badgePartners.length > 1 ? badgePartners.length : ''}`) : null;
       const outline = lit ? div().absolute().top(-1).left(-1).right(-1).bottom(-1).rounded(7).border(2).border_color(collab) : null;
-      const partnerTail = partner ? h_flex().id(`sf-partner-${s.id}`).flex_none().max_w(110).min_w(0).gap(3).items_center().text_size(12).font_normal().text_color(collab)
+      // The name is text on the header, so its colour is chosen for that header's background.
+      const tailColor = collabColor(t, s.active ? t.selected : t.surface);
+      const partnerTail = partner ? h_flex().id(`sf-partner-${s.id}`).flex_none().max_w(110).min_w(0).gap(3).items_center().text_size(12).font_normal().text_color(tailColor)
         .tooltip(partnerText)
-        .child(svg(`mods/sixfold-desk/icons/device-${computerKind(this.computers?.machines?.[partner.partners[0]]?.os)}.svg`).size(14).flex_none().text_color(collab))
+        .child(svg(`mods/sixfold-desk/icons/device-${computerKind(this.computers?.machines?.[partner.partners[0]]?.os)}.svg`).size(14).flex_none().text_color(tailColor))
         .child(div().min_w(0).truncate().child(`${partnerNames[0]}${partnerNames.length > 1 ? ` +${partnerNames.length - 1}` : ''}`)) : null;
       return v_flex().id(`sf-space-${s.id}`).relative().ml(7).mr(LINK_MARGIN).mb(12).gap(2).flex_none().rounded(6).border(1).border_color(workspacePinned(s,this.workspacePins)?t.accent:t.border)
       .when(lit,e=>e.bg(collab+'1A'))
@@ -658,7 +664,7 @@ export default class SixfoldDesk extends View {
       .child(h_flex().h(36).flex_none().pl(6).pr(8).items_center().gap(4).rounded(5).border_l(3).border_color(workspaceColor(s)).bg(s.active?t.selected:t.surface).text_size(12).font_bold()
         .when(this.dragSpace===s.id && this.overSpace!==s.id,e=>e.opacity(0.5))
         .when(this.dragSpace && this.overSpace===s.id && this.dragSpace!==s.id,e=>e.border(1).border_color(t.accent))
-        .tooltip(`${linked ? `${linked.partners.map(m => this.computerLabel(m)).join(', ')}${this.lang()==='ko' ? '과 협업 중' : ': worked on together now'} · ${collabNote}\n` : partner ? `${partnerText}\n` : ''}${this.lang()==='ko'?'드래그하여 순서 변경':'Drag to reorder'}`)
+        .tooltip(`${sharing ? `${sharing.map(m => this.computerLabel(m)).join(', ')}${this.lang()==='ko' ? '과 협업 중' : ': worked on together now'} · ${collabNote}\n` : partner ? `${partnerText}\n` : ''}${this.lang()==='ko'?'드래그하여 순서 변경':'Drag to reorder'}`)
         .on_mouse_down('left',(_event,cx)=>{
           // The sidebar is a window_drag region; this press belongs to the space.
           cx.stop_propagation();

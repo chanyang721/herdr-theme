@@ -132,3 +132,19 @@ test('hovering a workspace lights its partner computer row, and hovering that ro
     assert(!outlined(found.get('sf-space-solo'), COLLAB_COLORS.dark));
   } finally { delete globalThis.__visRuntime; }
 });
+
+test('a fifth project worked on together still lights its box, though pipes stop at four', async () => {
+  const names = ['A0', 'A1', 'A2', 'A3', 'Game'];
+  const many = names.flatMap(name => [
+    { id: `here-${name}`, machine: null, name, tabs: [{ id: `h-${name}` }] },
+    { id: `worker/${name}`, machine: 'worker', name, tabs: [{ id: `worker/t-${name}` }] },
+  ]);
+  const rt = { ...runtime(many.map(space => working(space.id))), spaces: () => many, focused: () => ({ space: 'here-A0', tab: 'h-A0' }) };
+  try {
+    const found = rows(view(await sidebar(rt)));
+    for (const name of names) {
+      assert(outlined(found.get(`sf-space-here-${name}`), COLLAB_COLORS.dark), `${name}: outlined`);
+      assert.deepEqual(text(found.get(`sf-space-mark-here-${name}`)), ['⇄'], `${name}: badge`);
+    }
+  } finally { delete globalThis.__visRuntime; }
+});
