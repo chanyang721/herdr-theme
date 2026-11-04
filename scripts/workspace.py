@@ -6,6 +6,7 @@ import subprocess
 import time
 from core_api import call
 from balance_grid import balance_grids
+from agent_env import launch_argv
 
 
 def app(command, args):
@@ -22,8 +23,9 @@ def main():
     spaces=json.loads(subprocess.check_output(['herdr-app','ls']))['spaces']
     if any(s['name']==args.name for s in spaces):
         raise SystemExit('Workspace already exists; refusing to duplicate it.')
-    claude={'argv':['claude']} if args.agents else {}
-    codex={'argv':['codex','--no-daemon']} if args.agents else {}
+    # Opened from inside an agent, a pane inherits its markers (child-session Claude, parent pane id).
+    claude={'argv':launch_argv(['claude'])} if args.agents else {}
+    codex={'argv':launch_argv(['codex','--no-daemon'])} if args.agents else {}
     new=app('space.new',{'name':args.name,'folder':args.folder,'tab':'개발 · 6분할',**claude})
     # The core adoption can arrive after the creation acknowledgment. Identify
     # the observed terminal rather than guessing an ID or duplicating the space.

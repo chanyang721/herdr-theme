@@ -49,8 +49,10 @@ class WorkspaceCreationTests(unittest.TestCase):
 
     def test_default_launches_four_claude_and_two_codex_in_one_grid(self):
         argv=self.exercise()
-        self.assertEqual(argv.count(['claude']),4)
-        self.assertEqual(argv.count(['codex','--no-daemon']),2)
+        from agent_env import launch_argv
+        self.assertEqual(argv.count(launch_argv(['claude'])),4)
+        self.assertEqual(argv.count(launch_argv(['codex','--no-daemon'])),2)
+        self.assertIn('CLAUDE_CODE_CHILD_SESSION',argv[0],'a pane opened from an agent must not inherit its child-session marker')
 
     def test_shells_are_explicit_opt_out(self):
         self.assertEqual(self.exercise(['--shells']),[None]*6)
