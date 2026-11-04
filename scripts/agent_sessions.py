@@ -113,6 +113,11 @@ def session_mapping(terminal, config=None):
         try:
             meta = json.loads((home / 'sessions' / f'{fg_pid}.json').read_text())
         except (OSError, ValueError):
+            if inherited_child_session(fg_pid):
+                # Started from inside another Claude (space.new from a Claude turn) with its
+                # CLAUDE_CODE_CHILD_SESSION marker: no session file and no transcript of its own,
+                # so `--resume` cannot bring it back. It is never suspended.
+                return None, 'cannot resume: Claude runs as an inherited child session (no session file or transcript)'
             return None, 'session mapping unverified: Claude session file missing'
         sid = meta.get('sessionId') if isinstance(meta, dict) else None
         if not isinstance(sid, str) or not UUID.match(sid) or meta.get('pid') != fg_pid:
@@ -138,6 +143,62 @@ def session_mapping(terminal, config=None):
             return None, f'session mapping unverified: {len(top)} top-level Codex rollouts open'
         sid = top[0]
     return {**base, 'session_id': sid}, ''
+
+
+def inherited_child_session(pid, reader=None):
+    """True when the process environment carries CLAUDE_CODE_CHILD_SESSION=1 (read with ps, never printed)."""
+    reader = reader or (lambda p: run(['ps', 'eww', '-p', str(p), '-o', 'command=']))
+    try:
+        text = reader(pid)
+    except (OSError, RuntimeError, subprocess.TimeoutExpired):
+        return False
+    return 'CLAUDE_CODE_CHILD_SESSION=1' in text.split()
+
+
+SGR = re.compile(r'\x1b\[([0-9;:]*)m')
+OTHER_ESC = re.compile(r'\x1b(?:\[[0-9;?:]*[A-Za-ln-z@`]|\][^\x07\x1b]*(?:\x07|\x1b\\)|[()][0-9A-Za-z]|[=>78])')
+
+
+def prompt_cells(raw, marker='❯'):
+    """[(char, dim)] of the input row after the last `marker` in an ANSI repaint, or None.
+
+    Claude draws its prompt suggestion faint (SGR 2) and typed text plain. Any escape other than
+    a colour change (a cursor move, say) ends the row: what follows is not this row.
+    """
+    i = raw.rfind(marker)
+    if i < 0:
+        return None
+    row, dim, pos = [], False, i + len(marker)
+    while pos < len(raw):
+        ch = raw[pos]
+        if ch in '\r\n':
+            break
+        if ch == '\x1b':
+            m = SGR.match(raw, pos)
+            if m:
+                codes = [c for c in re.split('[;:]', m.group(1)) if c != ''] or ['0']
+                for c in codes:
+                    if c in ('0', '22'):
+                        dim = False
+                    elif c == '2':
+                        dim = True
+                pos = m.end()
+                continue
+            return row if OTHER_ESC.match(raw, pos) else None
+        row.append((ch, dim))
+        pos += 1
+    return row
+
+
+def suggestion_only(text_value, raw, marker='❯'):
+    """True only when the row's every visible character is faint and spells exactly what the plain
+    screen shows after the marker: a Claude prompt suggestion, not something the person typed."""
+    cells = prompt_cells(raw, marker)
+    if not cells or not text_value:
+        return False
+    shown = ''.join(c for c, _ in cells).replace('\xa0', ' ').strip()
+    visible = [d for c, d in cells if not c.isspace() and c != '\xa0']
+    return bool(visible) and all(visible) and shown == text_value.strip()
 
 
 def resume_argv(app, argv, session_id):

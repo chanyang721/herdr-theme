@@ -48,12 +48,17 @@ class FakeLive:
         self.park_ok = True
         self.exits = True
         self.jobs = (True, '', 'jobs')
+        self.raw = ''
 
     def snapshot(self):
         return copy.deepcopy(self.data)
 
     def screen(self, address):
         return self.text
+
+    def styled_screen(self, address):
+        self.calls.append(('styled', address))
+        return self.raw
 
     def backend(self, terminal, config, process_tree_clean=False):
         return self.jobs
@@ -110,10 +115,86 @@ class SleepTests(unittest.TestCase):
 
     def test_visible_workspace_focused_pane_and_excluded_address_never_sleep(self):
         got = self.run_cycle()
-        self.assertIn('currently visible workspace', got['t1']['reasons'])
+        self.assertIn('shown on screen (visible tab)', got['t1']['reasons'])
         self.assertIn('focused pane', got['t1']['reasons'])
         self.assertIn('excluded address', got['t3']['reasons'])
         self.assertEqual(got['t12']['action'], 'slept')
+
+    def test_other_tabs_of_the_shown_space_may_sleep_but_the_shown_tab_may_not(self):
+        self.live.data['spaces'][0]['tabs'].append({'id': 'tab-other', 'terminals': [{'terminal': 't7', 'pane': 'p7', 'sub_agents': []}]})
+        self.live.data['terminals']['t7'] = copy.deepcopy(self.live.data['terminals']['t12'])
+        self.live.data['terminals']['t7'].update(address='t7', pid=700, foreground={'pid': 701, 'argv': ['claude'], 'name': 'claude'})
+        self.live.data['processes'].update({700: {'pid': 700, 'parent': 1, 'name': 'zsh', 'args': 'zsh'},
+                                           701: {'pid': 701, 'parent': 700, 'name': 'claude', 'args': 'claude'}})
+        got = self.run_cycle()
+        self.assertEqual(got['t7']['action'], 'slept')
+        self.assertIn('shown on screen (visible tab)', got['t1']['reasons'])
+
+    def test_a_pane_shown_in_a_float_never_sleeps(self):
+        self.live.data['status']['floats'] = {'f1': {'terminal': 't12'}}
+        got = self.run_cycle()
+        self.assertIn('shown on screen (visible tab)', got['t12']['reasons'])
+        self.assertNotIn(('keys', 't12', '/exit<enter>'), self.live.calls)
+
+    def test_a_faint_claude_suggestion_is_not_input_but_typed_text_is(self):
+        self.live.text = EMPTY.replace('❯ \n', '❯ 앱 다시 띄워서 반영해줘\n')
+        self.live.raw = f'{BORDER}\r\n❯\xa0\x1b[0m\x1b[2m앱 다시 띄워서 반영해줘\x1b[0m\r\n{BORDER}'
+        got = self.run_cycle()
+        self.assertEqual(got['t12']['action'], 'slept')
+        self.assertTrue(got['t12']['prompt_suggestion'])
+        for raw in (f'❯\xa0\x1b[0m앱 다시 띄워서 반영해줘\r\n',                 # typed: plain
+                    f'❯\xa0\x1b[2m앱 다시\x1b[22m 띄워서 반영해줘\r\n',          # partly typed
+                    f'❯\xa0\x1b[2m다른 글\x1b[0m\r\n',                         # does not match the screen
+                    ''):                                                          # attach gave nothing
+            self.setUp()
+            self.live.text = EMPTY.replace('❯ \n', '❯ 앱 다시 띄워서 반영해줘\n')
+            self.live.raw = raw
+            got = self.run_cycle()
+            self.assertEqual(got['t12']['action'], 'keep', raw)
+            self.assertIn('input not empty', got['t12']['reasons'])
+
+    def test_a_suggestion_with_text_below_the_input_row_is_still_input(self):
+        self.live.text = EMPTY.replace('❯ \n', '❯ 첫 줄\n  둘째 줄\n')
+        self.live.raw = '❯\xa0\x1b[2m첫 줄\x1b[0m\r\n'
+        got = self.run_cycle()
+        self.assertIn('input not empty', got['t12']['reasons'])
+        self.assertNotIn(('styled', 't12'), self.live.calls)
+
+    def test_focus_moving_elsewhere_during_a_cycle_does_not_block_sleep(self):
+        real = self.live.snapshot
+        calls = {'n': 0}
+        def moving():
+            calls['n'] += 1
+            data = real()
+            if calls['n'] > 1:   # the person switched to another tab of Share after the cycle began
+                data['status']['tab'] = 'tab-elsewhere'; data['status']['focused_pane'] = 'p-else'
+            return data
+        self.live.snapshot = moving
+        got = self.run_cycle(state=self.state())
+        self.assertEqual(got['t12']['action'], 'slept')
+
+    def test_focus_moving_onto_the_candidate_keeps_it(self):
+        state = self.state()
+        real = self.live.snapshot
+        def onto():
+            data = real()
+            data['status'].update(space='fixed', tab='tab-fixed', focused_pane='p12')
+            return data
+        self.live.snapshot = onto
+        got = self.run_cycle(state=state)
+        self.assertEqual(got['t12']['action'], 'keep')
+
+    def test_a_child_session_without_a_session_file_is_named_and_kept(self):
+        self.mapping.stop()
+        with tempfile.TemporaryDirectory() as home, \
+                patch.object(agent_sessions, 'inherited_child_session', lambda pid, reader=None: True):
+            mapping, why = agent_sessions.session_mapping(self.live.data['terminals']['t12'], {'claude_home': home})
+        self.mapping.start()
+        self.assertIsNone(mapping)
+        self.assertIn('cannot resume', why)
+        env = 'claude CLAUDECODE=1 CLAUDE_CODE_CHILD_SESSION=1 HOME=/x'
+        self.assertTrue(agent_sessions.inherited_child_session(1, reader=lambda p: env))
+        self.assertFalse(agent_sessions.inherited_child_session(1, reader=lambda p: 'claude HOME=/x'))
 
     def test_order_is_harness_then_exit_then_stub_then_labels(self):
         self.run_cycle()
