@@ -1,6 +1,6 @@
 # Codex 마이크 포커스 기본값
 
-`focusq install`은 `co.lukuku.herdr-codex-focus` 사용자 LaunchAgent를 기본 설치한다.
+`focusq install`은 `<label_prefix>.herdr-codex-focus` 사용자 LaunchAgent를 기본 설치한다(`label_prefix`는 `~/.config/herdr-app/data/sixfold/site.local.json`, 기본 `local.herdr-sixfold`).
 이미 플러그인이 설치되어 있으면 다음 명령으로 이 제어기만 적용한다.
 
 ```sh

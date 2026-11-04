@@ -53,6 +53,14 @@ python3 scripts/update_install.py mods/sixfold-desk/main.js mods/sixfold-desk/mo
 공개 미리보기는 데모 프로그램으로 촬영합니다. 실제 프로젝트나 대화 내용을 포함하지 않습니다.
 상세 설명은 [English README](README.md), 재현 명세는 [RECIPE.md](RECIPE.md)를 참고하세요.
 
+## 이 기기 전용 이름·경로 (`site.local.json`)
+
+프로젝트 이름, 별칭, 사이드바 표시·색, Slack 작업공간 주소와 멘션 이름, 보고서·상태 폴더, LaunchAgent 이름 앞부분,
+문서 탭 시드처럼 사람·조직마다 다른 값은 저장소에 두지 않고 `~/.config/herdr-app/data/sixfold/site.local.json`에서
+읽습니다(`HERDR_APP_HOME`을 따름). 형식은 `config/site.example.json`을 복사해 고칩니다. 파일이 없으면 일반 기본값
+(`local.herdr-sixfold` 라벨, `~/Library/Application Support/HerdrSixfold`, `~/Documents/HerdrReports`)으로
+동작하며, `*.local.json`은 `.gitignore`에 들어 있습니다.
+
 ## 고정 워크스페이스 표시
 
 `~/.config/herdr-app/data/sixfold/workspace-pins.local.json`에서 고정할 워크스페이스를 지정합니다. 예: `{"spaces":[{"id":"실제-workspace-id","machine":null}]}`. ID는 `herdr-app ls`로 확인하며 원격은 앱에 표시되는 ID와 machine을 함께 지정합니다. 이름을 바꿔도 고정 표시는 유지되고, 같은 이름의 다른 워크스페이스에는 적용되지 않습니다. 설정된 항목만 핀 아이콘과 강조 테두리로 표시하며, 기본 목록·순서·삭제 동작은 바꾸지 않습니다. `{"spaces":[]}`는 모두 해제합니다. 설정 변경은 실행 중 자동 반영되며 잘못된 JSON은 마지막 정상 설정을 유지합니다. 이 설정은 문서 고정 목록이나 `terminal.pin`과 별개입니다.
@@ -95,21 +103,21 @@ Project document tracking: see [configuration and collector](docs/project-docume
 
 `python3 scripts/install.py --home ~/.config/herdr-app --update`는 관리 mod와 helper를 갱신합니다. 개인 `settings.json`·기존 키 섹션·데이터는 보존하며, 직접 수정한 layout/theme도 보존합니다. 이전 설치 manifest가 없는 기존 layout/theme은 사용자 설정으로 취급합니다. mod는 전체 디렉터리를 staging한 뒤 교체합니다. `--update` 없는 첫 설치의 덮어쓰기 거부 동작은 유지합니다.
 
-`python3 scripts/seed_workspace_pins.py --home ~/.config/herdr-app --ensure-spaces`는 고정 설정 파일이 없을 때만 현재 컴퓨터의 Share·PeaceMinusOne·Medihomes를 찾아 실제 ID로 시드합니다. 없는 로컬 워크스페이스는 만들고 원래 선택 화면을 복원합니다. Herdr 앱이 실행 중이어야 하며 기존 `workspace-pins.local.json`은 내용에 관계없이 보존합니다. `--ensure-spaces`를 빼면 없는 워크스페이스를 만들지 않고 오류를 보고합니다. 테스트 시 `HERDR_APP_BIN`으로 앱 실행 파일을 대체할 수 있습니다.
+`python3 scripts/seed_workspace_pins.py --home ~/.config/herdr-app --ensure-spaces`는 고정 설정 파일이 없을 때만 현재 컴퓨터에서 `site.local.json`의 `fixed_space_names`(기본 Share)를 찾아 실제 ID로 시드합니다. 없는 로컬 워크스페이스는 만들고 원래 선택 화면을 복원합니다. Herdr 앱이 실행 중이어야 하며 기존 `workspace-pins.local.json`은 내용에 관계없이 보존합니다. `--ensure-spaces`를 빼면 없는 워크스페이스를 만들지 않고 오류를 보고합니다. 테스트 시 `HERDR_APP_BIN`으로 앱 실행 파일을 대체할 수 있습니다.
 
 ## 끝난 임시 워크스페이스 자동 정리
 
-`scripts/close_finished_spaces.py`는 기본 dry-run입니다. 고정 목록은 LukukuWatch의
+`scripts/close_finished_spaces.py`는 기본 dry-run입니다. 고정 목록은 상태 폴더(`state_dir`)의
 `close-finished-spaces.json`에서 이름 및 기기/ID로 지정하며, 현재 보고 있는 공간은 제외합니다.
 모든 에이전트가 idle/done이고, 입력이 비었으며, 프로세스·백엔드 실행 세션·서브에이전트·확인 대기가
 없다는 증거와 출력 불변이 10분간 관찰돼야 후보가 됩니다. 원격이나 확인할 수 없는 상태는 유지합니다.
 백엔드 세션 연결이 없거나 오래된 경우에도 일을 끝냈다고 추정하지 않습니다.
 
 `python3 scripts/install_space_cleanup.py --install`은 5분 주기의
-`co.lukuku.close-finished-spaces`를 dry-run으로 등록합니다. 30분 이상·7회 이상의 관찰 로그를
+`<label_prefix>.close-finished-spaces`를 dry-run으로 등록합니다. 30분 이상·7회 이상의 관찰 로그를
 직접 검토한 뒤 `--install --enable-apply`로 전환해야 실제 종료됩니다. 관찰 코드가 바뀌면
 관찰 기간과 검토가 초기화됩니다. 실행 로그·잠금·상태는
-`~/Library/Application Support/LukukuWatch/`에 저장하고 Herdr mod/layout에는 쓰지 않습니다.
+상태 폴더(`state_dir`, 기본 `~/Library/Application Support/HerdrSixfold/`)에 저장하고 Herdr mod/layout에는 쓰지 않습니다.
 
 종료 직전 조건을 다시 검사하고 기록을 남긴 다음, 종료 여부와 포커스 불변을 확인합니다.
 미커밋 파일은 기록에 남기고 보존하며 git worktree도 삭제하지 않습니다. 기존 날짜/이름 기록은
@@ -136,9 +144,9 @@ apply에서는 직전 재확인 → 하네스 `park --event suspended` 기록(�
 순서입니다. 칸은 남습니다. 그 칸에서 Enter를 누르면 같은 세션을 원래 옵션 그대로 이어 열고
 (`claude --resume <id>` / `codex … resume <id>`), `hc send`로 메시지가 오면 이어 열면서 그 메시지를
 첫 입력으로 넘깁니다. 셸이 메시지를 명령으로 실행하는 일은 없습니다. 자세한 화면·폴더 기록은
-`LukukuWatch/session-sleep/notes/`에만 둡니다(하네스에는 허용 목록의 요약만).
+상태 폴더의 `session-sleep/notes/`에만 둡니다(하네스에는 허용 목록의 요약만).
 
-`python3 scripts/install_session_sleep.py --install`은 `co.lukuku.sleep-idle-sessions`를 5분 주기
+`python3 scripts/install_session_sleep.py --install`은 `<label_prefix>.sleep-idle-sessions`를 5분 주기
 dry-run으로 등록하고, `--install --enable-apply --user-approved`가 apply로 바꿉니다.
 
 ## 2026-11-03 설치본 동기화

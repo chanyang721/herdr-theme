@@ -61,7 +61,7 @@ Herdr Theme 의 음성 기능이다. herdr 플러그인(id `local.focus-queue`)�
 2. 그 복사본의 `focusq install` 로:
    - herdr 에 플러그인 연결·활성화 (`herdr plugin link`, `herdr plugin enable`). 다른 폴더에 연결돼 있으면 옮긴다
    - Claude Code 음성 설정과 전송 직전 검사 hook (아래 "바꾸는 파일"). 다른 폴더의 hook 은 같은 쓰기에서 바꾼다
-   - Codex 마이크 관리 LaunchAgent (`co.lukuku.herdr-codex-focus`)
+   - Codex 마이크 관리 LaunchAgent (`<label_prefix>.herdr-codex-focus`, 기본 `local.herdr-sixfold.herdr-codex-focus`)
    - Herdr 앱 포커스 연동 (`~/.config/herdr-app/data/sixfold/voice-integration.json`)
    - 목소리 확인 환경: 전용 Python 환경(uv, Python 3.12, numpy·sounddevice·sherpa-onnx)과 모델 2개(3D-Speaker ERes2Net 화자 인식, Silero VAD)를 `~/.local/share/herdr-focus-queue` 에 받는다
 3. `focusq check` 로 위 진입점이 모두 설치된 복사본을 가리키는지 확인한다. 하나라도 아니면 종료 코드 1
@@ -85,7 +85,7 @@ python3 voice/install.py --home /tmp/h   # 다른 홈에 파일만 쓴다(아무
 | `~/.claude/settings.json` | `voiceEnabled: true`, `voice.enabled: true`, `voice.mode: "tap"`, `language` 가 없으면 `"korean"` |
 | `~/.claude/settings.json` | `hooks.UserPromptSubmit` 에 `voice_submit_hook.py` 추가 |
 | `~/.claude/keybindings.json` | `Chat` 의 `f8 → voice:pushToTalk` |
-| `~/Library/LaunchAgents/co.lukuku.herdr-codex-focus.plist` | Codex 마이크 관리 |
+| `~/Library/LaunchAgents/<label_prefix>.herdr-codex-focus.plist` | Codex 마이크 관리 |
 | `~/.config/herdr-app/data/sixfold/voice-integration.json` | `script` (Herdr 앱 포커스 연동) |
 
 값이 실제로 바뀔 때만 `*.focusq-<시각>.bak` 백업을 남긴다. 다른 키·훅·계정 설정은 건드리지 않는다. 받아쓰기를 스페이스가 아닌 F8 토글(tap 모드)로 두는 이유는, 스페이스로 토글하면 띄어쓰기가 녹음을 끝내기 때문이다.

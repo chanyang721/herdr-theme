@@ -32,13 +32,12 @@ If a configured workspace has no folder rows, inspect `files` and `warning` in i
 
 | 공간 | 항상 유지하는 문서 |
 |---|---|
-| PeaceMinusOne | `peaceminusone-backend/docs/ARCHITECTURE.md`, `MICROSERVICES.md`, `raffle-architecture.md`, `restock-alimtalk-architecture.md`, `adr/README.md` |
-| Medihomes | 보고서 폴더의 `20261027_메디홈즈_전체구조_착수전_정리.md`, `20261027_메디홈즈_고객사관점_비즈니스구조_계약목적.md`, `20261027_메디홈즈_프로젝트_현황_참여자_환경_제약.md`의 최신 날짜판 |
+| 프로젝트 공간 | 이 기기의 `site.local.json` → `doc_tabs.<공간 이름>`에 적은 문서(`sources`: 고정 경로, `topics`: 날짜 접두사의 최신판, `folders`: 문서 폴더). 예시는 `config/site.example.json` |
 | Share | `COMMON_ROUTING.md`, `README.ko.md` |
 | Voice | 해당 공간 프로젝트의 `README.md` |
 | Herdr | `README.ko.md`, `docs/project-documents.md` |
 
-표의 한글 경로는 읽기 편한 NFC 표기다. 설정에는 디스크의 실제 Unicode 경로를 보존한다. PMO ADR 목록의 Markdown 링크를 누르면 ADR 본문도 앱 안에 임시 **열람** 탭으로 표시한다. 계속 유지하려면 **고정**을 누른다. 임시 열람 탭은 재시작 복원을 보장하지 않으며, 고정한 문서와 마지막 고정 선택은 복원한다.
+표의 한글 경로는 읽기 편한 NFC 표기다. 설정에는 디스크의 실제 Unicode 경로를 보존한다. ADR 목록 같은 문서의 Markdown 링크를 누르면 ADR 본문도 앱 안에 임시 **열람** 탭으로 표시한다. 계속 유지하려면 **고정**을 누른다. 임시 열람 탭은 재시작 복원을 보장하지 않으며, 고정한 문서와 마지막 고정 선택은 복원한다.
 
 **고정/고정 해제**로 목록을 바꾼다. 고정 해제는 최근 자동 목록에서도 해당 주제를 제외한다. 다시 추가하려면 **고정 규칙 편집**에서 규칙을 고치거나 다음 CLI를 사용한다. 버튼을 누른 때만 외부 앱이 열린다. PDF·DOCX·XLSX는 **기본 앱**, 원문 편집은 **VS Code**로 연다. Markdown 본문은 읽기 전용이다. 기본 앱 연결 및 실제 외부 편집 창 실행은 자동 검증 범위에 포함하지 않았다.
 
@@ -74,7 +73,7 @@ python3 ~/.config/herdr-app/data/sixfold/doc-tabs/resolve_doc_pins.py --space �
 
 앱 재시작·공간 전환은 core에 저장된 문서 mod와 공간별 선택 상태를 복원한다. Sixfold 탭바는 문서 탭의 닫기 버튼과 우클릭 닫기 메뉴를 제공하지 않는다. 명령/키로 닫으면 살아 있는 Sixfold 탭바가 5초 주기로 누락 탭을 같은 ID로 복구한다. 복구는 core 문서만 변경하며 공간·탭·pane을 선택하지 않는다. 앱이 멈추거나 다른 레이아웃이면 자동 복구 주기는 보장되지 않는다. 필요하면 `python3 ~/.config/herdr-app/data/sixfold/doc-tabs/install_doc_tabs.py --ensure-tabs`를 실행한다. 전체 문서 탭 기능을 끄려면 탭바의 복구 코드를 먼저 제거한 뒤 해당 mod 탭을 닫는다. 스크롤 위치의 재시작 복원은 지원하지 않는다.
 
-검증(2026-11-02): 임시 `HERDR_APP_HOME`과 별도 core socket의 실제 앱에서 한글 표·로컬 SVG 이미지, 원자 저장, 삭제/복구, 새 날짜판, 동일 날짜 충돌, 긴 본문 제한, 앱 재시작 후 선택 복원을 확인하고 `shot`을 눈으로 검사했다. 별도 core 재시작 후 문서 탭과 선택 유지, 두 공간 전환, 중복 방지, 명령으로 닫은 탭의 자동 복구와 복구 후 개발 pane 유지도 확인했다. 임시 driver는 `tests/doc-tabs-native-driver.js`, 수용 시험은 `tests/native_doc_tabs.py`이며 사용자 앱에는 설치하지 않는다. 사용자 화면 포인터·키 자동화는 사용하지 않았다. OS/기기 재부팅·절전·원격 공간·외부 앱 창 동작·본문 스크롤 복원은 미검증이다. Medihomes의 기존 자료 source가 없거나 접근 불가하면 경고를 계속 표시하며, 다른 정상 보고서의 표시와 구분한다.
+검증(2026-11-02): 임시 `HERDR_APP_HOME`과 별도 core socket의 실제 앱에서 한글 표·로컬 SVG 이미지, 원자 저장, 삭제/복구, 새 날짜판, 동일 날짜 충돌, 긴 본문 제한, 앱 재시작 후 선택 복원을 확인하고 `shot`을 눈으로 검사했다. 별도 core 재시작 후 문서 탭과 선택 유지, 두 공간 전환, 중복 방지, 명령으로 닫은 탭의 자동 복구와 복구 후 개발 pane 유지도 확인했다. 임시 driver는 `tests/doc-tabs-native-driver.js`, 수용 시험은 `tests/native_doc_tabs.py`이며 사용자 앱에는 설치하지 않는다. 사용자 화면 포인터·키 자동화는 사용하지 않았다. OS/기기 재부팅·절전·원격 공간·외부 앱 창 동작·본문 스크롤 복원은 미검증이다. 프로젝트의 기존 자료 source가 없거나 접근 불가하면 경고를 계속 표시하며, 다른 정상 보고서의 표시와 구분한다.
 
 ## 세션에서 문서 열기
 
