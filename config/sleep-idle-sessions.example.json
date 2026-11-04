@@ -1,0 +1,8 @@
+{
+  "idle_seconds": 1200,
+  "exclude_addresses": ["t3"],
+  "max_per_cycle": 4,
+  "max_sample_gap_seconds": 660,
+  "user_approved_apply": false,
+  "reviewed_observer_sha256": null
+}
