@@ -293,3 +293,5 @@ and is independent of document pins and native terminal pins.
 Project overload collaboration uses explicit task records and durable leases above existing Share routing; see [commands, safety and verification](docs/overload-collaboration.md). The sidebar drains registered collaboration work only after `collaborate.py enable`; raw terminal text is never treated as a confirmed pending queue.
 
 A low-contrast 16px session-pet strip below the toolbar reflects the current workspace agents. `sixfold.pets=false` hides it; `sixfold.pets.motion=false` or `sixfold.motion=false` stops motion.
+
+운영 기준: 설치본=main. 작업은 main 기준 짧은 브랜치→main 병합으로 진행하며, 설치는 `scripts/update_install.py`로만 수행한다.
