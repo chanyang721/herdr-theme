@@ -152,3 +152,25 @@ export function trackLinks(seen, links, now, motion = true, slots = 4) {
   const wakes = [...seen.values()].map(item => item.gone !== null ? item.gone + LINK_FADE_MS : item.link.until).filter(Number.isFinite);
   return { lanes: [...seen.values()].sort((a, b) => a.slot - b.slot), wake: wakes.length ? Math.min(...wakes) : null };
 }
+
+// The collaboration colour (periwinkle): readable on the sidebar in both themes
+// (5:1 or more on dark and light grounds), apart from the accent and the amber
+// "needs you". Chosen by how light the theme's background is.
+export const COLLAB_COLORS = { dark: '#A9B8FF', light: '#3346B8' };
+export function collabColor(t) {
+  const hex = /^#([0-9a-f]{6})/i.exec(String(t?.background ?? t?.chrome ?? '').trim())?.[1];
+  if (!hex) return COLLAB_COLORS.dark;
+  const [r, g, b] = [0, 2, 4].map(i => parseInt(hex.slice(i, i + 2), 16) / 255);
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b > 0.5 ? COLLAB_COLORS.light : COLLAB_COLORS.dark;
+}
+
+// A workspace's partners: the other computers with a space of the same project
+// (projectGroups), whether or not anyone is working there now. Null without one.
+export function spacePartners(groups, space, labelOf = () => null) {
+  const name = projectName(space, labelOf).normalize('NFC').toLowerCase();
+  const machine = space?.machine ?? null;
+  const group = groups.find(item => item.name.normalize('NFC').toLowerCase() === name && item.machines.includes(machine));
+  if (!group) return null;
+  const partners = group.machines.filter(other => other !== machine);
+  return partners.length ? { group, partners, working: partners.map(other => group.working[group.machines.indexOf(other)]) } : null;
+}
