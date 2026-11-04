@@ -107,7 +107,9 @@ class Live:
     def git(self, folder):
         return agent_sessions.git_brief(folder)
 
-    def close(self, space_id):
+    def close(self, space_id, config=None):
+        if not (config or {}).get('space_close_enabled'):
+            raise RuntimeError('space.close refused: workspaces are kept (space_close_enabled is off)')
         return run([self.app, 'do', 'space.close', json.dumps({'id': space_id, 'confirmed': True})])
 
     def notify(self, address, message):
@@ -236,7 +238,13 @@ def cycle(adapter, config, state, now, *, apply=False, only_space=None, report_d
         tracking[space['id']] = {'since': since, 'fingerprint': item.get('fingerprint'), 'decision_notified_at': old.get('decision_notified_at', 0)}
         if item['safe'] and quiet >= config.get('idle_seconds', 600):
             item['action'] = 'would_close'
-            if apply and not trial_ok:
+            if apply and not config.get('space_close_enabled'):
+                # User rule (2026-11-04): a workspace is never removed and always keeps a pane.
+                # Closing even a temporary space waits for the person's explicit answer
+                # (`space_close_enabled: true`); until then the candidate is only reported.
+                item['action'] = 'keep'
+                item['reasons'].append('space close held: workspaces are kept until the person enables it')
+            elif apply and not trial_ok:
                 item['action'] = 'keep'
                 item['reasons'].append('30-minute dry-run review not complete')
             elif apply and not reviewed:
@@ -267,7 +275,7 @@ def cycle(adapter, config, state, now, *, apply=False, only_space=None, report_d
                             result.append(item); continue
                         item['harness'] = [d for _, d in parked]
                         item['record'] = record_space(item, report_dir, now)
-                        adapter.close(space['id'])
+                        adapter.close(space['id'], config)
                         after = adapter.snapshot()
                         if any(s['id'] == space['id'] for s in after['spaces']):
                             raise RuntimeError('space.close not confirmed')

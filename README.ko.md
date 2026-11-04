@@ -151,6 +151,14 @@ apply에서는 직전 재확인 → 하네스 `park --event suspended` 기록(�
 첫 입력으로 넘깁니다. 셸이 메시지를 명령으로 실행하는 일은 없습니다. 자세한 화면·폴더 기록은
 `LukukuWatch/session-sleep/notes/`에만 둡니다(하네스에는 허용 목록의 요약만).
 
+**워크스페이스는 사라지지 않습니다(사용자 규칙, 2026-11-04).** 절전은 셸 아래에서 도는 에이전트만 대상으로
+하므로(터미널 프로그램 자체가 에이전트면 제외) `/exit` 뒤에도 칸이 남습니다. `close_finished_spaces.py`의
+임시 공간 닫기는 설정 `space_close_enabled: true`를 사람이 넣기 전까지 후보를 기록만 하고 닫지 않습니다
+(`Live.close`도 스위치 없이는 거부).
+
+`session_sleep_stub.py`는 tty를 직접 바이트 단위로 읽습니다. 에이전트가 끝나며 CR→NL 변환을 끈 채로 남겨도
+Enter(CR)와 `hc send`(붙여넣기 표식 + CR)를 인식하고, macOS의 한 줄 1024바이트 한계에도 걸리지 않습니다.
+
 `python3 scripts/install_session_sleep.py --install`은 `co.lukuku.sleep-idle-sessions`를 5분 주기
 dry-run으로 등록하고, `--install --enable-apply --user-approved`가 apply로 바꿉니다.
 

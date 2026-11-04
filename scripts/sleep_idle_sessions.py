@@ -15,7 +15,8 @@ and not an excluded address. Then, in order, with a fresh recheck first:
      delivers the message (so `hc send` never reaches a bare shell)
   4. labels mark the pane: sixfold.sleep and the header title '절전 · …'
 
-Dry-run by default. Never closes a pane, a tab or a space.
+Dry-run by default. Never closes a pane, a tab or a space: the agent must run under a shell
+that stays after /exit, so every workspace keeps its panes (user rule, 2026-11-04).
 """
 import argparse
 import datetime as dt
@@ -182,6 +183,12 @@ def inspect(address, space, snapshot, adapter, config, tab=None):
     app = (terminal.get('status') or {}).get('app')
     state = (terminal.get('status') or {}).get('state')
     item.update(app=app, title=terminal.get('title'), cwd=terminal.get('cwd'), status_ms=terminal.get('status_ms'))
+    shell = Path(str((terminal.get('argv') or [''])[0])).name
+    if shell not in agent_sessions.SHELLS:
+        # /exit would end the terminal program itself and could take the pane (and a space's
+        # last pane) with it. Sleep only ever leaves a shell and the stub behind.
+        reasons.append('terminal program is not a shell: the pane would not survive /exit')
+        return item
     if not terminal.get('reported') or app not in agent_sessions.AGENTS or state not in ('done', 'idle'):
         reasons.append('not a confirmed idle/done agent' if state != 'blocked' else 'user decision pending (blocked agent)')
         return item
