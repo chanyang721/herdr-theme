@@ -7,8 +7,8 @@ import unittest
 from unittest.mock import patch
 import os, tempfile
 os.environ["HERDR_PLUGIN_STATE_DIR"] = tempfile.mkdtemp()  # never the live state
-import focus_queue as queue
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
+import focus_queue as queue
 from app_backend import project
 
 class AppFocusTests(unittest.TestCase):
