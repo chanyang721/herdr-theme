@@ -259,4 +259,6 @@ python3 -m unittest discover -s tests -p 'test_*.py'
 herdr-app check ~/.config/herdr-app/mods/sixfold-desk
 ```
 
+클론마다 한 번 `sh scripts/install-git-hooks.sh`를 실행하면 `git push` 전에 `npm test`와 `node --check`가 먼저 돌고, 실패하면 push가 멈춥니다(일부러 건너뛸 때는 `git push --no-verify`). macOS 음성 테스트는 push마다가 아니라 수동 또는 주 1회(`Voice (macOS)` 워크플로) 돕니다.
+
 `herdr-app check`는 mod 옆에 `gpui-kit.d.ts`와 `jsconfig.json`을 만듭니다. 커밋하지 마세요. 레이아웃 변경은 테스트만이 아니라 실제 화면으로 확인합니다. 더 새 Workspace Mods로 옮기려면 `workspace-mods.lock.json`의 `commit`(과 `tag`)을 바꾸고 updater를 실행합니다. 작업은 `main`에서 짧은 브랜치로 하며 설치본은 `main`을 따릅니다. 디자인 명세는 [RECIPE.md](RECIPE.md). Apache-2.0.
