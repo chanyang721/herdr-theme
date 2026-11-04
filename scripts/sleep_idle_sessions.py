@@ -225,7 +225,9 @@ def inspect(address, space, snapshot, adapter, config, tab=None):
     if not jobs_ok:
         reasons.append(jobs_reason)
     text = adapter.screen(address)
-    if spaces.DECISION.search(text):
+    if spaces.background_running(text):
+        reasons.append('in progress: a monitor or background shell is still running')
+    elif spaces.decision_pending(text):
         reasons.append('user decision pending')
     if VOICE.search('\n'.join(text.splitlines()[-6:])):
         reasons.append('voice input active')
