@@ -120,12 +120,13 @@ From the main computer, `hc send worker/t7 "message"` sends to that computer's t
 
 ### Shared work across computers
 
-Two kinds of link join computer rows, drawn as right-angle dashed pipes in a fixed right margin of the computer list (nothing moves or reflows):
+Workspaces belong to the same project when their names match; a trailing `(computer name)` naming the workspace's own computer is ignored, so `Docs (worker)` on `worker` matches `Docs` here. Unnamed workspaces (`~`) are skipped.
 
-- **Shared work:** a project with working agents on two or more computers at once. Same project means the same workspace name; a trailing `(name)` naming the workspace's own computer is ignored, so `Docs (worker)` on `worker` matches `Docs` here, and unnamed workspaces (`~`) are skipped. The shared workspace's border turns dashed in the link colour with ⇄ on its top edge (⇄2, ⇄3 … for more computers; the tooltip names them). When fewer than two computers are working on the project, the mark and that link fade out (0.6 s; at once with motion off).
-- **Recent sends:** a pair of computers that exchanged a send keeps a link for **five minutes after the last send**, even when nothing is being worked on together.
+- **A partner is always visible:** whenever that project has a workspace on another computer, its header shows a 14px computer icon and the partner's name at 12px, even with no work in progress. With more partners it reads, for example, `worker +1`; the tooltip lists every partner and its working-agent count. The collaboration colour is periwinkle: `#A9B8FF` on dark themes, `#3346B8` on light themes, adjusted for at least 4.5:1 text contrast on the header (win98 uses `#3043AF`).
+- **Working together now:** when this computer and at least one partner both have working agents on the project, the workspace gets a **2px solid outline, a 10% tint and a filled ⇄ badge** on its top edge. `⇄2`, `⇄3` … count the other computers working on it. These are overlays, so the layout stays still. When shared work ends, the workspace returns to its usual appearance with the partner name still visible; the badge fades with motion on.
+- **Find the other side:** hover a workspace to outline and tint its partner computer rows; hover a computer row to highlight its partner workspaces. Workspace partner names and shared-work marks are independent of the computer-list pipes' four-link limit. Orange needs-you / approval-waiting marks remain visible.
 
-Neither is evidence that a particular message was delivered or read.
+The computer list separately draws up to four right-angle dashed pipes in a fixed right margin: for shared work, or for a pair of computers for **five minutes after their last send**. The ↑/↓ counts still cover the **last ten minutes**. A shared-work mark shows simultaneous activity on the same project; a send link shows a send event. Neither proves that a particular message was delivered or read.
 
 ### Sends between computers
 
