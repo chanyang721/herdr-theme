@@ -145,6 +145,14 @@ def install():
     # Relinking from another folder: events go to this copy from the next one.
     # Running listeners keep the code they started with until they end.
     current = plugin()
+    # Moving an existing install keeps its choice about the submit hook: it is
+    # repointed if it was there and not added if it was not. A new install adds it.
+    try:
+        commands = [hook.get("command", "") for entry in submit_hooks(json.load(open(SETTINGS)))
+                    for hook in entry.get("hooks", [])]
+    except (OSError, ValueError):
+        commands = []
+    want_hook = not current or any(command.rstrip().endswith("/voice_submit_hook.py") for command in commands)
     if current and not linked():
         herdr("plugin", "unlink", PLUGIN_ID)
     if not linked():
@@ -154,7 +162,10 @@ def install():
     if not (plugin() or {}).get("enabled"):
         herdr("plugin", "enable", PLUGIN_ID)
     edit_json(SETTINGS, set_voice)
-    edit_json(SETTINGS, set_submit_hook)
+    if want_hook:
+        edit_json(SETTINGS, set_submit_hook)
+    else:
+        print("submit hook left off as before: ./focusq voice-hook adds it")
     edit_json(KEYBINDINGS, lambda data: chat_bindings(data).__setitem__(VOICE_KEY, "voice:pushToTalk"))
     edit_json(INTEGRATION, set_integration)
     codex = [sys.executable, os.path.join(ROOT, "install_codex_focus.py")]
@@ -179,8 +190,10 @@ def check():
     except (OSError, ValueError):
         settings = {}
     commands = [hook.get("command", "") for entry in submit_hooks(settings) for hook in entry.get("hooks", [])]
-    if SUBMIT_HOOK not in commands or any(old_submit_hook(command) for command in commands):
+    if any(old_submit_hook(command) for command in commands):
         problems.append(f"Claude submit hook: {[c for c in commands if c.endswith('voice_submit_hook.py')]}")
+    elif SUBMIT_HOOK not in commands:
+        print("note - Claude submit hook is off (./focusq voice-hook adds it)")
     try:
         script = json.load(open(INTEGRATION)).get("script")
     except (OSError, ValueError):
