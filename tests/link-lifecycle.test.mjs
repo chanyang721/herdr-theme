@@ -170,3 +170,18 @@ test('after a send link has gone, the ten-minute counts still schedule their red
     assert.equal(view.linkWake, at + 10 * 60 * 1000 + 1, 'redraw when the send leaves the ↑/↓ window');
   } finally { delete globalThis.__linkRuntime; }
 });
+
+test('a mod pane (no terminal) gets no session row and is not counted', async () => {
+  const spaces = [{ id: 'home', machine: null, name: 'Docs', tabs: [{ id: 'h' }] }];
+  const runtime = sidebarRuntime(spaces, [{ address: 't1', space: 'home', status: 'idle' }], [null]);
+  runtime.panes = () => [
+    { pane: 'p1', terminal: 't1', tab: 'h', title: 'Writer', status: 'idle' },
+    { pane: 'p2', terminal: null, mod: 'project-docs-tabs', tab: 'h', title: 'project-docs-tabs' },
+  ];
+  try {
+    const Sidebar = await sidebar(runtime);
+    const rows = renderRows(quietView(Sidebar));
+    assert(rows.has('sf-member-p1'), 'the terminal keeps its row');
+    assert(!rows.has('sf-member-p2'), 'the mod pane has none');
+  } finally { delete globalThis.__linkRuntime; }
+});
