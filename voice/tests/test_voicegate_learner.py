@@ -71,3 +71,50 @@ class LearnerTests(unittest.TestCase):
 if __name__ == "__main__":
     unittest.main()
 
+
+@unittest.skipIf(gate is None, "needs the voice environment")
+class CalibrationTests(unittest.TestCase):
+    """Enrollment writes the person's microphone into voice.local.json."""
+
+    def setUp(self):
+        self.saved = os.environ["HERDR_VOICE_SETTINGS"]
+        self.path = os.path.join(tempfile.mkdtemp(), "voice.local.json")
+        os.environ["HERDR_VOICE_SETTINGS"] = self.path
+
+    def tearDown(self):
+        os.environ["HERDR_VOICE_SETTINGS"] = self.saved
+        gate.DEVICE = ""
+
+    def calibrate(self, levels, builtin):
+        original = gate.builtin_input
+        gate.builtin_input = lambda: builtin
+        try:
+            return gate.calibrate("Example Headset", levels)
+        finally:
+            gate.builtin_input = original
+
+    def test_a_headset_is_allowed_to_send_and_gets_a_gain_for_its_level(self):
+        speech_db, gain, headset = self.calibrate([-40, -39, -38], builtin=False)
+        self.assertTrue(headset)
+        self.assertAlmostEqual(gain, round(10 ** ((gate.TARGET_SPEECH_DB + 39) / 20), 2))
+        data = json.load(open(self.path))
+        self.assertEqual(data["auto_send_devices"], ["Example Headset"])
+        self.assertEqual(data["devices"]["example-headset"]["speech_db"], -39.0)
+        self.calibrate([-39], builtin=False)  # enrolling again adds it once
+        self.assertEqual(json.load(open(self.path))["auto_send_devices"], ["Example Headset"])
+
+    def test_a_builtin_microphone_is_calibrated_but_not_allowed_to_send(self):
+        _, gain, headset = self.calibrate([-80], builtin=True)
+        self.assertFalse(headset)
+        self.assertEqual(gain, gate.MAX_GAIN)
+        self.assertNotIn("Example Headset", json.load(open(self.path)).get("auto_send_devices", []))
+
+    def test_a_threshold_set_for_the_microphone_wins_over_the_voiceprint(self):
+        gate.VOICEPRINT = os.path.join(tempfile.mkdtemp(), "voiceprint-example-headset.json")
+        with open(gate.VOICEPRINT, "w") as handle:
+            json.dump({"vector": [1.0, 0.0], "threshold": 0.4}, handle)
+        gate.DEVICE = "example-headset"
+        self.assertEqual(gate.load_voiceprint()[1], 0.4)
+        with open(self.path, "w") as handle:
+            json.dump({"devices": {"example-headset": {"threshold": 0.45}}}, handle)
+        self.assertEqual(gate.load_voiceprint()[1], 0.45)
