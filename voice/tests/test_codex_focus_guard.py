@@ -108,7 +108,7 @@ class InstallerTests(unittest.TestCase):
             path = installer.install(home, Path(guard.__file__).parent, Path(sys.executable), start=False)
             value = plistlib.loads(path.read_bytes())
             self.assertEqual(value['ProgramArguments'][-1], '--serve')
-            self.assertEqual(value['Label'], installer.LABEL)
+            self.assertEqual(value['Label'], installer.label(home))
             self.assertFalse((home / '.config').exists())
             self.assertFalse((home / '.codex').exists())
             run.assert_not_called()

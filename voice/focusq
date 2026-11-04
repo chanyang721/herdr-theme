@@ -99,7 +99,6 @@ def set_voice(data):
     data.setdefault("language", "korean")
 
 
-CODEX_LABEL = "co.lukuku.herdr-codex-focus"  # keep in step with install_codex_focus.LABEL
 SUBMIT_HOOK = f"/usr/bin/python3 {os.path.join(ROOT, 'voice_submit_hook.py')}"
 
 
@@ -200,7 +199,10 @@ def check():
         script = None
     if script != os.path.join(ROOT, "focus_queue.py"):
         problems.append(f"app focus routing: {script}")
-    agent = os.path.expanduser(f"~/Library/LaunchAgents/{CODEX_LABEL}.plist")
+    sys.path.insert(0, ROOT)
+    sys.dont_write_bytecode = True  # the installed copy stays free of __pycache__
+    from install_codex_focus import label as codex_label
+    agent = os.path.expanduser(f"~/Library/LaunchAgents/{codex_label(os.path.expanduser('~'))}.plist")
     try:
         import plistlib
         arguments = plistlib.load(open(agent, "rb")).get("ProgramArguments", [])
