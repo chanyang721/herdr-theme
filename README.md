@@ -231,21 +231,32 @@ Update installed copies of `scripts/route.py` and `scripts/collect_workflow.py` 
 they now call `hc` directly instead of the tracing launcher. Existing shells may
 retain their old PATH until refreshed.
 
-## Optional app voice routing
+## Optional voice (macOS)
 
-With an app-compatible `herdr-focus-queue` checkout already installed:
+`voice/` is a herdr plugin for directing agents by voice through a headset: only the focused pane
+records (Claude Code dictation on F8, Codex mute/unmute on F9), a finished sentence is sent after a
+short pause, and a local speaker check refuses dictation that was not the enrolled person's voice.
+Install or update it from this checkout:
 
 ```sh
-python3 scripts/install_voice.py /path/to/herdr-focus-queue
+bash voice/install.sh                    # first time: also installs herdr and uv with Homebrew
+python3 scripts/update_install.py voice  # later updates (or python3 voice/install.py)
 ```
 
-This opt-in integration publishes the active app pane to a local heartbeat. The voice plugin then
+The plugin is copied to `~/.local/share/herdr-focus-queue/plugin` and linked from there, so editing
+this checkout does not change what runs. Each person's microphones and tuned values live in their own
+`~/.config/herdr-app/data/sixfold/voice.local.json`, written when they enroll; the repository holds
+general defaults only. Voice data never leaves the Mac. Details: [voice/README.md](voice/README.md)
+(Korean).
+
+The app side publishes the active app pane to a local heartbeat. The voice plugin then
 routes microphones to that pane, including existing TUI attachments and native core sessions.
 Background app windows do not override TUI focus. The existing speech-end submission rules remain
 in the voice plugin; the theme grants no microphone permission or authentication. Existing Codex
 voice connections are muted/unmuted, never toggled off. Native Codex starts voice only from an observed
 empty CLI without a current connection. Remove `data/sixfold/voice-integration.json` under app home to
-stop the integration; that does not disconnect a voice conversation.
+stop the integration; that does not disconnect a voice conversation. `scripts/install_voice.py` remains as
+a compatibility name for `voice/install.py`.
 
 ## What it runs
 

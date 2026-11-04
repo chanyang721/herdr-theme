@@ -67,7 +67,7 @@ python3 scripts/update_install.py mods/sixfold-desk/main.js mods/sixfold-desk/mo
 
 컴퓨터별 화면과 원격 생성은 머신 레이아웃을 지원하는 앱·코어가 필요하며 0.1.17에서 검증했습니다. 사용자별 표시 이름과 기본 폴더는 로컬의 `~/.config/herdr-app/data/sixfold/computers.local.json`에 둡니다. 형식은 [English README의 Computers and remote agents](README.md#computers-and-remote-agents)를 참고하세요. 개인 IP·경로·인증 정보는 저장소에 넣지 않습니다. 기존 설치를 업데이트할 때는 `mods/sixfold-desk/main.js`와 `mods/sixfold-new-space/main.js`를 함께 적용하고 두 mod를 검사하세요.
 
-앱 대응 버전의 `herdr-focus-queue`가 설치돼 있다면 `python3 scripts/install_voice.py /path/to/herdr-focus-queue`로 선택한 pane의 음성을 연동할 수 있습니다. 음성 연결 종료와 마이크 음소거를 구분하며, 앱이 비활성 상태이면 TUI 포커스를 덮어쓰지 않습니다. 문장 종료 뒤 자동 전송은 음성 플러그인의 기존 규칙을 사용합니다.
+음성 기능은 `voice/`에 있습니다. `bash voice/install.sh`(처음) 또는 `python3 scripts/update_install.py voice`(업데이트)로 설치하면 선택한 pane만 마이크를 받습니다. 마이크·보정값 같은 개인 값은 각자의 `~/.config/herdr-app/data/sixfold/voice.local.json`에 둡니다. 자세한 내용은 [voice/README.md](voice/README.md)에 있습니다. 음성 연결 종료와 마이크 음소거를 구분하며, 앱이 비활성 상태이면 TUI 포커스를 덮어쓰지 않습니다. 문장 종료 뒤 자동 전송은 음성 플러그인의 기존 규칙을 사용합니다.
 
 메시지 개수는 워크스페이스를 누르지 않아도 0.25초마다 갱신합니다. 저장 내용이 같으면 다시 그리지 않습니다. 에이전트가 작업을 마치거나 해당 pane을 포커스하면 개수가 사라지고, 읽은 위치는 `data/sixfold/messages-read.json`에 저장되어 재시작해도 다시 쌓이지 않습니다. Share→프로젝트 같은 위치 전달과 빈 pane 대체는 [COMMON_ROUTING.md](COMMON_ROUTING.md)를 따르며, `python3 scripts/route.py --enable`로 현재 checkout의 대기열 처리를 연결합니다. Share 알림은 `data/sixfold/alerts.json`을 읽으며 수집기는 별도입니다.
 
