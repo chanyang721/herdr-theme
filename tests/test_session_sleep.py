@@ -25,7 +25,7 @@ def snapshot():
     terminal = lambda address, pid: {  # noqa: E731
         'address': address, 'state': 'live', 'pid': pid, 'created_ms': 5, 'reported': True, 'title': 'PR 검토 마무리',
         'status': {'app': 'claude-code', 'state': 'done'}, 'status_ms': (NOW - 3600) * 1000, 'turn': 3,
-        'cwd': '/fixture/repo', 'labels': {}, 'foreground': {'pid': pid + 1, 'argv': ['claude', '--dangerously-skip-permissions'], 'name': 'claude'}}
+        'cwd': '/fixture/repo', 'labels': {}, 'argv': ['/bin/zsh', '-l'], 'foreground': {'pid': pid + 1, 'argv': ['claude', '--dangerously-skip-permissions'], 'name': 'claude'}}
     return {
         'status': {'space': 'seen', 'tab': 'tab-seen', 'focused_pane': 'p-focus', 'errors': []},
         'spaces': [
@@ -196,6 +196,20 @@ class SleepTests(unittest.TestCase):
         self.assertTrue(agent_sessions.inherited_child_session(1, reader=lambda p: env))
         self.assertFalse(agent_sessions.inherited_child_session(1, reader=lambda p: 'claude HOME=/x'))
 
+    def test_an_agent_that_is_the_terminal_program_never_sleeps(self):
+        # /exit would end the terminal and could remove the pane, maybe a space's last one.
+        self.live.data['terminals']['t12']['argv'] = ['claude', '--resume', SID]
+        got = self.run_cycle()
+        self.assertIn('terminal program is not a shell: the pane would not survive /exit', got['t12']['reasons'])
+        self.assertNotIn(('keys', 't12', '/exit<enter>'), self.live.calls)
+
+    def test_sleep_never_closes_panes_tabs_or_spaces(self):
+        self.run_cycle()
+        self.assertIn(('keys', 't12', '/exit<enter>'), self.live.calls)
+        self.assertFalse([c for c in self.live.calls if c[0] in ('close', 'kill', 'rm', 'pane.close', 'space.close')])
+        with self.assertRaisesRegex(RuntimeError, 'workspaces are kept'):   # inherited close refuses too
+            sleep.Live('herdr-app-not-run', 'hc-not-run').close('sp-any', self.config)
+
     def test_order_is_harness_then_exit_then_stub_then_labels(self):
         self.run_cycle()
         steps = [c for c in self.live.calls if c[1] == 't12' or (c[0] == 'park' and c[2] == 't12')]
@@ -320,19 +334,68 @@ class StubTests(unittest.TestCase):
         self.assertEqual(stub.command(ticket, ''), ['codex', '--no-daemon', 'resume', SID])
         self.assertEqual(stub.command(ticket, '<hc from="t3">이어서 해</hc>'), ['codex', '--no-daemon', 'resume', SID, '<hc from="t3">이어서 해</hc>'])
 
-    def test_enter_resumes_in_the_original_folder_and_clears_labels(self):
+    def run_stub_in_pty(self, keys, icrnl=False):
+        """The real stub in a real terminal whose CR→NL translation is off (as an exiting agent can
+        leave it). The 'agent' it execs prints its argv and folder; `hc` is a fake on PATH."""
+        import os, pty, select as sel, termios, time
         with tempfile.TemporaryDirectory() as tmp:
-            path = Path(tmp) / 't12.json'
-            path.write_text(json.dumps({'address': 't12', 'app': 'claude-code', 'session_id': SID, 'space_id': 'sp', 'cwd': tmp,
-                                        'argv': ['claude', '--resume', SID], 'config': str(Path(tmp) / 'none.json')}))
-            with patch.object(stub.sys, 'stdin') as stdin, patch.object(stub.select, 'select', return_value=([], [], [])), \
-                    patch.object(stub.subprocess, 'run') as run, patch.object(stub.os, 'execvp') as execvp, \
-                    patch.object(stub.os, 'chdir') as chdir, patch('builtins.print'):
-                stdin.readline.return_value = '\n'
-                stub.main([str(path)])
-            execvp.assert_called_once_with('claude', ['claude', '--resume', SID])
-            chdir.assert_called_once_with(tmp)
-            self.assertIn(['hc', 'label', 't12', 'sixfold.sleep=', 'sixfold.title='], [c.args[0] for c in run.call_args_list])
+            root = Path(tmp)
+            (root / 'bin').mkdir()
+            fake_hc = root / 'bin/hc'
+            fake_hc.write_text('#!/bin/sh\necho "$@" >> "' + str(root / 'hc.log') + '"\n'); fake_hc.chmod(0o755)
+            agent = [sys.executable, '-c', 'import os,sys,json; print("AGENT", json.dumps([sys.argv[1:], os.getcwd()]))']
+            ticket = root / 't13.json'
+            ticket.write_text(json.dumps({'address': 't13', 'app': 'codex', 'session_id': SID, 'space_id': 'sp', 'cwd': str(root),
+                                          'argv': agent + ['resume', SID], 'config': str(root / 'none.json'), 'title': 'x'}))
+            pid, fd = pty.fork()
+            if pid == 0:
+                attrs = termios.tcgetattr(0)
+                attrs[0] = attrs[0] | termios.ICRNL if icrnl else attrs[0] & ~termios.ICRNL
+                termios.tcsetattr(0, termios.TCSANOW, attrs)
+                os.environ['PATH'] = str(root / 'bin') + ':' + os.environ['PATH']
+                os.execv(sys.executable, [sys.executable, str(Path(stub.__file__)), str(ticket)])
+            out, end, sent = b'', time.time() + 15, False
+            while time.time() < end:
+                ready, _, _ = sel.select([fd], [], [], 0.1)
+                if ready:
+                    try:
+                        chunk = os.read(fd, 65536)
+                    except OSError:
+                        break
+                    if not chunk:
+                        break
+                    out += chunk
+                if not sent and b'ctrl+c' in out:
+                    os.write(fd, keys); sent = True
+                if b'AGENT' in out and out.rstrip().endswith(b']'):
+                    break
+            if not os.waitpid(pid, os.WNOHANG)[0]:
+                os.kill(pid, 9); os.waitpid(pid, 0)   # a stub still waiting for Enter: the test fails, never hangs
+            text = out.decode('utf-8', 'replace')
+            self.assertNotIn('^M', text)
+            line = text[text.index('AGENT ['):].splitlines()[0]
+            labels = (root / 'hc.log').read_text() if (root / 'hc.log').exists() else ''
+            args, cwd = json.loads(line[len('AGENT '):])
+            return args, Path(cwd).resolve() == root.resolve(), labels
+
+    def test_enter_as_a_bare_cr_resumes_in_the_original_folder_and_clears_labels(self):
+        args, same_folder, labels = self.run_stub_in_pty(b'\r')
+        self.assertEqual(args, ['resume', SID])
+        self.assertTrue(same_folder)
+        self.assertIn('label t13 sixfold.sleep= sixfold.title=', labels)
+
+    def test_an_hc_send_message_is_handed_over_whole(self):
+        # hc send: bracketed paste of the wrapped message, then Enter (a CR).
+        msg = '<hc from="t3b">하네스 이어 열기 확인용입니다. 답만 하세요: OK</hc>'
+        args, _, _ = self.run_stub_in_pty(('\x1b[200~' + msg + '\x1b[201~\r').encode())
+        self.assertEqual(args, ['resume', SID, msg])
+        long = '<hc from="t5">' + '가' * 1500 + '</hc>'    # longer than a macOS canonical line
+        args, _, _ = self.run_stub_in_pty((long + '\r').encode(), icrnl=True)
+        self.assertEqual(args, ['resume', SID, long])
+
+    def test_message_text_is_cleaned_of_paste_markers_and_crs(self):
+        self.assertEqual(stub.message_of(b'\x1b[200~a\r\nb\rc\x1b[201~\r'), 'a\nb\nc')
+        self.assertEqual(stub.message_of(b'\r'), '')
 
 
 class InstallTests(unittest.TestCase):
