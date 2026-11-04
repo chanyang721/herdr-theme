@@ -66,12 +66,13 @@ export function treeSections(documents, options = {}) {
     for (const section of harness.sections) {
       const rows = [];
       for (const group of section.groups) {
-        const docs = group.ids.map(id => byId.get(id)).filter(d => d && matches(d, query));
+        // Versioned harness documents list their newest link; older ones fold under it.
+        const docs = headRows(group.ids.map(id => byId.get(id)).filter(d => d && d.state !== 'previous'));
         if (!docs.length) continue;
         if (group.label) rows.push({ heading: group.label });
-        for (const d of docs) rows.push({ doc: d, depth: group.label ? 1 : 0, versions: 0, expanded: false });
+        for (const r of docs) rows.push({ ...r, depth: r.depth + (group.label ? 1 : 0) });
       }
-      const count = rows.filter(r => r.doc).length;
+      const count = rows.filter(r => r.doc && r.doc.state !== 'previous').length;
       if (!count) continue;
       const key = `harness:${section.id}`, expanded = isOpen(key, section.id === 'status');
       sections.push({ key, label: `${HARNESS_LABEL} · ${section.label}`, count, expanded, harness: true,

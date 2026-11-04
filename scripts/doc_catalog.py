@@ -272,9 +272,22 @@ def harness(root, known_paths=None):
         elif top == 'decisions':
             row(path, target, mtime, 'decisions')
         elif top == 'docs':
-            row(path, target, mtime, 'docs', relative.parts[1] if len(relative.parts) > 2 else '')
+            entry = row(path, target, mtime, 'docs', relative.parts[1] if len(relative.parts) > 2 else '')
+            if len(relative.parts) > 3:
+                # docs/<group>/<document>/<dated link>: one document kept in several versions.
+                entry['bundle'] = str(relative.parent)
+                entry['label'] = label_of(relative.parts[-2] + Path(path.name).suffix)
         elif top == 'brain':
             row(path, target, mtime, 'brain')
+    bundles = {}
+    for entry in rows:
+        if entry.get('bundle'):
+            bundles.setdefault(entry['bundle'], []).append(entry)
+    for members in bundles.values():
+        members.sort(key=lambda r: (r.get('date', ''), r['mtime'], r['name']), reverse=True)
+        members[0]['versions'] = [r['id'] for r in members[1:]]
+        for other in members[1:]:
+            other.update(state='previous', head=members[0]['id'], label=label_of(other['name']))
     order = {name: index for index, name in enumerate(STATUS_ORDER)}
     status.sort(key=lambda r: (order.get(fold(r['name']), len(order)), r['relative']))
     for section, label in HARNESS_SECTIONS:

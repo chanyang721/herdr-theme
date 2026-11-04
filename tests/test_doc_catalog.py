@@ -131,6 +131,22 @@ class CatalogTests(unittest.TestCase):
         self.assertFalse(any(d['name'].startswith('.') for d in rows.values()))
         self.assertIn(str(root), data['watchRoots'])
 
+    def test_harness_version_folders_fold_under_the_newest_link(self):
+        root = self.harness_folder()
+        older = self.file('20261101_데모_구조.md', base=self.root / 'src')
+        newer = self.file('20261103_데모_구조.md', base=self.root / 'src')
+        bundle = root / 'docs/주제/데모_구조'
+        bundle.mkdir(parents=True)
+        os.symlink(older, bundle / older.name)
+        os.symlink(newer, bundle / newer.name)
+        data = self.view()
+        rows = {d['name']: d for d in data['documents'] if d.get('harness')}
+        head, previous = rows[newer.name], rows[older.name]
+        self.assertEqual((head['label'], head['versions']), ('데모 구조', [previous['id']]))
+        self.assertEqual((previous['state'], previous['head']), ('previous', head['id']))
+        group = next(s for s in data['harness']['sections'] if s['id'] == 'docs')['groups'][0]
+        self.assertEqual(group['label'], '주제')
+
     def test_harness_is_hidden_without_a_local_entry(self):
         self.harness_folder(space='other')
         self.assertIsNone(self.view()['harness'])

@@ -325,6 +325,16 @@ test('harness rows that link to a listed document select that document', async t
   h.handlers.get('doc-h2')(null, h.cx); await h.flush(); assert.equal(h.view.selected, 'a');
 });
 
+test('versioned harness documents show the newest link with older ones folded', () => {
+  const docs = [{ id: 'n', label: '구조', harness: true, versions: ['o'] }, { id: 'o', label: '구조 old', harness: true, state: 'previous', head: 'n' }];
+  const harness = { sections: [{ id: 'docs', label: '주제 문서', groups: [{ label: '주제', ids: ['n', 'o'] }] }] };
+  const [section] = treeSections(docs, { harness, open: { 'harness:docs': true } });
+  assert.equal(section.count, 1);
+  assert.deepEqual(section.rows.map(r => r.heading || `${r.doc.id}:${r.versions}`), ['주제', 'n:1']);
+  const unfolded = treeSections(docs, { harness, open: { 'harness:docs': true }, families: new Set(['n']) })[0];
+  assert.deepEqual(unfolded.rows.filter(r => r.doc).map(r => [r.doc.id, r.depth]), [['n', 1], ['o', 2]]);
+});
+
 test('tree helpers: search words, short dates and kind counts', () => {
   assert.ok(matches({ label: '견적 회신안', folder: '프로젝트' }, '회신 프로젝트'));
   assert.ok(!matches({ label: '견적' }, '구조'));
