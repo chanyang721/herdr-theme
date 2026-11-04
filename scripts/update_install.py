@@ -115,6 +115,26 @@ def digest(data):
     return hashlib.sha256(data).hexdigest()
 
 
+CONFIG_TARGETS = {
+    Path('config/templates/settings.json'): Path('settings.json'),
+    Path('config/templates/shared.json'): Path('shared.json'),
+    Path('config/templates/data/sixfold/collaboration.json'): Path('data/sixfold/collaboration.json'),
+    Path('config/templates/data/sixfold/project-docs-pins.json'): Path('data/sixfold/project-docs-pins.json'),
+}
+
+
+def fill_missing(current, defaults):
+    if not isinstance(current, dict) or not isinstance(defaults, dict):
+        raise InstallError('Portable JSON settings must be objects')
+    result = dict(current)
+    for key, value in defaults.items():
+        if key not in result:
+            result[key] = value
+        elif isinstance(result[key], dict) and isinstance(value, dict):
+            result[key] = fill_missing(result[key], value)
+    return result
+
+
 def read_status(cli, env):
     result = subprocess.run([cli, 'status'], env=env, check=True, capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=15)
     status = json.loads(result.stdout)
@@ -127,17 +147,27 @@ def input_files(repo, home, names):
     files = []
     for name in names:
         relative = Path(name)
-        if relative.is_absolute() or '..' in relative.parts or len(relative.parts) < 2:
+        if relative.is_absolute() or '..' in relative.parts or (len(relative.parts) < 2 and relative != Path('keys.json')):
             raise InstallError(f'Use explicit repository-relative file paths: {name}')
-        if relative.parts[0] not in ('mods', 'layouts', 'themes', 'scripts') or any(part.startswith('.') for part in relative.parts):
+        if relative.parts[0] not in ('mods', 'layouts', 'themes', 'scripts', 'bin', 'config', 'keys.json') or any(part.startswith('.') for part in relative.parts):
             raise InstallError(f'Unsupported installation target: {name}')
         if relative.parts[0] == 'mods' and ('recovery' in relative.parts[1] or len(relative.parts) < 3):
             raise InstallError('Do not clone mod directories into recovery mods')
         target_relative = relative
         if relative.parts[0] == 'scripts':
-            if len(relative.parts) != 2:
+            if len(relative.parts) < 2:
                 raise InstallError(f'Use scripts/<file>; installed destination is scripts/sixfold/<file>: {name}')
-            target_relative = Path('scripts/sixfold') / relative.name
+            target_relative = Path('scripts/sixfold', *relative.parts[1:])
+        elif relative.parts[0] == 'bin':
+            if len(relative.parts) < 2:
+                raise InstallError(f'Use bin/<file>; installed destination is bin/sixfold/<file>: {name}')
+            target_relative = Path('bin/sixfold', *relative.parts[1:])
+        elif relative == Path('keys.json'):
+            target_relative = Path('keys.json')
+        elif relative.parts[0] == 'config':
+            if relative not in CONFIG_TARGETS:
+                raise InstallError(f'Only portable config templates may be installed: {name}')
+            target_relative = CONFIG_TARGETS[relative]
         source, target = repo / relative, home / target_relative
         if not source.is_file() or source.is_symlink() or not source.resolve().is_relative_to(repo.resolve()):
             raise InstallError(f'Not a regular repository file: {name}')
@@ -158,6 +188,15 @@ def input_files(repo, home, names):
                     for child in node:
                         validate(child)
             validate(value)
+        if (relative.parts[0] == 'config' or relative == Path('keys.json')) and target.exists():
+            try:
+                current = json.loads(target.read_text(encoding='utf-8'))
+                defaults = json.loads(payload)
+            except (OSError, UnicodeError, json.JSONDecodeError) as error:
+                raise InstallError(f'Could not seed portable config {target_relative}: {error}') from error
+            seeded = fill_missing(current, defaults)
+            if seeded != current:
+                payload = (json.dumps(seeded, ensure_ascii=False, indent=2) + '\n').encode()
         if target_relative not in [item[0] for item in files]:
             files.append((target_relative, payload, source.stat().st_mode & 0o777))
     return files
