@@ -24,6 +24,8 @@ test('pane header shows the session share of the weekly window, or a quiet unkno
  const shares={terminals:{
   t1:{agent:'claude',known:true,share:9.6,limitPart:1.25,limitWeek:13,model:'claude-opus-5-5',since:'2026-10-31'},
   t7:{agent:'codex',known:false,reason:'session_unconfirmed'},
+  t1t:{agent:'claude',known:true,share:0.6,since:'2026-10-31',sleeping:true},
+  t1u:{agent:'codex',known:false,reason:'session_not_indexed',sleeping:true},
  }};
  const shared=key=>key===module.SHARES_KEY?shares:undefined;
  module.paneUsage({pane:'p1',terminal:'t1'},theme,shared);
@@ -37,6 +39,13 @@ test('pane header shows the session share of the weekly window, or a quiet unkno
  assert.deepEqual(texts,[],'a pane with no agent session shows nothing');
  assert.match(module.paneUsageTip(shares.terminals.t1,'t1'),/현재 주간 한도 기간\(2026-10-31~\) Claude 사용량 중 9\.6%\n주간 한도 13% 중 약 1\.3%p/);
  assert.match(module.paneUsageTip(shares.terminals.t7,'t7'),/세션 미확인/);
+ texts.length=0;
+ module.paneUsage({pane:'p1t',terminal:'t1t'},theme,shared);
+ assert.deepEqual(texts,['절전 · 이번 주','0.6%'],'a parked pane keeps its share, labelled asleep');
+ texts.length=0;
+ module.paneUsage({pane:'p1u',terminal:'t1u'},theme,shared);
+ assert.deepEqual(texts,['절전 · 사용량 —']);
+ assert.match(module.paneUsageTip(shares.terminals.t1t,'t1t'),/^t1t · 절전 중 \(이어 열 대화\) · 현재 주간 한도 기간/);
  assert.equal(module.sharePercent(0.04),'<0.1%');
  assert.equal(module.sharePercent(23.4),'23%');
 });
