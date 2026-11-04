@@ -32,8 +32,8 @@ Herdr Theme은 레이아웃과 사이드바입니다. 설치기는 [Herdr Worksp
 | System Metrics·MCP Status·CLI Status·Plan Usage·Agent Usage | 됨 | 됨 |
 | 워크플로 수집기(서브에이전트 트리) | 됨 | 됨(아래 작업 스케줄러 예시) |
 | Document Viewer: Markdown | 됨 | 됨 |
-| Document Viewer: HTML 미리보기 | 됨(WebKit 스냅숏) | 안 됨 — 미리보기 탭에 렌더러가 없다는 오류 |
-| Document Viewer: 저장하면 자동 새로고침 | 됨 | 안 됨 — 파일을 다시 열어야 반영 |
+| Document Viewer: HTML 미리보기 | 됨(WebKit 스냅숏) | 안 됨 — 안내와 함께 소스로 열림 |
+| Document Viewer: 저장하면 자동 새로고침 | 됨 | 됨 |
 | 음성 | 됨 | 안 됨(설치기가 건너뜀) |
 | 실시간 TUI 연결 | 됨(Linux도) | 안 됨(`termios` 필요) |
 | 대기 세션 절전·끝난 워크스페이스 정리 | 됨(LaunchAgent) | 안 됨 |
@@ -69,7 +69,7 @@ herdr-app do layout.switch --name sixfold
 설치기가 하는 일:
 
 - 테마의 mod·레이아웃·팔레트·도우미 스크립트를 앱 홈에 설치합니다(모든 운영체제에서 `~/.config/herdr-app`, `HERDR_APP_HOME`으로 변경 가능).
-- [`workspace-mods.lock.json`](workspace-mods.lock.json)에 고정된 커밋의 Herdr Workspace Mods를 `~/.local/share/herdr-sixfold/vendor/herdr-workspace-mods`로 받아 정확히 그 커밋이고 로컬 변경이 없는지 확인한 뒤 `system-metrics`, `mcp-status`, `cli-status`, `plan-usage`, `agent-usage`를 테마와 함께 설치합니다. 설치한 버전은 `data/sixfold/workspace-mods.json`에 기록합니다.
+- [`workspace-mods.lock.json`](workspace-mods.lock.json)에 고정된 커밋의 Herdr Workspace Mods를 `~/.local/share/herdr-sixfold/vendor/herdr-workspace-mods/<커밋 앞 12자>`(커밋마다 폴더 하나, 받기에 성공했을 때만 생김)으로 받아 정확히 그 커밋이고 로컬 변경이 없는지 확인한 뒤 그 커밋이 추적하는 파일로 `system-metrics`, `mcp-status`, `cli-status`, `plan-usage`, `agent-usage`를 테마와 함께 설치합니다. 설치한 버전은 `data/sixfold/workspace-mods.json`에 기록합니다.
 - Files 패널이 있는 레이아웃이 있으면(Herdr를 처음 켜면 `main`이 생김) Document Viewer 자체 설치기를 실행하고, 없으면 나중에 실행할 명령을 출력합니다. macOS가 아니면 Markdown만 설치합니다.
 - 이미 있는 파일이나 `layout:sixfold` 키 섹션은 덮어쓰지 않고 다른 레이아웃·설정·단축키는 보존합니다. `--update`는 전에 설치한 것을 갱신하되 직접 바꾼 레이아웃·팔레트는 그대로 둡니다.
 
@@ -186,7 +186,7 @@ Start-ScheduledTask -TaskName 'Herdr Theme workflow collector'
 
 ![MCP Status](docs/images/mcp-status.png)
 
-`claude mcp list`(와 `codex mcp list`, 이름으로 합침)의 MCP 서버마다 상태 점·서비스 색 배지·짧은 이름의 칩 하나. 초록=연결됨, 주황 고리=로그인·승인 필요, 빨강=실패, 회색=미확인. 3분마다 확인하고 서버가 끊기면 30초·1·2·5분 뒤 다시 확인하며, 툴팁에 끊긴·회복 시각과 `/mcp`가 필요할 수 있는 실행 중 Claude 세션 수가 나옵니다. 칩을 누르면 인증 절차(`/mcp` 또는 `codex mcp login <이름>`)를 복사할 뿐 스스로 로그인하지 않습니다. 이름·아이콘·숨김은 `data/sixfold/mcp-status.local.json`에서 정합니다. 서버가 많으면 레이아웃 폭에서 잘리므로 모두 보려면 `mcp-status` 블록을 넓히세요.
+`claude mcp list`(와 `codex mcp list`, 이름으로 합침)의 MCP 서버마다 상태 점·서비스 색 배지·짧은 이름의 칩 하나. 초록=연결됨, 주황 고리=로그인·승인 필요, 빨강=실패, 회색=미확인. 3분마다 확인하고 서버가 끊기면 30초·1·2·5분 뒤 다시 확인하며, 툴팁에 끊긴·회복 시각과 `/mcp`가 필요할 수 있는 실행 중 Claude 세션 수가 나옵니다. 칩을 누르면 인증 절차(`/mcp` 또는 `codex mcp login <이름>`)를 복사할 뿐 스스로 로그인하지 않습니다. 이름·아이콘·숨김은 `data/sixfold/mcp-status.local.json`에서 정합니다. 블록이 좁아 서버가 다 들어가지 않으면 확인이 필요한 서버부터 들어가는 만큼 보여 주고, 나머지는 `+N` 칩으로 세며 툴팁에 이름이 나옵니다.
 
 ### CLI Status
 
@@ -212,7 +212,7 @@ Codex·Claude 한도를 브랜드 아이콘·막대·백분율로: 5시간·7일
 
 ![Document Viewer](docs/images/document-viewer.png)
 
-프로젝트 파일 트리와 미리보기 패널. Markdown(macOS에서는 이미지·PDF·로컬 HTML을 읽기 전용 WebKit 스냅숏으로도)을 Source·Open과 함께 보여 줍니다. Files 패널이 있는 레이아웃에 설치되고 검토한 원본(Preview Plus / Files Plus)을 고정 커밋으로 받습니다. Windows에서는 Markdown 미리보기만 되고, 저장한 내용은 파일을 다시 열어야 반영됩니다.
+프로젝트 파일 트리와 미리보기 패널. Markdown(macOS에서는 이미지·PDF·로컬 HTML을 읽기 전용 WebKit 스냅숏으로도)을 Source·Open과 함께 보여 줍니다. Files 패널이 있는 레이아웃에 설치되고 검토한 원본(Preview Plus / Files Plus)을 고정 커밋으로 받습니다. Windows에서는 HTML이 macOS 렌더러가 필요하다는 안내와 함께 소스로 열리고, Markdown 미리보기와 저장 시 새로고침은 됩니다.
 
 ## 사이드바의 다른 기능
 

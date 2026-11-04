@@ -32,8 +32,8 @@ Checked on Windows 11 on 2026-11-04 by running each part; macOS is where the the
 | System Metrics, MCP Status, CLI Status, Plan Usage, Agent Usage | yes | yes |
 | Workflow collector (subagent trees) | yes | yes (Task Scheduler snippet below) |
 | Document Viewer: Markdown | yes | yes |
-| Document Viewer: HTML preview | yes (WebKit snapshot) | no — the preview tab reports the missing renderer |
-| Document Viewer: refresh when a file is saved | yes | no — reopen the file to see changes |
+| Document Viewer: HTML preview | yes (WebKit snapshot) | no — HTML opens on its source with a note |
+| Document Viewer: refresh when a file is saved | yes | yes |
 | Voice | yes | no (the installer skips it) |
 | Live TUI bridge | yes (also Linux) | no (needs `termios`) |
 | Idle-session sleep and finished-workspace cleanup | yes (LaunchAgents) | no |
@@ -69,7 +69,7 @@ herdr-app do layout.switch --name sixfold
 The installer:
 
 - installs the theme's mods, layouts, palettes and helper scripts into the app home (`~/.config/herdr-app` on every platform; `HERDR_APP_HOME` overrides it);
-- fetches Herdr Workspace Mods at the commit pinned in [`workspace-mods.lock.json`](workspace-mods.lock.json) into `~/.local/share/herdr-sixfold/vendor/herdr-workspace-mods`, checks it is exactly that commit with no local changes, and installs `system-metrics`, `mcp-status`, `cli-status`, `plan-usage` and `agent-usage` with the theme. The installed release is recorded in `data/sixfold/workspace-mods.json`;
+- fetches Herdr Workspace Mods at the commit pinned in [`workspace-mods.lock.json`](workspace-mods.lock.json) into `~/.local/share/herdr-sixfold/vendor/herdr-workspace-mods/<commit prefix>` (one folder per commit, made only once the checkout succeeds), checks it is exactly that commit with no local changes, and installs the files that commit tracks for `system-metrics`, `mcp-status`, `cli-status`, `plan-usage` and `agent-usage` with the theme. The installed release is recorded in `data/sixfold/workspace-mods.json`;
 - runs the Document Viewer's own installer when a layout with a Files panel exists (Herdr creates `main` on first start); otherwise it prints that command to run later. Off macOS it installs Markdown only;
 - refuses to replace existing files or an existing `layout:sixfold` key section, and preserves other layouts, settings and key bindings. `--update` refreshes what it installed before and keeps layouts and palettes you changed.
 
@@ -186,7 +186,7 @@ CPU and RAM of the computer the sidebar shows, with a bar of recent samples, ref
 
 ![MCP Status](docs/images/mcp-status.png)
 
-One chip per MCP server from `claude mcp list` (and `codex mcp list`, merged by name): a state dot, a service-colour badge and a short name. Green = connected; an orange ring = needs sign-in or approval; red = failed; grey = unknown. It checks every three minutes, and again after 30 s, 1, 2 and 5 minutes when a server drops; the tooltip says when it dropped and recovered and how many running Claude sessions may need `/mcp`. Clicking a chip copies the sign-in step (`/mcp` or `codex mcp login <name>`) and never signs in by itself. Rename, re-icon or hide servers in `data/sixfold/mcp-status.local.json`. With many servers the pill is cut at its layout width; widen the `mcp-status` block if you need them all.
+One chip per MCP server from `claude mcp list` (and `codex mcp list`, merged by name): a state dot, a service-colour badge and a short name. Green = connected; an orange ring = needs sign-in or approval; red = failed; grey = unknown. It checks every three minutes, and again after 30 s, 1, 2 and 5 minutes when a server drops; the tooltip says when it dropped and recovered and how many running Claude sessions may need `/mcp`. Clicking a chip copies the sign-in step (`/mcp` or `codex mcp login <name>`) and never signs in by itself. Rename, re-icon or hide servers in `data/sixfold/mcp-status.local.json`. When the block is too narrow for every server, it shows those that fit — servers needing attention first — and counts the rest on a `+N` chip whose tooltip names them.
 
 ### CLI Status
 
@@ -212,7 +212,7 @@ Token use of each live Claude/Codex session the core reports, grouped by workspa
 
 ![Document Viewer](docs/images/document-viewer.png)
 
-A project file tree and a preview panel for Markdown (and on macOS images, PDFs and local HTML as a read-only WebKit snapshot), with Source and Open. It installs into a layout with a Files panel and fetches its reviewed upstream (Preview Plus / Files Plus) at a pinned commit. On Windows only Markdown preview works, and a saved file is shown again after reopening it.
+A project file tree and a preview panel for Markdown (and on macOS images, PDFs and local HTML as a read-only WebKit snapshot), with Source and Open. It installs into a layout with a Files panel and fetches its reviewed upstream (Preview Plus / Files Plus) at a pinned commit. On Windows HTML opens on its source with a note that the preview needs the macOS renderer; Markdown preview and save-to-refresh work.
 
 ## More of the sidebar
 

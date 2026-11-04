@@ -207,14 +207,26 @@ def input_files(repo, home, names):
     return files
 
 
-def pinned_inputs(pairs):
-    """Pinned Workspace Mods files ((source, Path('mods/<name>/...'))) as update entries."""
+def is_junction(path):
+    """A Windows junction redirects like a symlink but is not reported as one before Python 3.12."""
+    check = getattr(os.path, 'isjunction', None)
+    return bool(check and check(path))
+
+
+def pinned_inputs(pairs, home):
+    """Pinned Workspace Mods files ((source, Path('mods/<name>/...'))) as update entries, with the
+    same target checks as listed files: no symlinked or junctioned path inside the app home."""
     out = []
     for source, relative in pairs:
         if relative.parts[0] != 'mods' or len(relative.parts) < 3 or '..' in relative.parts or relative.is_absolute():
             raise InstallError(f'Unsupported Workspace Mods target: {relative}')
         if not source.is_file() or source.is_symlink():
             raise InstallError(f'Not a regular Workspace Mods file: {source}')
+        target = home / relative
+        if any(parent.is_symlink() or is_junction(parent) for parent in [target, *target.parents] if parent != home.parent):
+            raise InstallError(f'Symlink installation targets are refused: {relative}')
+        if target.exists() and not target.is_file():
+            raise InstallError(f'Not a regular installation target: {relative}')
         out.append((relative, source.read_bytes(), source.stat().st_mode & 0o777))
     return out
 
@@ -232,7 +244,7 @@ def update(repo, home, names, cli='herdr-app', verify_timeout=10, allow_unhealth
             raise InstallError('Another installation holds the lock; do not copy files manually') from error
         env = {**os.environ, 'HERDR_APP_HOME': str(home)}
         files = input_files(repo, home, names)
-        theirs = pinned_inputs(extra)
+        theirs = pinned_inputs(extra, home)
         clash = {relative for relative, _, _ in files} & {relative for relative, _, _ in theirs}
         if clash:
             raise InstallError(f'Listed files clash with the pinned Workspace Mods: {sorted(map(str, clash))}')

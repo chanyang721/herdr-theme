@@ -124,6 +124,17 @@ def install(repo, app, update=False, extra=()):
         atomic_text(manifest_path, manifest_text)
 
 
+def later_command(argv, home, windows=None):
+    """A command to paste later, quoted for the shell people use there, naming this app home
+    (the document viewer installer reads HERDR_APP_HOME, not --home)."""
+    windows = sys.platform == 'win32' if windows is None else windows
+    if windows:
+        quote = lambda value: "'" + str(value).replace("'", "''") + "'"
+        return f"$env:HERDR_APP_HOME = {quote(home)}; & " + ' '.join(quote(part) if not part.startswith('-') else part for part in map(str, argv))
+    import shlex
+    return f"HERDR_APP_HOME={shlex.quote(str(home))} " + shlex.join(map(str, argv))
+
+
 def install_document_viewer(checkout, pin, home):
     """The document viewer installs into a personal layout with a Files panel and fetches its own
     reviewed upstream, so it runs its own installer — only when it is not installed yet."""
@@ -133,7 +144,8 @@ def install_document_viewer(checkout, pin, home):
     layout = workspace_mods.has_files_layout(home)
     command = [sys.executable, str(script), '--layout', layout or '<layout>'] + ([] if sys.platform == 'darwin' else ['--markdown-only'])
     if not layout:
-        print('Document viewer: no layout with a Files panel yet (start Herdr once). Later: ' + ' '.join(command))
+        print('Document viewer: no layout with a Files panel yet (start Herdr once). Later:')
+        print('  ' + later_command(command, home))
         return
     result = subprocess.run(command, env={**os.environ, 'HERDR_APP_HOME': str(home)})
     if result.returncode:

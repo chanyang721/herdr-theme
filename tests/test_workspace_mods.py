@@ -87,9 +87,47 @@ class PinTests(unittest.TestCase):
         cache = Path(self.tmp.name) / 'cache'
         with patch.object(workspace_mods, 'default_cache', return_value=cache):
             _, root, files = workspace_mods.pinned_files(self.release.theme)
-        self.assertEqual(root, cache)
-        self.assertEqual(git(cache, 'rev-parse', 'HEAD'), self.release.commit)
+        self.assertEqual(root, cache / self.release.commit[:12], 'one cache folder per commit')
+        self.assertEqual(git(root, 'rev-parse', 'HEAD'), self.release.commit)
         self.assertEqual(len(files), 4)
+
+    def test_a_failed_fetch_leaves_no_cache_behind_and_the_next_try_works(self):
+        cache = Path(self.tmp.name) / 'cache'
+        missing = 'f' * 40
+        self.release.pin({'system-metrics': 'system-metrics/mods/system-metrics'}, commit=missing)
+        with patch.object(workspace_mods, 'default_cache', return_value=cache):
+            with self.assertRaisesRegex(workspace_mods.PinError, 'could not fetch'):
+                workspace_mods.pinned_files(self.release.theme)
+            self.assertEqual(list(cache.iterdir()), [], 'no half-made or temporary checkout is left')
+            self.release.pin({'system-metrics': 'system-metrics/mods/system-metrics'})
+            _, root, files = workspace_mods.pinned_files(self.release.theme)
+        self.assertEqual(len(files), 2)
+
+    def test_installs_pinned_to_different_commits_keep_separate_checkouts(self):
+        cache = Path(self.tmp.name) / 'cache'
+        first = self.release.commit
+        (self.release.mods / 'system-metrics/mods/system-metrics/main.js').write_text('export default 2;', encoding='utf-8')
+        git(self.release.mods, '-c', 'user.name=t', '-c', 'user.email=t@example.com', 'commit', '-qam', 'next')
+        second = git(self.release.mods, 'rev-parse', 'HEAD')
+        with patch.object(workspace_mods, 'default_cache', return_value=cache):
+            self.release.pin({'system-metrics': 'system-metrics/mods/system-metrics'}, commit=first)
+            _, old_root, _ = workspace_mods.pinned_files(self.release.theme)
+            self.release.pin({'system-metrics': 'system-metrics/mods/system-metrics'}, commit=second)
+            _, new_root, files = workspace_mods.pinned_files(self.release.theme)
+        self.assertNotEqual(old_root, new_root)
+        self.assertEqual(git(old_root, 'rev-parse', 'HEAD'), first, 'the older pin is not moved')
+        main = next(path for path, rel in files if rel.name == 'main.js')
+        self.assertEqual(main.read_text(encoding='utf-8'), 'export default 2;')
+
+    def test_ignored_files_in_a_checkout_are_not_installed(self):
+        (self.release.mods / '.gitignore').write_text('*.log' + chr(10), encoding='utf-8')
+        git(self.release.mods, '-c', 'user.name=t', '-c', 'user.email=t@example.com', 'add', '.gitignore')
+        git(self.release.mods, '-c', 'user.name=t', '-c', 'user.email=t@example.com', 'commit', '-qm', 'ignore logs')
+        self.release.commit = git(self.release.mods, 'rev-parse', 'HEAD')
+        self.release.pin({'system-metrics': 'system-metrics/mods/system-metrics'})
+        (self.release.mods / 'system-metrics/mods/system-metrics/debug.log').write_text('local', encoding='utf-8')
+        _, _, files = workspace_mods.pinned_files(self.release.theme, self.release.mods)
+        self.assertNotIn('debug.log', [rel.name for _, rel in files])
 
     def test_records_the_installed_release_and_finds_a_files_layout(self):
         app = Path(self.tmp.name) / 'app'
@@ -151,11 +189,42 @@ class InstallerTests(unittest.TestCase):
         self.assertEqual(run('mods/sixfold-desk/main.js', '--without-workspace-mods'), [(['mods/sixfold-desk/main.js'], [])])
         self.assertEqual(run('voice'), ['voice'])
 
-    def test_listed_theme_files_may_not_clash_with_pinned_ones(self):
-        entries = update_install.pinned_inputs([(self.release.mods / 'plan-usage/mods/plan-usage/usage.py', Path('mods/plan-usage/usage.py'))])
+    def test_pinned_targets_are_checked_like_listed_files(self):
+        home = Path(self.tmp.name) / 'home'
+        (home / 'mods').mkdir(parents=True)
+        source = self.release.mods / 'plan-usage/mods/plan-usage/usage.py'
+        entries = update_install.pinned_inputs([(source, Path('mods/plan-usage/usage.py'))], home)
         self.assertEqual(entries[0][0], Path('mods/plan-usage/usage.py'))
         with self.assertRaises(update_install.InstallError):
-            update_install.pinned_inputs([(self.release.mods / 'plan-usage/mods/plan-usage/usage.py', Path('layouts/x.json'))])
+            update_install.pinned_inputs([(source, Path('layouts/x.json'))], home)
+        (home / 'mods/plan-usage/usage.py').mkdir(parents=True)
+        with self.assertRaisesRegex(update_install.InstallError, 'regular'):
+            update_install.pinned_inputs([(source, Path('mods/plan-usage/usage.py'))], home)
+
+    def test_a_linked_mods_folder_is_refused(self):
+        home = Path(self.tmp.name) / 'home2'
+        home.mkdir()
+        outside = Path(self.tmp.name) / 'outside'
+        outside.mkdir()
+        try:
+            if sys.platform == 'win32':
+                subprocess.run(['cmd', '/c', 'mklink', '/J', str(home / 'mods'), str(outside)], check=True, capture_output=True)
+            else:
+                (home / 'mods').symlink_to(outside, target_is_directory=True)
+        except (OSError, subprocess.CalledProcessError):
+            self.skipTest('cannot create a link here')
+        source = self.release.mods / 'plan-usage/mods/plan-usage/usage.py'
+        with self.assertRaisesRegex(update_install.InstallError, 'Symlink'):
+            update_install.pinned_inputs([(source, Path('mods/plan-usage/usage.py'))], home)
+
+    def test_the_later_document_viewer_command_names_the_home_and_quotes_paths(self):
+        from pathlib import PureWindowsPath, PurePosixPath
+        windows = install.later_command(['C:/Py/python.exe', 'C:/Users/A B/x.py', '--layout', '<layout>', '--markdown-only'],
+                                        PureWindowsPath('C:/Users/A B/.config/herdr-app'), windows=True)
+        self.assertEqual(windows, r"$env:HERDR_APP_HOME = 'C:\Users\A B\.config\herdr-app'; & 'C:/Py/python.exe' 'C:/Users/A B/x.py' --layout '<layout>' --markdown-only")
+        posix = install.later_command(['/usr/bin/python3', '/home/a b/x.py', '--layout', '<layout>'],
+                                      PurePosixPath('/home/a b/.config/herdr-app'), windows=False)
+        self.assertEqual(posix, "HERDR_APP_HOME='/home/a b/.config/herdr-app' /usr/bin/python3 '/home/a b/x.py' --layout '<layout>'")
 
 
 if __name__ == '__main__':
