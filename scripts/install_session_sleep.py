@@ -8,10 +8,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import install_space_cleanup as common  # noqa: E402
 
 SLEEP = {
-    'label': 'co.lukuku.sleep-idle-sessions',
+    'job': 'sleep-idle-sessions',
     'script': 'sleep_idle_sessions.py',
     # The order matches sleep_idle_sessions.OBSERVER_FILES (the reviewed hash).
-    'files': ('sleep_idle_sessions.py', 'agent_sessions.py', 'space_job_evidence.py', 'close_finished_spaces.py', 'session_sleep_stub.py'),
+    'files': ('sleep_idle_sessions.py', 'agent_sessions.py', 'space_job_evidence.py', 'close_finished_spaces.py', 'session_sleep_stub.py',
+              'site_config.py'),
     'config': 'sleep-idle-sessions.json',
     'example': 'config/sleep-idle-sessions.example.json',
     'state': 'sleep-idle-sessions-state.json',

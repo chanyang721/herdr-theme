@@ -31,7 +31,7 @@ def snapshot():
         'spaces': [
             {'id': 'seen', 'name': 'Share', 'machine': None, 'active': True,
              'tabs': [{'id': 'tab-seen', 'terminals': [pane('t1', 'p-focus')]}]},
-            {'id': 'fixed', 'name': 'Medihomes', 'machine': None, 'active': False,
+            {'id': 'fixed', 'name': 'Project B', 'machine': None, 'active': False,
              'tabs': [{'id': 'tab-fixed', 'terminals': [pane('t12', 'p12'), pane('t3', 'p3')]}]},
         ],
         'terminals': {'t1': terminal('t1', 100), 't12': terminal('t12', 200), 't3': terminal('t3', 300)},
@@ -210,7 +210,7 @@ class EvidenceTests(unittest.TestCase):
                          ['claude', '--model', 'opus', '--resume', SID])
 
     def test_summary_carries_no_paths(self):
-        item = {'address': 't12', 'app': 'claude-code', 'session_id': SID, 'space_name': 'Medihomes',
+        item = {'address': 't12', 'app': 'claude-code', 'session_id': SID, 'space_name': 'Project B',
                 'title': 'edit /Users/someone/work/x.md', 'git': {'branch': 'main', 'head': 'abc', 'uncommitted': 0, 'worktrees': 1}}
         text = json.dumps(agent_sessions.summary(item), ensure_ascii=False)
         self.assertNotIn('/Users/', text)
@@ -270,9 +270,9 @@ class InstallTests(unittest.TestCase):
             with patch.object(installer.common.subprocess, 'run', return_value=Done()):
                 done = installer.install(home, source, execute=True)
             doc = plistlib.loads(Path(done['plist']).read_bytes())
-            self.assertEqual(doc['Label'], 'co.lukuku.sleep-idle-sessions')
+            self.assertEqual(doc['Label'], 'local.herdr-sixfold.sleep-idle-sessions')
             self.assertIn('--dry-run', doc['ProgramArguments'])
-            self.assertTrue((home / 'Library/Application Support/LukukuWatch/session_sleep_stub.py').exists())
+            self.assertTrue((home / 'Library/Application Support/HerdrSixfold/session_sleep_stub.py').exists())
             self.assertEqual(installer.SLEEP['files'], sleep.OBSERVER_FILES)
 
 

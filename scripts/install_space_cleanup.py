@@ -13,12 +13,14 @@ import subprocess
 import sys
 import time
 
-LABEL = 'co.lukuku.close-finished-spaces'
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import site_config  # noqa: E402
+
 CLEANUP = {
-    'label': LABEL,
+    'job': 'close-finished-spaces',
     'script': 'close_finished_spaces.py',
     # The order matches close_finished_spaces.OBSERVER_FILES (the reviewed hash).
-    'files': ('close_finished_spaces.py', 'space_job_evidence.py', 'agent_sessions.py'),
+    'files': ('close_finished_spaces.py', 'space_job_evidence.py', 'agent_sessions.py', 'site_config.py'),
     'config': 'close-finished-spaces.json',
     'example': 'config/close-finished-spaces.example.json',
     'state': 'close-finished-spaces-state.json',
@@ -57,7 +59,9 @@ def detect_harness(home):
 
 def install_observer(home, source, spec, *, apply=False, user_approved=False, execute=False):
     home, source = Path(home), Path(source)
-    base = home / 'Library/Application Support/LukukuWatch'
+    site = site_config.load(home)
+    base = site_config.folder('state_dir', home, site)
+    label = site_config.label(spec['job'], home, site)
     config_path = base / spec['config']
     present = [name for name in spec['files'] if (source / 'scripts' / name).exists()]
     code = {name: (source / 'scripts' / name).read_bytes() for name in present}
@@ -84,12 +88,12 @@ def install_observer(home, source, spec, *, apply=False, user_approved=False, ex
         config['reviewed_observer_sha256'] = code_hash
     destination = base / spec['script']
     mode = '--apply' if apply else '--dry-run'
-    plist_path = home / 'Library/LaunchAgents' / (spec['label'] + '.plist')
-    plist = {'Label': spec['label'], 'ProgramArguments': [sys.executable, str(destination), '--config', str(config_path), mode],
+    plist_path = home / 'Library/LaunchAgents' / (label + '.plist')
+    plist = {'Label': label, 'ProgramArguments': [sys.executable, str(destination), '--config', str(config_path), mode],
              'StartInterval': 300, 'RunAtLoad': True, 'ProcessType': 'Background', 'WorkingDirectory': str(base),
              'EnvironmentVariables': {'HOME': str(home), 'PATH': f'{home}/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin'},
              'StandardOutPath': str(base / (spec['log'] + '.stdout.log')), 'StandardErrorPath': str(base / (spec['log'] + '.stderr.log'))}
-    result = {'label': spec['label'], 'mode': mode, 'script': str(destination), 'plist': str(plist_path), 'execute': execute,
+    result = {'label': label, 'mode': mode, 'script': str(destination), 'plist': str(plist_path), 'execute': execute,
               'observer_sha256': code_hash, 'harness': bool(config.get('harness'))}
     if not execute:
         return result
@@ -97,7 +101,7 @@ def install_observer(home, source, spec, *, apply=False, user_approved=False, ex
         write_changed(base / name, code[name])
     write_changed(config_path, (json.dumps(config, ensure_ascii=False, indent=2) + '\n').encode())
     changed = write_changed(plist_path, plistlib.dumps(plist))
-    service = f'gui/{os.getuid()}/{spec["label"]}'
+    service = f'gui/{os.getuid()}/{label}'
     loaded = subprocess.run(['launchctl', 'print', service], capture_output=True).returncode == 0
     if loaded and changed:
         subprocess.run(['launchctl', 'bootout', service], check=True)

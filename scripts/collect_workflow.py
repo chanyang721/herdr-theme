@@ -13,8 +13,11 @@ import sys
 import time
 import uuid
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import site_config  # noqa: E402
+
 WINDOWS = os.name == 'nt'
-BASE = (Path(os.environ.get('LOCALAPPDATA', Path.home())) if WINDOWS else Path.home() / 'Library' / 'Application Support') / 'LukukuWatch'
+BASE = (Path(os.environ.get('LOCALAPPDATA', Path.home())) / 'HerdrSixfold') if WINDOWS else site_config.folder('state_dir')
 DATA = Path(os.environ.get('HERDR_APP_HOME', Path.home() / '.config' / 'herdr-app')) / 'data' / 'sixfold'
 OUTPUT = DATA / 'workflow.json'
 HC = shutil.which('hc') or str(Path.home() / '.local/share/herdr-sixfold/bin/hc')

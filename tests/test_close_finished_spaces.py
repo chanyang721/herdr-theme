@@ -94,7 +94,7 @@ class CleanupPolicyTests(unittest.TestCase):
         self.live = FakeLive()
         self.live.report_dir = self.reports
         self.config = {'idle_seconds': 600, 'trial_seconds': 1800, 'max_sample_gap_seconds': 660,
-                       'fixed_names': ['Share', 'PeaceMinusOne', 'Medihomes'], 'fixed_spaces': [],
+                       'fixed_names': ['Share', 'Project A', 'Project B'], 'fixed_spaces': [],
                        'reviewed_dry_run_at': NOW, 'reviewed_observer_sha256': 'test', 'notify_terminal': 'review-session'}
         self.git_mock = patch.object(cleanup, 'git_info', lambda folder: {'folder': folder, 'remaining_uncommitted': ' M work.py', 'worktrees': 'fixture worktree'})
         self.git_mock.start()
@@ -183,7 +183,7 @@ class CleanupPolicyTests(unittest.TestCase):
         self.assert_blocked('currently visible')
 
     def test_fixed_names_ignore_case_and_fixed_ids_are_machine_specific(self):
-        for name in ['Share', 'PEACEMINUSONE', 'medihomes']:
+        for name in ['Share', 'PROJECT A', 'project b']:
             with self.subTest(name=name):
                 self.target()['name'] = name
                 self.assertFalse(self.inspect()['safe'])
