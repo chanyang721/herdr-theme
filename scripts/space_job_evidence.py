@@ -334,6 +334,8 @@ def _real_prompt(item, message):
     """A user turn the person (or hc) typed, not a tool result, command echo or meta note."""
     if item.get('isMeta') or item.get('toolUseResult') is not None:
         return False
+    if item.get('isCompactSummary'):
+        return False   # the summary Claude writes when it compacts (also while idle), not a prompt
     content = message.get('content')
     if isinstance(content, list):
         if any(isinstance(p, dict) and p.get('type') == 'tool_result' for p in content):
