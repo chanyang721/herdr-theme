@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Register the 5-minute observer in dry-run mode; enable apply only after reviewed live trial."""
+"""Register the 5-minute space-cleanup observer in dry-run mode; enable apply only after a
+reviewed live trial, or after the person approved apply and one dry-run of this code ran."""
 import argparse
 import datetime as dt
 import hashlib
@@ -13,6 +14,17 @@ import sys
 import time
 
 LABEL = 'co.lukuku.close-finished-spaces'
+CLEANUP = {
+    'label': LABEL,
+    'script': 'close_finished_spaces.py',
+    # The order matches close_finished_spaces.OBSERVER_FILES (the reviewed hash).
+    'files': ('close_finished_spaces.py', 'space_job_evidence.py', 'agent_sessions.py'),
+    'config': 'close-finished-spaces.json',
+    'example': 'config/close-finished-spaces.example.json',
+    'state': 'close-finished-spaces-state.json',
+    'log': 'close-finished-spaces',
+    'pins': True,
+}
 
 
 def write_changed(path, content):
@@ -29,40 +41,63 @@ def write_changed(path, content):
     return True
 
 
-def install(home, source, *, apply=False, execute=False):
+def detect_harness(home):
+    """The harness checkout this machine records into, and the Python that runs it."""
+    local = Path(home) / '.config/herdr-app/data/sixfold/harness-local/config.json'
+    try:
+        repo = Path(json.loads(local.read_text()).get('repo_path') or '')
+    except (OSError, ValueError):
+        return None
+    script = repo / 'runtime/harness.py'
+    if not script.is_file():
+        return None
+    venv = Path(home) / '.local/share/herdr-harness/venv/bin/python'
+    return {'python': str(venv if venv.exists() else sys.executable), 'script': str(script)}
+
+
+def install_observer(home, source, spec, *, apply=False, user_approved=False, execute=False):
     home, source = Path(home), Path(source)
     base = home / 'Library/Application Support/LukukuWatch'
-    config_path = base / 'close-finished-spaces.json'
-    source_code = (source / 'scripts/close_finished_spaces.py').read_bytes()
-    helper_code = (source / 'scripts/space_job_evidence.py').read_bytes()
-    code_hash = hashlib.sha256(source_code + helper_code).hexdigest()
-    config = json.loads(config_path.read_text()) if config_path.exists() else json.loads((source / 'config/close-finished-spaces.example.json').read_text())
-    if not config_path.exists():
+    config_path = base / spec['config']
+    present = [name for name in spec['files'] if (source / 'scripts' / name).exists()]
+    code = {name: (source / 'scripts' / name).read_bytes() for name in present}
+    code_hash = hashlib.sha256(b''.join(code[name] for name in present)).hexdigest()
+    config = json.loads(config_path.read_text()) if config_path.exists() else json.loads((source / spec['example']).read_text())
+    if not config_path.exists() and spec.get('pins'):
         pins = home / '.config/herdr-app/data/sixfold/workspace-pins.local.json'
         if pins.exists():
             config['fixed_spaces'] = json.loads(pins.read_text()).get('spaces', [])
+    harness = detect_harness(home)
+    if harness and not config.get('harness'):
+        config['harness'] = harness
     if apply:
-        state = json.loads((base / 'close-finished-spaces-state.json').read_text())
+        state = json.loads((base / spec['state']).read_text())
         trial = state.get('trial', {})
-        if state.get('observer_sha256') != code_hash or trial.get('error_count', 0) or trial.get('samples', 0) < 7 or time.time() - trial.get('started_at', time.time()) < 1800 or time.time() - state.get('last_at', 0) > 660:
+        current = state.get('observer_sha256') == code_hash and not trial.get('error_count', 0) and time.time() - state.get('last_at', 0) <= 660
+        if user_approved:
+            if not current or trial.get('samples', 0) < 1:
+                raise ValueError('one recorded dry-run of the current code is required before apply')
+            config['user_approved_apply'] = True
+        elif not current or trial.get('samples', 0) < 7 or time.time() - trial.get('started_at', time.time()) < 1800:
             raise ValueError('30-minute live dry-run with current code and 7 healthy samples is required')
         config['reviewed_dry_run_at'] = time.time()
         config['reviewed_observer_sha256'] = code_hash
-    destination = base / 'close_finished_spaces.py'
+    destination = base / spec['script']
     mode = '--apply' if apply else '--dry-run'
-    plist_path = home / 'Library/LaunchAgents' / (LABEL + '.plist')
-    plist = {'Label': LABEL, 'ProgramArguments': [sys.executable, str(destination), '--config', str(config_path), mode],
+    plist_path = home / 'Library/LaunchAgents' / (spec['label'] + '.plist')
+    plist = {'Label': spec['label'], 'ProgramArguments': [sys.executable, str(destination), '--config', str(config_path), mode],
              'StartInterval': 300, 'RunAtLoad': True, 'ProcessType': 'Background', 'WorkingDirectory': str(base),
              'EnvironmentVariables': {'HOME': str(home), 'PATH': f'{home}/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin'},
-             'StandardOutPath': str(base / 'close-finished-spaces.stdout.log'), 'StandardErrorPath': str(base / 'close-finished-spaces.stderr.log')}
-    result = {'label': LABEL, 'mode': mode, 'script': str(destination), 'plist': str(plist_path), 'execute': execute}
+             'StandardOutPath': str(base / (spec['log'] + '.stdout.log')), 'StandardErrorPath': str(base / (spec['log'] + '.stderr.log'))}
+    result = {'label': spec['label'], 'mode': mode, 'script': str(destination), 'plist': str(plist_path), 'execute': execute,
+              'observer_sha256': code_hash, 'harness': bool(config.get('harness'))}
     if not execute:
         return result
-    write_changed(base / 'space_job_evidence.py', helper_code)
-    write_changed(destination, source_code)
+    for name in present:
+        write_changed(base / name, code[name])
     write_changed(config_path, (json.dumps(config, ensure_ascii=False, indent=2) + '\n').encode())
     changed = write_changed(plist_path, plistlib.dumps(plist))
-    service = f'gui/{os.getuid()}/{LABEL}'
+    service = f'gui/{os.getuid()}/{spec["label"]}'
     loaded = subprocess.run(['launchctl', 'print', service], capture_output=True).returncode == 0
     if loaded and changed:
         subprocess.run(['launchctl', 'bootout', service], check=True)
@@ -74,14 +109,23 @@ def install(home, source, *, apply=False, execute=False):
     return result
 
 
-def main():
+def install(home, source, *, apply=False, user_approved=False, execute=False):
+    return install_observer(home, source, CLEANUP, apply=apply, user_approved=user_approved, execute=execute)
+
+
+def main(spec=CLEANUP):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--home', type=Path, default=Path.home())
     parser.add_argument('--source', type=Path, default=Path(__file__).resolve().parents[1])
     parser.add_argument('--install', action='store_true', help='write files and register launchd; default is a plan')
-    parser.add_argument('--enable-apply', action='store_true', help='review the saved trial and switch to real cleanup')
+    parser.add_argument('--enable-apply', action='store_true', help='review the saved trial and switch to real actions')
+    parser.add_argument('--user-approved', action='store_true',
+                        help='with --enable-apply: the person approved apply; one recorded dry-run of this code suffices')
     args = parser.parse_args()
-    print(json.dumps(install(args.home, args.source, apply=args.enable_apply, execute=args.install), ensure_ascii=False))
+    if args.user_approved and not args.enable_apply:
+        parser.error('--user-approved only goes with --enable-apply')
+    print(json.dumps(install_observer(args.home, args.source, spec, apply=args.enable_apply, user_approved=args.user_approved,
+                                      execute=args.install), ensure_ascii=False))
 
 
 if __name__ == '__main__':

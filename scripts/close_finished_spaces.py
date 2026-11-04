@@ -12,11 +12,15 @@ import shutil
 import subprocess
 import time
 import unicodedata
+import sys
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import agent_sessions  # noqa: E402
 
 BASE = Path.home() / 'Library/Application Support/LukukuWatch'
 DECISION = re.compile(r'승인\s*대기|확인\s*필요|결정\s*대기|사용자.{0,12}(?:확인|승인).{0,8}(?:대기|기다)|awaiting\s+(?:approval|confirmation)|waiting\s+for\s+(?:your|user)\s+(?:approval|confirmation)|allow\s+(?:once|always)', re.I)
 PLACEHOLDERS = {'', 'Ask Codex to do anything', 'Write tests for @filename', 'Implement {feature}', 'Find and fix a bug in @filename', 'Explain this codebase', 'Improve documentation in @filename', 'Summarize recent commits', 'Use /skills to list available skills'}
-AGENTS = {'codex', 'claude', 'claude-code'}
+AGENTS = agent_sessions.AGENTS
 
 
 def run(argv, *, timeout=12):
@@ -56,37 +60,16 @@ def empty_prompt(text, agent):
     if value not in PLACEHOLDERS:
         return False
     # A wrapped/multiline input is not empty. Only known footer chrome may follow.
-    footer = re.compile(r'^(?:GPT-|Claude|[←↳]|voice\b|mic\b|codex\b|[▁▂▃▄▅▆▇█]|⚠|⏵|\?\s|\d+%\s+context|f\d+\b|for agents|.*weekly limit|.*auto mode|.*shift\+tab|.*esc to interrupt)', re.I)
+    footer = re.compile(r'^(?:[─━═]{3,}$|GPT-|Claude|[←↳]|voice\b|mic\b|codex\b|[▁▂▃▄▅▆▇█]|⚠|⏵|\?\s|\d+%\s+context|f\d+\b|for agents|.*weekly limit|.*auto mode|.*shift\+tab|.*esc to interrupt)', re.I)
     return all(not line.strip() or footer.match(line.strip()) for line in lines[i + 1:])
 
 
 def process_rows():
-    rows = {}
-    for line in run(['ps', '-axo', 'pid=,ppid=,comm=']).splitlines():
-        pid, parent, name = line.strip().split(None, 2)
-        rows[int(pid)] = {'pid': int(pid), 'parent': int(parent), 'name': Path(name).name}
-    return rows
+    return agent_sessions.process_table()
 
 
 def process_evidence(terminal, processes):
-    root = terminal.get('pid')
-    if not isinstance(root, int) or root not in processes or not terminal.get('foreground'):
-        return False, 'process evidence unavailable', []
-    family, pending = set(), [root]
-    while pending:
-        pid = pending.pop()
-        if pid in family:
-            continue
-        family.add(pid)
-        pending.extend(p for p, info in processes.items() if info['parent'] == pid)
-    # The parent shell and idle CLI/wrapper are expected. Every other descendant
-    # (including shells, tool servers and unknown helpers) blocks cleanup.
-    extra = [processes[p]['name'] for p in family if p != root and processes[p]['name'] not in AGENTS | {'expect'}]
-    if extra:
-        return False, 'running/unknown child processes: ' + ', '.join(sorted(set(extra))), sorted(family)
-    if not any(processes[p]['name'] in AGENTS for p in family):
-        return False, 'agent process identity unverified', sorted(family)
-    return True, '', sorted(family)
+    return agent_sessions.process_evidence(terminal, processes)
 
 
 class Live:
@@ -106,9 +89,23 @@ class Live:
             raise RuntimeError('complete visible screen unavailable')
         return value['text']
 
-    def backend(self, terminal, config):
+    def backend(self, terminal, config, process_tree_clean=False):
         from space_job_evidence import check_jobs
-        return check_jobs(terminal, config)
+        mapping, why = agent_sessions.session_mapping(terminal, config)
+        configured = (config.get('sessions') or {}).get(terminal.get('address'))
+        if mapping is None and not configured:
+            return False, f'backend jobs unverified: {why}', ''
+        return check_jobs(terminal, config, mapping, process_tree_clean)
+
+    def mapping(self, terminal, config):
+        configured = (config.get('sessions') or {}).get(terminal.get('address'))
+        return configured or agent_sessions.session_mapping(terminal, config)[0]
+
+    def park(self, config, item, event, reason=None):
+        return agent_sessions.harness_park(config, item, event, reason=reason)
+
+    def git(self, folder):
+        return agent_sessions.git_brief(folder)
 
     def close(self, space_id):
         return run([self.app, 'do', 'space.close', json.dumps({'id': space_id, 'confirmed': True})])
@@ -128,7 +125,7 @@ def fixed(space, config):
 
 
 def inspect(space, snapshot, adapter, config):
-    reasons, evidence, screens = [], [], []
+    reasons, evidence, screens, sessions = [], [], [], []
     status = snapshot['status']
     if not all(focus(status)) or status.get('errors'):
         reasons.append('app focus/health unverified')
@@ -162,7 +159,7 @@ def inspect(space, snapshot, adapter, config):
         valid, why, pids = process_evidence(terminal, snapshot['processes'])
         if not valid:
             reasons.append(f'{address}: {why}')
-        jobs_ok, jobs_reason, jobs_fingerprint = adapter.backend(terminal, config)
+        jobs_ok, jobs_reason, jobs_fingerprint = adapter.backend(terminal, config, valid)
         if not jobs_ok:
             reasons.append(f'{address}: {jobs_reason}')
         text = adapter.screen(address)
@@ -171,11 +168,17 @@ def inspect(space, snapshot, adapter, config):
         if not empty_prompt(text, agent):
             reasons.append(f'{address}: empty input unverified')
         screens.append(text)
+        mapping = adapter.mapping(terminal, config) if hasattr(adapter, 'mapping') else None
+        if mapping and mapping.get('session_id'):
+            sessions.append({'address': address, 'app': agent, 'session_id': mapping['session_id'], 'space_id': space['id'],
+                             'space_name': space.get('name'), 'title': terminal.get('title'), 'cwd': terminal.get('cwd')})
+        else:
+            reasons.append(f'{address}: session id unverified (harness record impossible)')
         evidence.append([address, terminal.get('pid'), terminal.get('status_ms'), terminal.get('turn'), pids, jobs_fingerprint, hashlib.sha256(text.encode()).hexdigest()])
     fingerprint = hashlib.sha256(json.dumps(evidence, sort_keys=True).encode()).hexdigest()
     return {'id': space['id'], 'name': space['name'], 'safe': not reasons, 'reasons': reasons, 'fingerprint': fingerprint,
             'folders': sorted({t.get('cwd') for a, t in all_terms.items() if a in addresses and t.get('cwd')} | ({space['folder']} if space.get('folder') else set())),
-            'summary': '\n'.join('\n'.join(s.splitlines()[-8:]) for s in screens)[:2400]}
+            'summary': '\n'.join('\n'.join(s.splitlines()[-8:]) for s in screens)[:2400], 'sessions': sessions}
 
 
 def git_info(folder):
@@ -214,8 +217,11 @@ def cycle(adapter, config, state, now, *, apply=False, only_space=None, report_d
     trial = state.get('trial', {}) if fresh else {}
     trial = {'started_at': trial.get('started_at', now), 'samples': trial.get('samples', 0) + 1,
              'error_count': trial.get('error_count', 0)}
-    trial_ok = now - trial['started_at'] >= config.get('trial_seconds', 1800) and trial['samples'] >= 7 and trial['error_count'] == 0
-    reviewed = isinstance(config.get('reviewed_dry_run_at'), (int, float)) and config['reviewed_dry_run_at'] >= trial['started_at'] + config.get('trial_seconds', 1800) and config.get('reviewed_observer_sha256') == state.get('observer_sha256')
+    # The person may approve apply after one recorded dry-run of this exact code
+    # (user_approved_apply), instead of the 30-minute trial review.
+    approved = bool(config.get('user_approved_apply')) and config.get('reviewed_observer_sha256') == state.get('observer_sha256')
+    trial_ok = (now - trial['started_at'] >= config.get('trial_seconds', 1800) and trial['samples'] >= 7 or approved and trial['samples'] >= 2) and trial['error_count'] == 0
+    reviewed = approved or isinstance(config.get('reviewed_dry_run_at'), (int, float)) and config['reviewed_dry_run_at'] >= trial['started_at'] + config.get('trial_seconds', 1800) and config.get('reviewed_observer_sha256') == state.get('observer_sha256')
     result, tracking = [], {}
     initial_focus = focus(snapshot['status'])
     for space in snapshot['spaces']:
@@ -247,6 +253,19 @@ def cycle(adapter, config, state, now, *, apply=False, only_space=None, report_d
                     if not latest['safe'] or latest.get('fingerprint') != item.get('fingerprint'):
                         item['action'] = 'keep'; item['reasons'].append('evidence changed before close')
                     else:
+                        # Harness first: no record, no close (each agent session in the space).
+                        parked, refused = [], None
+                        for session in item.get('sessions', []):
+                            session = {**session, 'git': adapter.git(session.get('cwd'))} if hasattr(adapter, 'git') else session
+                            ok, detail = adapter.park(config, session, 'close_requested', reason='space closed: idle and finished')
+                            if not ok:
+                                refused = f"{session['address']}: {detail}"; break
+                            parked.append((session, detail))
+                        if refused or not parked:
+                            item['action'] = 'keep'; item['reasons'].append(f'harness record failed: {refused or "no session"}')
+                            item['harness'] = [d for _, d in parked]
+                            result.append(item); continue
+                        item['harness'] = [d for _, d in parked]
                         item['record'] = record_space(item, report_dir, now)
                         adapter.close(space['id'])
                         after = adapter.snapshot()
@@ -256,8 +275,13 @@ def cycle(adapter, config, state, now, *, apply=False, only_space=None, report_d
                             raise RuntimeError('focus changed after close; further cleanup stopped')
                         item['action'] = 'closed'
                         del tracking[space['id']]
+                        for session, _ in parked:
+                            adapter.park(config, session, 'closed', reason='space closed')
         elif item['safe']:
             item['reasons'].append('idle/output-stable observation window incomplete')
+        if item['action'] == 'would_close' and not apply and hasattr(adapter, 'park'):
+            item['harness_check'] = [agent_sessions.harness_park(config, {**x, 'git': adapter.git(x.get('cwd'))}, 'close_requested', dry_run=True)
+                                     for x in item.get('sessions', [])]
         if apply and trial_ok and reviewed and any('user decision pending' in r for r in item['reasons']):
             notified = old.get('decision_notified_at', 0)
             if config.get('notify_terminal') and now - notified >= 86400:
@@ -267,6 +291,13 @@ def cycle(adapter, config, state, now, *, apply=False, only_space=None, report_d
     state.update(last_at=now, spaces=tracking, trial=trial)
     return {'at': dt.datetime.fromtimestamp(now).astimezone().isoformat(), 'mode': 'apply' if apply else 'dry-run', 'trial': trial,
             'trial_ready': trial_ok, 'results': result, 'focus': initial_focus}
+
+
+OBSERVER_FILES = ('close_finished_spaces.py', 'space_job_evidence.py', 'agent_sessions.py')
+
+
+def observer_sha256(folder):
+    return hashlib.sha256(b''.join((Path(folder) / name).read_bytes() for name in OBSERVER_FILES)).hexdigest()
 
 
 def main():
@@ -294,7 +325,7 @@ def main():
     except BlockingIOError:
         print(json.dumps({'action': 'skip', 'reason': 'another cleanup observer is running'})); return
     state = load(args.state, {})
-    observer_hash = hashlib.sha256(Path(__file__).read_bytes() + Path(__file__).with_name('space_job_evidence.py').read_bytes()).hexdigest()
+    observer_hash = observer_sha256(Path(__file__).parent)
     if state.get('observer_sha256') != observer_hash:
         state = {'observer_sha256': observer_hash}
     try:

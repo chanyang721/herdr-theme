@@ -42,6 +42,9 @@ class FakeLive:
         self.focus_after_close = False
         self.close_error = None
         self.report_dir = None
+        self.parks = []
+        self.park_error = None
+        self.session_known = True
 
     def snapshot(self):
         self.snapshots += 1
@@ -53,8 +56,20 @@ class FakeLive:
         self.reads.append(address)
         return self.text
 
-    def backend(self, terminal, config):
+    def backend(self, terminal, config, process_tree_clean=False):
         return True, '', 'verified-test-jobs'
+
+    def mapping(self, terminal, config):
+        return {'session_id': '11111111-2222-3333-4444-555555555555'} if self.session_known else None
+
+    def park(self, config, item, event, reason=None):
+        self.parks.append((event, item['address'], item['session_id']))
+        if self.report_dir is not None and event == 'close_requested':
+            assert not self.closed, 'harness record must precede space.close'
+        return (True, f'record-{len(self.parks)}') if not self.park_error else (False, self.park_error)
+
+    def git(self, folder):
+        return {'branch': 'main', 'head': 'abc1234', 'uncommitted': 1, 'worktrees': 1}
 
     def close(self, space_id):
         if self.report_dir is not None:
@@ -323,3 +338,52 @@ class PromptEvidenceTests(unittest.TestCase):
         self.assertFalse(cleanup.empty_prompt('›\nunknown continuation\n', 'codex'))
         self.assertFalse(cleanup.empty_prompt('› pending instruction\n', 'codex'))
         self.assertFalse(cleanup.empty_prompt('❯\n', 'unknown-agent'))
+
+
+class HarnessRecordTests(CleanupPolicyTests):
+    """Temporary spaces: harness record → workspace record document → space close."""
+
+    def test_harness_record_precedes_document_and_close_and_closed_follows(self):
+        result = self.cycle()
+        self.assertEqual(result['results'][0]['action'], 'closed')
+        self.assertEqual([e for e, *_ in self.live.parks], ['close_requested', 'closed'])
+        self.assertEqual(result['results'][0]['harness'], ['record-1'])
+
+    def test_refused_harness_record_keeps_the_space_and_writes_no_document(self):
+        self.live.park_error = 'harness refused: org: work records need a local denylist'
+        result = self.cycle()
+        self.assertEqual((result['results'][0]['action'], self.live.closed), ('keep', []))
+        self.assertTrue(any('harness record failed' in r for r in result['results'][0]['reasons']))
+        self.assertFalse(self.reports.exists())
+
+    def test_unknown_session_id_is_a_reason_to_keep(self):
+        self.live.session_known = False
+        self.assert_blocked('session id unverified')
+
+    def test_user_approval_replaces_the_30_minute_review_after_one_recorded_dry_run(self):
+        self.config.pop('reviewed_dry_run_at')
+        self.config['user_approved_apply'] = True
+        state = self.ready_state()
+        state['trial'].update(started_at=NOW-300, samples=1)   # one dry-run seen; this apply cycle is the second
+        self.assertEqual(self.cycle(state)['results'][0]['action'], 'closed')
+
+    def test_user_approval_is_tied_to_the_reviewed_code(self):
+        self.config.pop('reviewed_dry_run_at')
+        self.config.update(user_approved_apply=True, reviewed_observer_sha256='other-code')
+        state = self.ready_state()
+        state['trial'].update(started_at=NOW-300, samples=1)
+        self.assertEqual(self.cycle(state)['results'][0]['action'], 'keep')
+
+    def test_claude_input_box_borders_do_not_hide_an_empty_prompt(self):
+        border = '─' * 40
+        empty = f'done\n{border}\n❯ \n{border}\n  ⏵⏵ auto mode on (shift+tab to cycle) · ← 2 agents\n'
+        typed = f'done\n{border}\n❯ 예시값도 하나 넣어줘\n{border}\n  ⏵⏵ auto mode on (shift+tab to cycle)\n'
+        self.assertTrue(cleanup.empty_prompt(empty, 'claude-code'))
+        self.assertFalse(cleanup.empty_prompt(typed, 'claude-code'))
+
+
+# The harness tests share CleanupPolicyTests' fixtures; attach them there so nothing runs twice.
+for _name, _test in list(vars(HarnessRecordTests).items()):
+    if _name.startswith('test_'):
+        setattr(CleanupPolicyTests, _name, _test)
+del HarnessRecordTests
