@@ -96,7 +96,7 @@
               "id": "cli-status",
               "type": "block",
               "size": {
-                "px": 500
+                "px": 580
               },
               "content": {
                 "mod": "cli-status"
