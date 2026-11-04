@@ -86,10 +86,20 @@
               "id": "mcp-status",
               "type": "block",
               "size": {
-                "px": 440
+                "px": 520
               },
               "content": {
                 "mod": "mcp-status"
+              }
+            },
+            {
+              "id": "cli-status",
+              "type": "block",
+              "size": {
+                "px": 400
+              },
+              "content": {
+                "mod": "cli-status"
               }
             },
             {

@@ -181,10 +181,10 @@ dry-run으로 등록하고, `--install --enable-apply --user-approved`가 apply�
 
 ## 2026-11-03 설치본 동기화
 
-현재 `layouts/sixfold.json`은 실제 설치된 모니터 줄을 포함합니다. 사용 전 외부 모드 `system-metrics`, `mcp-status`, `agent-usage`, `plan-usage`를 별도 설치해야 합니다([의존성 안내](extras/monitor-layout/README.md)). 이 저장소는 외부 모드의 버전을 고정하거나 자동 설치하지 않습니다.
+현재 `layouts/sixfold.json`은 실제 설치된 모니터 줄을 포함합니다. 사용 전 외부 모드 `system-metrics`, `mcp-status`, `cli-status`, `agent-usage`, `plan-usage`를 별도 설치해야 합니다([의존성 안내](extras/monitor-layout/README.md)). 이 저장소는 외부 모드의 버전을 고정하거나 자동 설치하지 않습니다.
 
 ## 2026-11-04 회사 Mac 설치 동결
 
-`sixfold` 배치는 `system-metrics` 480px, MCP 연결 상태 `mcp-status` 440px, `plan-usage` 540px(모델별 주간 창 `Fable 7d` 포함) 순으로 둡니다(서버마다 상태 점·아이콘·짧은 이름 칩, 연결=컬러, 인증 필요·실패·미확인=회색, 툴팁에 이유). System Metrics는 `herdr-workspace-mods`의 `7b81a76` 기준이며, sidebar의 `sixfold.computing.shown`을 따라 현재 컴퓨터만 측정합니다. 원격 컴퓨터 미등록 상태의 로컬 측정과 실제 CPU/RAM 표시를 확인했습니다.
+`sixfold` 배치는 `system-metrics` 480px, MCP 연결 상태 `mcp-status` 520px, 계정 CLI 인증 상태 `cli-status` 400px(AWS 프로필·GitHub·kubectl·Docker, 인증=컬러·만료/없음=흑백, 각진 칩), `plan-usage` 540px(모델별 주간 창 `Fable 7d` 포함) 순으로 둡니다(서버마다 상태 점·아이콘·짧은 이름 칩, 연결=컬러, 인증 필요·실패·미확인=회색, 툴팁에 이유). System Metrics는 `herdr-workspace-mods`의 `7b81a76` 기준이며, sidebar의 `sixfold.computing.shown`을 따라 현재 컴퓨터만 측정합니다. 원격 컴퓨터 미등록 상태의 로컬 측정과 실제 CPU/RAM 표시를 확인했습니다.
 
 Usage Bar의 초기화권 UI는 이 배치에 추가하지 않습니다. 초기화권은 기존 Plan Usage의 `↺` 한 곳에서 표시합니다. 이번 동결은 System Metrics 설치와 현재 배치의 조합이며, 다른 mod 전체가 원격 main과 일치한다는 뜻은 아닙니다. 설치는 `scripts/update_install.py`의 lock·전체 mod 백업·디렉터리 교체·errors/focus 검증 경로를 사용했습니다. 개인별 영수증과 화면은 로컬 워크스페이스 기록에 보관합니다.
