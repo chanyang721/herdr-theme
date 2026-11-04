@@ -210,6 +210,29 @@ class CodexJobEvidenceTests(unittest.TestCase):
         (self.root/'child-session.jsonl').unlink()
         self.hold('unreadable')
 
+    def test_completed_code_cell_mentioning_exec_command_is_a_result(self):
+        self.log('main-session', [event('task_started'), call('c', 'exec', 'text(await tools.exec_command({cmd:"ls"}));'),
+                                 output('c', [{'type': 'input_text', 'text': 'Script completed\nWall time 0.1 seconds\n'},
+                                              {'type': 'input_text', 'text': 'Warning: truncated output (original token count: 9)\nTotal output lines: 2\n\n[{"name":"x"}]'}]),
+                                 event('task_complete')])
+        self.assertTrue(self.check()[0], self.check())
+
+    def test_refused_spawn_without_output_after_task_end_is_not_work(self):
+        self.child([event('task_started'), call('s', 'spawn_agent', '{}'), event('task_complete')])
+        self.assertTrue(self.check()[0], self.check())
+        self.child([event('task_started'), call('x', 'exec_command', '{}'), event('task_complete')], name='other-child')
+        self.hold('pending backend tool calls')
+
+    def test_open_exec_sessions_pass_only_with_a_clean_process_tree(self):
+        self.log('main-session', [event('task_started'), call('l', 'exec_command', '{}'),
+                                 output('l', {'session_id': 5, 'exit_code': None}), event('task_complete')])
+        self.hold('exec sessions')
+        self.assertTrue(jobs.check_jobs(self.terminal, self.config, process_tree_clean=True)[0])
+
+    def test_closed_child_needs_no_finished_turn_but_its_commands_still_count(self):
+        self.child([event('task_started')], edge='closed')
+        self.assertTrue(self.check()[0], self.check())
+
     def test_child_graph_cycle_cannot_be_accepted(self):
         self.child()
         with sqlite3.connect(self.db) as c:
@@ -267,6 +290,72 @@ class ClaudeJobEvidenceTests(unittest.TestCase):
         (child_dir/'agent.meta.json').write_text('{"finished":false}')
         self.assertFalse(self.check()[0])
         self.assertIn('child working/unknown', self.check()[1])
+
+    # Real Claude Code logs (2.1.x): what made every idle session "unverified" before.
+    def use(self, tool_id, background=False):
+        part = {'type': 'tool_use', 'id': tool_id, 'name': 'Bash', 'input': {'run_in_background': True} if background else {}}
+        return {'type': 'assistant', 'sessionId': 'claude-main', 'message': {'role': 'assistant', 'stop_reason': 'tool_use', 'content': [part]}}
+
+    def result(self, tool_id, text='ok', extra=None, error=False):
+        return {'type': 'user', 'sessionId': 'claude-main', 'toolUseResult': extra or {},
+                'message': {'role': 'user', 'content': [{'type': 'tool_result', 'tool_use_id': tool_id, 'content': text, 'is_error': error}]}}
+
+    def end(self):
+        return {'type': 'assistant', 'sessionId': 'claude-main', 'message': {'role': 'assistant', 'stop_reason': 'end_turn', 'content': []}}
+
+    def notice(self, task, tool_id, status='completed', kind='queue-operation'):
+        return {'type': kind, 'sessionId': 'claude-main',
+                'content': f'<task-notification> <task-id>{task}</task-id> <tool-use-id>{tool_id}</tool-use-id> <status>{status}</status> </task-notification>'}
+
+    def test_api_request_copies_of_tool_results_are_not_events(self):
+        blob = {'type': 'api-request-blob', 'sessionId': 'claude-main', 'message': {'role': 'user', 'content': [
+            {'type': 'tool_result', 'tool_use_id': 'a'}]}}
+        self.write([self.use('a'), blob, self.result('a'), self.end()])
+        self.assertTrue(self.check()[0], self.check())
+
+    def test_compaction_is_read_through(self):
+        self.write([self.use('a'), self.result('a'), {'type': 'user', 'isCompactSummary': True, 'sessionId': 'claude-main',
+                                                   'message': {'role': 'user', 'content': 'summary'}}, self.end()])
+        self.assertTrue(self.check()[0], self.check())
+
+    def test_background_job_blocks_until_its_completion_notice(self):
+        started = [self.use('a', True), self.result('a', 'Command running in background with ID: b1.', {'backgroundTaskId': 'b1'}), self.end()]
+        self.write(started)
+        self.assertIn('background job running', self.check()[1])
+        self.write(started + [self.notice('b1', 'a')])
+        self.assertTrue(self.check()[0], self.check())
+        self.write(started + [self.notice('b1', 'a', status='running')])
+        self.assertIn('background job running', self.check()[1])
+
+    def test_stopped_background_job_and_denied_launch_do_not_block(self):
+        self.write([self.use('a', True), self.result('a', 'Command running in background with ID: b1.'),
+                    self.use('s'), self.result('s', 'Successfully stopped task: b1 (sleep 99)'),
+                    self.use('d', True), self.result('d', 'Permission for this action was denied', error=True), self.end()])
+        self.assertTrue(self.check()[0], self.check())
+
+    def test_async_agent_blocks_until_notified(self):
+        started = [self.use('a'), self.result('a', 'launched', {'isAsync': True, 'status': 'async_launched', 'agentId': 'ag1'}), self.end()]
+        self.write(started)
+        self.assertIn('background job running', self.check()[1])
+        self.write(started + [self.notice('ag1', 'a', kind='attachment')])
+        self.assertTrue(self.check()[0], self.check())
+
+    def test_unicode_line_separators_inside_strings_do_not_split_records(self):
+        records = [self.use('a'), self.result('a', 'line\u2028still the same record'), self.end()]
+        self.log.write_text(''.join(json.dumps(r, ensure_ascii=False)+'\n' for r in records))
+        os.utime(self.log, (STAMP/1000, STAMP/1000))
+        self.assertIn('\u2028', self.log.read_text())
+        self.assertTrue(self.check()[0], self.check())
+
+    def test_finished_subagent_ending_on_its_result_tool_is_accepted(self):
+        child_dir = self.home/'projects/fixture/claude-main/subagents'
+        child_dir.mkdir(parents=True)
+        (child_dir/'agent-x.meta.json').write_text('{"finished":true}')
+        (child_dir/'agent-x.jsonl').write_text(json.dumps(self.use('final')) + '\n')
+        self.assertTrue(self.check()[0], self.check())
+        (child_dir/'agent-x.meta.json').write_text('{}')   # no `finished`: the log must show an ended turn
+        self.assertFalse(self.check()[0])
+
 
 class TruncatedHostMetadataTests(unittest.TestCase):
     def test_complete_exit_metadata_before_truncated_stdout_is_evidence(self):

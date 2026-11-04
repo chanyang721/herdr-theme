@@ -23,6 +23,11 @@ class Unverified(Exception):
     pass
 
 
+class OpenExecSessions(Unverified):
+    """Exec sessions the log started and never saw end. They are child processes of the Codex
+    process, so a caller that verified that process tree holds no command may accept them."""
+
+
 def _hash(value):
     return hashlib.sha256(json.dumps(value, ensure_ascii=False, sort_keys=True, default=str).encode()).hexdigest()
 
@@ -144,7 +149,7 @@ def _read_jsonl(path, session_id, observations):
     if not data or not data.endswith(b'\n'):
         raise Unverified('incomplete rollout history')
     records = []
-    for line in data.decode('utf-8').splitlines():
+    for line in data.decode('utf-8').split('\n'):
         if not line.strip():
             continue
         item = json.loads(line)
@@ -212,7 +217,9 @@ def _codex_log(records):
                 exited = isinstance(exit_code, int) and not isinstance(exit_code, bool)
                 if result_session:
                     saw_result = True
-                    if session_id and session_id != result_session:
+                    # One code-mode cell may poll one session and start another; only a direct
+                    # tool call names exactly the session its result belongs to.
+                    if session_id and session_id != result_session and call['name'] != 'exec':
                         raise Unverified('backend poll session identity mismatch')
                     if exited:
                         sessions.discard(result_session)
@@ -221,19 +228,34 @@ def _codex_log(records):
                 elif exited:
                     saw_result = True
                     if session_id:
-                        if session_id not in sessions:
-                            raise Unverified('backend session completion has no matching start')
-                        sessions.remove(session_id)
+                        # An exit for a session whose start was not parsed still means it ended.
+                        sessions.discard(session_id)
             shell_call = call['name'] in {'exec_command', 'write_stdin', 'shell', 'bash'} or 'exec_command' in call['raw'] or 'write_stdin' in call['raw']
-            if shell_call and not saw_result and not running:
+            # A code-mode cell the host reports as completed has returned: anything it left
+            # running would have printed a session_id (tracked above) or a running cell.
+            completed = any(COMPLETED_CELL.match(text) for text in host_texts)
+            if shell_call and not saw_result and not running and not completed:
                 raise Unverified('backend command result unverified')
-    if pending:
+    # After the task ended, a call that never got its output (a refused spawn_agent, say) is not
+    # running. A command call without output is, until proven otherwise.
+    if any(calls[c]['relevant'] for c in pending) or (pending and lifecycle != 'finished'):
         raise Unverified('pending backend tool calls')
     if cells:
         raise Unverified('running backend execution cells')
     if sessions:
-        raise Unverified('running backend exec sessions')
+        raise OpenExecSessions('running backend exec sessions')
     return lifecycle
+
+
+def _codex_finished(records):
+    phase = None
+    for record in records:
+        payload = record.get('payload') if isinstance(record.get('payload'), dict) else {}
+        if record.get('type') == 'event_msg' and payload.get('type') == 'task_started':
+            phase = 'working'
+        elif record.get('type') == 'event_msg' and payload.get('type') in TERMINAL_EVENTS:
+            phase = 'finished'
+    return phase == 'finished'
 
 
 def _codex(terminal, mapping, config, observations):
@@ -257,8 +279,15 @@ def _codex(terminal, mapping, config, observations):
             records, mtime_ms = _read_jsonl(row[0], session_id, observations)
             if main and mtime_ms <= terminal['status_ms']-5000:
                 raise Unverified('stale main rollout/session mapping')
-            phase = _codex_log(records)
-            if phase != 'finished':
+            try:
+                phase = _codex_log(records)
+            except OpenExecSessions:
+                if not config.get('_process_tree_clean'):
+                    raise
+                observations.append({'open_exec_sessions_without_processes': session_id})
+                phase = 'finished' if _codex_finished(records) else None
+            # A thread its parent closed runs no more turns; what it left running is still checked.
+            if phase != 'finished' and edge != 'closed':
                 raise Unverified('open child task working/unknown' if not main else 'main backend task working/unknown')
             rows = connection.execute('select child_thread_id, status from thread_spawn_edges where parent_thread_id = ? order by child_thread_id', (session_id,)).fetchall()
             observations.append({'parent': session_id, 'children': rows})
@@ -281,25 +310,72 @@ def _claude_records(path, observations):
     after = path.stat()
     if len(data) > MAX_ROLLOUT_BYTES or not data.endswith(b'\n') or (before.st_size, before.st_mtime_ns) != (after.st_size, after.st_mtime_ns):
         raise Unverified('backend jobs unverified: Claude history incomplete')
-    records = [json.loads(line) for line in data.decode('utf-8').splitlines() if line.strip()]
+    lines = [line for line in data.decode('utf-8').split('\n') if line.strip()]
+    records = [json.loads(line) for line in lines]
     observations.append({'claude_log': str(path), 'sha256': hashlib.sha256(data).hexdigest(), 'mtime_ns': after.st_mtime_ns})
     return records, after.st_mtime*1000
 
 
-def _claude_log(records, session_id):
-    pending = set()
+# Copies of API requests repeat earlier tool results; they are not conversation events.
+CLAUDE_COPIES = {'api-request', 'api-request-blob', 'api-request-shape'}
+NOTICE = re.compile(r'<task-notification>(.*?)</task-notification>', re.S)
+NOTICE_IDS = re.compile(r'<(?:task-id|tool-use-id)>([A-Za-z0-9_-]+)</(?:task-id|tool-use-id)>')
+NOTICE_ENDED = re.compile(r'<status>(?:completed|failed|killed|stopped|cancelled)</status>')
+
+
+def _ended_tasks(text):
+    """Task and tool-use ids that a task notification reports as ended."""
+    return {i for block in NOTICE.findall(text) if NOTICE_ENDED.search(block) for i in NOTICE_IDS.findall(block)}
+STOPPED_TEXT = re.compile(r'Successfully (?:stopped task|killed shell):?\s*([A-Za-z0-9_-]+)')
+BACKGROUND_TEXT = re.compile(r'running in (?:the )?background with ID:\s*([A-Za-z0-9_-]+)', re.I)
+
+
+def _real_prompt(item, message):
+    """A user turn the person (or hc) typed, not a tool result, command echo or meta note."""
+    if item.get('isMeta') or item.get('toolUseResult') is not None:
+        return False
+    content = message.get('content')
+    if isinstance(content, list):
+        if any(isinstance(p, dict) and p.get('type') == 'tool_result' for p in content):
+            return False
+        content = ' '.join(p.get('text', '') for p in content if isinstance(p, dict))
+    text = (content or '').lstrip() if isinstance(content, str) else ''
+    return bool(text) and not text.startswith(('<local-command-', '<command-name>', '<command-message>', '<task-notification>', '<system-reminder>'))
+
+
+def _claude_log(records, session_id, finished_by_meta=False):
+    """Fail closed on: unknown identity, a tool call without its result, a background task
+    (shell or async agent) started with no completed/failed/killed notice after it, and a turn
+    that has not ended. Compaction keeps the file append-only, so it is read through."""
+    pending, started, ended = set(), set(), set()
+    alias = {}   # a background task id <-> the tool call that started it: one task
+    background_calls = set()
     finished = False
     identified = False
     for item in records:
-        if not isinstance(item, dict) or item.get('isCompactSummary') or item.get('type') in ('summary', 'compact_boundary'):
-            raise Unverified('backend jobs unverified: Claude history truncated')
+        if not isinstance(item, dict):
+            raise Unverified('backend jobs unverified: Claude history invalid')
+        message = item.get('message') if isinstance(item.get('message'), dict) else {}
+        kind = item.get('type') or message.get('role')
+        if kind in CLAUDE_COPIES or str(kind).startswith('api-request'):
+            continue
         if item.get('sessionId'):
             if item['sessionId'] != session_id:
                 raise Unverified('backend jobs unverified: Claude session identity mismatch')
             identified = True
-        message = item.get('message') or {}
-        if not isinstance(message, dict):
+        raw = json.dumps(item, ensure_ascii=False)
+        if '<task-notification>' in raw:
+            ended.update(_ended_tasks(raw.replace('\\n', '\n')))
+        if kind not in ('assistant', 'user'):
             continue
+        result = item.get('toolUseResult')
+        launched = set()
+        if isinstance(result, dict):
+            if result.get('backgroundTaskId'):
+                launched.add(str(result['backgroundTaskId']))
+            if result.get('agentId') and (result.get('isAsync') or result.get('status') == 'async_launched'):
+                launched.add(str(result['agentId']))
+        started.update(launched)
         content = message.get('content', [])
         for part in content if isinstance(content, list) else []:
             if not isinstance(part, dict):
@@ -308,23 +384,37 @@ def _claude_log(records, session_id):
                 tool_id = part.get('id')
                 if not tool_id or tool_id in pending:
                     raise Unverified('backend jobs unverified: Claude tool identity')
-                if (part.get('input') or {}).get('run_in_background'):
-                    raise Unverified('backend jobs unverified: Claude background job')
                 pending.add(tool_id)
+                if (part.get('input') or {}).get('run_in_background'):
+                    background_calls.add(tool_id)
             elif part.get('type') == 'tool_result':
                 tool_id = part.get('tool_use_id')
                 if tool_id not in pending:
                     raise Unverified('backend jobs unverified: Claude tool history')
                 text = json.dumps(part.get('content', ''), ensure_ascii=False)
-                if re.search(r'running in (?:the )?background|background(?:ed)? (?:task|process)|task_id', text, re.I):
-                    raise Unverified('backend jobs unverified: Claude background job')
+                background = set(BACKGROUND_TEXT.findall(text)) | launched
+                if tool_id in background_calls and not background and not part.get('is_error'):
+                    background = {tool_id}   # asked for the background, no id seen: assume it runs
+                started.update(background)
+                for task in background:
+                    alias[task] = tool_id
+                    alias[tool_id] = task
+                ended.update(STOPPED_TEXT.findall(text))
                 pending.remove(tool_id)
         if message.get('role') == 'assistant':
             finished = message.get('stop_reason') == 'end_turn'
-        elif message.get('role') == 'user':
+        elif _real_prompt(item, message):
             finished = False
-    if not identified or pending or not finished:
-        raise Unverified('backend jobs unverified: Claude task state')
+    if not identified:
+        raise Unverified('backend jobs unverified: Claude session identity')
+    if pending & background_calls or any(task not in ended and alias.get(task) not in ended for task in started):
+        raise Unverified('backend jobs unverified: Claude background job running')
+    if finished_by_meta:
+        return   # a subagent ends on its result tool call; its meta says it finished
+    if pending:
+        raise Unverified('backend jobs unverified: Claude tool call without result')
+    if not finished:
+        raise Unverified('backend jobs unverified: Claude turn not ended')
 
 
 def _claude(terminal, mapping, config, observations):
@@ -347,26 +437,32 @@ def _claude(terminal, mapping, config, observations):
     if mtime <= terminal['status_ms']-5000:
         raise Unverified('backend jobs unverified: stale Claude log')
     _claude_log(records, mapping['session_id'])
-    for child_meta in (home/'projects').glob(f'*/{mapping["session_id"]}/subagents/*.meta.json'):
+    for child_meta in sorted((home/'projects').glob(f'*/{mapping["session_id"]}/subagents/*.meta.json')):
         child = json.loads(child_meta.read_text())
-        if not isinstance(child, dict) or child.get('finished') is not True:
+        # `finished` is written by newer Claude Code only: false blocks, missing defers to the log.
+        if not isinstance(child, dict) or child.get('finished') is False:
             raise Unverified('backend jobs unverified: Claude child working/unknown')
         log_path = child.get('logPath') or child_meta.with_name(child_meta.name.replace('.meta.json', '.jsonl'))
         child_records, _ = _claude_records(log_path, observations)
-        child_session = child.get('sessionId')
+        # A subagent's log carries its parent's session id (and its own agentId).
+        child_session = child.get('sessionId') or mapping['session_id']
         if not isinstance(child_session, str) or not child_session:
             raise Unverified('backend jobs unverified: Claude child session identity')
-        _claude_log(child_records, child_session)
+        _claude_log(child_records, child_session, finished_by_meta=child.get('finished') is True)
         observations.append({'claude_child_meta': child})
 
 
-def check_jobs(terminal, config):
-    """Return (verified_no_jobs, reason, fingerprint), conservatively read-only."""
+def check_jobs(terminal, config, mapping=None, process_tree_clean=False):
+    """Return (verified_no_jobs, reason, fingerprint), conservatively read-only.
+
+    mapping: the terminal's session (agent_sessions.session_mapping) when the config has none.
+    process_tree_clean: the caller saw no command process under the agent (only helpers)."""
+    config = {**config, '_process_tree_clean': bool(process_tree_clean)}
     observations = [{'terminal': {k: terminal.get(k) for k in ('address', 'pid', 'created_ms', 'status_ms', 'status')}}]
     try:
         address = terminal.get('address')
         sessions = config.get('sessions', {})
-        mapping = sessions.get(address) if isinstance(sessions, dict) else None
+        mapping = (sessions.get(address) if isinstance(sessions, dict) else None) or mapping
         if not isinstance(mapping, dict):
             raise Unverified('backend jobs unverified: session mapping missing')
         observations.append({'mapping': mapping})
