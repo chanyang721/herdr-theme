@@ -197,5 +197,35 @@ else:sys.exit(4)
         self.assertEqual((right / 'main.js').read_text(), 'installed')
         self.assertFalse((left.parent / 'example.exchange-aside').exists())
 
+class VoiceRoutingTests(unittest.TestCase):
+    """voice/... names install the voice plugin as one unit, not as app files."""
+
+    def run_main(self, names):
+        import update_install
+        calls = []
+        repo = Path(__file__).resolve().parents[1]
+        with patch.object(update_install, 'update', side_effect=lambda *a, **k: calls.append(('update', a[2])) or 'receipt'), \
+             patch.object(update_install, 'install_voice', side_effect=lambda r, h: calls.append(('voice', r))), \
+             patch.object(sys, 'argv', ['update_install.py', '--repo', str(repo), *names]):
+            update_install.main()
+        return calls
+
+    def test_voice_alone_skips_the_app_update(self):
+        self.assertEqual([c[0] for c in self.run_main(['voice'])], ['voice'])
+
+    def test_app_files_and_voice_install_both_in_order(self):
+        calls = self.run_main(['mods/sixfold-desk/main.js', 'voice/focus_queue.py'])
+        self.assertEqual(calls[0], ('update', ['mods/sixfold-desk/main.js']))
+        self.assertEqual(calls[1][0], 'voice')
+
+    def test_a_failed_voice_install_fails_the_update(self):
+        import update_install
+        with tempfile.TemporaryDirectory() as folder:
+            (Path(folder) / 'voice').mkdir()
+            (Path(folder) / 'voice/install.py').write_text('import sys; sys.exit(1)\n')
+            with self.assertRaises(InstallError):
+                update_install.install_voice(Path(folder), Path(folder) / 'app')
+
+
 if __name__ == '__main__':
     unittest.main()
