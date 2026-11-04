@@ -5,6 +5,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
 SCRIPTS = Path(__file__).resolve().parents[1] / 'scripts'
 sys.path.insert(0, str(SCRIPTS))
@@ -12,6 +13,20 @@ import file_lock
 
 
 class PortableHelpers(unittest.TestCase):
+    @unittest.skipUnless(os.name == 'nt', 'Windows desktop integration')
+    def test_browser_reuses_ego_profile_and_hides_console(self):
+        import desktop
+        with tempfile.TemporaryDirectory() as tmp:
+            document = Path(tmp) / '한글 보고서.html'
+            document.write_text('<p>document</p>', encoding='utf-8')
+            original = Path.is_file
+            with patch.object(Path, 'is_file', lambda p: p.name == 'ego.exe' or original(p)), patch.object(desktop.subprocess, 'Popen') as launch:
+                desktop.launch('browser', document)
+                argv = launch.call_args.args[0]
+                self.assertEqual(Path(argv[0]).name, 'ego.exe')
+                self.assertEqual(argv[1:], [str(document.resolve())])
+                self.assertEqual(launch.call_args.kwargs['creationflags'], subprocess.CREATE_NO_WINDOW)
+
     def test_lock_contends_across_processes_and_keeps_owner_readable(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / 'owner.json'
