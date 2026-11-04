@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Route Common workspace tasks to the same project slot, with idle fallback."""
 import argparse
-import fcntl
+import file_lock as fcntl
 import json
 import os
 import re
@@ -24,7 +24,7 @@ READY = {'idle'}
 
 def call(argv, env=None):
     result = subprocess.run([str(x) for x in argv], capture_output=True, text=True,
-                            timeout=30, env=env)
+                            timeout=30, env=env, creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
     try:
         data = json.loads(result.stdout or result.stderr)
     except ValueError:
@@ -155,7 +155,7 @@ def source_address(explicit):
     pane = os.environ.get('HERDR_PANE_ID')
     if pane:
         path = Path.home() / '.local/state/herdr-sixfold/migration-map.local.json'
-        for item in json.loads(path.read_text()).get('panes', []):
+        for item in json.loads(path.read_text(encoding='utf-8')).get('panes', []):
             if item.get('source') == pane:
                 return item['terminal']
     raise ValueError('발신 위치가 없습니다. Share 세션에서 실행하거나 --from 실제터미널ID를 지정하세요.')
@@ -163,7 +163,7 @@ def source_address(explicit):
 
 def save_queue(requests):
     temporary = QUEUE.with_suffix('.tmp')
-    temporary.write_text(json.dumps({'requests': requests}, ensure_ascii=False))
+    temporary.write_text(json.dumps({'requests': requests}, ensure_ascii=False), encoding='utf-8')
     temporary.chmod(0o600)
     temporary.replace(QUEUE)
 
@@ -199,7 +199,7 @@ def main():
     args = parser.parse_args()
     if args.enable:
         DATA.mkdir(parents=True, exist_ok=True)
-        (DATA / 'routing.json').write_text(json.dumps({'script': str(Path(__file__).resolve())}))
+        (DATA / 'routing.json').write_text(json.dumps({'script': str(Path(__file__).resolve())}), encoding='utf-8')
         print(json.dumps({'state': 'enabled', 'script': str(Path(__file__).resolve())}))
         return
     if not args.drain and (not args.project or not args.text):
@@ -212,7 +212,7 @@ def main():
             if args.drain:
                 return
             raise ValueError('다른 작업을 전달 중입니다. 전송하지 않았으니 잠시 후 다시 실행하세요.')
-        pending = json.loads(QUEUE.read_text()).get('requests', []) if QUEUE.exists() else []
+        pending = json.loads(QUEUE.read_text(encoding='utf-8')).get('requests', []) if QUEUE.exists() else []
         if args.drain and not pending:
             return
         spaces, live = snapshot()
@@ -239,6 +239,9 @@ def main():
 
 
 if __name__ == '__main__':
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, 'reconfigure'):
+            stream.reconfigure(encoding='utf-8', errors='replace')
     try:
         main()
     except (ValueError, OSError, subprocess.TimeoutExpired) as error:

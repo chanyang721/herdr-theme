@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Index configured project documents and maintain only explicitly owned symlinks."""
 import argparse
-import fcntl
+import file_lock as fcntl
 import hashlib
 import json
 import os
@@ -20,7 +20,7 @@ OWNER='herdr-project-docs-v1'
 def atomic_json(path,value):
     text=json.dumps(value,ensure_ascii=False,indent=2)+'\n'
     try:
-        if path.read_text()==text:return False
+        if path.read_text(encoding='utf-8')==text:return False
     except FileNotFoundError:pass
     path.parent.mkdir(parents=True,exist_ok=True)
     fd,name=tempfile.mkstemp(prefix='.'+path.name+'-',dir=path.parent)
@@ -72,7 +72,7 @@ def owned_links(folder,items):
     folder.mkdir(parents=True,exist_ok=True)
     manifest=folder/'.herdr-document-links.json'
     try:
-        previous=json.loads(manifest.read_text())
+        previous=json.loads(manifest.read_text(encoding='utf-8'))
         if previous.get('owner')!=OWNER or not isinstance(previous.get('links'),dict):return 'manifest_conflict'
         managed=previous['links']
     except FileNotFoundError:managed={}
@@ -104,7 +104,7 @@ def owned_links(folder,items):
 
 
 def collect(config,index,pins=None):
-    data=json.loads(config.read_text()) if config.exists() else {'version':1,'spaces':{}}
+    data=json.loads(config.read_text(encoding='utf-8')) if config.exists() else {'version':1,'spaces':{}}
     if data.get('version')!=1 or not isinstance(data.get('spaces'),dict):raise ValueError('Expected version:1 and spaces mapping')
     output={'version':1,'spaces':{}}
     for space,settings in data['spaces'].items():
@@ -119,7 +119,7 @@ def collect(config,index,pins=None):
         if warnings:output['spaces'][space]['warning']=','.join(sorted(set(warnings)))
     # Spaces that only have 문서 tab rules are indexed by id from those folders, without links.
     try:
-        rules=json.loads(pins.read_text()).get('spaces',{}) if pins else {}
+        rules=json.loads(pins.read_text(encoding='utf-8')).get('spaces',{}) if pins else {}
     except (OSError,ValueError,AttributeError):rules={}
     for space_id,settings in rules.items():
         if space_id in output['spaces'] or settings.get('name') in output['spaces'] or not isinstance(settings.get('folders'),list):continue
@@ -146,4 +146,8 @@ def main():
     print(json.dumps({'spaces':len(result['spaces']),'documents':sum(len(x['files']) for x in result['spaces'].values())}))
 
 
-if __name__=='__main__':main()
+if __name__ == '__main__':
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, 'reconfigure'):
+            stream.reconfigure(encoding='utf-8', errors='replace')
+    main()

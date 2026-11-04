@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Create one tab with six splits: four Claude and two Codex sessions by default."""
+import sys
 import argparse
 import json
 import subprocess
@@ -59,8 +60,12 @@ def main():
     if args.agents:
         for terminal,kind in zip(order,['claude','claude','codex','claude','claude','codex']):
             address=terminal['terminal']
-            subprocess.run(['hc','label',address,'sixfold.native-agent='+kind],check=True,capture_output=True)
+            subprocess.run(['hc','label',address,'sixfold.native-agent='+kind],check=True,capture_output=True, creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
     print(json.dumps({'space':new['space'],'tab':new['tab'],'terminals':order},ensure_ascii=False))
 
 
-if __name__=='__main__':main()
+if __name__ == '__main__':
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, 'reconfigure'):
+            stream.reconfigure(encoding='utf-8', errors='replace')
+    main()

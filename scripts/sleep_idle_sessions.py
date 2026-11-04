@@ -25,7 +25,7 @@ that stays after /exit, so every workspace keeps its panes (user rule, 2026-11-0
 """
 import argparse
 import datetime as dt
-import fcntl
+import file_lock as fcntl
 import hashlib
 import json
 import os
@@ -74,7 +74,7 @@ class Live(spaces.Live):
         import select
         import subprocess
         proc = subprocess.Popen([self.core, 'attach', '--observe', address], stdin=subprocess.DEVNULL,
-                                stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, env=self._env())
+                                stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, env=self._env(), creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
         data, end, last = b'', time.time() + limit, None
         try:
             while time.time() < end:
@@ -249,7 +249,7 @@ def note(item, notes_dir, now):
     path.parent.mkdir(parents=True, exist_ok=True)
     keep = {k: item.get(k) for k in ('address', 'space_name', 'space_id', 'app', 'session_id', 'title', 'cwd', 'git', 'screen_tail', 'harness', 'argv', 'close_report')}
     keep['at'] = dt.datetime.fromtimestamp(now).astimezone().isoformat()
-    path.write_text(json.dumps(keep, ensure_ascii=False, indent=2) + '\n')
+    path.write_text(json.dumps(keep, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
     path.chmod(0o600)
     return str(path)
 
@@ -261,7 +261,7 @@ def ticket(item, tickets_dir):
     value = {'address': item['address'], 'app': item['app'], 'session_id': item['session_id'], 'cwd': item.get('cwd'),
              'argv': agent_sessions.resume_argv(item['app'], item.get('argv'), item['session_id']),
              'title': item.get('title') or '', 'space_id': item['space_id'], 'space_name': item.get('space_name')}
-    path.write_text(json.dumps(value, ensure_ascii=False, indent=2) + '\n')
+    path.write_text(json.dumps(value, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
     path.chmod(0o600)
     return path
 
@@ -434,4 +434,7 @@ def main():
 
 
 if __name__ == '__main__':
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, 'reconfigure'):
+            stream.reconfigure(encoding='utf-8', errors='replace')
     main()

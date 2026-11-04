@@ -6,7 +6,7 @@ feature; --ensure-tabs recreates missing tabs using the already installed mod.
 """
 import argparse
 import copy
-import fcntl
+import file_lock as fcntl
 import hashlib
 import json
 import os
@@ -136,11 +136,11 @@ def status():
 def copy_feature(repo, app_home):
     source = repo/'mods'/MOD
     # Native compatibility check is required before anything becomes visible.
-    subprocess.run(['herdr-app', 'check', str(source)], check=True, capture_output=True, text=True)
+    subprocess.run(['herdr-app', 'check', str(source)], check=True, capture_output=True, text=True, creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
     destinations = [(source, app_home/'mods'/MOD)]
     tabs_source = repo/'mods/sixfold-tabs/main.js'
     if tabs_source.exists():
-        subprocess.run(['herdr-app', 'check', str(tabs_source.parent)], check=True, capture_output=True, text=True)
+        subprocess.run(['herdr-app', 'check', str(tabs_source.parent)], check=True, capture_output=True, text=True, creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
         destinations.append((tabs_source, app_home/'mods/sixfold-tabs/main.js'))
     for source_path, destination in destinations:
         if source_path.is_dir():
@@ -181,13 +181,13 @@ def install_mermaid(repo, app_home, library):
 def compile_swift(source, output):
     """Compile a WebKit renderer with the first macOS SDK the installed compiler accepts."""
     sdks = [Path('/Library/Developer/CommandLineTools/SDKs')/name for name in ('MacOSX26.5.sdk', 'MacOSX15.4.sdk')]
-    found = subprocess.run(['xcrun', '--show-sdk-path'], capture_output=True, text=True)
+    found = subprocess.run(['xcrun', '--show-sdk-path'], capture_output=True, text=True, creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
     if found.returncode == 0: sdks.append(Path(found.stdout.strip()))
     errors = []
     # The newest SDK can be ahead of the installed compiler; try known matches first.
     for sdk in dict.fromkeys(sdks):
         if not sdk.exists(): continue
-        attempt = subprocess.run(['swiftc', '-O', '-sdk', str(sdk), str(source), '-o', str(output)], capture_output=True, text=True)
+        attempt = subprocess.run(['swiftc', '-O', '-sdk', str(sdk), str(source), '-o', str(output)], capture_output=True, text=True, creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
         if not attempt.returncode: return
         errors.append(attempt.stderr)
     raise RuntimeError(f'A compatible macOS Swift SDK is required for {output.name}.\n' + '\n'.join(errors)[-2000:])
@@ -222,12 +222,12 @@ def main():
             raise ValueError('Install the checked document mod before ensuring tabs')
         config_file = data/'project-docs-pins.json'
         if args.install:
-            existing = json.loads(config_file.read_text()) if config_file.exists() else {'version': 1, 'spaces': {}}
+            existing = json.loads(config_file.read_text(encoding='utf-8')) if config_file.exists() else {'version': 1, 'spaces': {}}
             project_file = data/'project-docs.json'
-            project = json.loads(project_file.read_text()) if project_file.exists() else {}
+            project = json.loads(project_file.read_text(encoding='utf-8')) if project_file.exists() else {}
             with config_file.with_suffix('.lock').open('a') as config_lock:
                 fcntl.flock(config_lock, fcntl.LOCK_EX)
-                existing = json.loads(config_file.read_text()) if config_file.exists() else {'version': 1, 'spaces': {}}
+                existing = json.loads(config_file.read_text(encoding='utf-8')) if config_file.exists() else {'version': 1, 'spaces': {}}
                 atomic_json(config_file, seed_config(snapshot['value'], existing, project, args.repo,
                                                          site=site_config.load(app=app_home)))
         # Reread after checks and copies; never overwrite a concurrent structure edit.
@@ -250,4 +250,8 @@ def main():
         print(json.dumps(result, ensure_ascii=False))
 
 
-if __name__ == '__main__': main()
+if __name__ == '__main__':
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, 'reconfigure'):
+            stream.reconfigure(encoding='utf-8', errors='replace')
+    main()

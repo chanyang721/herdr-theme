@@ -382,7 +382,7 @@ test('tree helpers: search words, dates, locations and list nodes', () => {
 
 test('the column view is the byte-identical shared copy', async () => {
   const text = await readFile(new URL('../mods/project-docs-tabs/column-view.js', import.meta.url), 'utf8');
-  assert.match(text.split('\n')[0], /^export const COLUMN_VIEW_VERSION = \d+;$/);
+  assert.match(text.split('\n')[0].trimEnd(), /^export const COLUMN_VIEW_VERSION = \d+;$/);
 });
 
 test('a selected 열람 tab is shown again after the mod reloads', async t => {

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Display one existing Herdr TUI terminal in a core terminal, without restarting it."""
 import argparse
-import fcntl
+import file_lock as fcntl
 import hashlib
 import json
 import os
@@ -18,7 +18,7 @@ from pathlib import Path
 
 def source_pane(binary, session, pane):
     result = subprocess.run([binary, '--session', session, 'pane', 'get', pane],
-                            capture_output=True, text=True, timeout=2, check=True)
+                            capture_output=True, text=True, timeout=2, check=True, creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
     return json.loads(result.stdout)['result']['pane']
 
 
@@ -183,4 +183,7 @@ def main():
 
 
 if __name__ == '__main__':
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, 'reconfigure'):
+            stream.reconfigure(encoding='utf-8', errors='replace')
     main()

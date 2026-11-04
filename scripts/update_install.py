@@ -136,7 +136,7 @@ def fill_missing(current, defaults):
 
 
 def read_status(cli, env):
-    result = subprocess.run([cli, 'status'], env=env, check=True, capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=15)
+    result = subprocess.run([cli, 'status'], env=env, check=True, capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=15, creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
     status = json.loads(result.stdout)
     if not isinstance(status, dict) or not isinstance(status.get('errors'), list):
         raise InstallError('status must contain an errors array')
@@ -248,7 +248,7 @@ def update(repo, home, names, cli='herdr-app', verify_timeout=10, allow_unhealth
                 if relative.parts[0] == 'mods':
                     atomic_write(stage / Path(*relative.parts[1:]), payload, mode)
             for name in mods:
-                checked = subprocess.run([cli, 'check', str(stage / name)], env=env, capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=30)
+                checked = subprocess.run([cli, 'check', str(stage / name)], env=env, capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=30, creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
                 if checked.returncode:
                     raise InstallError(f'Native check failed for {name}: {checked.stdout.strip()} {checked.stderr.strip()}')
             # Validate before touching installed code; backups never live in mods/.
@@ -372,7 +372,7 @@ def install_voice(repo, home):
     if not script.is_file():
         raise InstallError(f'Voice plugin missing in {repo}')
     env = {**os.environ, 'HERDR_APP_HOME': str(home)}
-    if subprocess.run([sys.executable, str(script)], env=env).returncode != 0:
+    if subprocess.run([sys.executable, str(script)], env=env, creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0)).returncode != 0:
         raise InstallError('Voice plugin install or check failed (see above)')
 
 
@@ -404,4 +404,7 @@ def main():
 
 
 if __name__ == '__main__':
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, 'reconfigure'):
+            stream.reconfigure(encoding='utf-8', errors='replace')
     main()

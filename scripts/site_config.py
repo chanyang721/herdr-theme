@@ -47,7 +47,7 @@ def path(home=None, app=None):
 def load(home=None, app=None):
     """Defaults overlaid with the local file; a broken file is ignored, not fatal."""
     try:
-        value = json.loads(path(home, app).read_text())
+        value = json.loads(path(home, app).read_text(encoding='utf-8'))
     except (OSError, ValueError):
         value = {}
     return {**DEFAULTS, **(value if isinstance(value, dict) else {})}

@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Open a local document in its project's 문서 tab instead of an external editor."""
+import sys
 import argparse
-import fcntl
+import file_lock as fcntl
 import json
 import os
 from pathlib import Path
@@ -69,7 +70,7 @@ def main():
     app = Path(os.environ.get('HERDR_APP_HOME', Path.home()/'.config/herdr-app'))
     if not (app/'mods'/MOD/'main.js').exists():
         parser.error('install the document tabs first: python3 scripts/install_doc_tabs.py --install')
-    config = json.loads((app/'data/sixfold/project-docs-pins.json').read_text())
+    config = json.loads((app/'data/sixfold/project-docs-pins.json').read_text(encoding='utf-8'))
     listing = json.loads(subprocess.check_output(['herdr-app', 'ls'], text=True))
     live = {space['id'] for space in listing.get('spaces', []) if docs_tab(listing, space['id'])}
     space_id = choose_space(config, file, args.space, live)
@@ -84,17 +85,20 @@ def main():
     with path.with_suffix('.lock').open('a') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
         try:
-            requests = json.loads(path.read_text()).get('requests', {})
+            requests = json.loads(path.read_text(encoding='utf-8')).get('requests', {})
         except (OSError, ValueError, AttributeError):
             requests = {}
         requests[space_id] = {'path': str(file), 'at': time.time_ns() // 1_000_000}
         tmp = path.with_suffix('.tmp')
-        tmp.write_text(json.dumps({'version': 2, 'requests': requests}, ensure_ascii=False))
+        tmp.write_text(json.dumps({'version': 2, 'requests': requests}, ensure_ascii=False), encoding='utf-8')
         tmp.replace(path)
     if not args.no_show:
-        subprocess.run(['herdr-app', 'do', 'tab.select', '--id', tab], check=True, capture_output=True, text=True)
+        subprocess.run(['herdr-app', 'do', 'tab.select', '--id', tab], check=True, capture_output=True, text=True, creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
     print(json.dumps({'space': space_id, 'tab': tab, 'file': str(file), 'shown': not args.no_show}, ensure_ascii=False))
 
 
 if __name__ == '__main__':
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, 'reconfigure'):
+            stream.reconfigure(encoding='utf-8', errors='replace')
     main()

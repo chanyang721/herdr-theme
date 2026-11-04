@@ -11,7 +11,7 @@ export function watchDocs(view,cx){
   let busy=false,previous,collected=0;
   const refresh=cx=>{
     // New and moved documents reach the index without anyone running the collector by hand.
-    if(Date.now()-collected>=COLLECT_MS){collected=Date.now();exec('python3',[`${appHome()}/data/sixfold/doc-tabs/collect_docs.py`]).catch(()=>{});}
+    if(Date.now()-collected>=COLLECT_MS){collected=Date.now();exec('python3',[`${appHome()}/scripts/sixfold/collect_docs.py`]).catch(()=>{});}
     if(busy)return;busy=true;
     cx.spawn(async cx=>{
       try{
@@ -50,7 +50,7 @@ export function docsSection(view,t,space=spaces().find(s=>s.active)){
     const tab=!code&&readable(file.path);
     cx.spawn(async cx=>{
       let error=null;
-      try{const r=await (tab?exec('python3',[`${appHome()}/data/sixfold/doc-tabs/open_doc_tab.py`,file.path,'--space',space.id]):exec(code?'code':'open',code?['--reuse-window',file.path]:[file.path]));if(r.code!==0)throw Error();}
+      try{const r=await (tab?exec('python3',[`${appHome()}/scripts/sixfold/open_doc_tab.py`,file.path,'--space',space.id]):exec('python3',[`${appHome()}/scripts/sixfold/desktop.py`,code?'editor':'open',file.path]));if(r.code!==0)throw Error();}
       catch{error=tab?'문서 탭에서 열지 못했습니다. ↗로 재시도하세요.':code?'VS Code에서 열지 못했습니다.':'기본 앱에서 열지 못했습니다. ↗로 재시도하세요.';}
       view.docsErrors[space.id]=error;cx.notify();
     });

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Install or update managed Herdr Theme files while preserving personal settings."""
+import sys
 import argparse
 import hashlib
 import json
@@ -30,7 +31,7 @@ def atomic_text(path, text):
 def install(repo, app, update=False):
     manifest_path = app/'data/sixfold/install-manifest.json'
     if manifest_path.exists():
-        manifest = json.loads(manifest_path.read_text())
+        manifest = json.loads(manifest_path.read_text(encoding='utf-8'))
         if not isinstance(manifest, dict):
             raise ValueError('Invalid install manifest')
     else:
@@ -43,9 +44,9 @@ def install(repo, app, update=False):
     files = [(src, dst) for src, dst in files
              if not (src.parent == repo/'themes' and src.name in REFERENCES and dst.exists())]
     keyfile = app/'keys.json'
-    original = keyfile.read_text() if keyfile.exists() else '{}'
+    original = keyfile.read_text(encoding='utf-8') if keyfile.exists() else '{}'
     existing = json.loads(original)
-    fragment = json.loads((repo/'keys.json').read_text())
+    fragment = json.loads((repo/'keys.json').read_text(encoding='utf-8'))
     if not isinstance(existing, dict):
         raise ValueError('keys.json must be an object')
     if not update:
@@ -104,14 +105,14 @@ def install(repo, app, update=False):
             if dst.relative_to(app).parts[0] == 'mods':
                 continue
             if not dst.exists() or dst.read_bytes() != src.read_bytes():
-                atomic_text(dst, src.read_text())
+                atomic_text(dst, src.read_text(encoding='utf-8'))
     rendered = json.dumps(existing, ensure_ascii=False, indent=2)+'\n'
     if json.loads(original) != existing:
         if keyfile.exists() and not keyfile.with_name('keys.json.before-sixfold').exists():
             atomic_text(keyfile.with_name('keys.json.before-sixfold'), original)
         atomic_text(keyfile, rendered)
     manifest_text = json.dumps(next_manifest, ensure_ascii=False, indent=2, sort_keys=True)+'\n'
-    if not manifest_path.exists() or manifest_path.read_text() != manifest_text:
+    if not manifest_path.exists() or manifest_path.read_text(encoding='utf-8') != manifest_text:
         atomic_text(manifest_path, manifest_text)
 
 
@@ -127,4 +128,7 @@ def main():
 
 
 if __name__ == '__main__':
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, 'reconfigure'):
+            stream.reconfigure(encoding='utf-8', errors='replace')
     main()

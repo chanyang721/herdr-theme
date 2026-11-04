@@ -55,7 +55,7 @@ def main():
     if not index.exists():
         with tempfile.TemporaryDirectory() as folder:
             result = subprocess.run([str(binary), str(args.doc), f'{folder}/html-{key}', args.theme, str(args.width)],
-                                    capture_output=True, text=True, timeout=60)
+                                    capture_output=True, text=True, timeout=60, creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
             try:
                 data = json.loads(result.stdout)
             except ValueError:
@@ -67,8 +67,8 @@ def main():
             for number in range(len(data['tiles'])):
                 shutil.move(f'{folder}/html-{key}-{number}.png', cache/f'html-{key}-{number}.png')
             # The index is written last, so a partial render is never reused.
-            index.write_text(json.dumps({'tiles': len(data['tiles']), 'truncated': bool(data.get('truncated'))}))
-    saved = json.loads(index.read_text())
+            index.write_text(json.dumps({'tiles': len(data['tiles']), 'truncated': bool(data.get('truncated'))}), encoding='utf-8')
+    saved = json.loads(index.read_text(encoding='utf-8'))
     # Indexes written before truncation was recorded hold only the tile count.
     saved = saved if isinstance(saved, dict) else {'tiles': saved, 'truncated': False}
     pages = []
@@ -81,4 +81,7 @@ def main():
 
 
 if __name__ == '__main__':
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, 'reconfigure'):
+            stream.reconfigure(encoding='utf-8', errors='replace')
     sys.exit(main())

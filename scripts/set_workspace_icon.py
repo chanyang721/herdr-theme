@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Set a local workspace icon without committing customer assets to the theme."""
+import sys
 import argparse
 import hashlib
 import json
@@ -26,14 +27,18 @@ def main():
     if source != (folder/name).resolve():
         shutil.copy2(source,folder/name)
     path=data/'workspace-icons.json'
-    icons=json.loads(path.read_text()) if path.exists() else {}
+    icons=json.loads(path.read_text(encoding='utf-8')) if path.exists() else {}
     icons[args.workspace]={'path':f'data/sixfold/icons/{name}','tint':args.tint}
     if args.background:icons[args.workspace]['background']=args.background
     temporary=path.with_suffix('.tmp')
-    temporary.write_text(json.dumps(icons,ensure_ascii=False))
+    temporary.write_text(json.dumps(icons,ensure_ascii=False), encoding='utf-8')
     temporary.chmod(0o600)
     temporary.replace(path)
     print(f'Updated local icon: {args.workspace}')
 
 
-if __name__=='__main__':main()
+if __name__ == '__main__':
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, 'reconfigure'):
+            stream.reconfigure(encoding='utf-8', errors='replace')
+    main()

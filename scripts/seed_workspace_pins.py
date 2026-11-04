@@ -34,7 +34,7 @@ def seed(app_home, ensure_spaces=False, command='herdr-app'):
             return False
         env = {**os.environ, 'HERDR_APP_HOME': str(app_home)}
         def call(*args):
-            result = subprocess.run([command, *args], env=env, check=True, capture_output=True, text=True)
+            result = subprocess.run([command, *args], env=env, check=True, capture_output=True, text=True, creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
             return json.loads(result.stdout) if result.stdout.strip() else {}
         def spaces():
             value = call('ls')
@@ -89,4 +89,7 @@ def main():
 
 
 if __name__ == '__main__':
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, 'reconfigure'):
+            stream.reconfigure(encoding='utf-8', errors='replace')
     main()

@@ -46,7 +46,7 @@ def family(agent):
 def child_pids(pid):
     if WINDOWS:
         return [child for child, parent in windows_processes().items() if parent == pid]
-    children = subprocess.run(['/usr/bin/pgrep', '-P', str(pid)], capture_output=True, text=True)
+    children = subprocess.run(['/usr/bin/pgrep', '-P', str(pid)], capture_output=True, text=True, creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
     return [int(line) for line in children.stdout.split()]
 
 
@@ -72,7 +72,7 @@ def codex_thread(pids):
     if WINDOWS:
         return windows_codex_thread(pids)
     for pid in pids:
-        files = subprocess.run(['/usr/sbin/lsof', '-p', str(pid)], capture_output=True, text=True).stdout
+        files = subprocess.run(['/usr/sbin/lsof', '-p', str(pid)], capture_output=True, text=True, creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0)).stdout
         match = ROLLOUT.search(files)
         if match:
             return match.group(1)
@@ -419,4 +419,7 @@ def main():
 
 
 if __name__ == '__main__':
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, 'reconfigure'):
+            stream.reconfigure(encoding='utf-8', errors='replace')
     sys.exit(main())

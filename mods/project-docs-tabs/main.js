@@ -1,6 +1,6 @@
 import { View, div, image } from 'gpui-kit';
 import { v_flex, h_flex, TextView, InputState, Input } from 'gpui-base';
-import { props, appHome, readTextFile, exec, watchFolder, theme, settings, shared, setShared, spaces, panes } from 'herdr';
+import { props, appHome, readTextFile, exec, watchFolder, theme, settings, shared, setShared, spaces, panes, window as hostWindow } from 'herdr';
 import { stageMarkdown } from './vendor/markdown.js';
 import { dirname, resolveLink } from './vendor/paths.js';
 import { mermaidFences, applyDiagrams } from './mermaid.js';
@@ -23,6 +23,8 @@ const COLUMN = 200;
 const LOCATION_ICONS = { docs: '🗂', harness: '🧭', opened: '👁', archived: '🗄' };
 const HARNESS_TAG = '하네스 생성물 · 읽기 전용';
 const isHtml = path => /\.html?$/i.test(path);
+const windows = () => typeof hostWindow === 'function' && hostWindow().platform === 'windows';
+const desktop = (action, path) => exec('python3', [`${appHome()}/scripts/sixfold/desktop.py`, action, path]);
 const readable = path => /\.md$/i.test(path) || isHtml(path);
 // Puts the file itself (as Finder Cmd+C does) or its UTF-8 text on the general pasteboard.
 const MAC_COPY = String.raw`
@@ -54,10 +56,10 @@ export default class ProjectDocuments extends View {
   init(_props, cx) {
     const p = props() || {};
     this.spaceId = p.spaceId;
-    this.script = p.resolverScript || `${appHome()}/data/sixfold/doc-tabs/resolve_doc_pins.py`;
+    this.script = p.resolverScript || `${appHome()}/scripts/sixfold/resolve_doc_pins.py`;
     this.config = p.pinsConfig || `${appHome()}/data/sixfold/project-docs-pins.json`;
-    this.mermaidScript = p.mermaidScript || `${appHome()}/data/sixfold/doc-tabs/render_mermaid.py`;
-    this.htmlScript = p.htmlScript || `${appHome()}/data/sixfold/doc-tabs/render_html.py`;
+    this.mermaidScript = p.mermaidScript || `${appHome()}/scripts/sixfold/render_mermaid.py`;
+    this.htmlScript = p.htmlScript || `${appHome()}/scripts/sixfold/render_html.py`;
     this.documents = []; this.watchers = new Map(); this.generation = 0;
     this.selected = shared(STATE)?.[this.spaceId]; this.width = 800; this.paneWidth = 1200;
     this.kinds = []; this.harness = null; this.kindFilter = null; this.kindMenu = false; this.sidebar = null;
@@ -239,6 +241,13 @@ export default class ProjectDocuments extends View {
   browser(path, cx) {
     cx.spawn(async cx => {
       try {
+        if (windows()) {
+          const result = await desktop('browser', path);
+          if (result.code !== 0) throw Error(result.stderr.trim() || '브라우저를 열지 못했습니다.');
+          this.actionError = null;
+          cx.notify();
+          return;
+        }
         const found = await exec('osascript', ['-l', 'JavaScript', '-e', MAC_BROWSER]);
         const app = found.code === 0 ? found.stdout.trim() : '';
         const result = await exec('open', app ? ['-a', app, path] : [path]);
@@ -263,7 +272,9 @@ export default class ProjectDocuments extends View {
   external(command, args, cx) {
     cx.spawn(async cx => {
       try {
-        const result = await exec(command, args);
+        const result = windows() && (command === 'open' || command === 'code')
+          ? await desktop(command === 'code' ? 'editor' : 'open', args[args.length - 1])
+          : await exec(command, args);
         if (result.code !== 0) throw Error(result.stderr.trim() || '외부 앱을 열지 못했습니다.');
         this.actionError = null;
       } catch (error) { this.actionError = String(error.message || error); }
@@ -274,7 +285,8 @@ export default class ProjectDocuments extends View {
   copy(path, mode, cx) {
     cx.spawn(async cx => {
       try {
-        const result = await exec('osascript', ['-l', 'JavaScript', '-e', MAC_COPY, path, mode]);
+        const result = windows() ? await desktop(mode === 'text' ? 'copy-text' : 'copy-file', path)
+          : await exec('osascript', ['-l', 'JavaScript', '-e', MAC_COPY, path, mode]);
         if (result.code !== 0) throw Error(result.stderr.trim().replace(/^.*Error: /, '').replace(/ \(-?\d+\)$/, '') || '복사하지 못했습니다.');
         this.actionError = null; this.copied = `${mode === 'text' ? '본문' : '파일'} 복사됨 · ${path.split('/').pop()}`;
       } catch (error) { this.copied = null; this.actionError = `복사 실패 · ${String(error.message || error)}`; }

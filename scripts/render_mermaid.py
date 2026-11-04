@@ -67,7 +67,7 @@ def main():
                 source.write_text(code, encoding='utf-8')
                 partial = Path(folder)/name
                 result = subprocess.run([str(binary), str(source), str(partial), str(library), args.theme, args.background],
-                                        capture_output=True, text=True, timeout=30)
+                                        capture_output=True, text=True, timeout=30, creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
                 if result.returncode or not partial.exists():
                     try:
                         detail = json.loads(result.stdout).get('error')
@@ -83,4 +83,7 @@ def main():
 
 
 if __name__ == '__main__':
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, 'reconfigure'):
+            stream.reconfigure(encoding='utf-8', errors='replace')
     sys.exit(main())

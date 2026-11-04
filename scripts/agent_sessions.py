@@ -26,7 +26,7 @@ HELPERS = [re.compile(p, re.I) for p in (
 
 
 def run(argv, *, timeout=12, env=None):
-    result = subprocess.run([str(v) for v in argv], capture_output=True, text=True, timeout=timeout, env=env)
+    result = subprocess.run([str(v) for v in argv], capture_output=True, text=True, timeout=timeout, env=env, creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
     if result.returncode:
         raise RuntimeError(f'{Path(str(argv[0])).name} {argv[1:2]} exited {result.returncode}: {result.stderr.strip()[:180]}')
     return result.stdout
@@ -114,7 +114,7 @@ def session_mapping(terminal, config=None):
     if provider(app) == 'claude':
         home = Path(config.get('claude_home', Path.home() / '.claude')).expanduser()
         try:
-            meta = json.loads((home / 'sessions' / f'{fg_pid}.json').read_text())
+            meta = json.loads((home / 'sessions' / f'{fg_pid}.json').read_text(encoding='utf-8'))
         except (OSError, ValueError):
             if inherited_child_session(fg_pid):
                 # Started from inside another Claude (space.new from a Claude turn) with its
@@ -283,7 +283,7 @@ def harness_park(config, item, event, *, dry_run=False, reason=None, runner=None
     argv.append('--mask')
     if dry_run:
         argv.append('--dry-run')
-    runner = runner or (lambda a: subprocess.run([str(v) for v in a], capture_output=True, text=True, timeout=60))
+    runner = runner or (lambda a: subprocess.run([str(v) for v in a], capture_output=True, text=True, timeout=60, creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0)))
     try:
         result = runner(argv)
     except (OSError, subprocess.TimeoutExpired) as exc:
@@ -335,7 +335,7 @@ def harness_close_status(config, item, since, *, runner=None):
         return False, 'harness not configured'
     argv = [python, script, 'close-status', item['address'], '--provider', provider(item['app']),
             '--session-id', item['session_id'], '--since', since]
-    runner = runner or (lambda a: subprocess.run([str(v) for v in a], capture_output=True, text=True, timeout=60))
+    runner = runner or (lambda a: subprocess.run([str(v) for v in a], capture_output=True, text=True, timeout=60, creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0)))
     try:
         result = runner(argv)
         value = json.loads((result.stdout or '').strip().splitlines()[-1])
@@ -369,7 +369,7 @@ def harness_archive(config, data, *, runner=None):
     try:
         with os.fdopen(fd, 'w') as stream:
             json.dump(data, stream, ensure_ascii=False)
-        runner = runner or (lambda a: subprocess.run([str(v) for v in a], capture_output=True, text=True, timeout=60))
+        runner = runner or (lambda a: subprocess.run([str(v) for v in a], capture_output=True, text=True, timeout=60, creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0)))
         try:
             result = runner([python, script, 'archive', '--file', path])
         except (OSError, subprocess.TimeoutExpired) as exc:

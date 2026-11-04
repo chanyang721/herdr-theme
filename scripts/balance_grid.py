@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Make every six-terminal tab exactly 3 by 2, preserving pane IDs and live terminals."""
+import sys
 import copy
 import uuid
 from core_api import call
@@ -29,6 +30,9 @@ def balance_grids(document):
 
 
 if __name__=='__main__':
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, 'reconfigure'):
+            stream.reconfigure(encoding='utf-8', errors='replace')
     snapshot=call('doc.get',{'name':'herdr-app'})
     changed=balance_grids(snapshot['value'])
     result=call('doc.set',{'name':'herdr-app','version':snapshot['version'],'value':snapshot['value']})

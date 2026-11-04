@@ -86,7 +86,7 @@ def clear_labels(address):
     if not address:
         return
     try:
-        subprocess.run(['hc', 'label', address, *[f'{k}=' for k in LABELS]], capture_output=True, timeout=10)
+        subprocess.run(['hc', 'label', address, *[f'{k}=' for k in LABELS]], capture_output=True, timeout=10, creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
     except (OSError, subprocess.SubprocessError):
         pass
 
@@ -96,13 +96,13 @@ def record_resumed(ticket):
     # The installed stub sits in the observer's state folder next to its config.
     config = Path(ticket.get('config') or Path(__file__).resolve().parent / 'sleep-idle-sessions.json')
     try:
-        harness = json.loads(config.read_text()).get('harness') or {}
+        harness = json.loads(config.read_text(encoding='utf-8')).get('harness') or {}
         if harness.get('python') and harness.get('script'):
             provider = 'claude' if ticket['app'] in ('claude', 'claude-code') else 'codex'
             subprocess.run([harness['python'], harness['script'], 'park', ticket['address'], '--provider', provider,
                             '--session-id', ticket['session_id'], '--space-id', ticket['space_id'], '--event', 'resumed',
                             '--done', f"{ticket.get('space_name') or '?'} {ticket['address']}: resumed from sleep"],
-                           capture_output=True, timeout=30)
+                           capture_output=True, timeout=30, creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
     except (OSError, ValueError, KeyError, subprocess.SubprocessError):
         pass
 
@@ -114,7 +114,7 @@ def command(ticket, message):
 
 def main(argv=None):
     argv = sys.argv[1:] if argv is None else argv
-    ticket = json.loads(Path(argv[0]).read_text())
+    ticket = json.loads(Path(argv[0]).read_text(encoding='utf-8'))
     title = ticket.get('title') or ''
     resume = ' '.join(ticket['argv'])
     fd = sys.stdin.fileno()
@@ -141,4 +141,7 @@ def main(argv=None):
 
 
 if __name__ == '__main__':
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, 'reconfigure'):
+            stream.reconfigure(encoding='utf-8', errors='replace')
     sys.exit(main())

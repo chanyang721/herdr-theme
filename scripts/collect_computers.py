@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Read local Tailscale status only; never connect to peers or change settings."""
+import sys
 import json
 from pathlib import Path
 import shutil
@@ -32,11 +33,14 @@ def main():
         if not command:
             raise ValueError('Tailscale CLI unavailable')
         result = subprocess.run([command, 'status', '--json'], capture_output=True,
-                                text=True, timeout=8, check=True)
+                                text=True, timeout=8, check=True, creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
         print(json.dumps({'peers': computers(json.loads(result.stdout)), 'error': None}))
     except (OSError, ValueError, subprocess.SubprocessError):
         print(json.dumps({'peers': [], 'error': 'Tailscale status unavailable'}))
 
 
 if __name__ == '__main__':
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, 'reconfigure'):
+            stream.reconfigure(encoding='utf-8', errors='replace')
     main()

@@ -425,7 +425,7 @@ def _claude(terminal, mapping, config, observations):
     if not isinstance(process_pid, int) or isinstance(process_pid, bool):
         raise Unverified('backend jobs unverified: Claude process identity')
     meta_path = home/'sessions'/f'{process_pid}.json'
-    meta = json.loads(meta_path.read_text())
+    meta = json.loads(meta_path.read_text(encoding='utf-8'))
     if not isinstance(meta, dict) or meta.get('sessionId') != mapping['session_id']:
         raise Unverified('backend jobs unverified: Claude session mapping')
     observations.append({'claude_meta': meta})
@@ -440,7 +440,7 @@ def _claude(terminal, mapping, config, observations):
         raise Unverified('backend jobs unverified: stale Claude log')
     _claude_log(records, mapping['session_id'])
     for child_meta in sorted((home/'projects').glob(f'*/{mapping["session_id"]}/subagents/*.meta.json')):
-        child = json.loads(child_meta.read_text())
+        child = json.loads(child_meta.read_text(encoding='utf-8'))
         # `finished` is written by newer Claude Code only: false blocks, missing defers to the log.
         if not isinstance(child, dict) or child.get('finished') is False:
             raise Unverified('backend jobs unverified: Claude child working/unknown')

@@ -2,7 +2,7 @@
 """Conservatively observe idle temporary spaces. Dry-run by default; never deletes worktrees."""
 import argparse
 import datetime as dt
-import fcntl
+import file_lock as fcntl
 import hashlib
 import json
 import os
@@ -46,7 +46,7 @@ AGENTS = agent_sessions.AGENTS
 
 
 def run(argv, *, timeout=12):
-    result = subprocess.run([str(v) for v in argv], capture_output=True, text=True, timeout=timeout)
+    result = subprocess.run([str(v) for v in argv], capture_output=True, text=True, timeout=timeout, creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
     if result.returncode:
         raise RuntimeError(f'{Path(str(argv[0])).name} {argv[1:2]} exited {result.returncode}: {result.stderr.strip()[:180]}')
     return result.stdout
@@ -54,7 +54,7 @@ def run(argv, *, timeout=12):
 
 def load(path, default=None):
     try:
-        return json.loads(Path(path).read_text())
+        return json.loads(Path(path).read_text(encoding='utf-8'))
     except FileNotFoundError:
         return default
 
@@ -63,7 +63,7 @@ def save(path, value):
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_name(path.name + f'.{os.getpid()}.tmp')
-    tmp.write_text(json.dumps(value, ensure_ascii=False, indent=2) + '\n')
+    tmp.write_text(json.dumps(value, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
     tmp.chmod(0o600)
     tmp.replace(path)
 
@@ -491,4 +491,7 @@ def main():
 
 
 if __name__ == '__main__':
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, 'reconfigure'):
+            stream.reconfigure(encoding='utf-8', errors='replace')
     main()

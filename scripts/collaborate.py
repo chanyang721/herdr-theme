@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Explicit independent-task ledger and at-most-once same-project overload collaboration."""
+import sys
 import argparse
 from contextlib import contextmanager
-import fcntl
+import file_lock as fcntl
 import json
 import os
 from pathlib import Path
@@ -28,7 +29,7 @@ def call(argv, source=None):
 
 def config():
     path = DATA / 'collaboration.json'
-    value = json.loads(path.read_text()) if path.exists() else {}
+    value = json.loads(path.read_text(encoding='utf-8')) if path.exists() else {}
     if not isinstance(value, dict):
         raise ValueError('collaboration.json은 객체여야 합니다.')
     result = {**DEFAULTS, **value}
@@ -65,7 +66,7 @@ def locked():
 
 def load():
     path = DATA / 'collaboration-tasks.json'
-    value = json.loads(path.read_text()) if path.exists() else {'version': 1, 'tasks': {}}
+    value = json.loads(path.read_text(encoding='utf-8')) if path.exists() else {'version': 1, 'tasks': {}}
     if value.get('version') != 1 or not isinstance(value.get('tasks'), dict):
         raise ValueError('손상된 협업 원장: 자동 초기화하지 않습니다.')
     return value
@@ -320,7 +321,7 @@ def transition(args):
             authorized(task, who, 'target')
             if args.lease != task.get('lease') or not args.lease:
                 raise ValueError('임대 토큰 불일치')
-            persisted = json.loads(lease_path(args.id).read_text())
+            persisted = json.loads(lease_path(args.id).read_text(encoding='utf-8'))
             if persisted['token'] != args.lease or persisted['target'] != who:
                 raise ValueError('임대 파일 불일치')
             if args.action == 'accept':
@@ -417,6 +418,9 @@ def main():
 
 
 if __name__ == '__main__':
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, 'reconfigure'):
+            stream.reconfigure(encoding='utf-8', errors='replace')
     try:
         main()
     except (ValueError, OSError, KeyError, subprocess.SubprocessError) as error:

@@ -5,9 +5,10 @@ The CLI prints ``catalog()``: pins first, then every document in the space's fol
 its kind, version family and state, then the harness view. ``resolve()`` is the older
 pins-plus-recent selection that pin commands still validate against.
 """
+import sys
 import argparse
 from datetime import date, datetime, timedelta
-import fcntl
+import file_lock as fcntl
 import hashlib
 import json
 import os
@@ -287,16 +288,19 @@ def main():
         if args.pin or args.pin_id or args.unpin:
             with args.config.with_suffix('.lock').open('a') as lock:
                 fcntl.flock(lock, fcntl.LOCK_EX)
-                config = json.loads(args.config.read_text())
+                config = json.loads(args.config.read_text(encoding='utf-8'))
                 resolve(config, args.space)  # Validate before writing user rules.
                 mutate(config, args.space, args.pin, args.unpin, args.pin_id)
                 atomic_json(args.config, config)
         else:
-            config = json.loads(args.config.read_text())
+            config = json.loads(args.config.read_text(encoding='utf-8'))
         print(json.dumps(catalog(config, args.space), ensure_ascii=False))
     except (OSError, ValueError, KeyError, TypeError) as error:
         parser.exit(1, str(error) + '\n')
 
 
 if __name__ == '__main__':
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, 'reconfigure'):
+            stream.reconfigure(encoding='utf-8', errors='replace')
     main()

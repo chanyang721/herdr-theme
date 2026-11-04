@@ -198,7 +198,7 @@ def harness_root(space_id, app_home, override=None):
         return root if root.is_dir() else None
     base = Path(app_home) / 'data/sixfold/harness-local/views/workspaces'
     try:
-        index = json.loads((base / 'index.json').read_text())
+        index = json.loads((base / 'index.json').read_text(encoding='utf-8'))
     except (OSError, ValueError):
         return None
     for entry in index.get('workspaces', []) if isinstance(index, dict) else []:
@@ -220,6 +220,12 @@ LABELS = {'readme.md': '한눈에 보기', 'context.md': '컨텍스트', 'goal.m
 def _files(folder):
     """Visible files under a harness folder; generated links are followed, broken ones hidden."""
     found = []
+    folder = Path(folder)
+    try:
+        hardlinks = json.loads((folder / '.hardlinks.json').read_text(encoding='utf-8'))
+    except (OSError, ValueError):
+        hardlinks = {}
+    hardlinks = hardlinks if isinstance(hardlinks, dict) else {}
     for directory, subdirs, names in os.walk(folder, followlinks=False):
         subdirs[:] = sorted(name for name in subdirs if not name.startswith('.'))
         for name in names:
@@ -228,6 +234,11 @@ def _files(folder):
                 continue
             try:
                 target = path.resolve(strict=True)
+                saved = hardlinks.get(path.relative_to(folder).as_posix())
+                if isinstance(saved, dict) and isinstance(saved.get('source'), str):
+                    original = Path(saved['source'])
+                    if target.samefile(original):
+                        target = original.resolve(strict=True)
                 if not target.is_file():
                     continue
                 info = target.stat()

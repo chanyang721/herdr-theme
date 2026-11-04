@@ -1,4 +1,5 @@
 """Use herdr-core's documented plain JSON-RPC transport through hc connect."""
+import sys
 import json
 import queue
 import threading
@@ -6,7 +7,7 @@ import subprocess
 
 
 def call(method, params):
-    process = subprocess.Popen(['hc', 'connect'], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True, encoding='utf-8')
+    process = subprocess.Popen(['hc', 'connect'], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True, encoding='utf-8', creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
     try:
         process.stdin.write(json.dumps({'jsonrpc':'2.0','id':1,'method':method,'params':params})+'\n')
         process.stdin.flush()
@@ -42,5 +43,8 @@ def balance(document):
 
 
 if __name__ == '__main__':
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, 'reconfigure'):
+            stream.reconfigure(encoding='utf-8', errors='replace')
     snapshot = call('doc.get', {'name':'herdr-app'})
     print(call('doc.set', {'name':'herdr-app','version':snapshot['version'],'value':balance(snapshot['value'])}))

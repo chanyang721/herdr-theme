@@ -47,7 +47,7 @@ def detect_harness(home):
     """The harness checkout this machine records into, and the Python that runs it."""
     local = Path(home) / '.config/herdr-app/data/sixfold/harness-local/config.json'
     try:
-        repo = Path(json.loads(local.read_text()).get('repo_path') or '')
+        repo = Path(json.loads(local.read_text(encoding='utf-8')).get('repo_path') or '')
     except (OSError, ValueError):
         return None
     script = repo / 'runtime/harness.py'
@@ -66,16 +66,16 @@ def install_observer(home, source, spec, *, apply=False, user_approved=False, ex
     present = [name for name in spec['files'] if (source / 'scripts' / name).exists()]
     code = {name: (source / 'scripts' / name).read_bytes() for name in present}
     code_hash = hashlib.sha256(b''.join(code[name] for name in present)).hexdigest()
-    config = json.loads(config_path.read_text()) if config_path.exists() else json.loads((source / spec['example']).read_text())
+    config = json.loads(config_path.read_text(encoding='utf-8')) if config_path.exists() else json.loads((source / spec['example']).read_text(encoding='utf-8'))
     if not config_path.exists() and spec.get('pins'):
         pins = home / '.config/herdr-app/data/sixfold/workspace-pins.local.json'
         if pins.exists():
-            config['fixed_spaces'] = json.loads(pins.read_text()).get('spaces', [])
+            config['fixed_spaces'] = json.loads(pins.read_text(encoding='utf-8')).get('spaces', [])
     harness = detect_harness(home)
     if harness and not config.get('harness'):
         config['harness'] = harness
     if apply:
-        state = json.loads((base / spec['state']).read_text())
+        state = json.loads((base / spec['state']).read_text(encoding='utf-8'))
         trial = state.get('trial', {})
         current = state.get('observer_sha256') == code_hash and not trial.get('error_count', 0) and time.time() - state.get('last_at', 0) <= 660
         if user_approved:
@@ -102,14 +102,14 @@ def install_observer(home, source, spec, *, apply=False, user_approved=False, ex
     write_changed(config_path, (json.dumps(config, ensure_ascii=False, indent=2) + '\n').encode())
     changed = write_changed(plist_path, plistlib.dumps(plist))
     service = f'gui/{os.getuid()}/{label}'
-    loaded = subprocess.run(['launchctl', 'print', service], capture_output=True).returncode == 0
+    loaded = subprocess.run(['launchctl', 'print', service], capture_output=True, creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0)).returncode == 0
     if loaded and changed:
-        subprocess.run(['launchctl', 'bootout', service], check=True)
+        subprocess.run(['launchctl', 'bootout', service], check=True, creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
         loaded = False
     if not loaded:
-        subprocess.run(['launchctl', 'bootstrap', f'gui/{os.getuid()}', str(plist_path)], check=True)
-        subprocess.run(['launchctl', 'kickstart', service], check=True)
-    result['loaded'] = subprocess.run(['launchctl', 'print', service], capture_output=True).returncode == 0
+        subprocess.run(['launchctl', 'bootstrap', f'gui/{os.getuid()}', str(plist_path)], check=True, creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
+        subprocess.run(['launchctl', 'kickstart', service], check=True, creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
+    result['loaded'] = subprocess.run(['launchctl', 'print', service], capture_output=True, creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0)).returncode == 0
     return result
 
 
@@ -133,4 +133,7 @@ def main(spec=CLEANUP):
 
 
 if __name__ == '__main__':
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, 'reconfigure'):
+            stream.reconfigure(encoding='utf-8', errors='replace')
     main()
