@@ -30,6 +30,12 @@ export function metaParts(meta,width){
   return {text:wide||medium?parts.join(' · '):'',permission:wide||medium?meta.permission:null};
 }
 
+// The pane's position number ('01', '02') before the title is off by default; site.local.json
+// `"pane_header_index": true` brings it back.
+export function showPaneIndex(site){
+  return site?.pane_header_index===true;
+}
+
 export function showTitle(text,meta){
   return !(meta&&DEFAULT_TITLE.test((text||'').trim()));
 }

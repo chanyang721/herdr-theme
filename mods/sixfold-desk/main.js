@@ -15,7 +15,7 @@ import { watchAlerts, alertSection, visibleAlerts } from './alerts.js';
 import { workspaceAlertsRow, hasWorkspaceAlerts, openInbox } from './alert-inbox.js';
 import { panePet, petRunning, RUN_FRAME_MS, RUN_FRAMES } from './pets.js';
 import { paneUsage } from './session-usage.js';
-import { paneMeta, paneMetaChip, showTitle } from './pane-meta.js';
+import { paneMeta, paneMetaChip, showPaneIndex, showTitle } from './pane-meta.js';
 import { watchBadges, workspaceBadges } from './badges.js';
 
 const hasPanel=node=>node?.id==='panel'||(node?.children||[]).some(hasPanel);
@@ -373,7 +373,7 @@ export default class SixfoldDesk extends View {
       .border(1).border_color(style.border)
       .on_size_change((size, cx) => { const width = size.width / (settings().zoom || 1); if (Math.abs((this.headWidth || 0) - width) > 8) { this.headWidth = width; cx.notify(); } })
       .on_click(() => run('pane.focus', { pane: p.pane }))
-      .child(div().flex_none().font_bold().text_color(p.focused ? t.accent : t.dim).child(String(index).padStart(2, '0')))
+      .when(showPaneIndex(this.site), el => el.child(div().flex_none().font_bold().text_color(p.focused ? t.accent : t.dim).child(String(index).padStart(2, '0'))))
       .child(h_flex().flex_1().min_w(0).items_center().gap(7)
         .when(showTitle(name, meta), el => el.child(div().min_w(0).truncate().text_color(t.foreground).child(name)))
         .when(Boolean(meta), el => el.child(paneMetaChip(p, t, meta, this.headWidth))))

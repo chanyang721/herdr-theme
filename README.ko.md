@@ -61,6 +61,8 @@ python3 scripts/update_install.py mods/sixfold-desk/main.js mods/sixfold-desk/mo
 (`local.herdr-sixfold` 라벨, `~/Library/Application Support/HerdrSixfold`, `~/Documents/HerdrReports`)으로
 동작하며, `*.local.json`은 `.gitignore`에 들어 있습니다.
 
+칸 머리줄 제목 앞 위치 번호(`01`, `02`)는 기본으로 숨깁니다. `site.local.json`에 `"pane_header_index": true`를 넣으면 다시 보입니다.
+
 ## 고정 워크스페이스 표시
 
 `~/.config/herdr-app/data/sixfold/workspace-pins.local.json`에서 고정할 워크스페이스를 지정합니다. 예: `{"spaces":[{"id":"실제-workspace-id","machine":null}]}`. ID는 `herdr-app ls`로 확인하며 원격은 앱에 표시되는 ID와 machine을 함께 지정합니다. 이름을 바꿔도 고정 표시는 유지되고, 같은 이름의 다른 워크스페이스에는 적용되지 않습니다. 설정된 항목만 핀 아이콘과 강조 테두리로 표시하며, 기본 목록·순서·삭제 동작은 바꾸지 않습니다. `{"spaces":[]}`는 모두 해제합니다. 설정 변경은 실행 중 자동 반영되며 잘못된 JSON은 마지막 정상 설정을 유지합니다. 이 설정은 문서 고정 목록이나 `terminal.pin`과 별개입니다.

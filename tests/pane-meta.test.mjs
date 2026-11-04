@@ -43,3 +43,13 @@ test('permission risk colours and unmatched sessions',async()=>{
  assert.equal(module.showTitle('Claude Code',claude),false,'the product name is replaced by the icon');
  assert.equal(module.showTitle('Herdr 문서탭',claude),true);assert.equal(module.showTitle('Claude Code',null),true);
 });
+
+test('the position number before the pane title is off unless the site turns it on',async()=>{
+ const {module}=await load();
+ assert.equal(module.showPaneIndex(undefined),false);
+ assert.equal(module.showPaneIndex({}),false);
+ assert.equal(module.showPaneIndex({pane_header_index:'yes'}),false,'only an explicit true restores it');
+ assert.equal(module.showPaneIndex({pane_header_index:true}),true);
+ const main=await readFile(new URL('../mods/sixfold-desk/main.js',import.meta.url),'utf8');
+ assert.match(main,/\.when\(showPaneIndex\(this\.site\), el => el\.child\(div\(\)[^\n]*padStart\(2, '0'\)/,'the header number renders only behind the setting');
+});

@@ -4,6 +4,7 @@
   "reports_dir": "~/Documents/HerdrReports",
   "projects_dir": "~/Documents/HerdrProjects",
   "hub_space_ids": ["sp-your-share-workspace-id"],
+  "pane_header_index": false,
   "fixed_space_names": ["Share", "Project A", "Project B"],
   "project_aliases": {"pa": "project a", "에이": "project a"},
   "workspaces": {

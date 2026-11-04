@@ -311,6 +311,9 @@ Without the file the generic defaults apply (`local.herdr-sixfold` labels,
 `~/Library/Application Support/HerdrSixfold`, `~/Documents/HerdrReports`). `*.local.json` is
 git-ignored.
 
+Pane headers no longer show the position number (`01`, `02`) before the title. Set
+`"pane_header_index": true` in `site.local.json` to bring it back.
+
 ## Pinned workspace markers
 
 Configure `~/.config/herdr-app/data/sixfold/workspace-pins.local.json` with
