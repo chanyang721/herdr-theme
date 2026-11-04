@@ -15,7 +15,7 @@ import { workflowNodes, delegationEvents, workflowStatus, sessionChildren, activ
 import { watchDocs, currentDocs, docsSection, prepareDocsInput } from './docs.js';
 import { watchAlerts, alertSection, visibleAlerts } from './alerts.js';
 import { workspaceAlertsRow, hasWorkspaceAlerts, openInbox } from './alert-inbox.js';
-import { panePet, petRunning, RUN_FRAME_MS, RUN_FRAMES } from './pets.js';
+import { panePet } from './pets.js';
 import { paneUsage } from './session-usage.js';
 import { paneMeta, paneMetaChip, showPaneIndex, showTitle } from './pane-meta.js';
 import { watchBadges, workspaceBadges } from './badges.js';
@@ -66,18 +66,8 @@ export default class SixfoldDesk extends View {
     this.collaborationScript = null;
     this.collaborationBusy = false;
     this.readMessages = {};
-    if (props()?.role === 'pane') {
-      // The header cat gallops frame by frame only while this pane's agent works; an idle
-      // header never redraws for it.
-      this.petFrame = 0;
-      cx.timer.every(RUN_FRAME_MS, cx => {
-        const pane = panes().find(x => x.pane === props()?.pane);
-        if (!petRunning(pane?.status, shared)) return;
-        this.petFrame = (this.petFrame + 1) % RUN_FRAMES;
-        cx.notify();
-      });
-      return;
-    }
+    // The header cat animates natively (pets.js): a pane header keeps no timer of its own.
+    if (props()?.role === 'pane') return;
     if (props()?.role !== 'sidebar') return;
     this.projectDocs=null;
     this.docsSpaces=new Set();this.docsHeights={};
@@ -396,7 +386,7 @@ export default class SixfoldDesk extends View {
       .child(paneUsage(p, t, shared))
       .child(div().flex_1().min_w(0))
       // The cat is the status, so it stands beside the status badge.
-      .child(panePet(p,t,shared,this.petFrame||0))
+      .child(panePet(p,t,shared,style))
       .child(this.badge(p.status, p.status ? w[p.status] : '', t, 11, ['working', 'blocked'].includes(p.status) ? t.foreground : null)));
   }
 
