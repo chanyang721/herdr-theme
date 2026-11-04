@@ -113,6 +113,11 @@ def session_mapping(terminal, config=None):
         try:
             meta = json.loads((home / 'sessions' / f'{fg_pid}.json').read_text())
         except (OSError, ValueError):
+            if inherited_child_session(fg_pid):
+                # Started from inside another Claude (space.new from a Claude turn) with its
+                # CLAUDE_CODE_CHILD_SESSION marker: no session file and no transcript of its own,
+                # so `--resume` cannot bring it back. It is never suspended.
+                return None, 'cannot resume: Claude runs as an inherited child session (no session file or transcript)'
             return None, 'session mapping unverified: Claude session file missing'
         sid = meta.get('sessionId') if isinstance(meta, dict) else None
         if not isinstance(sid, str) or not UUID.match(sid) or meta.get('pid') != fg_pid:
@@ -138,6 +143,62 @@ def session_mapping(terminal, config=None):
             return None, f'session mapping unverified: {len(top)} top-level Codex rollouts open'
         sid = top[0]
     return {**base, 'session_id': sid}, ''
+
+
+def inherited_child_session(pid, reader=None):
+    """True when the process environment carries CLAUDE_CODE_CHILD_SESSION=1 (read with ps, never printed)."""
+    reader = reader or (lambda p: run(['ps', 'eww', '-p', str(p), '-o', 'command=']))
+    try:
+        text = reader(pid)
+    except (OSError, RuntimeError, subprocess.TimeoutExpired):
+        return False
+    return 'CLAUDE_CODE_CHILD_SESSION=1' in text.split()
+
+
+SGR = re.compile(r'\x1b\[([0-9;:]*)m')
+OTHER_ESC = re.compile(r'\x1b(?:\[[0-9;?:]*[A-Za-ln-z@`]|\][^\x07\x1b]*(?:\x07|\x1b\\)|[()][0-9A-Za-z]|[=>78])')
+
+
+def prompt_cells(raw, marker='❯'):
+    """[(char, dim)] of the input row after the last `marker` in an ANSI repaint, or None.
+
+    Claude draws its prompt suggestion faint (SGR 2) and typed text plain. Any escape other than
+    a colour change (a cursor move, say) ends the row: what follows is not this row.
+    """
+    i = raw.rfind(marker)
+    if i < 0:
+        return None
+    row, dim, pos = [], False, i + len(marker)
+    while pos < len(raw):
+        ch = raw[pos]
+        if ch in '\r\n':
+            break
+        if ch == '\x1b':
+            m = SGR.match(raw, pos)
+            if m:
+                codes = [c for c in re.split('[;:]', m.group(1)) if c != ''] or ['0']
+                for c in codes:
+                    if c in ('0', '22'):
+                        dim = False
+                    elif c == '2':
+                        dim = True
+                pos = m.end()
+                continue
+            return row if OTHER_ESC.match(raw, pos) else None
+        row.append((ch, dim))
+        pos += 1
+    return row
+
+
+def suggestion_only(text_value, raw, marker='❯'):
+    """True only when the row's every visible character is faint and spells exactly what the plain
+    screen shows after the marker: a Claude prompt suggestion, not something the person typed."""
+    cells = prompt_cells(raw, marker)
+    if not cells or not text_value:
+        return False
+    shown = ''.join(c for c, _ in cells).replace('\xa0', ' ').strip()
+    visible = [d for c, d in cells if not c.isspace() and c != '\xa0']
+    return bool(visible) and all(visible) and shown == text_value.strip()
 
 
 def resume_argv(app, argv, session_id):
@@ -213,6 +274,10 @@ def harness_park(config, item, event, *, dry_run=False, reason=None, runner=None
         argv += ['--space-id', item['space_id']]
     if reason:
         argv += ['--reason', _clean(reason, 280)]
+    if item.get('report_task_id'):
+        argv += ['--task-id', item['report_task_id']]
+    # Observer text names spaces and panes: denylisted terms become [가림] in the record.
+    argv.append('--mask')
     if dry_run:
         argv.append('--dry-run')
     runner = runner or (lambda a: subprocess.run([str(v) for v in a], capture_output=True, text=True, timeout=60))
@@ -236,3 +301,90 @@ def harness_park(config, item, event, *, dry_run=False, reason=None, runner=None
     if dry_run:
         return bool(value.get('ok')), 'harness would accept' if value.get('ok') else 'harness refused'
     return (True, value['id']) if isinstance(value, dict) and value.get('id') else (False, 'harness record id missing')
+
+
+# --- the session's own report before it is put to sleep or its space is closed ---------------
+# HARNESS-MAPPING A3: the session that did the work writes its final report and experience
+# (`harness.py close-report`); the observer only asks, waits within a limit and checks with
+# `close-status`. No report in time → nothing is cleaned up (fail-closed). Nothing is accepted.
+
+REPORT_MARK = '[세션 정리 보고 요청]'
+
+
+def close_report_message(config):
+    harness = config.get('harness') or {}
+    python, script = harness.get('python', 'python3'), harness.get('script', 'harness.py')
+    return (f"{REPORT_MARK} 관찰기가 이 세션을 곧 정리(절전)합니다. 새 작업은 시작하지 말고 아래만 하세요. "
+            "1) 레포 밖 임시 파일(예: $TMPDIR/experience-close.json)에 experience JSON을 씁니다: "
+            '{"judgments": [{"situation": "무엇을 판단했나", "expected": "예상", "actual": "실제", "error": "MATCHED|PARTIAL|WRONG"}]} '
+            "(판단 1~5개, 선택: cause·surprise·pattern_candidates). "
+            f"2) {python} {script} close-report --done \"이 세션이 한 일\" --remaining \"남은 일\" --experience <그 파일> 를 실행합니다. "
+            "3) 고객·회사·제품 이름 대신 워크스페이스 id를 씁니다. 거부되면 문장을 고쳐 다시 실행합니다. "
+            "다른 세션에 보고하지 말고, 보고 id만 한 줄로 답하고 끝내세요. 승인은 사람이 기억함에서 합니다.")
+
+
+def harness_close_status(config, item, since, *, runner=None):
+    """(ok, detail): ok with {report_id, task_id} when the session wrote a final report since `since`."""
+    harness = config.get('harness') or {}
+    python, script = harness.get('python'), harness.get('script')
+    if not python or not script:
+        return False, 'harness not configured'
+    argv = [python, script, 'close-status', item['address'], '--provider', provider(item['app']),
+            '--session-id', item['session_id'], '--since', since]
+    runner = runner or (lambda a: subprocess.run([str(v) for v in a], capture_output=True, text=True, timeout=60))
+    try:
+        result = runner(argv)
+        value = json.loads((result.stdout or '').strip().splitlines()[-1])
+    except (OSError, subprocess.TimeoutExpired, ValueError, IndexError) as exc:
+        return False, f'close-status unavailable: {exc}'[:240]
+    if result.returncode != 0 or not isinstance(value, dict):
+        return False, 'close-status refused'
+    if value.get('ok') and value.get('report_id'):
+        return True, {'report_id': value['report_id'], 'task_id': value.get('task_id')}
+    return False, 'no close report yet'
+
+
+def utc_iso(epoch):
+    import datetime as _dt
+    return _dt.datetime.fromtimestamp(epoch, _dt.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+
+
+def report_gate(entries, item, adapter, config, now):
+    """(decision, detail) for one session about to be cleaned up; `entries` is the observer state
+    {address: {...}} and is updated in place.
+
+      off       close reports are switched off (config close_report.enabled false)
+      requested the request was just typed into the session; wait for its answer
+      waiting   asked, no report yet, still within timeout_seconds
+      failed    no report within timeout_seconds: kept; asked again after retry_seconds
+      ready     a final report since the request: detail = {report_id, task_id}
+
+    A report counts only while the session has done at most `turns` turns since the request
+    (the answer itself); work after it means the report is stale and a new one is asked."""
+    cfg = config.get('close_report') or {}
+    if cfg.get('enabled', True) is False:
+        return 'off', None
+    timeout, retry, turns = cfg.get('timeout_seconds', 900), cfg.get('retry_seconds', 3600), cfg.get('turns', 1)
+    address, sid, turn = item['address'], item['session_id'], item.get('turn')
+    entry = entries.get(address)
+    if entry and entry.get('session_id') != sid:
+        entry = None
+    if entry and isinstance(turn, int) and isinstance(entry.get('turn'), int) and turn > entry['turn'] + turns:
+        entry = None   # the person worked with it after the request
+    if entry and entry.get('failed_at'):
+        if now - entry['failed_at'] < retry:
+            return 'failed', f"no close report (asked {int((now - entry['requested_at']) // 60)} minutes ago): kept, asks again later"
+        entry = None
+    if entry is None:
+        entries.pop(address, None)
+        adapter.request_report(address, close_report_message(config))
+        entries[address] = {'session_id': sid, 'requested_at': now, 'since': utc_iso(now - 5), 'turn': turn}
+        return 'requested', None
+    ok, detail = adapter.close_status(config, item, entry['since'])
+    if ok:
+        entry['report'] = detail
+        return 'ready', detail
+    if now - entry['requested_at'] >= timeout:
+        entry['failed_at'] = now
+        return 'failed', f'no close report within {timeout // 60} minutes: kept (fail-closed)'
+    return 'waiting', detail

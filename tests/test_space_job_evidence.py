@@ -318,6 +318,17 @@ class ClaudeJobEvidenceTests(unittest.TestCase):
                                                    'message': {'role': 'user', 'content': 'summary'}}, self.end()])
         self.assertTrue(self.check()[0], self.check())
 
+    def test_idle_compaction_after_end_turn_is_not_a_new_prompt(self):
+        # Claude compacts an idle session ("Compacted while idle"): a summary user message after end_turn.
+        summary = {'type': 'user', 'isCompactSummary': True, 'isVisibleInTranscriptOnly': True, 'sessionId': 'claude-main',
+                   'message': {'role': 'user', 'content': 'This session is being continued from a previous conversation'}}
+        boundary = {'type': 'system', 'subtype': 'compact_boundary', 'sessionId': 'claude-main', 'content': 'Conversation compacted'}
+        self.write([self.use('a'), self.result('a'), self.end(), boundary, summary])
+        self.assertTrue(self.check()[0], self.check())
+        prompt = {'type': 'user', 'sessionId': 'claude-main', 'message': {'role': 'user', 'content': '다음 일 해줘'}}
+        self.write([self.end(), boundary, summary, prompt])
+        self.assertIn('turn not ended', self.check()[1])
+
     def test_background_job_blocks_until_its_completion_notice(self):
         started = [self.use('a', True), self.result('a', 'Command running in background with ID: b1.', {'backgroundTaskId': 'b1'}), self.end()]
         self.write(started)

@@ -71,7 +71,7 @@ class FakeLive:
     def git(self, folder):
         return {'branch': 'main', 'head': 'abc1234', 'uncommitted': 1, 'worktrees': 1}
 
-    def close(self, space_id):
+    def close(self, space_id, config=None):
         if self.report_dir is not None:
             assert list(self.report_dir.glob('*.md')), 'record must exist before space.close'
         self.closed.append(space_id)
@@ -85,6 +85,14 @@ class FakeLive:
     def notify(self, address, message):
         self.notifications.append((address, message))
 
+    reported = False
+
+    def request_report(self, address, text):
+        self.notifications.append(('ask', address))
+
+    def close_status(self, config, item, since):
+        return (True, {'report_id': 'REP1', 'task_id': 'TASK1'}) if self.reported else (False, 'no close report yet')
+
 
 class CleanupPolicyTests(unittest.TestCase):
     def setUp(self):
@@ -95,7 +103,9 @@ class CleanupPolicyTests(unittest.TestCase):
         self.live.report_dir = self.reports
         self.config = {'idle_seconds': 600, 'trial_seconds': 1800, 'max_sample_gap_seconds': 660,
                        'fixed_names': ['Share', 'PeaceMinusOne', 'Medihomes'], 'fixed_spaces': [],
-                       'reviewed_dry_run_at': NOW, 'reviewed_observer_sha256': 'test', 'notify_terminal': 'review-session'}
+                       'reviewed_dry_run_at': NOW, 'reviewed_observer_sha256': 'test', 'notify_terminal': 'review-session',
+                       'space_close_enabled': True,   # the close path itself; the default hold is tested below
+                       'close_report': {'enabled': False}}   # the session's own report is tested in CloseReportSpaceTests
         self.git_mock = patch.object(cleanup, 'git_info', lambda folder: {'folder': folder, 'remaining_uncommitted': ' M work.py', 'worktrees': 'fixture worktree'})
         self.git_mock.start()
         self.addCleanup(self.git_mock.stop)
@@ -121,6 +131,23 @@ class CleanupPolicyTests(unittest.TestCase):
         self.assertEqual(self.live.closed, [])
         self.assertEqual(result['results'][0]['action'], 'keep')
         self.assertTrue(any(reason in r for r in result['results'][0]['reasons']), result)
+
+    def test_by_default_no_space_is_ever_closed(self):
+        # User rule (2026-11-04): workspaces are never removed; closing waits for an explicit answer.
+        del self.config['space_close_enabled']
+        result = self.cycle()
+        self.assertEqual(self.live.closed, [])
+        item = result['results'][0]
+        self.assertEqual(item['action'], 'keep')
+        self.assertIn('space close held: workspaces are kept until the person enables it', item['reasons'])
+        self.assertFalse(any(c[1] == 'close_requested' for c in getattr(self.live, 'parks', [])))
+
+    def test_the_live_close_refuses_without_the_switch(self):
+        live = cleanup.Live('herdr-app-not-run', 'hc-not-run')
+        with self.assertRaisesRegex(RuntimeError, 'workspaces are kept'):
+            live.close('sp-any', {})
+        with self.assertRaisesRegex(RuntimeError, 'workspaces are kept'):
+            live.close('sp-any')
 
     def test_idle_boundary_is_600_seconds_and_record_precedes_close(self):
         result = self.cycle(self.ready_state(599))

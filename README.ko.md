@@ -127,16 +127,44 @@ Project document tracking: see [configuration and collector](docs/project-docume
 
 `scripts/sleep_idle_sessions.py`는 고정 워크스페이스를 포함해 세션 단위로 봅니다. idle/done이고,
 입력창이 비었고, 승인·확인 대기 문구와 음성 수신 표시가 없고, 서브에이전트·명령 프로세스·백그라운드
-작업이 없고, 현재 보는 공간·포커스 칸·`exclude_addresses`(기본 `t3`)가 아니며, 그 증거가 20분
-(`idle_seconds`) 동안 변하지 않은 세션만 후보입니다. Claude의 회색 입력 제안은 화면 글자만으로 실제
-입력과 구분되지 않아 입력이 있는 것으로 보고 유지합니다.
+작업이 없고, 화면에 보이는 칸(보는 공간의 보이는 탭, 떠 있는 창)·포커스 칸·`exclude_addresses`(기본
+`t3`)가 아니며, 그 증거가 20분(`idle_seconds`) 동안 변하지 않은 세션만 후보입니다. 보는 공간이라도 다른
+탭의 칸은 후보가 됩니다.
 
-apply에서는 직전 재확인 → 하네스 `park --event suspended` 기록(실패하면 중단) → `/exit` 입력 → 셸 복귀
+- Claude의 회색 입력 제안: 글자 화면에서는 실제 입력과 같아 보이므로, 그때만 `hc attach --observe`(읽기
+  전용, 입력·크기 변경 없음)로 색 속성을 읽습니다. 입력줄의 보이는 글자가 **모두** 흐린 글씨(SGR 2)이고
+  글자 화면과 정확히 같을 때만 제안으로 보고, 하나라도 보통 글씨이거나 읽지 못하면 입력으로 보고 유지합니다.
+- 세션 파일이 없는 Claude: `CLAUDE_CODE_CHILD_SESSION=1`을 물려받아 열린 Claude(다른 Claude 안에서
+  `space.new`로 연 경우)는 세션 파일도 transcript도 없어 이어 열 수 없습니다. `cannot resume`으로 표시하고
+  재우지 않습니다. 표식이 없는데 파일이 없으면 기존처럼 매핑 미확인으로 유지합니다.
+- 유휴 중 자동 압축(`Compacted while idle`)의 요약 메시지는 새 프롬프트가 아니므로 턴 종료 판정을 바꾸지
+  않습니다.
+- 직전 재확인은 주기 시작 때 포커스와 비교하지 않고, 그 칸을 새 스냅샷으로 다시 검사합니다(보이는 탭·포커스
+  칸·증거 지문). 절전 중 포커스가 그 칸으로 오면 중단하고, 다른 곳으로 옮겨졌으면 그 주기의 나머지 절전만
+  다음 주기로 미룹니다.
+
+apply에서는 먼저 **세션 정리 보고**를 받습니다: 관찰기가 그 세션에 `[세션 정리 보고 요청]` 메시지를 넣으면
+세션이 스스로 `harness.py close-report --done --remaining --experience FILE`을 실행합니다(task가 없으면 세션
+task를 만들어 묶음). 다음 주기부터 `close-status`로 요청 이후의 final report를 확인하고, 답한 뒤 2분
+그대로이면 20분을 다시 기다리지 않고 절전합니다. `close_report.timeout_seconds`(기본 15분) 안에 보고가
+없으면 절전하지 않고 `retry_seconds`(기본 1시간) 뒤 다시 묻습니다(fail-closed). 요청 뒤 사람이 그 세션과
+더 일하면(턴 증가) 보고를 새로 받습니다. 관찰기는 accept하지 않습니다 — 보고는 기억함 **승인 대기**에서
+사람이 수락합니다. 공간 정리도 닫기 전에 공간의 세션마다 같은 보고를 받습니다.
+그다음 직전 재확인 → 하네스 `park --event suspended --task-id <보고 task> --mask` 기록(실패하면 중단) → `/exit` 입력 → 셸 복귀
 확인 → 칸에서 `session_sleep_stub.py` 실행 → 라벨 `sixfold.sleep`, 머리줄 `sixfold.title=절전 · …`
-순서입니다. 칸은 남습니다. 그 칸에서 Enter를 누르면 같은 세션을 원래 옵션 그대로 이어 열고
+순서입니다. 하네스 기록은 회사 org에 denylist가 없으면 `harness-local/history-outbox/` 로컬 초안으로
+남고(하네스 WORKSPACE-HISTORY 경계) denylist가 생긴 뒤 `history-observe`가 등록합니다. 칸은 남습니다. 그 칸에서 Enter를 누르면 같은 세션을 원래 옵션 그대로 이어 열고
 (`claude --resume <id>` / `codex … resume <id>`), `hc send`로 메시지가 오면 이어 열면서 그 메시지를
 첫 입력으로 넘깁니다. 셸이 메시지를 명령으로 실행하는 일은 없습니다. 자세한 화면·폴더 기록은
 `LukukuWatch/session-sleep/notes/`에만 둡니다(하네스에는 허용 목록의 요약만).
+
+**워크스페이스는 사라지지 않습니다(사용자 규칙, 2026-11-04).** 절전은 셸 아래에서 도는 에이전트만 대상으로
+하므로(터미널 프로그램 자체가 에이전트면 제외) `/exit` 뒤에도 칸이 남습니다. `close_finished_spaces.py`의
+임시 공간 닫기는 설정 `space_close_enabled: true`를 사람이 넣기 전까지 후보를 기록만 하고 닫지 않습니다
+(`Live.close`도 스위치 없이는 거부).
+
+`session_sleep_stub.py`는 tty를 직접 바이트 단위로 읽습니다. 에이전트가 끝나며 CR→NL 변환을 끈 채로 남겨도
+Enter(CR)와 `hc send`(붙여넣기 표식 + CR)를 인식하고, macOS의 한 줄 1024바이트 한계에도 걸리지 않습니다.
 
 `python3 scripts/install_session_sleep.py --install`은 `co.lukuku.sleep-idle-sessions`를 5분 주기
 dry-run으로 등록하고, `--install --enable-apply --user-approved`가 apply로 바꿉니다.

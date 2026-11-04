@@ -7,7 +7,12 @@ or decision text, no voice input, no subagent terminal, only idle helper
 processes, no background job, outside the visible workspace and focused pane,
 and not an excluded address. Then, in order, with a fresh recheck first:
 
-  1. the harness keeps its context (`harness.py park --event suspended`);
+  0. the session writes its own final report and experience: the observer types a
+     `[세션 정리 보고 요청]` message, and sleeps it only after `harness.py close-status`
+     finds that report (within close_report.timeout_seconds; otherwise it is kept and
+     asked again after retry_seconds). The report waits for the person's acceptance in
+     the memory window; nothing here accepts. close_report.enabled false skips this step.
+  1. the harness keeps its context (`harness.py park --event suspended --task-id …`);
      no record, no sleep
   2. `/exit` is typed into the agent and the shell must come back
   3. the pane runs session_sleep_stub.py: Enter resumes the same session
@@ -15,7 +20,8 @@ and not an excluded address. Then, in order, with a fresh recheck first:
      delivers the message (so `hc send` never reaches a bare shell)
   4. labels mark the pane: sixfold.sleep and the header title '절전 · …'
 
-Dry-run by default. Never closes a pane, a tab or a space.
+Dry-run by default. Never closes a pane, a tab or a space: the agent must run under a shell
+that stays after /exit, so every workspace keeps its panes (user rule, 2026-11-04).
 """
 import argparse
 import datetime as dt
@@ -61,6 +67,39 @@ class Live(spaces.Live):
     def wait(self, seconds):
         time.sleep(seconds)
 
+    def styled_screen(self, address, limit=3.0, quiet=0.4):
+        """The pane's repaint with colours, from a watch-only attach (never types or resizes)."""
+        import select
+        import subprocess
+        proc = subprocess.Popen([self.core, 'attach', '--observe', address], stdin=subprocess.DEVNULL,
+                                stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, env=self._env())
+        data, end, last = b'', time.time() + limit, None
+        try:
+            while time.time() < end:
+                ready, _, _ = select.select([proc.stdout], [], [], 0.1)
+                if ready:
+                    chunk = os.read(proc.stdout.fileno(), 65536)
+                    if not chunk:
+                        break
+                    data, last = data + chunk, time.time()
+                elif last and time.time() - last >= quiet:
+                    break
+        finally:
+            proc.terminate()
+            try:
+                proc.wait(timeout=2)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+        if not data:
+            raise RuntimeError('styled screen unavailable')
+        return data.decode('utf-8', 'replace')
+
+    def request_report(self, address, text):
+        return self.type_line(address, text)
+
+    def close_status(self, config, item, since):
+        return agent_sessions.harness_close_status(config, item, since)
+
     def park_check(self, config, item):
         return agent_sessions.harness_park(config, item, 'suspended', dry_run=True)
 
@@ -99,7 +138,36 @@ def focused_terminal(snapshot):
     return None
 
 
-def inspect(address, space, snapshot, adapter, config):
+def on_screen(address, space, tab, status):
+    """The person can see this pane: it is in the shown tab of the shown space, or in a float/overlay.
+    Other tabs of the shown space are out of sight (only the focused pane and the shown tab count)."""
+    if space.get('id') == status.get('space') and (tab is None or tab == status.get('tab')):
+        return True
+    shown = json.dumps([status.get('floats') or {}, status.get('overlays') or []], ensure_ascii=False)
+    return re.search(r'(?<![\w/])' + re.escape(address) + r'(?![\w])', shown) is not None
+
+
+def claude_suggestion(text, app, adapter, address):
+    """True when the only thing in Claude's input row is its faint prompt suggestion."""
+    if agent_sessions.provider(app) != 'claude' or not hasattr(adapter, 'styled_screen'):
+        return False
+    lines = text.splitlines()
+    rows = [i for i, line in enumerate(lines) if line.lstrip().startswith('❯')]
+    if not rows:
+        return False
+    i = rows[-1]
+    value = lines[i].strip()[1:].strip()
+    blank = '\n'.join(lines[:i] + ['❯'] + lines[i + 1:])
+    if not value or not spaces.empty_prompt(blank, app):
+        return False
+    try:
+        raw = adapter.styled_screen(address)
+    except (OSError, RuntimeError, ValueError):
+        return False
+    return agent_sessions.suggestion_only(value, raw)
+
+
+def inspect(address, space, snapshot, adapter, config, tab=None):
     """Every reason this terminal may not sleep now, and its evidence fingerprint."""
     reasons = []
     status = snapshot['status']
@@ -109,8 +177,8 @@ def inspect(address, space, snapshot, adapter, config):
         reasons.append('app focus/health unverified')
     if address in set(config.get('exclude_addresses', [])):
         reasons.append('excluded address')
-    if space.get('id') == status.get('space') or space.get('active'):
-        reasons.append('currently visible workspace')
+    if on_screen(address, space, tab, status):
+        reasons.append('shown on screen (visible tab)')
     if focused_terminal(snapshot) == address:
         reasons.append('focused pane')
     if space.get('machine') is not None:
@@ -125,7 +193,14 @@ def inspect(address, space, snapshot, adapter, config):
         return item
     app = (terminal.get('status') or {}).get('app')
     state = (terminal.get('status') or {}).get('state')
-    item.update(app=app, title=terminal.get('title'), cwd=terminal.get('cwd'), status_ms=terminal.get('status_ms'))
+    item.update(app=app, title=terminal.get('title'), cwd=terminal.get('cwd'), status_ms=terminal.get('status_ms'),
+                turn=terminal.get('turn'))
+    shell = Path(str((terminal.get('argv') or [''])[0])).name
+    if shell not in agent_sessions.SHELLS:
+        # /exit would end the terminal program itself and could take the pane (and a space's
+        # last pane) with it. Sleep only ever leaves a shell and the stub behind.
+        reasons.append('terminal program is not a shell: the pane would not survive /exit')
+        return item
     if not terminal.get('reported') or app not in agent_sessions.AGENTS or state not in ('done', 'idle'):
         reasons.append('not a confirmed idle/done agent' if state != 'blocked' else 'user decision pending (blocked agent)')
         return item
@@ -153,7 +228,10 @@ def inspect(address, space, snapshot, adapter, config):
     if VOICE.search('\n'.join(text.splitlines()[-6:])):
         reasons.append('voice input active')
     if not spaces.empty_prompt(text, app):
-        reasons.append('input not empty (or a prompt suggestion the screen cannot tell apart)')
+        if claude_suggestion(text, app, adapter, address):
+            item['prompt_suggestion'] = True   # faint Claude suggestion only; typed text stays protected
+        else:
+            reasons.append('input not empty')
     item['screen_tail'] = '\n'.join(text.splitlines()[-12:])[:2000]
     item['fingerprint'] = hashlib.sha256(json.dumps([address, terminal.get('pid'), terminal.get('status_ms'), terminal.get('turn'),
                                                      pids, jobs_fp, mapping['session_id'], hashlib.sha256(text.encode()).hexdigest()],
@@ -165,7 +243,7 @@ def note(item, notes_dir, now):
     """Local-only detail (screen tail, folder, git): never synced, kept beside the observer."""
     path = Path(notes_dir) / f"{dt.datetime.fromtimestamp(now):%Y%m%d}-{item['address']}-{item['session_id'][:8]}.json"
     path.parent.mkdir(parents=True, exist_ok=True)
-    keep = {k: item.get(k) for k in ('address', 'space_name', 'space_id', 'app', 'session_id', 'title', 'cwd', 'git', 'screen_tail', 'harness', 'argv')}
+    keep = {k: item.get(k) for k in ('address', 'space_name', 'space_id', 'app', 'session_id', 'title', 'cwd', 'git', 'screen_tail', 'harness', 'argv', 'close_report')}
     keep['at'] = dt.datetime.fromtimestamp(now).astimezone().isoformat()
     path.write_text(json.dumps(keep, ensure_ascii=False, indent=2) + '\n')
     path.chmod(0o600)
@@ -231,10 +309,13 @@ def cycle(adapter, config, state, now, *, apply=False, paths=None):
     approved = bool(config.get('user_approved_apply')) and config.get('reviewed_observer_sha256') == state.get('observer_sha256')
     ready = approved and trial['samples'] >= 2 and trial['error_count'] == 0
     idle = config.get('idle_seconds', 1200)
+    reports = {a: e for a, e in (state.get('reports') or {}).items() if a in pane_of(snapshot)}
+    settle = (config.get('close_report') or {}).get('settle_seconds', 120)
     initial_focus = spaces.focus(snapshot['status'])
     results, tracking, slept = [], {}, 0
-    for address, (space, _tab) in sorted(pane_of(snapshot).items()):
-        item = inspect(address, space, snapshot, adapter, config)
+    stop_reason = None
+    for address, (space, tab) in sorted(pane_of(snapshot).items()):
+        item = inspect(address, space, snapshot, adapter, config, tab)
         old = previous.get(address, {})
         safe = not item['reasons']
         same = fresh and safe and old.get('fingerprint') == item.get('fingerprint')
@@ -244,7 +325,10 @@ def cycle(adapter, config, state, now, *, apply=False, paths=None):
         if safe:
             tracking[address] = {'since': since, 'fingerprint': item.get('fingerprint')}
             status_age = (now * 1000 - (item.get('status_ms') or now * 1000)) / 1000
-            if quiet < idle or status_age < idle:
+            asked = reports.get(address) or {}
+            answering = (asked.get('session_id') == item.get('session_id') and not asked.get('failed_at')
+                         and quiet >= settle and status_age >= settle)
+            if (quiet < idle or status_age < idle) and not answering:
                 item['reasons'].append(f'unchanged for {int(min(quiet, status_age) // 60)} of {idle // 60} minutes')
             else:
                 item['action'] = 'would_sleep'
@@ -256,24 +340,46 @@ def cycle(adapter, config, state, now, *, apply=False, paths=None):
                 elif apply and slept >= config.get('max_per_cycle', 4):
                     item['action'] = 'keep'
                     item['reasons'].append('per-cycle limit reached')
+                elif apply and stop_reason:
+                    item['action'] = 'keep'
+                    item['reasons'].append(stop_reason)
                 elif apply:
+                    # The person moves around while a cycle runs. A fresh recheck of this pane
+                    # (shown tab, focused pane, evidence) is what matters, not where the focus
+                    # was when the cycle began.
                     check = adapter.snapshot()
                     where = pane_of(check).get(address)
-                    latest = inspect(address, where[0], check, adapter, config) if where else None
-                    if not latest or spaces.focus(check['status']) != initial_focus:
-                        item['action'] = 'keep'; item['reasons'].append('pane/focus changed before sleep')
-                    elif latest['reasons'] or latest.get('fingerprint') != item.get('fingerprint'):
+                    latest = inspect(address, where[0], check, adapter, config, where[1]) if where else None
+                    if not latest:
+                        item['action'] = 'keep'; item['reasons'].append('pane moved or closed before sleep')
+                    elif latest['reasons']:
+                        item['action'] = 'keep'; item['reasons'].append('recheck: ' + '; '.join(latest['reasons']))
+                    elif latest.get('fingerprint') != item.get('fingerprint'):
                         item['action'] = 'keep'; item['reasons'].append('evidence changed before sleep')
                     else:
-                        item['action'] = sleep_one(item, adapter, config, paths, now)
+                        before = spaces.focus(check['status'])
+                        decision, detail = agent_sessions.report_gate(reports, item, adapter, config, now)
+                        if decision == 'ready':
+                            item['close_report'], item['report_task_id'] = detail['report_id'], detail.get('task_id')
+                        if decision in ('ready', 'off'):
+                            item['action'] = sleep_one(item, adapter, config, paths, now)
+                        else:
+                            item['action'] = 'report_requested' if decision == 'requested' else 'keep'
+                            item['reasons'].append({'requested': 'asked the session for its close report',
+                                                    'waiting': 'waiting for the session close report'}.get(decision, detail))
                         if item['action'] == 'slept':
                             slept += 1
                             tracking.pop(address, None)
-                            if spaces.focus(adapter.snapshot()['status']) != initial_focus:
-                                raise RuntimeError('focus changed after sleep; further sleeps stopped')
+                            reports.pop(address, None)
+                            after = adapter.snapshot()
+                            if focused_terminal(after) == address:
+                                raise RuntimeError('focus moved to the slept pane; further sleeps stopped')
+                            if spaces.focus(after['status']) != before:
+                                stop_reason = 'focus moved during the previous sleep; next cycle'
+                                item['focus_moved'] = True
         item.pop('argv', None)
         results.append(item)
-    state.update(last_at=now, sessions=tracking, trial=trial)
+    state.update(last_at=now, sessions=tracking, trial=trial, reports=reports)
     return {'at': dt.datetime.fromtimestamp(now).astimezone().isoformat(), 'mode': 'apply' if apply else 'dry-run',
             'trial': trial, 'apply_ready': ready, 'focus': initial_focus, 'results': results}
 
