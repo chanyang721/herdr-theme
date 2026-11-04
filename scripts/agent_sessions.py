@@ -20,6 +20,8 @@ UUID = re.compile(r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12
 HELPERS = [re.compile(p, re.I) for p in (
     r'(?:^|/)node_repl(?:\s|$)', r'(?:^|/)codex-code-mode-host(?:\s|$)', r'/cua_node/bin/node\s',
     r'\s--mcp\b', r'\bmcp(?:\s|$)', r'\bmcp[-_]server\b', r'-mcp(?:\s|$|/)',
+    # Claude Code keeps the Mac awake for a few minutes after a turn; it ends by itself.
+    r'^(?:/usr/bin/)?caffeinate -i -t \d{1,4}$',
 )]
 
 

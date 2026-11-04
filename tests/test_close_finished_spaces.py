@@ -537,3 +537,11 @@ class DecisionCycleTests(CleanupPolicyTests.__base__):
         self.assertTrue(any('in progress' in r for r in reasons), reasons)
         self.assertFalse(any('user decision pending' in r for r in reasons), reasons)
         self.assertEqual(self.live.notifications, [])
+
+
+class HelperProcessTests(unittest.TestCase):
+    def test_claude_keep_awake_timer_is_a_helper_but_other_caffeinate_is_not(self):
+        h = cleanup.agent_sessions.is_helper
+        self.assertTrue(h({'args': 'caffeinate -i -t 300'}))
+        self.assertFalse(h({'args': 'caffeinate -i make build'}))
+        self.assertFalse(h({'args': 'caffeinate -dims'}))
