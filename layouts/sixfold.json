@@ -86,7 +86,7 @@
               "id": "mcp-status",
               "type": "block",
               "size": {
-                "px": 150
+                "px": 360
               },
               "content": {
                 "mod": "mcp-status"
