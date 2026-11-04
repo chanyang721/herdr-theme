@@ -32,7 +32,7 @@ Herdr Theme은 레이아웃과 사이드바입니다. 설치기는 [Herdr Worksp
 | System Metrics·MCP Status·CLI Status·Plan Usage·Agent Usage | 됨 | 됨 |
 | 워크플로 수집기(서브에이전트 트리) | 됨 | 됨(아래 작업 스케줄러 예시) |
 | Document Viewer: Markdown | 됨 | 됨 |
-| Document Viewer: HTML 미리보기 | 됨(WebKit 스냅숏) | 안 됨 — 안내와 함께 소스로 열림 |
+| Document Viewer: HTML 미리보기 | 됨(WebKit 스냅숏) | 안 됨 — 소스로 열리고, HTML 탭에 macOS가 필요하다는 안내 |
 | Document Viewer: 저장하면 자동 새로고침 | 됨 | 됨 |
 | 음성 | 됨 | 안 됨(설치기가 건너뜀) |
 | 실시간 TUI 연결 | 됨(Linux도) | 안 됨(`termios` 필요) |
@@ -212,7 +212,7 @@ Codex·Claude 한도를 브랜드 아이콘·막대·백분율로: 5시간·7일
 
 ![Document Viewer](docs/images/document-viewer.png)
 
-프로젝트 파일 트리와 미리보기 패널. Markdown(macOS에서는 이미지·PDF·로컬 HTML을 읽기 전용 WebKit 스냅숏으로도)을 Source·Open과 함께 보여 줍니다. Files 패널이 있는 레이아웃에 설치되고 검토한 원본(Preview Plus / Files Plus)을 고정 커밋으로 받습니다. Windows에서는 HTML이 macOS 렌더러가 필요하다는 안내와 함께 소스로 열리고, Markdown 미리보기와 저장 시 새로고침은 됩니다.
+프로젝트 파일 트리와 미리보기 패널. Markdown(macOS에서는 이미지·PDF·로컬 HTML을 읽기 전용 WebKit 스냅숏으로도)을 Source·Open과 함께 보여 줍니다. Files 패널이 있는 레이아웃에 설치되고 검토한 원본(Preview Plus / Files Plus)을 고정 커밋으로 받습니다. Windows에서는 HTML이 소스로 열리고 HTML 탭에 macOS 렌더러가 필요하다는 안내가 나오며, Markdown 미리보기와 저장 시 새로고침은 됩니다.
 
 ## 사이드바의 다른 기능
 

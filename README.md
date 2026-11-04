@@ -32,7 +32,7 @@ Checked on Windows 11 on 2026-11-04 by running each part; macOS is where the the
 | System Metrics, MCP Status, CLI Status, Plan Usage, Agent Usage | yes | yes |
 | Workflow collector (subagent trees) | yes | yes (Task Scheduler snippet below) |
 | Document Viewer: Markdown | yes | yes |
-| Document Viewer: HTML preview | yes (WebKit snapshot) | no — HTML opens on its source with a note |
+| Document Viewer: HTML preview | yes (WebKit snapshot) | no — HTML opens on its source; the HTML tab says the preview needs macOS |
 | Document Viewer: refresh when a file is saved | yes | yes |
 | Voice | yes | no (the installer skips it) |
 | Live TUI bridge | yes (also Linux) | no (needs `termios`) |
@@ -212,7 +212,7 @@ Token use of each live Claude/Codex session the core reports, grouped by workspa
 
 ![Document Viewer](docs/images/document-viewer.png)
 
-A project file tree and a preview panel for Markdown (and on macOS images, PDFs and local HTML as a read-only WebKit snapshot), with Source and Open. It installs into a layout with a Files panel and fetches its reviewed upstream (Preview Plus / Files Plus) at a pinned commit. On Windows HTML opens on its source with a note that the preview needs the macOS renderer; Markdown preview and save-to-refresh work.
+A project file tree and a preview panel for Markdown (and on macOS images, PDFs and local HTML as a read-only WebKit snapshot), with Source and Open. It installs into a layout with a Files panel and fetches its reviewed upstream (Preview Plus / Files Plus) at a pinned commit. On Windows HTML opens on its source, and its HTML tab says the preview needs the macOS renderer; Markdown preview and save-to-refresh work.
 
 ## More of the sidebar
 
