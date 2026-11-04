@@ -116,6 +116,31 @@ Project document tracking: see [configuration and collector](docs/project-docume
 덮어쓰지 않고 자동 정리 시각만 덧붙입니다. 승인·확인 대기는 공간을 유지하고 설정된 Share 세션에
 하루 한 번까지 이유를 알립니다. `--only-space ID`로 한 공간만 관찰할 수 있으며 조건을 우회하지 않습니다.
 
+세션 연결은 설정 없이도 찾습니다(Claude는 `~/.claude/sessions/<pid>.json`, Codex는 `resume <id>` 인자나
+프로세스가 열어 둔 최상위 rollout). 닫기 전에 공간의 에이전트 세션마다 하네스에
+`harness.py park --event close_requested`로 맥락(제목·다시 열기 명령·git 브랜치/미커밋/worktree 수)을
+기록하고, 기록이 거부되면 닫지 않습니다. 닫은 뒤에는 `closed`를 남깁니다. 하네스 위치는 하네스의
+로컬 설정(`harness-local/config.json`의 `repo_path`)에서 찾습니다. 사용자가 apply를 승인한 경우
+`--install --enable-apply --user-approved`는 현재 코드의 dry-run 기록 1회만 있으면 전환합니다.
+
+## 대기 세션 절전
+
+`scripts/sleep_idle_sessions.py`는 고정 워크스페이스를 포함해 세션 단위로 봅니다. idle/done이고,
+입력창이 비었고, 승인·확인 대기 문구와 음성 수신 표시가 없고, 서브에이전트·명령 프로세스·백그라운드
+작업이 없고, 현재 보는 공간·포커스 칸·`exclude_addresses`(기본 `t3`)가 아니며, 그 증거가 20분
+(`idle_seconds`) 동안 변하지 않은 세션만 후보입니다. Claude의 회색 입력 제안은 화면 글자만으로 실제
+입력과 구분되지 않아 입력이 있는 것으로 보고 유지합니다.
+
+apply에서는 직전 재확인 → 하네스 `park --event suspended` 기록(실패하면 중단) → `/exit` 입력 → 셸 복귀
+확인 → 칸에서 `session_sleep_stub.py` 실행 → 라벨 `sixfold.sleep`, 머리줄 `sixfold.title=절전 · …`
+순서입니다. 칸은 남습니다. 그 칸에서 Enter를 누르면 같은 세션을 원래 옵션 그대로 이어 열고
+(`claude --resume <id>` / `codex … resume <id>`), `hc send`로 메시지가 오면 이어 열면서 그 메시지를
+첫 입력으로 넘깁니다. 셸이 메시지를 명령으로 실행하는 일은 없습니다. 자세한 화면·폴더 기록은
+`LukukuWatch/session-sleep/notes/`에만 둡니다(하네스에는 허용 목록의 요약만).
+
+`python3 scripts/install_session_sleep.py --install`은 `co.lukuku.sleep-idle-sessions`를 5분 주기
+dry-run으로 등록하고, `--install --enable-apply --user-approved`가 apply로 바꿉니다.
+
 ## 2026-11-03 설치본 동기화
 
 현재 `layouts/sixfold.json`은 실제 설치된 모니터 줄을 포함합니다. 사용 전 외부 모드 `system-metrics`, `agent-usage`, `plan-usage`를 별도 설치해야 합니다([의존성 안내](extras/monitor-layout/README.md)). 이 저장소는 외부 모드의 버전을 고정하거나 자동 설치하지 않습니다.
