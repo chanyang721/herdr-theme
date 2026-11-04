@@ -38,7 +38,7 @@ async function sidebar(runtime) {
     .replace(/import \{[^}]*\} from '.\/docs.js';/, 'const currentDocs=()=>null;const docsSection=()=>null;const prepareDocsInput=()=>{};')
     .replace(/import \{ watchAlerts, alertSection, visibleAlerts \} from '.\/alerts.js';/, 'const visibleAlerts=()=>[];')
     .replace(/import .* from '.\/alert-inbox.js';/, 'const workspaceAlertsRow=()=>null, hasWorkspaceAlerts=()=>false;')
-    .replace(/import \{ panePet, petRunning, RUN_FRAME_MS, RUN_FRAMES \} from '.\/pets.js';/, 'const panePet=()=>null,petRunning=()=>false,RUN_FRAME_MS=110,RUN_FRAMES=5;')
+    .replace(/import \{ panePet \} from '.\/pets.js';/, 'const panePet=()=>null;')
     .replace(/import \{ paneUsage \} from '.\/session-usage.js';/, 'const paneUsage=()=>null;').replace(/import \{ paneMeta, paneMetaChip, showPaneIndex, showTitle \} from '.\/pane-meta.js';/, 'const paneMeta=()=>null,paneMetaChip=()=>null,showPaneIndex=()=>false,showTitle=()=>true;')
     .replace(/import \{ watchBadges, workspaceBadges \} from '.\/badges.js';/, 'const watchBadges=()=>{},workspaceBadges=()=>null;');
   for (const name of ['model', 'flow', 'workflow', 'sidebar-identity', 'collab']) source = source.replace(`'./${name}.js'`, JSON.stringify(new URL(`../mods/sixfold-desk/${name}.js`, import.meta.url).href));
