@@ -15,6 +15,7 @@ import { watchAlerts, alertSection, visibleAlerts } from './alerts.js';
 import { workspaceAlertsRow, hasWorkspaceAlerts, openInbox } from './alert-inbox.js';
 import { panePet, petRunning, RUN_FRAME_MS, RUN_FRAMES } from './pets.js';
 import { paneUsage } from './session-usage.js';
+import { paneMeta, paneMetaChip, showTitle } from './pane-meta.js';
 import { watchBadges, workspaceBadges } from './badges.js';
 
 const hasPanel=node=>node?.id==='panel'||(node?.children||[]).some(hasPanel);
@@ -365,12 +366,17 @@ export default class SixfoldDesk extends View {
     if (!p) return div();
     const index = all.filter(x => x.tab === p.tab).findIndex(x => x.pane === p.pane) + 1;
     const style = paneHeaderStyle(p, t);
+    // Agent icon, model, speed, effort and permission of the pane's confirmed session, after the title.
+    const meta = paneMeta(p.terminal, shared), name = title(p);
     return div().size_full().bg(style.base).child(h_flex().id(`sixfold-head-${p.pane}`).size_full().items_center().gap(7).px(9)
       .bg(style.background).text_size(11.5)
       .border(1).border_color(style.border)
+      .on_size_change((size, cx) => { const width = size.width / (settings().zoom || 1); if (Math.abs((this.headWidth || 0) - width) > 8) { this.headWidth = width; cx.notify(); } })
       .on_click(() => run('pane.focus', { pane: p.pane }))
       .child(div().flex_none().font_bold().text_color(p.focused ? t.accent : t.dim).child(String(index).padStart(2, '0')))
-      .child(div().flex_1().min_w(0).truncate().text_color(t.foreground).child(title(p)))
+      .child(h_flex().flex_1().min_w(0).items_center().gap(7)
+        .when(showTitle(name, meta), el => el.child(div().min_w(0).truncate().text_color(t.foreground).child(name)))
+        .when(Boolean(meta), el => el.child(paneMetaChip(p, t, meta, this.headWidth))))
       // Session usage sits in the middle: title and an equal spacer share the room around it.
       .child(paneUsage(p, t, shared))
       .child(div().flex_1().min_w(0))

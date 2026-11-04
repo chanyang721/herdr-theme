@@ -44,7 +44,7 @@ for (const native of [false,true]) test(`background messages refresh through ${n
   source = source.replace(/import \{ watchAlerts, alertSection, visibleAlerts \} from '.\/alerts.js';/,
     'const watchAlerts=()=>{};');
   source = source.replace(/import \{ panePet, petRunning, RUN_FRAME_MS, RUN_FRAMES \} from '.\/pets.js';/,'const panePet=()=>null,petRunning=()=>false,RUN_FRAME_MS=110,RUN_FRAMES=5;')
-  source = source.replace(/import \{ paneUsage \} from '.\/session-usage.js';/,'const paneUsage=()=>null;');
+  source = source.replace(/import \{ paneUsage \} from '.\/session-usage.js';/,'const paneUsage=()=>null;').replace(/import \{ paneMeta, paneMetaChip, showTitle \} from '.\/pane-meta.js';/,'const paneMeta=()=>null,paneMetaChip=()=>null,showTitle=()=>true;');
   source = source.replace(/import \{ watchBadges, workspaceBadges \} from '.\/badges.js';/,'const watchBadges=()=>{},workspaceBadges=()=>null;');
   const {default: Sidebar} = await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64')+`#native=${native}`);
   const view = new Sidebar();
