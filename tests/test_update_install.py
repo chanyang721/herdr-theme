@@ -215,7 +215,7 @@ class VoiceRoutingTests(unittest.TestCase):
         repo = Path(__file__).resolve().parents[1]
         with patch.object(update_install, 'update', side_effect=lambda *a, **k: calls.append(('update', a[2])) or 'receipt'), \
              patch.object(update_install, 'install_voice', side_effect=lambda r, h: calls.append(('voice', r))), \
-             patch.object(sys, 'argv', ['update_install.py', '--repo', str(repo), *names]):
+             patch.object(update_install.workspace_mods, 'pinned_files', return_value=(None, None, [])),              patch.object(sys, 'argv', ['update_install.py', '--repo', str(repo), *names]):
             update_install.main()
         return calls
 
