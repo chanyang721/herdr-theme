@@ -68,7 +68,7 @@ test('alerts recover after cold install and partial writes without a folder watc
 for (const lineEnding of ['\n', '\r\n']) {
 test(`workflow updates never auto-open; new mentions open once across health ticks, omissions and restart (${lineEnding === '\n' ? 'LF' : 'CRLF'})`,async()=>{
   const files=new Map([
-    ['alerts.json','{"items":[]}'],['project-alerts.json','{"items":[],"projects":["Medihomes"]}'],
+    ['alerts.json','{"items":[]}'],['project-alerts.json','{"items":[],"projects":["Project B"]}'],
     ['slack-alerts-read.json','{}'],['slack-mentions.json','{"items":[{"id":"old"}]}'],
     ['slack-live-health.json','{"state":"ok","checked":1}'],
     ['slack-workflows.json','{"jobs":{"job":{"id":"job","version":"source-v1","state":"needs_decision","summary":"Review ready","artifacts":["/report.md"],"finished_at":"first"},"legacy":{"id":"legacy","state":"ready","summary":"Old wording","sources":[{"id":"slack:C1:legacy"}],"artifacts":[],"finished_at":"first"}}}'],

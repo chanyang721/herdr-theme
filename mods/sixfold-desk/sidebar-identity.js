@@ -38,11 +38,20 @@ export function tailscaleStatus(peer, lang = 'ko') {
   return lang === 'ko' ? 'Tailscale 상태 미확인' : 'Tailscale status unknown';
 }
 
-export function workspaceIdentity(space) {
+// Project names, their marks and colours are machine-local (data/sixfold/site.local.json
+// `workspaces`, keyed by lower-case name); the repository only knows the generic ones.
+export function workspaceLocal(space, site = {}) {
   const name = String(space.name ?? '').trim().toLowerCase();
-  if (space.id === 'sp5b1f0e5ae362facabc5ac1ece5d08277' || name === 'share' || name === '공통' || name === 'common') return 'hub';
-  if (name === 'peaceminusone' || name === 'pmo') return 'flower';
-  if (name === 'medihomes') return 'medical';
+  const entry = site?.workspaces?.[name];
+  return entry && typeof entry === 'object' ? entry : null;
+}
+
+export function workspaceIdentity(space, site = {}) {
+  const name = String(space.name ?? '').trim().toLowerCase();
+  const hubs = Array.isArray(site?.hub_space_ids) ? site.hub_space_ids : [];
+  if (hubs.includes(space.id) || name === 'share' || name === '공통' || name === 'common') return 'hub';
+  const icon = workspaceLocal(space, site)?.icon;
+  if (typeof icon === 'string' && /^[a-z-]+$/.test(icon)) return icon;
   if (name === 'voice') return 'microphone';
   if (name === 'herdr') return 'terminal';
   return null;
