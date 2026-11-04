@@ -30,7 +30,7 @@ def readable(path):
         # Reading the document establishes that this is an available source,
         # rather than treating a remembered path or index as evidence.
         if path.is_symlink() or is_archived(path): return False
-        with path.open() as document: document.read(1024)
+        with path.open(encoding='utf-8') as document: document.read(1024)
         return True
     except (OSError, UnicodeError): return False
 

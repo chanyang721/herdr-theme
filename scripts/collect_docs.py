@@ -25,7 +25,7 @@ def atomic_json(path,value):
     path.parent.mkdir(parents=True,exist_ok=True)
     fd,name=tempfile.mkstemp(prefix='.'+path.name+'-',dir=path.parent)
     try:
-        with os.fdopen(fd,'w') as file:file.write(text)
+        with os.fdopen(fd,'w',encoding='utf-8') as file:file.write(text)
         os.replace(name,path)
     finally:
         if os.path.exists(name):os.unlink(name)

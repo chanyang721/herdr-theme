@@ -49,7 +49,7 @@ def atomic(path, value):
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_name(path.name + '.' + uuid.uuid4().hex + '.tmp')
     fd = os.open(temporary, os.O_CREAT | os.O_WRONLY | os.O_EXCL, 0o600)
-    with os.fdopen(fd, 'w') as stream:
+    with os.fdopen(fd, 'w', encoding='utf-8') as stream:
         json.dump(value, stream, ensure_ascii=False, indent=2)
         stream.flush()
         os.fsync(stream.fileno())
@@ -268,7 +268,7 @@ def drain():
                 # Exclusive creation + global ledger lock. Never expire/reassign an
                 # uncertain lease: at-most-once takes precedence over availability.
                 fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
-                with os.fdopen(fd, 'w') as stream:
+                with os.fdopen(fd, 'w', encoding='utf-8') as stream:
                     json.dump(lease, stream)
                     stream.flush()
                     os.fsync(stream.fileno())

@@ -13,6 +13,15 @@ import file_lock
 
 
 class PortableHelpers(unittest.TestCase):
+    def test_document_index_is_utf8_even_without_python_utf8_mode(self):
+        import json
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'index.json'
+            code = 'import sys;sys.path.insert(0,sys.argv[1]);from collect_docs import atomic_json;from pathlib import Path;atomic_json(Path(sys.argv[2]),{"text":chr(0xD55C)+chr(0x1F4C4)})'
+            subprocess.run([sys.executable, '-X', 'utf8=0', '-c', code, str(SCRIPTS), str(path)],
+                check=True, capture_output=True, creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
+            self.assertEqual(json.loads(path.read_text(encoding='utf-8')), {'text': chr(0xD55C)+chr(0x1F4C4)})
+
     @unittest.skipUnless(os.name == 'nt', 'Windows desktop integration')
     def test_browser_reuses_ego_profile_and_hides_console(self):
         import desktop

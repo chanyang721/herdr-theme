@@ -367,7 +367,7 @@ def harness_archive(config, data, *, runner=None):
         return False, 'machine id unknown'
     fd, path = tempfile.mkstemp(prefix='space-archive-', suffix='.json')
     try:
-        with os.fdopen(fd, 'w') as stream:
+        with os.fdopen(fd, 'w', encoding='utf-8') as stream:
             json.dump(data, stream, ensure_ascii=False)
         runner = runner or (lambda a: subprocess.run([str(v) for v in a], capture_output=True, text=True, timeout=60, creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0)))
         try:
