@@ -371,7 +371,7 @@ export default class SixfoldDesk extends View {
       .child(paneUsage(p, t, shared))
       .child(div().flex_1().min_w(0))
       // The cat is the status, so it stands beside the status badge.
-      .child(panePet(p,t,shared))
+      .child(panePet(p,t,shared,style))
       .child(this.badge(p.status, p.status ? w[p.status] : '', t, 11, ['working', 'blocked'].includes(p.status) ? t.foreground : null)));
   }
 
