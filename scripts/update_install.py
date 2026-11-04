@@ -326,9 +326,21 @@ def update(repo, home, names, cli='herdr-app', verify_timeout=10, allow_unhealth
                 raise InstallError(f'{error}; {receipt["phase"]}; receipt: {backup / "receipt.json"}') from error
 
 
+def install_voice(repo, home):
+    """The voice plugin is a herdr plugin with its own entry points (hook,
+    LaunchAgent, app routing), so it installs as one unit and checks itself."""
+    script = repo / 'voice/install.py'
+    if not script.is_file():
+        raise InstallError(f'Voice plugin missing in {repo}')
+    env = {**os.environ, 'HERDR_APP_HOME': str(home)}
+    if subprocess.run([sys.executable, str(script)], env=env).returncode != 0:
+        raise InstallError('Voice plugin install or check failed (see above)')
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('files', nargs='+', help='Explicit repository-relative files; existing unlisted files are preserved')
+    parser.add_argument('files', nargs='+', help='Explicit repository-relative files; existing unlisted files are preserved. '
+                        '"voice" (or any voice/... file) installs the voice plugin as one unit with voice/install.py')
     parser.add_argument('--home', type=Path, default=Path(os.environ.get('HERDR_APP_HOME', Path.home() / '.config/herdr-app')))
     parser.add_argument('--repo', type=Path, default=Path(__file__).resolve().parents[1], help='Reviewed source worktree (required when running an installed copy)')
     parser.add_argument('--cli', default='herdr-app')
@@ -340,11 +352,16 @@ def main():
     try:
         if not (args.repo / 'mods').is_dir() or not (args.repo / 'layouts').is_dir():
             raise InstallError('Run from a source worktree, or pass --repo /path/to/reviewed-worktree')
-        backup = update(args.repo, args.home, args.files, args.cli,
-                        args.verify_timeout, args.allow_unhealthy_before)
+        app_files = [name for name in args.files if Path(name).parts[:1] != ('voice',)]
+        voice = len(app_files) != len(args.files)
+        backup = update(args.repo, args.home, app_files, args.cli,
+                        args.verify_timeout, args.allow_unhealthy_before) if app_files else None
+        if voice:
+            install_voice(args.repo, args.home)
     except (InstallError, subprocess.SubprocessError, OSError, ValueError) as error:
         parser.exit(1, f'Install failed: {error}\n')
-    print(f'Installed and verified errors=0; backup/receipt: {backup}')
+    if backup:
+        print(f'Installed and verified errors=0; backup/receipt: {backup}')
 
 
 if __name__ == '__main__':

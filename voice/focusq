@@ -7,6 +7,7 @@
   ./focusq enable     turn the plugin on
   ./focusq disable    turn the plugin off (panes keep their current voice state)
   ./focusq status     show whether the plugin is linked and enabled
+  ./focusq check      check that herdr, the submit hook, the app and Codex all run this copy
   ./focusq uninstall  unlink the plugin and remove the F8 voice binding
 
   ./focusq voice-setup   install the voice gate (install runs this when uv exists)
@@ -26,6 +27,11 @@ import time
 
 PLUGIN_ID = "local.focus-queue"
 ROOT = os.path.dirname(os.path.realpath(__file__))
+# HERDR_VOICE_NO_START=1 writes every file but starts nothing: no LaunchAgent,
+# no model download (used for installs into a test home).
+NO_START = os.environ.get("HERDR_VOICE_NO_START") == "1"
+APP_HOME = os.environ.get("HERDR_APP_HOME") or os.path.expanduser("~/.config/herdr-app")
+INTEGRATION = os.path.join(APP_HOME, "data", "sixfold", "voice-integration.json")
 CLAUDE_DIR = os.path.expanduser("~/.claude")
 SETTINGS = os.path.join(CLAUDE_DIR, "settings.json")
 KEYBINDINGS = os.path.join(CLAUDE_DIR, "keybindings.json")
@@ -93,6 +99,7 @@ def set_voice(data):
     data.setdefault("language", "korean")
 
 
+CODEX_LABEL = "co.lukuku.herdr-codex-focus"  # keep in step with install_codex_focus.LABEL
 SUBMIT_HOOK = f"/usr/bin/python3 {os.path.join(ROOT, 'voice_submit_hook.py')}"
 
 
@@ -100,10 +107,20 @@ def submit_hooks(data):
     return data.setdefault("hooks", {}).setdefault("UserPromptSubmit", [])
 
 
+def old_submit_hook(command):
+    """A submit hook of this plugin installed from another folder."""
+    return command != SUBMIT_HOOK and command.rstrip().endswith("/voice_submit_hook.py")
+
+
 def set_submit_hook(data):
     """Every prompt passes voice_submit_hook.py, which refuses dictation the
-    voice gate did not hear the user say."""
+    voice gate did not hear the user say. A hook left by an install from
+    another folder is replaced in the same write, so no prompt goes unchecked
+    and none is checked twice."""
     entries = submit_hooks(data)
+    for entry in entries:
+        entry["hooks"] = [hook for hook in entry.get("hooks", []) if not old_submit_hook(hook.get("command", ""))]
+    entries[:] = [entry for entry in entries if entry.get("hooks")]
     if not any(hook.get("command") == SUBMIT_HOOK for entry in entries for hook in entry.get("hooks", [])):
         entries.append({"hooks": [{"type": "command", "command": SUBMIT_HOOK}]})
 
@@ -114,11 +131,24 @@ def remove_submit_hook(data):
                   if not any(hook.get("command") == SUBMIT_HOOK for hook in entry.get("hooks", []))]
 
 
-def install():
+def set_integration(data):
+    """The Herdr app's sidebar asks this script where focus went."""
+    data["script"] = os.path.join(ROOT, "focus_queue.py")
+
+
+def linked():
     current = plugin()
-    if current and os.path.realpath(os.path.dirname(current.get("manifest_path", ""))) != ROOT:
+    return bool(current) and os.path.realpath(os.path.dirname(current.get("manifest_path", ""))) == ROOT
+
+
+def install():
+    # Relinking from another folder: events go to this copy from the next one.
+    # Running listeners keep the code they started with until they end.
+    current = plugin()
+    if current and not linked():
         herdr("plugin", "unlink", PLUGIN_ID)
-    herdr("plugin", "link", ROOT)
+    if not linked():
+        herdr("plugin", "link", ROOT)
     # A new link is already enabled. Enabling needs a running herdr server,
     # which a fresh Mac does not have yet, so only ask when it is off.
     if not (plugin() or {}).get("enabled"):
@@ -126,13 +156,50 @@ def install():
     edit_json(SETTINGS, set_voice)
     edit_json(SETTINGS, set_submit_hook)
     edit_json(KEYBINDINGS, lambda data: chat_bindings(data).__setitem__(VOICE_KEY, "voice:pushToTalk"))
-    subprocess.run([sys.executable, os.path.join(ROOT, "install_codex_focus.py")], check=True)
-    print("installed: plugin linked and enabled, Claude Code voice on F8 (tap mode)")
-    if shutil.which("uv"):
+    edit_json(INTEGRATION, set_integration)
+    codex = [sys.executable, os.path.join(ROOT, "install_codex_focus.py")]
+    subprocess.run(codex + (["--no-start"] if NO_START else []), check=True)
+    print(f"installed from {ROOT}: plugin linked and enabled, Claude Code voice on F8 (tap mode)")
+    if NO_START:
+        print("voice check not set up (HERDR_VOICE_NO_START)")
+    elif shutil.which("uv"):
         voice_setup()
     else:
         print("voice check skipped: install uv (brew install uv) and run ./focusq voice-setup")
     print("restart running Claude Code sessions to pick up the F8 voice key")
+
+
+def check():
+    """Whether every entry point runs this copy. Exit 1 lists what does not."""
+    problems = []
+    if not linked():
+        problems.append(f"herdr plugin: {(plugin() or {}).get('manifest_path', 'not linked')}")
+    try:
+        settings = json.load(open(SETTINGS))
+    except (OSError, ValueError):
+        settings = {}
+    commands = [hook.get("command", "") for entry in submit_hooks(settings) for hook in entry.get("hooks", [])]
+    if SUBMIT_HOOK not in commands or any(old_submit_hook(command) for command in commands):
+        problems.append(f"Claude submit hook: {[c for c in commands if c.endswith('voice_submit_hook.py')]}")
+    try:
+        script = json.load(open(INTEGRATION)).get("script")
+    except (OSError, ValueError):
+        script = None
+    if script != os.path.join(ROOT, "focus_queue.py"):
+        problems.append(f"app focus routing: {script}")
+    agent = os.path.expanduser(f"~/Library/LaunchAgents/{CODEX_LABEL}.plist")
+    try:
+        import plistlib
+        arguments = plistlib.load(open(agent, "rb")).get("ProgramArguments", [])
+    except (OSError, ValueError):
+        arguments = []
+    if os.path.join(ROOT, "codex_focus.py") not in arguments:
+        problems.append(f"Codex focus LaunchAgent: {arguments or 'missing'}")
+    for problem in problems:
+        print("not this copy - " + problem)
+    if not problems:
+        print(f"all voice entry points run {ROOT}")
+    return not problems
 
 
 def uninstall():
@@ -224,6 +291,8 @@ def main():
         status()
     elif command == "status":
         status()
+    elif command == "check":
+        sys.exit(0 if check() else 1)
     elif command == "voice-setup":
         voice_setup()
         print("now run ./focusq voice-enroll")
