@@ -153,13 +153,13 @@ def copy_feature(repo, app_home):
         else:
             destination.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(source_path, destination)
-    scripts = app_home/'data/sixfold/doc-tabs'
+    scripts = app_home/'scripts/sixfold'
     scripts.mkdir(parents=True, exist_ok=True)
     for name in ('install_doc_tabs.py', 'resolve_doc_pins.py', 'doc_catalog.py', 'collect_docs.py', 'core_api.py', 'render_mermaid.py', 'render_html.py', 'open_doc_tab.py',
-                 'site_config.py'):
+                 'site_config.py', 'file_lock.py', 'desktop.py'):
         shutil.copy2(repo/'scripts'/name, scripts/name)
     try:
-        compile_swift(repo/'scripts/render_html.swift', scripts/'render-html')
+        compile_swift(repo/'scripts/render_html.swift', app_home/'data/sixfold/doc-tabs/render-html')
     except RuntimeError as error:
         # Markdown still works without it; HTML documents then show the install notice.
         print(f'HTML renderer skipped: {str(error)[:300]}', file=sys.stderr)

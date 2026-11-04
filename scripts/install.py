@@ -38,8 +38,10 @@ def install(repo, app, update=False):
         manifest = {}
     files = [(p, app/p.relative_to(repo)) for folder in ('layouts', 'themes', 'mods')
              for p in sorted((repo/folder).rglob('*')) if p.is_file() and p.name not in GENERATED]
-    files += [(repo/'scripts'/name, app/'scripts/sixfold'/name)
-              for name in ('workspace.py', 'core_api.py', 'balance_grid.py', 'collect_computers.py', 'route.py', 'collaborate.py', 'update_install.py')]
+    helpers = ('workspace.py', 'core_api.py', 'balance_grid.py', 'collect_computers.py', 'route.py', 'collaborate.py', 'update_install.py',
+               'file_lock.py', 'agent_env.py', 'site_config.py', 'desktop.py', 'install_doc_tabs.py', 'resolve_doc_pins.py',
+               'doc_catalog.py', 'collect_docs.py', 'open_doc_tab.py', 'render_mermaid.py', 'render_html.py')
+    files += [(repo/'scripts'/name, app/'scripts/sixfold'/name) for name in helpers]
     # Reference palettes belong to Herdr/the user, even in update mode.
     files = [(src, dst) for src, dst in files
              if not (src.parent == repo/'themes' and src.name in REFERENCES and dst.exists())]
