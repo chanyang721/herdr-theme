@@ -16,7 +16,16 @@ run_npm_tests() {
 checks() {
   run_npm_tests &&
   node --check mods/sixfold-desk/main.js &&
-  node --check mods/sixfold-new-space/main.js
+  node --check mods/sixfold-new-space/main.js &&
+  $CARGO fmt --manifest-path rust/Cargo.toml --all -- --check &&
+  run_rust_tests
+}
+run_rust_tests() {
+  out=$($CARGO test --manifest-path rust/Cargo.toml --locked --jobs 1 -- --test-threads=1 2>&1); rc=$?
+  printf '%s\n' "$out" >&2
+  [ "$rc" -eq 0 ] || return "$rc"
+  n=$(printf '%s\n' "$out" | sed -n 's/^test result: ok\. \([0-9][0-9]*\) passed;.*/\1/p' | awk '{n+=$1} END {print n+0}')
+  if [ "$n" -lt 50 ]; then echo "pre-push: $n Rust tests passed, at least 50 expected" >&2; return 1; fi
 }
 
 # ---- shared part --------------------------------------------------------------
@@ -33,21 +42,9 @@ if [ "${SKIP_PREPUSH_TESTS:-}" = 1 ]; then
   echo "pre-push: SKIP_PREPUSH_TESTS=1, checks skipped" >&2
   exit 0
 fi
-PYBIN=auto; PYARGS=  # @tool-py
-if [ "$PYBIN" = auto ]; then
-  # Resolved once to an absolute path and verified; the checks never search PATH for the interpreter.
-  # PYBIN is quoted at each use (paths may contain spaces); PYARGS holds plain arguments only.
-  p=$(command -v py 2>/dev/null) || p=''
-  case "$p" in /*) ;; *) p='' ;; esac
-  if [ -n "$p" ] && "$p" -3.12 -c '' >/dev/null 2>&1; then PYBIN=$p; PYARGS=-3.12
-  else
-    p=$(command -v python3 2>/dev/null) || p=''
-    case "$p" in /*) ;; *) echo "pre-push: no python 3 found by absolute path" >&2; exit 1 ;; esac
-    "$p" -c '' >/dev/null 2>&1 || { echo "pre-push: $p does not run" >&2; exit 1; }
-    PYBIN=$p; PYARGS=
-  fi
-fi
-export PYTHONUTF8=1
+CARGO=cargo  # @tool-cargo
+CARGO_BUILD_JOBS=1
+export CARGO_BUILD_JOBS
 CYG=cygpath  # @tool-cygpath
 MKTEMP=mktemp  # @tool-mktemp
 MKDIR=mkdir  # @tool-mkdir

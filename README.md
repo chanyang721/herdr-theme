@@ -24,7 +24,7 @@ Herdr Theme is the layout and sidebar. The installer also adds [Herdr Workspace 
 
 ## Platform support
 
-Checked on Windows 11 on 2026-11-04 by running each part; macOS is where the theme was built.
+The table describes supported behavior and the previous release's checks. Native migration evidence and remaining platform checks are tracked in [Native helper migration](docs/native-rust-migration.md).
 
 | Part | macOS | Windows |
 | --- | --- | --- |
@@ -42,7 +42,7 @@ Linux follows the macOS column except where noted, but was not checked for this 
 
 ## Requirements
 
-- Herdr app 0.1.11 or newer, Python 3 and Git. Computer lists and remote workspaces need machine-layout support (checked on 0.1.17).
+- Herdr app 0.1.11 or newer, Git; building the native helper also needs stable Rust and a C compiler. Computer lists and remote workspaces need machine-layout support (checked on 0.1.17).
 - Message animations need the native message events: an app exposing `messageEvents()` and a core emitting `message_sent`. Until they ship in a release, build both from source: the app from the [`feat/message-sent-events`](https://github.com/chanyang721/herdr-app/tree/feat/message-sent-events) branch and the core from [herdrdev/herdr-core#90](https://github.com/herdrdev/herdr-core/pull/90). Install the app and core together, and replace the core on every computer whose sends you want to see (the core that delivers a message emits the event). Without them everything else works; sends do not animate.
 - Agent Usage reads the local store of the [Insights](https://github.com/GaganSD/coding-agent-toolkit/tree/main/herdr-insights) mod (install it separately; it needs Node.js).
 
@@ -53,38 +53,40 @@ macOS / Linux:
 ```sh
 git clone https://github.com/chanyang721/herdr-theme.git
 cd herdr-theme
-python3 scripts/install.py
+cargo build --manifest-path rust/Cargo.toml --locked --release --bin herdr-theme --jobs 1
+./rust/target/release/herdr-theme install
 herdr-app do layout.switch --name sixfold
 ```
 
-Windows (PowerShell, with the Python launcher):
+Windows (PowerShell, using the native executable):
 
 ```powershell
 git clone https://github.com/chanyang721/herdr-theme.git
 cd herdr-theme
-py -3 scripts/install.py
+cargo build --manifest-path rust/Cargo.toml --locked --release --bin herdr-theme --jobs 1
+.\rust\target\release\herdr-theme.exe install
 herdr-app do layout.switch --name sixfold
 ```
 
 The installer:
 
-- installs the theme's mods, layouts, palettes and helper scripts into the app home (`~/.config/herdr-app` on every platform; `HERDR_APP_HOME` overrides it);
+- installs the theme's mods, layouts, palettes and native helper into the app home (`~/.config/herdr-app` on every platform; `HERDR_APP_HOME` overrides it);
 - fetches Herdr Workspace Mods at the commit pinned in [`workspace-mods.lock.json`](workspace-mods.lock.json) into `~/.local/share/herdr-sixfold/vendor/herdr-workspace-mods/<commit prefix>` (one folder per commit, made only once the checkout succeeds), checks it is exactly that commit with no local changes, and installs the files that commit tracks for `system-metrics`, `mcp-status`, `cli-status`, `plan-usage` and `agent-usage` with the theme. The installed release is recorded in `data/sixfold/workspace-mods.json`;
-- runs the Document Viewer's own installer when a layout with a Files panel exists (Herdr creates `main` on first start); otherwise it prints that command to run later. Off macOS it installs Markdown only;
+- installs the pinned Document Viewer assets through the native installer when a layout with a Files panel exists (Herdr creates `main` on first start); otherwise it prints that command to run later. Off macOS it installs Markdown only;
 - refuses to replace existing files or an existing `layout:sixfold` key section, and preserves other layouts, settings and key bindings. `--update` refreshes what it installed before and keeps layouts and palettes you changed.
 
 Options: `--without-workspace-mods` installs the theme alone (the `sixfold` layout's monitor strip then needs those mods installed some other way); `--workspace-mods-source PATH` installs from a local checkout already at the pinned commit instead of fetching. On a wide screen the `sixfold` layout puts the whole strip in one row; on a smaller Windows window use the two-row variant in [`extras/windows-layout`](extras/windows-layout/README.md), which the screenshots use.
 
 ### Updating an installation
 
-After the first install, **use only `scripts/update_install.py`; never copy files into the running app by hand.** List the theme files you reviewed; the pinned Workspace Mods are brought to the pinned release in the same run (unchanged files are skipped, so nothing reloads needlessly):
+After the first install, **use only `herdr-theme update_install`; never copy files into the running app by hand.** List the theme files you reviewed; the pinned Workspace Mods are brought to the pinned release in the same run (unchanged files are skipped, so nothing reloads needlessly):
 
 ```sh
-python3 scripts/update_install.py mods/sixfold-desk/main.js mods/sixfold-desk/model.js
-python3 scripts/update_install.py            # only bring the Workspace Mods to the pinned release
+herdr-theme update_install mods/sixfold-desk/main.js mods/sixfold-desk/model.js
+herdr-theme update_install            # only bring the Workspace Mods to the pinned release
 ```
 
-(`py -3` on Windows.) `--without-workspace-mods` leaves them as installed; a run that lists only `voice` never touches them.
+The examples assume the built executable is on PATH; alternatively use `./rust/target/release/herdr-theme` or `.\rust\target\release\herdr-theme.exe`. `--without-workspace-mods` leaves the pinned mods as installed; a run that lists only `voice` never touches them. Include `scripts/herdr-theme` (`scripts/herdr-theme.exe` on Windows) when updating native helper code.
 
 The updater locks `data/sixfold/install.lock`, builds complete affected mod trees outside `mods/`, runs `herdr-app check` on each, keeps full backups under `backups/sixfold-update-*/`, then exchanges each mod directory. On macOS and Linux the exchange is atomic; Windows has no directory swap, so the mod path is missing for a moment and a failed move puts the installed tree back. It then requires `status.errors` to stay empty for one second with space, tab and focus unchanged, and rolls back otherwise (a later concurrent writer is preserved and reported). The receipt in the backup records what happened. A clean status is not a visual check: also look at `herdr-app shot`.
 
@@ -164,18 +166,20 @@ There is no permanent message panel. A new send shows a sender → recipient not
 
 The sidebar reads sends from the app's in-memory `messageEvents()` (see [Requirements](#requirements)); events carry sender, recipient, time and the observed `started` result, never message text. Send with the core CLI directly: `hc send TARGET "message"`.
 
-**Removing the old tracing launcher.** Earlier versions shipped a Python launcher; it has been removed. If you installed it, remove `~/.local/share/herdr-sixfold/bin` from your PATH, stop calling `hc_trace.py`, check that `hc` resolves to the core CLI (`Get-Command hc -All` / `command -v hc`), restore a `~/.local/bin/hc` symlink that points at the launcher, delete `hc_trace.py`, `bin/hc` and `bin/hc.cmd` under `~/.local/share/herdr-sixfold/`, and update installed `route.py` and `collect_workflow.py`.
+**Removing the old tracing launcher.** Earlier versions shipped a Python launcher; it has been removed. If you installed it, remove `~/.local/share/herdr-sixfold/bin` from your PATH, stop calling `hc_trace.py`, check that `hc` resolves to the core CLI (`Get-Command hc -All` / `command -v hc`), restore a `~/.local/bin/hc` symlink that points at the launcher, delete `hc_trace.py`, `bin/hc` and `bin/hc.cmd` under `~/.local/share/herdr-sixfold/`, and update installed `herdr-theme route` and `herdr-theme collect_workflow`.
 
 ## Subagent trees and the workflow collector
 
-Subagents expand under their parent with `▸ N`; new delegations open the tree and animate a pipeline. `scripts/collect_workflow.py` reads Claude metadata, the read-only Codex database and hc parent links into `data/sixfold/workflow.json` (`--once`, or every three seconds writing only changes). It runs on macOS, Linux and Windows (on Windows without opening console windows).
+Subagents expand under their parent with `▸ N`; new delegations open the tree and animate a pipeline. `herdr-theme collect_workflow` reads Claude metadata, the read-only Codex database and hc parent links into `data/sixfold/workflow.json` (`--once`, or every three seconds writing only changes). It runs on macOS, Linux and Windows (on Windows without opening console windows).
 
-The first install does not include the collector and nothing registers it to run in the background. Install it with the updater (`python3 scripts/update_install.py scripts/collect_workflow.py`, `py -3` on Windows). On Windows you can run it at logon, hidden, one instance at a time:
+The installed native helper includes the collector, but does not register or start it in the background. On Windows you can run it at logon, hidden, one instance at a time:
 
 ```powershell
-$pyw = Join-Path (Split-Path (py -3 -c "import sys; print(sys.executable)")) 'pythonw.exe'
 $home_ = "$HOME\.config\herdr-app"
-$action = New-ScheduledTaskAction -Execute $pyw -Argument "`"$home_\scripts\sixfold\collect_workflow.py`"" -WorkingDirectory $home_
+$collector = "$home_\scripts\sixfold\herdr-theme.exe"
+$command = "Start-Process -WindowStyle Hidden -Wait -FilePath '$collector' -ArgumentList 'collect_workflow'"
+$encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($command))
+$action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument "-NoProfile -NonInteractive -WindowStyle Hidden -EncodedCommand $encoded" -WorkingDirectory $home_
 $trigger = New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME
 $settings = New-ScheduledTaskSettingsSet -MultipleInstances IgnoreNew -ExecutionTimeLimit 0 -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
 Register-ScheduledTask -TaskName 'Herdr Theme workflow collector' -Action $action -Trigger $trigger -Settings $settings
@@ -186,7 +190,7 @@ Remove it with `Stop-ScheduledTask` and then `Unregister-ScheduledTask -TaskName
 
 ## Workspace Mods
 
-These come from [Herdr Workspace Mods](https://github.com/chanyang721/herdr-workspace-mods) and are installed with the theme; each also works on its own (see that repository). The strip's helpers are Python scripts started by the mods; on Windows they run without console windows, and click-to-copy uses `Set-Clipboard` (macOS `pbcopy`, Linux `wl-copy`/`xclip`). Labels in the strip are Korean.
+These come from [Herdr Workspace Mods](https://github.com/chanyang721/herdr-workspace-mods) and are installed with the theme; each also works on its own (see that repository). The strip's helpers are native commands started by the mods; on Windows they run without console windows, and click-to-copy uses `Set-Clipboard` (macOS `pbcopy`, Linux `wl-copy`/`xclip`). Labels in the strip are Korean.
 
 ### System Metrics
 
@@ -241,23 +245,23 @@ A project file tree and a preview panel for Markdown (and on macOS images, PDFs 
 
 **Channel alerts.** New channel messages listed in `data/sixfold/project-alerts.json` appear on a line under the workspace title; the `sixfold-slack-inbox` mod shows mentions from `data/sixfold/slack-mentions.json` grouped by thread. Collecting from Slack is a separate tool.
 
-**Grids and new workspaces.** `scripts/balance_grid.py` equalises six-terminal tabs without restarting anything; `scripts/workspace.py "Example" /path` creates a workspace like **+ Space** with one coordinating session (`--shells` for a plain shell; `--tiers high` opens that one session on the model for the given task tier, default `high`, see `scripts/model_tier.py`). More panes come from the harness `dispatch`.
+**Grids and new workspaces.** `herdr-theme balance_grid` equalises six-terminal tabs without restarting anything; `herdr-theme workspace "Example" /path` creates a workspace like **+ Space** with one coordinating session (`--shells` for a plain shell; `--tiers high` opens that one session on the model for the given task tier, default `high`, see `rust/src/automation/tiers.rs`). More panes come from the harness `dispatch`. Creating a workspace leaves the window showing what you were looking at: the selection is put back if the new space took it (a pane or tab you chose yourself is left alone). Known limit: if the creation fails midway and another process makes a terminal at the same moment that you then select, the earlier selection is restored over it.
 
-**Pins, icons and local settings.** `data/sixfold/workspace-pins.local.json` (`{"spaces":[{"id":"…","machine":null}]}`) marks exact workspaces with a pin and accent border. `scripts/set_workspace_icon.py 'ID or name' icon.png` sets a project icon (SVG/PNG/JPEG/WebP). Per-person names, colours, folders and the Slack address live in `data/sixfold/site.local.json` (start from `config/site.example.json`); `"pane_header_index": true` brings back pane numbers. `*.local.json` is git-ignored.
+**Pins, icons and local settings.** `data/sixfold/workspace-pins.local.json` (`{"spaces":[{"id":"…","machine":null}]}`) marks exact workspaces with a pin and accent border. `herdr-theme set_workspace_icon 'ID or name' icon.png` sets a project icon (SVG/PNG/JPEG/WebP). Per-person names, colours, folders and the Slack address live in `data/sixfold/site.local.json` (start from `config/site.example.json`); `"pane_header_index": true` brings back pane numbers. `*.local.json` is git-ignored.
 
-**macOS only.** Idle sessions can be put to sleep and finished workspaces listed by two LaunchAgent observers (`install_session_sleep.py`, `install_space_cleanup.py`), dry-run until you enable apply; workspaces are never closed unless `space_close_enabled: true` is set. The live TUI bridge (`scripts/tui_bridge.py`, also Linux) attaches an existing Herdr TUI pane without importing it. The voice plugin in [`voice/`](voice/README.md) records only the focused pane.
+**macOS only.** Idle sessions can be put to sleep and finished workspaces listed by two LaunchAgent observers (`herdr-theme install_session_sleep`, `herdr-theme install_space_cleanup`), dry-run until you enable apply; workspaces are never closed unless `space_close_enabled: true` is set. The live TUI bridge (`herdr-theme tui_bridge`, also Linux) attaches an existing Herdr TUI pane without importing it. The voice plugin in [`voice/`](voice/README.md) records only the focused pane.
 
 Message routing between a common workspace and project slots: [COMMON_ROUTING.md](COMMON_ROUTING.md). Collaboration under overload: [docs/overload-collaboration.md](docs/overload-collaboration.md). Project document tracking: [docs/project-documents.md](docs/project-documents.md).
 
 ## What it runs
 
-The UI uses Herdr's workspace/agent APIs with no network requests of its own. Helpers run `hc`, `herdr-app`, Python and the account CLIs locally; the installers run Git to fetch the pinned releases. No private configuration, account data or session mapping belongs in this repository.
+The UI uses Herdr's workspace/agent APIs. Native helpers run `hc`, `herdr-app` and account CLIs locally; installers run Git to fetch pinned releases. Existing provider-usage network requests remain in the native collectors. Optional external adapters use the command their owner configures. No private configuration, account data or session mapping belongs in this repository.
 
 ## Development
 
 ```sh
 npm test
-python3 -m unittest discover -s tests -p 'test_*.py'
+cargo test --manifest-path rust/Cargo.toml --locked --jobs 1 -- --test-threads=1
 herdr-app check ~/.config/herdr-app/mods/sixfold-desk
 ```
 

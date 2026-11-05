@@ -43,9 +43,9 @@ async function harness({ documents = [document('a'), document('b')], selection, 
     exec: async (command, args) => {
       calls.push({ command, args });
       if (command === 'osascript' && state.osascript) return state.osascript(args);
-      if (command !== 'python3') return { code: 0, stdout: '', stderr: '' };
-      if (args[0].endsWith('render_mermaid.py')) return state.mermaid ? state.mermaid(args) : { code: 0, stdout: '{"diagrams":[]}', stderr: '' };
-      if (args[0].endsWith('render_html.py')) return state.html(args);
+      if (command !== '/app/scripts/sixfold/herdr-theme') return { code: 0, stdout: '', stderr: '' };
+      if (args[0] === 'render_mermaid') return state.mermaid ? state.mermaid(args) : { code: 0, stdout: '{"diagrams":[]}', stderr: '' };
+      if (args[0] === 'render_html') return state.html(args);
       if (state.result) return state.result();
       return { code: 0, stdout: JSON.stringify({ spaceId: 'Demo', documents: state.documents, warnings: [], checkedAt: 1, watchRoots: ['/docs'] }), stderr: '' };
     },
@@ -132,14 +132,14 @@ test('ADR Markdown links open inside the read-only panel and can become pins', a
   h.view.follow('/docs/adr/README.md', './0015-queue.md', h.cx); await h.flush();
   assert.equal(h.view.bodyText, '본문 /docs/adr/0015-queue.md');
   assert.ok(h.view.documents.some(d => d.opened && d.path === '/docs/adr/0015-queue.md'));
-  assert.ok(h.calls.every(c => c.command === 'python3'));
+  assert.ok(h.calls.every(c => c.command === '/app/scripts/sixfold/herdr-theme'));
   h.render(); h.handlers.get('docs-pin')({}, h.cx); await h.flush();
   assert.ok(h.calls.some(c => c.args.includes('--pin') && c.args.includes('/docs/adr/0015-queue.md')));
 });
 
 test('background loading does not launch an editor and external actions require explicit clicks', async t => {
   const h = await harness(); t.after(() => h.view.close());
-  h.render(); assert.ok(h.calls.every(call => call.command === 'python3'));
+  h.render(); assert.ok(h.calls.every(call => call.command === '/app/scripts/sixfold/herdr-theme'));
   h.handlers.get('docs-edit')({}, h.cx); await h.flush();
   assert.deepEqual(h.calls.at(-1), { command: 'code', args: ['--reuse-window', '/docs/a.md'] });
   h.handlers.get('docs-open')({}, h.cx); await h.flush();
@@ -149,7 +149,7 @@ test('background loading does not launch an editor and external actions require 
 test('pin and unpin actions target the selected document and resolver space', async t => {
   const h = await harness(); t.after(() => h.view.close());
   h.render(); h.handlers.get('docs-pin')({}, h.cx); await h.flush();
-  assert.ok(h.calls.some(call => call.command === 'python3' && call.args.includes('--space') && call.args.includes('Demo') && call.args.at(-2) === '--unpin' && call.args.at(-1) === 'a'));
+  assert.ok(h.calls.some(call => call.command === '/app/scripts/sixfold/herdr-theme' && call.args.includes('--space') && call.args.includes('Demo') && call.args.at(-2) === '--unpin' && call.args.at(-1) === 'a'));
   h.state.documents = [document('a', '/docs/a.md', false)]; h.view.refresh(h.cx); await h.flush();
   h.render(); h.handlers.get('docs-pin')({}, h.cx); await h.flush();
   assert.ok(h.calls.some(call => call.args.at(-2) === '--pin' && call.args.at(-1) === '/docs/a.md'));
@@ -407,9 +407,13 @@ test('kind folders and the 수정일 column list the newest write first, whateve
   assert.deepEqual(finder.sortNodes(tree, { key: 'date', dir: 1 }).map(n => n.docId), ['new-name-old-write', 'middle', 'old-name-new-write']);
 });
 
-test('tabs naming the stale data/sixfold/doc-tabs resolver run the installed scripts/sixfold copy instead', async () => {
-  const resolver = h => h.calls.find(c => c.command === 'python3' && c.args[0].endsWith('resolve_doc_pins.py')).args[0];
-  assert.equal(resolver(await harness({ props: { resolverScript: '/app/data/sixfold/doc-tabs/resolve_doc_pins.py' } })), '/app/scripts/sixfold/resolve_doc_pins.py');
-  assert.equal(resolver(await harness({ props: { resolverScript: '/custom/resolve_doc_pins.py' } })), '/custom/resolve_doc_pins.py');
-  assert.equal(resolver(await harness()), '/app/scripts/sixfold/resolve_doc_pins.py');
+test('old tabs use the native resolver and an explicit native command remains configurable', async () => {
+  const resolver = h => h.calls.find(c => c.args[0] === 'resolve_doc_pins').command;
+  assert.equal(resolver(await harness({ props: { resolverScript: '/app/data/sixfold/doc-tabs/resolve_doc_pins.py' } })), '/app/scripts/sixfold/herdr-theme');
+  assert.equal(resolver(await harness({ props: { resolverCommand: '/custom/herdr-theme' } })), '/custom/herdr-theme');
+  assert.equal(resolver(await harness()), '/app/scripts/sixfold/herdr-theme');
+  const external = await harness({ props: { resolverScript: '/custom/resolve_doc_pins.py' } });
+  assert.deepEqual(external.calls[0], {command:'python3',args:['/custom/resolve_doc_pins.py','--config','/app/data/sixfold/project-docs-pins.json','--space','Demo']});
+  const similar = await harness({ props: { python:'/custom/python', resolverScript: '/custom/data/sixfold/doc-tabs/resolve_doc_pins.py' } });
+  assert.deepEqual(similar.calls[0], {command:'/custom/python',args:['/custom/data/sixfold/doc-tabs/resolve_doc_pins.py','--config','/app/data/sixfold/project-docs-pins.json','--space','Demo']});
 });

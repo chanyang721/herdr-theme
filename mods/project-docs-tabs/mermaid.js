@@ -1,4 +1,4 @@
-// Mermaid blocks become native image() blocks rendered by scripts/render_mermaid.py.
+// Mermaid blocks become native image() blocks rendered by herdr-theme render_mermaid.
 // The fence rules match that script so each block is found by its exact code.
 const FENCE = /^( {0,3})(`{3,}|~{3,})[ \t]*mermaid\b[^\n]*$/;
 

@@ -1,0 +1,138 @@
+{
+  "schema": 1,
+  "provider": "OpenBLAS",
+  "version": "0.3.29",
+  "abi": "ILP64",
+  "carrier": "NumPy 2.3.0 wheel; only native libraries and license data are extracted",
+  "platforms": {
+    "darwin-arm64": {
+      "wheel": {
+        "package": "numpy",
+        "filename": "numpy-2.3.0-cp312-cp312-macosx_11_0_arm64.whl",
+        "url": "https://files.pythonhosted.org/packages/2f/86/4ff04335901d6cf3a6bb9c748b0097546ae5af35e455ae9b962ebff4ecd7/numpy-2.3.0-cp312-cp312-macosx_11_0_arm64.whl",
+        "sha256": "9498f60cd6bb8238d8eaf468a3d5bb031d34cd12556af53510f05fcf581c1b7e"
+      },
+      "primary": "libscipy_openblas64_.dylib",
+      "files": [
+        {
+          "entry": "numpy/.dylibs/libscipy_openblas64_.dylib",
+          "filename": "libscipy_openblas64_.dylib",
+          "sha256": "159ee995e17f3e7ecf181821b694eb61a027e18a8316bc03fa4eb83aa2a40367"
+        },
+        {
+          "entry": "numpy/.dylibs/libgfortran.5.dylib",
+          "filename": "libgfortran.5.dylib",
+          "sha256": "728b8a719b0b015422632c74de2913ed14d82b319bc3a0643830bd506492662e"
+        },
+        {
+          "entry": "numpy/.dylibs/libquadmath.0.dylib",
+          "filename": "libquadmath.0.dylib",
+          "sha256": "1b341ae276c4adcb30c070b774ec6e68e819c883e897f0de8941d553f7989a0d"
+        },
+        {
+          "entry": "numpy/.dylibs/libgcc_s.1.1.dylib",
+          "filename": "libgcc_s.1.1.dylib",
+          "sha256": "baee2e6118dd54c0852f881d718516d70884de84bfaa085de5d8d8f90baa3b06"
+        },
+        {
+          "entry": "numpy-2.3.0.dist-info/LICENSE.txt",
+          "filename": "LICENSE.txt",
+          "sha256": "7be8708f1d49ad5160837ae72ce2aee1ac3873476098dccfda59b63a4694ae48"
+        }
+      ]
+    },
+    "darwin-x64": {
+      "wheel": {
+        "package": "numpy",
+        "filename": "numpy-2.3.0-cp312-cp312-macosx_10_13_x86_64.whl",
+        "url": "https://files.pythonhosted.org/packages/89/59/9df493df81ac6f76e9f05cdbe013cdb0c9a37b434f6e594f5bd25e278908/numpy-2.3.0-cp312-cp312-macosx_10_13_x86_64.whl",
+        "sha256": "389b85335838155a9076e9ad7f8fdba0827496ec2d2dc32ce69ce7898bde03ba"
+      },
+      "primary": "libscipy_openblas64_.dylib",
+      "files": [
+        {
+          "entry": "numpy/.dylibs/libscipy_openblas64_.dylib",
+          "filename": "libscipy_openblas64_.dylib",
+          "sha256": "3e558abec366fb437f0354af4579c344fd73856e173d5578d15b9aeb381bc93f"
+        },
+        {
+          "entry": "numpy/.dylibs/libgfortran.5.dylib",
+          "filename": "libgfortran.5.dylib",
+          "sha256": "004e1800141f5159cf4b14006af30139147627f0a7886ddf2ebf08e4f61719d9"
+        },
+        {
+          "entry": "numpy/.dylibs/libquadmath.0.dylib",
+          "filename": "libquadmath.0.dylib",
+          "sha256": "d290435604ce2ba8d1969ef6c46566689f543ef07a927d764500cc5eec78b761"
+        },
+        {
+          "entry": "numpy/.dylibs/libgcc_s.1.1.dylib",
+          "filename": "libgcc_s.1.1.dylib",
+          "sha256": "c09af95565433e66b4432a1e59aa6c1debe5b8af8908b5f1f89bbd7fea30b114"
+        },
+        {
+          "entry": "numpy-2.3.0.dist-info/LICENSE.txt",
+          "filename": "LICENSE.txt",
+          "sha256": "d84715000c6b3fd8719b2027238b6f6457cb853b2eb7023821a585949387f7bf"
+        }
+      ]
+    },
+    "linux-x64": {
+      "wheel": {
+        "package": "numpy",
+        "filename": "numpy-2.3.0-cp312-cp312-manylinux_2_28_x86_64.whl",
+        "url": "https://files.pythonhosted.org/packages/b7/f6/bc47f5fa666d5ff4145254f9e618d56e6a4ef9b874654ca74c19113bb538/numpy-2.3.0-cp312-cp312-manylinux_2_28_x86_64.whl",
+        "sha256": "c24bb4113c66936eeaa0dc1e47c74770453d34f46ee07ae4efd853a2ed1ad10a"
+      },
+      "primary": "libscipy_openblas64_-56d6093b.so",
+      "files": [
+        {
+          "entry": "numpy.libs/libgfortran-040039e1-0352e75f.so.5.0.0",
+          "filename": "libgfortran-040039e1-0352e75f.so.5.0.0",
+          "sha256": "c6090048eccc763522c12ef016f81da6b627cb3a044f55cf0479a839c41c0980"
+        },
+        {
+          "entry": "numpy.libs/libquadmath-96973f99-934c22de.so.0.0.0",
+          "filename": "libquadmath-96973f99-934c22de.so.0.0.0",
+          "sha256": "6ed5137f412781ad7863439fb543613f620b43c32b63292a0029246162f5bbc6"
+        },
+        {
+          "entry": "numpy.libs/libscipy_openblas64_-56d6093b.so",
+          "filename": "libscipy_openblas64_-56d6093b.so",
+          "sha256": "0bd815d04b6b54990e3cccc7528fbb696456d09569f533d0390c13f0cdc4dd4a"
+        },
+        {
+          "entry": "numpy-2.3.0.dist-info/LICENSE.txt",
+          "filename": "LICENSE.txt",
+          "sha256": "2046a3130e50b11c01659b3a0d963e6ae0b7436ff8e89cbcfd9e87bc6112d595"
+        }
+      ]
+    },
+    "win32-x64": {
+      "wheel": {
+        "package": "numpy",
+        "filename": "numpy-2.3.0-cp312-cp312-win_amd64.whl",
+        "url": "https://files.pythonhosted.org/packages/bc/49/d5781eaa1a15acb3b3a3f49dc9e2ff18d92d0ce5c2976f4ab5c0a7360250/numpy-2.3.0-cp312-cp312-win_amd64.whl",
+        "sha256": "0898c67a58cdaaf29994bc0e2c65230fd4de0ac40afaf1584ed0b02cd74c6fdd"
+      },
+      "primary": "libscipy_openblas64_-13e2df515630b4a41f92893938845698.dll",
+      "files": [
+        {
+          "entry": "numpy.libs/libscipy_openblas64_-13e2df515630b4a41f92893938845698.dll",
+          "filename": "libscipy_openblas64_-13e2df515630b4a41f92893938845698.dll",
+          "sha256": "6547e9fb966e9773caee2755e91a8bf4d6f3a2f0eebf9646b0158f8675ea4ab5"
+        },
+        {
+          "entry": "numpy.libs/msvcp140-263139962577ecda4cd9469ca360a746.dll",
+          "filename": "msvcp140-263139962577ecda4cd9469ca360a746.dll",
+          "sha256": "a4c2229bdc2a2a630acdc095b4d86008e5c3e3bc7773174354f3da4f5beb9cde"
+        },
+        {
+          "entry": "numpy-2.3.0.dist-info/LICENSE.txt",
+          "filename": "LICENSE.txt",
+          "sha256": "233d7ab5c32bc4aed6848f647d397007965acdb691c86fe27d17cc3eb60359d1"
+        }
+      ]
+    }
+  }
+}

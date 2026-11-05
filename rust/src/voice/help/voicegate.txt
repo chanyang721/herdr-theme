@@ -1,0 +1,30 @@
+Voice gate: tell the enrolled user's voice apart from other voices.
+
+Claude Code reads the microphone itself, so this does not filter what it
+hears. It listens to the same microphone alongside it, cuts speech into
+segments, and records for each one whether it was the enrolled voice. The
+focus-queue listener reads those verdicts before it sends a dictation, so
+speech from other people is erased instead of being sent as an instruction.
+Nothing here delays recording or transcription.
+
+  herdr-theme voicegate enroll [seconds]   record the user's voice and save a voiceprint
+  herdr-theme voicegate serve              write a verdict for every speech segment
+  herdr-theme voicegate tail               print verdicts live (for calibration)
+
+Each microphone is enrolled once with `enroll`, alone in a quiet room.
+`serve` never starts a voiceprint by itself: learning from whatever was sent
+would let a laptop mic learn a conversation nearby as the user. After
+enrollment it keeps the voiceprint up to date. The listener marks the time
+span of every dictation that was actually sent in voice-confirmed.jsonl;
+speech in those spans that already scores POOL_SCORE goes into a pool, and
+the voiceprint is rebuilt from it. Speech that does not sound like the user
+is dropped from the pool on every rebuild. The judging
+threshold may rise a little (up to MAX_THRESHOLD) once ADAPT_SCORES confirmed
+segments, scored by the voiceprint before it learned them, all sit well above
+it; pooling itself always uses POOL_SCORE, so the two cannot ratchet.
+
+Runs in its own environment (native PortAudio and sherpa-onnx), set up by
+`focusq voice-setup`. The voiceprint stays on this machine; no audio is kept.
+Enrollment also writes this person's microphone into voice.local.json
+(rust/src/voice/settings.rs): its speech level and detector gain, and, for a headset,
+permission to send dictation on its own.

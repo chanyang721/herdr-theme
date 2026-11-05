@@ -10,7 +10,7 @@ import { listView, breadcrumb, icon } from './finder.js';
 
 const LIMIT = 400000;
 const STATE = 'sixfold.docs.selection.v1';
-// scripts/open_doc_tab.py writes the latest open request; each space handles it once.
+// The native open_doc_tab helper writes the latest request; each space handles it once.
 const REQUEST = 'project-docs-open.json';
 const OPENED = 'sixfold.docs.opened.v1';
 // Per space: Finder view (column or list), location and open column path, as last left.
@@ -24,7 +24,27 @@ const LOCATION_ICONS = { docs: '🗂', harness: '🧭', opened: '👁', archived
 const HARNESS_TAG = '하네스 생성물 · 읽기 전용';
 const isHtml = path => /\.html?$/i.test(path);
 const windows = () => typeof hostWindow === 'function' && hostWindow().platform === 'windows';
-const desktop = (action, path) => exec('python3', [`${appHome()}/scripts/sixfold/desktop.py`, action, path]);
+const native = () => `${appHome()}/scripts/sixfold/herdr-theme${windows()?'.exe':''}`;
+const desktop = (action, path) => exec(native(), ['desktop', action, path]);
+// Explicit user-owned scripts are an external adapter, as the harness is. The
+// bundled helper paths saved by old installers always migrate to the native CLI.
+const helper = (p, name, stem) => {
+  const command = p[`${name}Command`];
+  if (Array.isArray(command) && command.length) return command;
+  if (typeof command === 'string' && command) return [command, stem];
+  const script = p[`${name}Script`];
+  const comparable = path => {
+    const value=path.replace(/\\/g,'/').replace(/\/+$/,'');
+    return /^[A-Za-z]:\//.test(value) || value.startsWith('//')?value.toLowerCase():value;
+  };
+  const bundled = typeof script === 'string' && [
+    `${appHome()}/scripts/sixfold/${stem}.py`,
+    `${appHome()}/data/sixfold/doc-tabs/${stem}.py`,
+  ].some(path=>comparable(script)===comparable(path));
+  if (typeof script === 'string' && script && !bundled) return [p.python || 'python3', script];
+  return [native(), stem];
+};
+const invoke = (command, args) => exec(command[0], [...command.slice(1), ...args]);
 const readable = path => /\.md$/i.test(path) || isHtml(path);
 // Puts the file itself (as Finder Cmd+C does) or its UTF-8 text on the general pasteboard.
 const MAC_COPY = String.raw`
@@ -49,7 +69,7 @@ function run() {
   var app = $.NSWorkspace.sharedWorkspace.URLForApplicationToOpenURL($.NSURL.URLWithString('https://example.com'));
   return app.isNil() ? '' : app.path.js;
 }`;
-// Same steps as render_html.py, so a pane resize re-renders only at 40px steps; rounding
+// Same steps as native render_html, so a pane resize re-renders only at 40px steps; rounding
 // down keeps the picture at 1:1 instead of shrinking it a little.
 export const htmlWidth = width => Math.min(2000, Math.max(320, Math.floor(width / 40) * 40));
 export default class ProjectDocuments extends View {
@@ -58,11 +78,10 @@ export default class ProjectDocuments extends View {
     this.spaceId = p.spaceId;
     // Tabs made by older installers name a copy under data/sixfold/doc-tabs that updates never
     // refresh; the installed helper in scripts/sixfold is the current one.
-    const legacy = /[\\/]data[\\/]sixfold[\\/]doc-tabs[\\/]resolve_doc_pins\.py$/;
-    this.script = p.resolverScript && !legacy.test(p.resolverScript) ? p.resolverScript : `${appHome()}/scripts/sixfold/resolve_doc_pins.py`;
+    this.resolverCommand = helper(p, 'resolver', 'resolve_doc_pins');
     this.config = p.pinsConfig || `${appHome()}/data/sixfold/project-docs-pins.json`;
-    this.mermaidScript = p.mermaidScript || `${appHome()}/scripts/sixfold/render_mermaid.py`;
-    this.htmlScript = p.htmlScript || `${appHome()}/scripts/sixfold/render_html.py`;
+    this.mermaidCommand = helper(p, 'mermaid', 'render_mermaid');
+    this.htmlCommand = helper(p, 'html', 'render_html');
     this.documents = []; this.watchers = new Map(); this.generation = 0;
     this.selected = shared(STATE)?.[this.spaceId]; this.width = 800; this.paneWidth = 1200;
     this.kinds = []; this.harness = null; this.kindFilter = null; this.kindMenu = false; this.sidebar = null;
@@ -79,7 +98,7 @@ export default class ProjectDocuments extends View {
     cx.timer.every(5000, cx => this.refresh(cx));
   }
 
-  invoke(args = []) { return exec('python3', [this.script, '--config', this.config, '--space', this.spaceId, ...args]); }
+  invoke(args = []) { return invoke(this.resolverCommand, ['--config', this.config, '--space', this.spaceId, ...args]); }
 
   refresh(cx) {
     if (!this.spaceId || this.closed) return;
@@ -212,7 +231,7 @@ export default class ProjectDocuments extends View {
     if (!mermaidFences(text).length) return result;
     try {
       const [mode, background] = look.split(':');
-      const run = await exec('python3', [this.mermaidScript, '--doc', path, '--theme', mode, '--background', /^#[0-9a-f]{6}$/i.test(background) ? background : '#ffffff']);
+      const run = await invoke(this.mermaidCommand, ['--doc', path, '--theme', mode, '--background', /^#[0-9a-f]{6}$/i.test(background) ? background : '#ffffff']);
       const data = JSON.parse(run.stdout || '{}');
       if (run.code !== 0 || data.error) throw Error(data.error || run.stderr.trim() || 'Mermaid 렌더링 실패');
       const failed = [];
@@ -225,7 +244,7 @@ export default class ProjectDocuments extends View {
   // HTML reports are drawn by WebKit as the browser shows them, then laid out as image tiles.
   async page(path, look, width) {
     this.diagramError = null;
-    const run = await exec('python3', [this.htmlScript, '--doc', path, '--theme', look.split(':')[0], '--width', String(width)]);
+    const run = await invoke(this.htmlCommand, ['--doc', path, '--theme', look.split(':')[0], '--width', String(width)]);
     let data = {};
     try { data = JSON.parse(run.stdout || '{}'); } catch {}
     if (run.code !== 0 || !Array.isArray(data.pages)) throw Error(data.error || run.stderr.trim() || 'HTML 렌더링 실패');

@@ -1,0 +1,350 @@
+{
+  "baseline": "8c5b71d2f1074bb5d1d831fa395617bf4ae2abc8",
+  "icon": [
+    {
+      "name": "unicode-existing",
+      "workspace": "연구 공간",
+      "options": [],
+      "extension": ".SVG",
+      "existing": {
+        "other": {
+          "path": "local/other.svg",
+          "tint": true,
+          "notes": [
+            "보존",
+            1e-07
+          ]
+        }
+      },
+      "body": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"2\" height=\"3\"></svg>",
+      "expected": {
+        "exit": 0,
+        "stdout": "Updated local icon: 연구 공간\n",
+        "text": "{\"other\": {\"path\": \"local/other.svg\", \"tint\": true, \"notes\": [\"보존\", 1e-07]}, \"연구 공간\": {\"path\": \"data/sixfold/icons/ca40a732d84a06b5.svg\", \"tint\": false}}",
+        "copied": 1,
+        "mtime": 946684800
+      }
+    },
+    {
+      "name": "tinted",
+      "workspace": "Tinted",
+      "options": [
+        "--tint",
+        "--background",
+        "#abc"
+      ],
+      "extension": ".png",
+      "existing": {},
+      "body": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"2\" height=\"3\"></svg>",
+      "expected": {
+        "exit": 0,
+        "stdout": "Updated local icon: Tinted\n",
+        "text": "{\"Tinted\": {\"path\": \"data/sixfold/icons/ca40a732d84a06b5.png\", \"tint\": true, \"background\": \"#abc\"}}",
+        "copied": 1,
+        "mtime": 946684800
+      }
+    },
+    {
+      "name": "empty-background",
+      "workspace": "Empty",
+      "options": [
+        "--background",
+        ""
+      ],
+      "extension": ".webp",
+      "existing": {},
+      "body": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"2\" height=\"3\"></svg>",
+      "expected": {
+        "exit": 0,
+        "stdout": "Updated local icon: Empty\n",
+        "text": "{\"Empty\": {\"path\": \"data/sixfold/icons/ca40a732d84a06b5.webp\", \"tint\": false}}",
+        "copied": 1,
+        "mtime": 946684800
+      }
+    },
+    {
+      "name": "empty-background-tint",
+      "workspace": "EmptyTint",
+      "options": [
+        "--tint",
+        "--background",
+        ""
+      ],
+      "extension": ".jpeg",
+      "existing": {},
+      "body": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"2\" height=\"3\"></svg>",
+      "expected": {
+        "exit": 0,
+        "stdout": "Updated local icon: EmptyTint\n",
+        "text": "{\"EmptyTint\": {\"path\": \"data/sixfold/icons/ca40a732d84a06b5.jpeg\", \"tint\": true}}",
+        "copied": 1,
+        "mtime": 946684800
+      }
+    },
+    {
+      "name": "unsupported-existing",
+      "workspace": "Rejected",
+      "options": [],
+      "extension": ".txt",
+      "existing": {
+        "other": {
+          "path": "keep.svg"
+        }
+      },
+      "body": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"2\" height=\"3\"></svg>",
+      "expected": {
+        "exit": 2,
+        "stdout": "",
+        "text": "{\"other\": {\"path\": \"keep.svg\"}}",
+        "copied": 0,
+        "mtime": null
+      }
+    }
+  ],
+  "seed": [
+    {
+      "name": "create-and-restore",
+      "names": [
+        "Alpha",
+        "Beta"
+      ],
+      "spaces": [],
+      "status": {
+        "space": "original-space",
+        "focused_pane": "original-pane"
+      },
+      "fail": false,
+      "expected": {
+        "exit": 0,
+        "calls": [
+          [
+            "ls"
+          ],
+          [
+            "status"
+          ],
+          [
+            "do",
+            "space.new",
+            "--name",
+            "Alpha",
+            "--machine",
+            ""
+          ],
+          [
+            "do",
+            "space.select",
+            "--id",
+            "original-space"
+          ],
+          [
+            "do",
+            "pane.focus",
+            "--pane",
+            "original-pane"
+          ],
+          [
+            "ls"
+          ],
+          [
+            "do",
+            "space.new",
+            "--name",
+            "Beta",
+            "--machine",
+            ""
+          ],
+          [
+            "do",
+            "space.select",
+            "--id",
+            "original-space"
+          ],
+          [
+            "do",
+            "pane.focus",
+            "--pane",
+            "original-pane"
+          ],
+          [
+            "ls"
+          ]
+        ],
+        "state": {
+          "spaces": [
+            {
+              "id": "created-0",
+              "name": "Alpha",
+              "machine": null
+            },
+            {
+              "id": "created-1",
+              "name": "Beta",
+              "machine": null
+            }
+          ],
+          "space": "original-space",
+          "focused_pane": "original-pane"
+        },
+        "text": "{\n  \"spaces\": [\n    {\n      \"id\": \"created-0\",\n      \"machine\": null\n    },\n    {\n      \"id\": \"created-1\",\n      \"machine\": null\n    }\n  ]\n}\n",
+        "lockExists": false
+      }
+    },
+    {
+      "name": "failed-create-restores",
+      "names": [
+        "Alpha"
+      ],
+      "spaces": [],
+      "status": {
+        "space": "original-space",
+        "focused_pane": "original-pane"
+      },
+      "fail": true,
+      "expected": {
+        "exit": 1,
+        "calls": [
+          [
+            "ls"
+          ],
+          [
+            "status"
+          ],
+          [
+            "do",
+            "space.new",
+            "--name",
+            "Alpha",
+            "--machine",
+            ""
+          ],
+          [
+            "do",
+            "space.select",
+            "--id",
+            "original-space"
+          ],
+          [
+            "do",
+            "pane.focus",
+            "--pane",
+            "original-pane"
+          ]
+        ],
+        "state": {
+          "spaces": [],
+          "space": "original-space",
+          "focused_pane": "original-pane"
+        },
+        "text": null,
+        "lockExists": false
+      }
+    },
+    {
+      "name": "empty-selection",
+      "names": [
+        "Alpha"
+      ],
+      "spaces": [],
+      "status": {
+        "space": "",
+        "focused_pane": ""
+      },
+      "fail": false,
+      "expected": {
+        "exit": 0,
+        "calls": [
+          [
+            "ls"
+          ],
+          [
+            "status"
+          ],
+          [
+            "do",
+            "space.new",
+            "--name",
+            "Alpha",
+            "--machine",
+            ""
+          ],
+          [
+            "ls"
+          ]
+        ],
+        "state": {
+          "spaces": [
+            {
+              "id": "created-0",
+              "name": "Alpha",
+              "machine": null
+            }
+          ],
+          "space": "new-selection",
+          "focused_pane": "new-pane"
+        },
+        "text": "{\n  \"spaces\": [\n    {\n      \"id\": \"created-0\",\n      \"machine\": null\n    }\n  ]\n}\n",
+        "lockExists": false
+      }
+    },
+    {
+      "name": "casefold-local-only",
+      "names": [
+        "ALPHA"
+      ],
+      "spaces": [
+        {
+          "id": "remote",
+          "name": "ALPHA",
+          "machine": "remote"
+        },
+        {
+          "id": "",
+          "name": "alpha",
+          "machine": null
+        },
+        {
+          "id": "local",
+          "name": "alpha",
+          "machine": null
+        }
+      ],
+      "status": {
+        "space": "original-space",
+        "focused_pane": "original-pane"
+      },
+      "fail": false,
+      "expected": {
+        "exit": 0,
+        "calls": [
+          [
+            "ls"
+          ]
+        ],
+        "state": {
+          "spaces": [
+            {
+              "id": "remote",
+              "name": "ALPHA",
+              "machine": "remote"
+            },
+            {
+              "id": "",
+              "name": "alpha",
+              "machine": null
+            },
+            {
+              "id": "local",
+              "name": "alpha",
+              "machine": null
+            }
+          ],
+          "space": "original-space",
+          "focused_pane": "original-pane"
+        },
+        "text": "{\n  \"spaces\": [\n    {\n      \"id\": \"local\",\n      \"machine\": null\n    }\n  ]\n}\n",
+        "lockExists": false
+      }
+    }
+  ]
+}

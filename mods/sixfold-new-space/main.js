@@ -1,6 +1,6 @@
 import { View, div } from 'gpui-kit';
 import { v_flex, h_flex, InputState, Input } from 'gpui-base';
-import { appHome, home, props, closeOverlay, exec, theme, pickFolder, knownAgents, run } from 'herdr';
+import { appHome, home, props, closeOverlay, exec, theme, pickFolder, knownAgents, run, window } from 'herdr';
 
 export default class NewWorkspace extends View {
   init(_props, cx) {
@@ -32,9 +32,9 @@ export default class NewWorkspace extends View {
         const agents=await knownAgents();
         // The workspace opens one Claude session; Codex is only needed later, when dispatch adds a pane.
         if (!agents.some(a=>a.key==='claude' && a.installed)) throw new Error('claude 실행 파일을 먼저 설치해 주세요.');
-        const windows=/^[A-Za-z]:[\\/]/.test(home());
-        const result=await exec(windows?'py':'python3',[
-          ...(windows?['-3']:[]), '-X','utf8', `${appHome()}/scripts/sixfold/workspace.py`,name,folder,
+        const windows=(typeof window==='function' && window()?.platform==='windows') || /^(?:[A-Za-z]:[\\/]|\\\\)/.test(home());
+        const result=await exec(`${appHome()}/scripts/sixfold/herdr-theme${windows?'.exe':''}`,[
+          'workspace',name,folder,
           ...(tiers?['--tiers',tiers]:[]),
         ]);
         if (result.code!==0) throw new Error(result.stderr || result.stdout || '워크스페이스 생성 실패');

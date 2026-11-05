@@ -1,0 +1,253 @@
+{
+  "schema": 1,
+  "platform": "win32-x64",
+  "backend": "libsndfile-1.2.2",
+  "binary_sha256": "87d3a959fc3d2d8aaf93ac5f0ea4821962dd20f764bc32202f3f356471b493d5",
+  "library_sha256": "22518c16f9d13eda5ae5adf999c4740d7d16cc2d6b178b36dd4ac2f759a38559",
+  "audio_sha256": "9175e523081bf6a630ce72a55b05f92148eaafaf58cbbbe743686cd81c50848e",
+  "native_path_empty": true,
+  "cases": [
+    {
+      "format": "AIFF",
+      "input_sha256": "630bf0cf672c6ef61e4e0c57408d9eff8d150a9eaff3267fc23526a80c86fc05",
+      "original_status": "readable-mono16k",
+      "native_exit": 0,
+      "status": "pass",
+      "frames": 1024,
+      "exact_float32_bits": true
+    },
+    {
+      "format": "AU",
+      "input_sha256": "34847187da00467c969a9c149e3baace220821b598a589b73c3925be55de1399",
+      "original_status": "readable-mono16k",
+      "native_exit": 0,
+      "status": "pass",
+      "frames": 1024,
+      "exact_float32_bits": true
+    },
+    {
+      "format": "AVR",
+      "input_sha256": "e32ca70ecc6094ef2faf571f26124b0473e59542e34fe470850eaba80aa235e0",
+      "original_status": "readable-mono16k",
+      "native_exit": 0,
+      "status": "pass",
+      "frames": 1024,
+      "exact_float32_bits": true
+    },
+    {
+      "format": "CAF",
+      "input_sha256": "cb6b2665d31ff0ce2efff7d5947cb32114d1fac7caa1b023182f525d77284dd0",
+      "original_status": "readable-mono16k",
+      "native_exit": 0,
+      "status": "pass",
+      "frames": 1024,
+      "exact_float32_bits": true
+    },
+    {
+      "format": "FLAC",
+      "input_sha256": "3391c78673bc39983670a64569e0baf53aef0f8c64a4bdc68199d554da8c9b8a",
+      "original_status": "readable-mono16k",
+      "native_exit": 0,
+      "status": "pass",
+      "frames": 1024,
+      "exact_float32_bits": true
+    },
+    {
+      "format": "HTK",
+      "input_sha256": "2fa58d208c998a11c97725d0c73fdc1fc3b7af9185f96e44691a6921d9712b55",
+      "original_status": "readable-mono16k",
+      "native_exit": 0,
+      "status": "pass",
+      "frames": 1024,
+      "exact_float32_bits": true
+    },
+    {
+      "format": "IRCAM",
+      "input_sha256": "69b5faac3eb7faddc05290800f17c7a0e0cb3d0ef73f364ac24d56ab3ebad46c",
+      "original_status": "readable-mono16k",
+      "native_exit": 0,
+      "status": "pass",
+      "frames": 1024,
+      "exact_float32_bits": true
+    },
+    {
+      "format": "MAT4",
+      "input_sha256": "2f7dcda38f8d1db38da4c5cd9498fccfaf04e94efdb7daf5c1a39946d04ef6ca",
+      "original_status": "readable-mono16k",
+      "native_exit": 0,
+      "status": "pass",
+      "frames": 1024,
+      "exact_float32_bits": true
+    },
+    {
+      "format": "MAT5",
+      "input_sha256": "1a82af45857a2bedd3ca4c863c4935086f299065ee566da7e850a1b21c1d0eb9",
+      "original_status": "readable-mono16k",
+      "native_exit": 0,
+      "status": "pass",
+      "frames": 1024,
+      "exact_float32_bits": true
+    },
+    {
+      "format": "MP3",
+      "input_sha256": "91f0ba3d0f4d50cc8b76474e9ae5b0c6bad946157e76d8686340c09228c03d3f",
+      "original_status": "readable-mono16k",
+      "native_exit": 0,
+      "status": "pass",
+      "frames": 16384,
+      "exact_float32_bits": true
+    },
+    {
+      "format": "MPC2K",
+      "input_sha256": "23b06892da41c738b7f0456c7af3bd755f7e73e3b40d61c550a43d3cda47f3ab",
+      "original_status": "readable-mono16k",
+      "native_exit": 0,
+      "status": "pass",
+      "frames": 1024,
+      "exact_float32_bits": true
+    },
+    {
+      "format": "NIST",
+      "input_sha256": "cff97050f51cf32e61b4513e7894a04f82864916f9ad3c6c5d1b97d8090b10d9",
+      "original_status": "readable-mono16k",
+      "native_exit": 0,
+      "status": "pass",
+      "frames": 1024,
+      "exact_float32_bits": true
+    },
+    {
+      "format": "OGG",
+      "input_sha256": "ac3951c29e5707d1311d92194b4b93832478030db346231b8a58d19c13105d73",
+      "original_status": "readable-mono16k",
+      "native_exit": 0,
+      "status": "pass",
+      "frames": 1024,
+      "exact_float32_bits": true
+    },
+    {
+      "format": "PAF",
+      "input_sha256": "2b28c9a10d65cef2aa2ff781516904a34340cd75a0b26e61378e27c891902716",
+      "original_status": "readable-mono16k",
+      "native_exit": 0,
+      "status": "pass",
+      "frames": 1024,
+      "exact_float32_bits": true
+    },
+    {
+      "format": "PVF",
+      "input_sha256": "b4b42f41a8dc01962179287d187276a23b0b1f48d71459b9be2f38691c84ccce",
+      "original_status": "readable-mono16k",
+      "native_exit": 0,
+      "status": "pass",
+      "frames": 1024,
+      "exact_float32_bits": true
+    },
+    {
+      "format": "RF64",
+      "input_sha256": "47ab51c59509a26da1b577cf4628ae17b6c03fa6b35e2df1add2ca311de75f60",
+      "original_status": "readable-mono16k",
+      "native_exit": 0,
+      "status": "pass",
+      "frames": 1024,
+      "exact_float32_bits": true
+    },
+    {
+      "format": "SD2",
+      "input_sha256": "c5c8b5e110910a79668fb50ab5ee1ef867fa8aa516bcc7a089d0b67a5a3c82fa",
+      "original_status": "original-rejected-input",
+      "native_exit": 1,
+      "status": "pass"
+    },
+    {
+      "format": "SDS",
+      "input_sha256": "f64ac7fac8fb68e379a0df9f76fe058af91e0d57c53aebce2b240c5d65d2b3b2",
+      "original_status": "readable-mono16k",
+      "native_exit": 0,
+      "status": "pass",
+      "frames": 1024,
+      "exact_float32_bits": true
+    },
+    {
+      "format": "SVX",
+      "input_sha256": "88aa3059f9ca7d91814a3396c4b36b063199047aa6cc06ecd49d6610519e83c9",
+      "original_status": "readable-mono16k",
+      "native_exit": 0,
+      "status": "pass",
+      "frames": 1024,
+      "exact_float32_bits": true
+    },
+    {
+      "format": "VOC",
+      "input_sha256": "278bc7097cf3c4f1e6649b07432e58f58bb200230a8fa640df632235c90b6c1d",
+      "original_status": "readable-mono16k",
+      "native_exit": 0,
+      "status": "pass",
+      "frames": 1024,
+      "exact_float32_bits": true
+    },
+    {
+      "format": "W64",
+      "input_sha256": "09173eaa0d75a9839bb96757393d7c5b7279e2b76fafa924740201c0a60be5a3",
+      "original_status": "readable-mono16k",
+      "native_exit": 0,
+      "status": "pass",
+      "frames": 1024,
+      "exact_float32_bits": true
+    },
+    {
+      "format": "WAV",
+      "input_sha256": "d7480e0f069c09e1a339defc55cb0a5e67ee9a7b7e119449af6db461a176942c",
+      "original_status": "readable-mono16k",
+      "native_exit": 0,
+      "status": "pass",
+      "frames": 1024,
+      "exact_float32_bits": true
+    },
+    {
+      "format": "WAVEX",
+      "input_sha256": "0329fbcffed1f3c05501c86d137dcdb6a5d7338bcb591400f72d541ea8efdf2d",
+      "original_status": "readable-mono16k",
+      "native_exit": 0,
+      "status": "pass",
+      "frames": 1024,
+      "exact_float32_bits": true
+    },
+    {
+      "format": "WVE",
+      "input_sha256": "9a749d197f2512c37238de6fbe4c5c82f66939afcfd1438f1a28696c7c3ce707",
+      "original_status": "original-rejected-input",
+      "native_exit": 1,
+      "status": "pass"
+    },
+    {
+      "format": "XI",
+      "input_sha256": "24ef2b5012da3d0cf71b377f76cc411f3587e328a867961ab9ce7da9e185a3aa",
+      "original_status": "original-rejected-input",
+      "native_exit": 1,
+      "status": "pass"
+    },
+    {
+      "format": "stereo",
+      "input_sha256": "91f66ff803760ad77058141f44cc96e41e4237092a5547844b740694b9027080",
+      "original_status": "original-rejected-input",
+      "native_exit": 1,
+      "status": "pass"
+    },
+    {
+      "format": "rate8000",
+      "input_sha256": "3676c6d192e4546ba96fb0393cdc3abd8427f8b6aac16c14b20c0d2a3e99d1be",
+      "original_status": "original-rejected-input",
+      "native_exit": 1,
+      "status": "pass"
+    },
+    {
+      "format": "invalid",
+      "input_sha256": "b25d46ef0169db3fe2920bf0ec54c4fbacf73f76a0e36a2e4accfeedd3ed12e8",
+      "original_status": "original-rejected-input",
+      "native_exit": 1,
+      "status": "pass"
+    }
+  ],
+  "status": "pass",
+  "missing_required_formats": []
+}

@@ -1,0 +1,180 @@
+{
+  "schema": 1,
+  "baseline_commit": "8c5b71d2f1074bb5d1d831fa395617bf4ae2abc8",
+  "sources": {
+    "tests/eval_voice_models.py": {
+      "url": "https://raw.githubusercontent.com/chanyang721/herdr-theme/8c5b71d2f1074bb5d1d831fa395617bf4ae2abc8/voice/tests/eval_voice_models.py",
+      "sha256": "117006412c90305dc51e8e5209bba52c52fd93d39bd90a5c2c7ba43f427a08c2"
+    },
+    "tests/eval_voice_vad.py": {
+      "url": "https://raw.githubusercontent.com/chanyang721/herdr-theme/8c5b71d2f1074bb5d1d831fa395617bf4ae2abc8/voice/tests/eval_voice_vad.py",
+      "sha256": "a6a550c338b533965c6b801b88964a1b2620b5818ab151d0843821aa0387fa1b"
+    },
+    "tests/eval_gate_chain.py": {
+      "url": "https://raw.githubusercontent.com/chanyang721/herdr-theme/8c5b71d2f1074bb5d1d831fa395617bf4ae2abc8/voice/tests/eval_gate_chain.py",
+      "sha256": "786be58f1339cd0ce18aac63ea898dda411a06da35f8c9c3967f30b056682c3a"
+    },
+    "voicegate.py": {
+      "url": "https://raw.githubusercontent.com/chanyang721/herdr-theme/8c5b71d2f1074bb5d1d831fa395617bf4ae2abc8/voice/voicegate.py",
+      "sha256": "d04612e66475a7726dda389c0f7f5581ce16a96592f65f37a8f3718dab970a00"
+    },
+    "voice_policy.py": {
+      "url": "https://raw.githubusercontent.com/chanyang721/herdr-theme/8c5b71d2f1074bb5d1d831fa395617bf4ae2abc8/voice/voice_policy.py",
+      "sha256": "03ca597d4eb75d64bbd24a3db0840de42b59f79ded992cf03f50fd7852af79e2"
+    },
+    "voice_settings.py": {
+      "url": "https://raw.githubusercontent.com/chanyang721/herdr-theme/8c5b71d2f1074bb5d1d831fa395617bf4ae2abc8/voice/voice_settings.py",
+      "sha256": "ee632afd0a96179c49378f55513e83d4a794392d8f5ade7555e1fca4c2764352"
+    }
+  },
+  "platforms": {
+    "win32-x64": [
+      {
+        "package": "scipy",
+        "version": "1.16.0",
+        "filename": "scipy-1.16.0-cp312-cp312-win_amd64.whl",
+        "url": "https://files.pythonhosted.org/packages/ea/b5/29fece1a74c6a94247f8a6fb93f5b28b533338e9c34fdcc9cfe7a939a767/scipy-1.16.0-cp312-cp312-win_amd64.whl",
+        "sha256": "adf9b1999323ba335adc5d1dc7add4781cb5a4b0ef1e98b79768c05c796c4e49"
+      },
+      {
+        "package": "pyarrow",
+        "version": "20.0.0",
+        "filename": "pyarrow-20.0.0-cp312-cp312-win_amd64.whl",
+        "url": "https://files.pythonhosted.org/packages/a0/8e/9adee63dfa3911be2382fb4d92e4b2e7d82610f9d9f668493bebaa2af50f/pyarrow-20.0.0-cp312-cp312-win_amd64.whl",
+        "sha256": "96d6a0a37d9c98be08f5ed6a10831d88d52cac7b13f5287f1e0f625a0de8062b"
+      },
+      {
+        "package": "soundfile",
+        "version": "0.13.1",
+        "filename": "soundfile-0.13.1-py2.py3-none-win_amd64.whl",
+        "url": "https://files.pythonhosted.org/packages/14/e9/6b761de83277f2f02ded7e7ea6f07828ec78e4b229b80e4ca55dd205b9dc/soundfile-0.13.1-py2.py3-none-win_amd64.whl",
+        "sha256": "1e70a05a0626524a69e9f0f4dd2ec174b4e9567f4d8b6c11d38b5c289be36ee9"
+      },
+      {
+        "package": "cffi",
+        "version": "1.17.1",
+        "filename": "cffi-1.17.1-cp312-cp312-win_amd64.whl",
+        "url": "https://files.pythonhosted.org/packages/50/b9/db34c4755a7bd1cb2d1603ac3863f22bcecbd1ba29e5ee841a4bc510b294/cffi-1.17.1-cp312-cp312-win_amd64.whl",
+        "sha256": "51392eae71afec0d0c8fb1a53b204dbb3bcabcb3c9b807eedf3e1e6ccf2de903"
+      },
+      {
+        "package": "pycparser",
+        "version": "2.22",
+        "filename": "pycparser-2.22-py3-none-any.whl",
+        "url": "https://files.pythonhosted.org/packages/13/a3/a812df4e2dd5696d1f351d58b8fe16a405b234ad2886a0dab9183fb78109/pycparser-2.22-py3-none-any.whl",
+        "sha256": "c3702b6d3dd8c7abc1afa565d7e63d53a1d0bd86cdc24edd75470f4de499cfcc"
+      }
+    ],
+    "linux-x64": [
+      {
+        "package": "scipy",
+        "version": "1.16.0",
+        "filename": "scipy-1.16.0-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl",
+        "url": "https://files.pythonhosted.org/packages/6d/f0/b6ac354a956384fd8abee2debbb624648125b298f2c4a7b4f0d6248048a5/scipy-1.16.0-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl",
+        "sha256": "03931b4e870c6fef5b5c0970d52c9f6ddd8c8d3e934a98f09308377eba6f3824"
+      },
+      {
+        "package": "pyarrow",
+        "version": "20.0.0",
+        "filename": "pyarrow-20.0.0-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl",
+        "url": "https://files.pythonhosted.org/packages/af/a9/3bdd799e2c9b20c1ea6dc6fa8e83f29480a97711cf806e823f808c2316ac/pyarrow-20.0.0-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl",
+        "sha256": "2c3a01f313ffe27ac4126f4c2e5ea0f36a5fc6ab51f8726cf41fee4b256680bd"
+      },
+      {
+        "package": "soundfile",
+        "version": "0.13.1",
+        "filename": "soundfile-0.13.1-py2.py3-none-manylinux_2_28_x86_64.whl",
+        "url": "https://files.pythonhosted.org/packages/57/5e/70bdd9579b35003a489fc850b5047beeda26328053ebadc1fb60f320f7db/soundfile-0.13.1-py2.py3-none-manylinux_2_28_x86_64.whl",
+        "sha256": "03267c4e493315294834a0870f31dbb3b28a95561b80b134f0bd3cf2d5f0e618"
+      },
+      {
+        "package": "cffi",
+        "version": "1.17.1",
+        "filename": "cffi-1.17.1-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl",
+        "url": "https://files.pythonhosted.org/packages/b2/d5/da47df7004cb17e4955df6a43d14b3b4ae77737dff8bf7f8f333196717bf/cffi-1.17.1-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl",
+        "sha256": "b62ce867176a75d03a665bad002af8e6d54644fad99a3c70905c543130e39d93"
+      },
+      {
+        "package": "pycparser",
+        "version": "2.22",
+        "filename": "pycparser-2.22-py3-none-any.whl",
+        "url": "https://files.pythonhosted.org/packages/13/a3/a812df4e2dd5696d1f351d58b8fe16a405b234ad2886a0dab9183fb78109/pycparser-2.22-py3-none-any.whl",
+        "sha256": "c3702b6d3dd8c7abc1afa565d7e63d53a1d0bd86cdc24edd75470f4de499cfcc"
+      }
+    ],
+    "darwin-arm64": [
+      {
+        "package": "scipy",
+        "version": "1.16.0",
+        "filename": "scipy-1.16.0-cp312-cp312-macosx_12_0_arm64.whl",
+        "url": "https://files.pythonhosted.org/packages/99/0d/270e2e9f1a4db6ffbf84c9a0b648499842046e4e0d9b2275d150711b3aba/scipy-1.16.0-cp312-cp312-macosx_12_0_arm64.whl",
+        "sha256": "1dbc8fdba23e4d80394ddfab7a56808e3e6489176d559c6c71935b11a2d59db1"
+      },
+      {
+        "package": "pyarrow",
+        "version": "20.0.0",
+        "filename": "pyarrow-20.0.0-cp312-cp312-macosx_12_0_arm64.whl",
+        "url": "https://files.pythonhosted.org/packages/a1/d6/0c10e0d54f6c13eb464ee9b67a68b8c71bcf2f67760ef5b6fbcddd2ab05f/pyarrow-20.0.0-cp312-cp312-macosx_12_0_arm64.whl",
+        "sha256": "75a51a5b0eef32727a247707d4755322cb970be7e935172b6a3a9f9ae98404ba"
+      },
+      {
+        "package": "soundfile",
+        "version": "0.13.1",
+        "filename": "soundfile-0.13.1-py2.py3-none-macosx_11_0_arm64.whl",
+        "url": "https://files.pythonhosted.org/packages/a0/e5/58fd1a8d7b26fc113af244f966ee3aecf03cb9293cb935daaddc1e455e18/soundfile-0.13.1-py2.py3-none-macosx_11_0_arm64.whl",
+        "sha256": "743f12c12c4054921e15736c6be09ac26b3b3d603aef6fd69f9dde68748f2593"
+      },
+      {
+        "package": "cffi",
+        "version": "1.17.1",
+        "filename": "cffi-1.17.1-cp312-cp312-macosx_11_0_arm64.whl",
+        "url": "https://files.pythonhosted.org/packages/da/ee/fb72c2b48656111c4ef27f0f91da355e130a923473bf5ee75c5643d00cca/cffi-1.17.1-cp312-cp312-macosx_11_0_arm64.whl",
+        "sha256": "733e99bc2df47476e3848417c5a4540522f234dfd4ef3ab7fafdf555b082ec0c"
+      },
+      {
+        "package": "pycparser",
+        "version": "2.22",
+        "filename": "pycparser-2.22-py3-none-any.whl",
+        "url": "https://files.pythonhosted.org/packages/13/a3/a812df4e2dd5696d1f351d58b8fe16a405b234ad2886a0dab9183fb78109/pycparser-2.22-py3-none-any.whl",
+        "sha256": "c3702b6d3dd8c7abc1afa565d7e63d53a1d0bd86cdc24edd75470f4de499cfcc"
+      }
+    ],
+    "darwin-x64": [
+      {
+        "package": "scipy",
+        "version": "1.16.0",
+        "filename": "scipy-1.16.0-cp312-cp312-macosx_10_14_x86_64.whl",
+        "url": "https://files.pythonhosted.org/packages/01/c0/c943bc8d2bbd28123ad0f4f1eef62525fa1723e84d136b32965dcb6bad3a/scipy-1.16.0-cp312-cp312-macosx_10_14_x86_64.whl",
+        "sha256": "7eb6bd33cef4afb9fa5f1fb25df8feeb1e52d94f21a44f1d17805b41b1da3180"
+      },
+      {
+        "package": "pyarrow",
+        "version": "20.0.0",
+        "filename": "pyarrow-20.0.0-cp312-cp312-macosx_12_0_x86_64.whl",
+        "url": "https://files.pythonhosted.org/packages/7e/e2/04e9874abe4094a06fd8b0cbb0f1312d8dd7d707f144c2ec1e5e8f452ffa/pyarrow-20.0.0-cp312-cp312-macosx_12_0_x86_64.whl",
+        "sha256": "211d5e84cecc640c7a3ab900f930aaff5cd2702177e0d562d426fb7c4f737781"
+      },
+      {
+        "package": "soundfile",
+        "version": "0.13.1",
+        "filename": "soundfile-0.13.1-py2.py3-none-macosx_10_9_x86_64.whl",
+        "url": "https://files.pythonhosted.org/packages/ea/ab/73e97a5b3cc46bba7ff8650a1504348fa1863a6f9d57d7001c6b67c5f20e/soundfile-0.13.1-py2.py3-none-macosx_10_9_x86_64.whl",
+        "sha256": "82dc664d19831933fe59adad199bf3945ad06d84bc111a5b4c0d3089a5b9ec33"
+      },
+      {
+        "package": "cffi",
+        "version": "1.17.1",
+        "filename": "cffi-1.17.1-cp312-cp312-macosx_10_9_x86_64.whl",
+        "url": "https://files.pythonhosted.org/packages/5a/84/e94227139ee5fb4d600a7a4927f322e1d4aea6fdc50bd3fca8493caba23f/cffi-1.17.1-cp312-cp312-macosx_10_9_x86_64.whl",
+        "sha256": "805b4371bf7197c329fcb3ead37e710d1bca9da5d583f5073b799d5c5bd1eee4"
+      },
+      {
+        "package": "pycparser",
+        "version": "2.22",
+        "filename": "pycparser-2.22-py3-none-any.whl",
+        "url": "https://files.pythonhosted.org/packages/13/a3/a812df4e2dd5696d1f351d58b8fe16a405b234ad2886a0dab9183fb78109/pycparser-2.22-py3-none-any.whl",
+        "sha256": "c3702b6d3dd8c7abc1afa565d7e63d53a1d0bd86cdc24edd75470f4de499cfcc"
+      }
+    ]
+  }
+}

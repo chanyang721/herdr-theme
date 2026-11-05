@@ -1,0 +1,1943 @@
+{
+  "schema": 1,
+  "baseline": {
+    "repository": "https://github.com/chanyang721/herdr-theme",
+    "commit": "8c5b71d2f1074bb5d1d831fa395617bf4ae2abc8",
+    "tracked_python_count": 97
+  },
+  "record_count": 97,
+  "kind_counts": {
+    "import-only": 11,
+    "runtime": 38,
+    "test": 39,
+    "tool": 9
+  },
+  "coverage_notes": [
+    "Every original tracked .py path has a replacement/verification-area record. This inventory does not claim every original unittest assertion was independently ported or executed after removal.",
+    "Import-only modules retain a no-op direct compatibility command where appropriate; their functional APIs are native and used by other helpers.",
+    "Frozen fixtures record selected original calls; native sandbox, CLI and explicit platform/model integrations provide additional evidence. Consult actual CI reports for pass/skip/failure status.",
+    "Optional explicit external harness/custom-script adapters and isolated immutable Python validation oracles are outside the installed theme-owned runtime.",
+    "No live installation, user app/core restart, real clipboard change or real reset-credit consumption is implied by this inventory."
+  ],
+  "files": [
+    {
+      "oldpath": "extras/system-metrics/mods/system-metrics/sample.py",
+      "kind": "runtime",
+      "nativecommand": "herdr-theme system-metrics",
+      "native_modules": [
+        "rust/src/automation/mod.rs"
+      ],
+      "primary_tests": [
+        "rust/src/automation/metrics.rs"
+      ],
+      "frozen_oracles": [],
+      "verification_relationship": "contract area and native integration; not a one-to-one translation of every original test method",
+      "notes": "This legacy extra preserves its original macOS-only behavior. The installed pinned mod has a separate cross-platform native metrics command."
+    },
+    {
+      "oldpath": "scripts/agent_env.py",
+      "kind": "runtime",
+      "nativecommand": "herdr-theme agent-env",
+      "native_modules": [
+        "rust/src/automation/mod.rs"
+      ],
+      "primary_tests": [
+        "rust/src/automation/contracts.rs"
+      ],
+      "frozen_oracles": [
+        "rust/tests/fixtures/general-python-baseline.json"
+      ],
+      "verification_relationship": "contract area and native integration; not a one-to-one translation of every original test method"
+    },
+    {
+      "oldpath": "scripts/agent_sessions.py",
+      "kind": "import-only",
+      "nativecommand": "herdr-theme agent-sessions",
+      "native_modules": [
+        "rust/src/observers/sessions.rs"
+      ],
+      "primary_tests": [
+        "rust/src/observers/contracts.rs",
+        "rust/tests/observer_cli.rs",
+        "rust/tests/process_contracts.rs"
+      ],
+      "frozen_oracles": [
+        "rust/tests/fixtures/observer-contracts.json",
+        "rust/tests/fixtures/observer-inspect.json"
+      ],
+      "verification_relationship": "contract area and native integration; not a one-to-one translation of every original test method",
+      "notes": "Original direct execution did nothing; compatibility command is a no-op. Lifecycle callers use the ported native APIs."
+    },
+    {
+      "oldpath": "scripts/balance_grid.py",
+      "kind": "runtime",
+      "nativecommand": "herdr-theme balance-grid",
+      "native_modules": [
+        "rust/src/automation/mod.rs",
+        "rust/src/automation/format.rs"
+      ],
+      "primary_tests": [
+        "rust/tests/rpc_cli.rs",
+        "rust/src/automation/contracts.rs"
+      ],
+      "frozen_oracles": [
+        "rust/tests/fixtures/general-python-baseline.json"
+      ],
+      "verification_relationship": "contract area and native integration; not a one-to-one translation of every original test method"
+    },
+    {
+      "oldpath": "scripts/close_finished_spaces.py",
+      "kind": "runtime",
+      "nativecommand": "herdr-theme close-finished-spaces",
+      "native_modules": [
+        "rust/src/observers/spaces.rs",
+        "rust/src/observers/sessions.rs",
+        "rust/src/observers/jobs.rs"
+      ],
+      "primary_tests": [
+        "rust/src/observers/contracts.rs",
+        "rust/tests/observer_cli.rs",
+        "rust/tests/process_contracts.rs"
+      ],
+      "frozen_oracles": [
+        "rust/tests/fixtures/observer-contracts.json",
+        "rust/tests/fixtures/observer-inspect.json"
+      ],
+      "verification_relationship": "contract area and native integration; not a one-to-one translation of every original test method"
+    },
+    {
+      "oldpath": "scripts/collaborate.py",
+      "kind": "runtime",
+      "nativecommand": "herdr-theme collaborate",
+      "native_modules": [
+        "rust/src/automation/collaboration.rs"
+      ],
+      "primary_tests": [
+        "rust/tests/automation_cli.rs",
+        "rust/src/automation/contracts.rs"
+      ],
+      "frozen_oracles": [
+        "rust/tests/fixtures/general-python-baseline.json"
+      ],
+      "verification_relationship": "contract area and native integration; not a one-to-one translation of every original test method"
+    },
+    {
+      "oldpath": "scripts/collect_computers.py",
+      "kind": "runtime",
+      "nativecommand": "herdr-theme collect-computers",
+      "native_modules": [
+        "rust/src/automation/mod.rs"
+      ],
+      "primary_tests": [
+        "rust/src/automation/contracts.rs",
+        "tests/computers.test.mjs"
+      ],
+      "frozen_oracles": [
+        "rust/tests/fixtures/general-python-baseline.json"
+      ],
+      "verification_relationship": "contract area and native integration; not a one-to-one translation of every original test method"
+    },
+    {
+      "oldpath": "scripts/collect_docs.py",
+      "kind": "runtime",
+      "nativecommand": "herdr-theme collect-docs",
+      "native_modules": [
+        "rust/src/documents/pins.rs",
+        "rust/src/documents/common.rs"
+      ],
+      "primary_tests": [
+        "rust/src/documents/pins.rs",
+        "rust/tests/documents_sandbox.rs",
+        "tests/docs.test.mjs"
+      ],
+      "frozen_oracles": [],
+      "verification_relationship": "contract area and native integration; not a one-to-one translation of every original test method"
+    },
+    {
+      "oldpath": "scripts/collect_workflow.py",
+      "kind": "runtime",
+      "nativecommand": "herdr-theme collect-workflow",
+      "native_modules": [
+        "rust/src/automation/workflow.rs"
+      ],
+      "primary_tests": [
+        "rust/src/automation/contracts.rs",
+        "rust/src/automation/workflow.rs",
+        "rust/tests/process_contracts.rs"
+      ],
+      "frozen_oracles": [
+        "rust/tests/fixtures/general-python-baseline.json"
+      ],
+      "verification_relationship": "contract area and native integration; not a one-to-one translation of every original test method"
+    },
+    {
+      "oldpath": "scripts/core_api.py",
+      "kind": "runtime",
+      "nativecommand": "herdr-theme core-api",
+      "native_modules": [
+        "rust/src/automation/mod.rs",
+        "rust/src/automation/format.rs"
+      ],
+      "primary_tests": [
+        "rust/tests/rpc_cli.rs"
+      ],
+      "frozen_oracles": [
+        "rust/tests/fixtures/python-repr.json"
+      ],
+      "verification_relationship": "contract area and native integration; not a one-to-one translation of every original test method"
+    },
+    {
+      "oldpath": "scripts/demo_agent.py",
+      "kind": "runtime",
+      "nativecommand": "herdr-theme demo-agent",
+      "native_modules": [
+        "rust/src/automation/mod.rs"
+      ],
+      "primary_tests": [],
+      "frozen_oracles": [],
+      "verification_relationship": "contract area and native integration; not a one-to-one translation of every original test method",
+      "notes": "ANSI demo entrypoint is ported. Disposable native UI tools can inspect it; there is no dedicated frozen long-running demo-output test."
+    },
+    {
+      "oldpath": "scripts/desktop.py",
+      "kind": "runtime",
+      "nativecommand": "herdr-theme desktop",
+      "native_modules": [
+        "rust/src/documents/render.rs"
+      ],
+      "primary_tests": [
+        "rust/tests/documents_cli.rs",
+        "tests/docs.test.mjs"
+      ],
+      "frozen_oracles": [],
+      "verification_relationship": "contract area and native integration; not a one-to-one translation of every original test method",
+      "notes": "Desktop/clipboard process integration is platform-specific. Parser and caller contracts do not constitute live clipboard acceptance."
+    },
+    {
+      "oldpath": "scripts/doc_catalog.py",
+      "kind": "import-only",
+      "nativecommand": "herdr-theme doc-catalog",
+      "native_modules": [
+        "rust/src/documents/catalog.rs",
+        "rust/src/documents/casefold.rs"
+      ],
+      "primary_tests": [
+        "rust/tests/documents_differential.rs",
+        "rust/src/documents/catalog.rs"
+      ],
+      "frozen_oracles": [
+        "rust/tests/fixtures/documents-python-baseline.json"
+      ],
+      "verification_relationship": "contract area and native integration; not a one-to-one translation of every original test method",
+      "notes": "Read-only catalog APIs are native; original direct execution was a no-op."
+    },
+    {
+      "oldpath": "scripts/doc_routing.py",
+      "kind": "runtime",
+      "nativecommand": "herdr-theme doc-routing",
+      "native_modules": [
+        "rust/src/documents/routing.rs",
+        "rust/src/documents/pins.rs"
+      ],
+      "primary_tests": [
+        "rust/src/documents/routing.rs",
+        "rust/tests/documents_differential.rs"
+      ],
+      "frozen_oracles": [
+        "rust/tests/fixtures/documents-python-baseline.json"
+      ],
+      "verification_relationship": "contract area and native integration; not a one-to-one translation of every original test method"
+    },
+    {
+      "oldpath": "scripts/file_lock.py",
+      "kind": "import-only",
+      "nativecommand": "herdr-theme file-lock",
+      "native_modules": [
+        "rust/src/locking.rs"
+      ],
+      "primary_tests": [
+        "rust/src/locking.rs"
+      ],
+      "frozen_oracles": [],
+      "verification_relationship": "contract area and native integration; not a one-to-one translation of every original test method",
+      "notes": "POSIX flock and Windows reserved-byte locking are shared native APIs; original direct execution was a no-op."
+    },
+    {
+      "oldpath": "scripts/install.py",
+      "kind": "runtime",
+      "nativecommand": "herdr-theme install",
+      "native_modules": [
+        "rust/src/documents/install.rs",
+        "rust/src/documents/migration.rs"
+      ],
+      "primary_tests": [
+        "rust/tests/documents_sandbox.rs",
+        "rust/tests/documents_cli.rs",
+        "rust/src/documents/migration.rs"
+      ],
+      "frozen_oracles": [],
+      "verification_relationship": "contract area and native integration; not a one-to-one translation of every original test method"
+    },
+    {
+      "oldpath": "scripts/install_doc_tabs.py",
+      "kind": "runtime",
+      "nativecommand": "herdr-theme install-doc-tabs",
+      "native_modules": [
+        "rust/src/documents/install.rs",
+        "rust/src/documents/pins.rs"
+      ],
+      "primary_tests": [
+        "rust/tests/documents_differential.rs",
+        "rust/tests/documents_sandbox.rs",
+        "rust/tests/documents_cli.rs",
+        "rust/tests/renderers_macos.rs"
+      ],
+      "frozen_oracles": [
+        "rust/tests/fixtures/documents-python-baseline.json"
+      ],
+      "verification_relationship": "contract area and native integration; not a one-to-one translation of every original test method"
+    },
+    {
+      "oldpath": "scripts/install_preview.py",
+      "kind": "runtime",
+      "nativecommand": "herdr-theme install-preview",
+      "native_modules": [
+        "rust/src/documents/install.rs"
+      ],
+      "primary_tests": [
+        "rust/src/documents/install.rs",
+        "rust/tests/documents_sandbox.rs",
+        "rust/tests/renderers_macos.rs"
+      ],
+      "frozen_oracles": [],
+      "verification_relationship": "contract area and native integration; not a one-to-one translation of every original test method",
+      "notes": "The pinned viewer installer is implemented natively; its Python installer is not invoked. Actual WebKit validation is an explicit macOS-only test."
+    },
+    {
+      "oldpath": "scripts/install_session_sleep.py",
+      "kind": "runtime",
+      "nativecommand": "herdr-theme install-session-sleep",
+      "native_modules": [
+        "rust/src/documents/observers.rs"
+      ],
+      "primary_tests": [
+        "rust/tests/observer_install_migration.rs",
+        "rust/src/documents/observers.rs"
+      ],
+      "frozen_oracles": [
+        "rust/tests/fixtures/observer-approval-policy.json"
+      ],
+      "verification_relationship": "contract area and native integration; not a one-to-one translation of every original test method"
+    },
+    {
+      "oldpath": "scripts/install_space_cleanup.py",
+      "kind": "runtime",
+      "nativecommand": "herdr-theme install-space-cleanup",
+      "native_modules": [
+        "rust/src/documents/observers.rs"
+      ],
+      "primary_tests": [
+        "rust/tests/observer_install_migration.rs",
+        "rust/src/documents/observers.rs"
+      ],
+      "frozen_oracles": [
+        "rust/tests/fixtures/observer-approval-policy.json"
+      ],
+      "verification_relationship": "contract area and native integration; not a one-to-one translation of every original test method"
+    },
+    {
+      "oldpath": "scripts/install_voice.py",
+      "kind": "runtime",
+      "nativecommand": "herdr-theme install-voice",
+      "native_modules": [
+        "rust/src/documents/mod.rs",
+        "rust/src/voice/install.rs"
+      ],
+      "primary_tests": [
+        "voice/tests/native-install.test.mjs",
+        "rust/src/voice/install.rs"
+      ],
+      "frozen_oracles": [],
+      "verification_relationship": "contract area and native integration; not a one-to-one translation of every original test method"
+    },
+    {
+      "oldpath": "scripts/model_tier.py",
+      "kind": "import-only",
+      "nativecommand": "herdr-theme model-tier",
+      "native_modules": [
+        "rust/src/automation/tiers.rs"
+      ],
+      "primary_tests": [
+        "rust/src/automation/contracts.rs"
+      ],
+      "frozen_oracles": [
+        "rust/tests/fixtures/general-python-baseline.json"
+      ],
+      "verification_relationship": "contract area and native integration; not a one-to-one translation of every original test method",
+      "notes": "Model-tier APIs are native; original direct execution was a no-op."
+    },
+    {
+      "oldpath": "scripts/open_doc_tab.py",
+      "kind": "runtime",
+      "nativecommand": "herdr-theme open-doc-tab",
+      "native_modules": [
+        "rust/src/documents/pins.rs"
+      ],
+      "primary_tests": [
+        "rust/tests/documents_differential.rs",
+        "rust/tests/documents_cli.rs",
+        "tests/docs.test.mjs"
+      ],
+      "frozen_oracles": [
+        "rust/tests/fixtures/documents-python-baseline.json"
+      ],
+      "verification_relationship": "contract area and native integration; not a one-to-one translation of every original test method"
+    },
+    {
+      "oldpath": "scripts/open_document.py",
+      "kind": "runtime",
+      "nativecommand": "herdr-theme open-document",
+      "native_modules": [
+        "rust/src/documents/pins.rs"
+      ],
+      "primary_tests": [
+        "tests/docs.test.mjs",
+        "rust/tests/documents_cli.rs"
+      ],
+      "frozen_oracles": [],
+      "verification_relationship": "contract area and native integration; not a one-to-one translation of every original test method",
+      "notes": "Side-panel commands and the existing focus-preserving request protocol are ported; real native UI use is a separate disposable-tool check."
+    },
+    {
+      "oldpath": "scripts/render_html.py",
+      "kind": "runtime",
+      "nativecommand": "herdr-theme render-html",
+      "native_modules": [
+        "rust/src/documents/render.rs"
+      ],
+      "primary_tests": [
+        "rust/tests/documents_differential.rs",
+        "rust/src/documents/render.rs",
+        "rust/tests/documents_cli.rs",
+        "rust/tests/renderers_macos.rs"
+      ],
+      "frozen_oracles": [
+        "rust/tests/fixtures/documents-python-baseline.json"
+      ],
+      "verification_relationship": "contract area and native integration; not a one-to-one translation of every original test method"
+    },
+    {
+      "oldpath": "scripts/render_mermaid.py",
+      "kind": "runtime",
+      "nativecommand": "herdr-theme render-mermaid",
+      "native_modules": [
+        "rust/src/documents/render.rs"
+      ],
+      "primary_tests": [
+        "rust/tests/documents_differential.rs",
+        "rust/src/documents/render.rs",
+        "rust/tests/renderers_macos.rs"
+      ],
+      "frozen_oracles": [
+        "rust/tests/fixtures/documents-python-baseline.json"
+      ],
+      "verification_relationship": "contract area and native integration; not a one-to-one translation of every original test method"
+    },
+    {
+      "oldpath": "scripts/resolve_doc_pins.py",
+      "kind": "runtime",
+      "nativecommand": "herdr-theme resolve-doc-pins",
+      "native_modules": [
+        "rust/src/documents/pins.rs",
+        "rust/src/documents/catalog.rs",
+        "rust/src/documents/routing.rs"
+      ],
+      "primary_tests": [
+        "rust/tests/documents_differential.rs",
+        "rust/src/documents/pins.rs",
+        "tests/doc-tabs.test.mjs"
+      ],
+      "frozen_oracles": [
+        "rust/tests/fixtures/documents-python-baseline.json"
+      ],
+      "verification_relationship": "contract area and native integration; not a one-to-one translation of every original test method"
+    },
+    {
+      "oldpath": "scripts/route.py",
+      "kind": "runtime",
+      "nativecommand": "herdr-theme route",
+      "native_modules": [
+        "rust/src/automation/routing.rs"
+      ],
+      "primary_tests": [
+        "rust/tests/automation_cli.rs",
+        "rust/src/automation/contracts.rs"
+      ],
+      "frozen_oracles": [
+        "rust/tests/fixtures/general-python-baseline.json"
+      ],
+      "verification_relationship": "contract area and native integration; not a one-to-one translation of every original test method"
+    },
+    {
+      "oldpath": "scripts/seed_workspace_pins.py",
+      "kind": "runtime",
+      "nativecommand": "herdr-theme seed-workspace-pins",
+      "native_modules": [
+        "rust/src/documents/install.rs"
+      ],
+      "primary_tests": [
+        "rust/src/documents/install.rs",
+        "rust/tests/documents_sandbox.rs",
+        "rust/tests/documents_workspace_cli.rs"
+      ],
+      "frozen_oracles": [
+        "rust/tests/fixtures/documents-workspace-cli.json"
+      ],
+      "verification_relationship": "contract area and native integration; not a one-to-one translation of every original test method",
+      "notes": "Four unchanged original seed-function scenarios capture exact app action order, local casefold matching, failed creation finally restoration and empty original selections. Native subprocess tests use an explicitly configured refusing fixture executable; an opt-in original CLI comparison exercises the same fixture. No live app is contacted; this does not assert a one-to-one translation of every original test method."
+    },
+    {
+      "oldpath": "scripts/session_sleep_stub.py",
+      "kind": "runtime",
+      "nativecommand": "herdr-theme session-sleep-stub",
+      "native_modules": [
+        "rust/src/observers/stub.rs"
+      ],
+      "primary_tests": [
+        "rust/tests/stub_pty.rs",
+        "rust/tests/process_contracts.rs",
+        "rust/src/observers/contracts.rs"
+      ],
+      "frozen_oracles": [
+        "rust/tests/fixtures/observer-contracts.json",
+        "rust/tests/fixtures/observer-inspect.json"
+      ],
+      "verification_relationship": "contract area and native integration; not a one-to-one translation of every original test method"
+    },
+    {
+      "oldpath": "scripts/set_workspace_icon.py",
+      "kind": "runtime",
+      "nativecommand": "herdr-theme set-workspace-icon",
+      "native_modules": [
+        "rust/src/documents/install.rs"
+      ],
+      "primary_tests": [
+        "rust/tests/documents_workspace_cli.rs"
+      ],
+      "frozen_oracles": [
+        "rust/tests/fixtures/documents-workspace-cli.json"
+      ],
+      "verification_relationship": "contract area and native integration; not a one-to-one translation of every original test method",
+      "notes": "Five original icon CLI scenarios capture preserved unrelated Unicode settings, tint, empty background, unsupported existing extension, exact JSON bytes and copied image metadata. Native sandbox tests and an opt-in untouched-original CLI comparison use disposable homes."
+    },
+    {
+      "oldpath": "scripts/site_config.py",
+      "kind": "import-only",
+      "nativecommand": "herdr-theme site-config",
+      "native_modules": [
+        "rust/src/documents/common.rs",
+        "rust/src/common.rs",
+        "rust/src/observers/mod.rs"
+      ],
+      "primary_tests": [
+        "rust/src/automation/contracts.rs",
+        "rust/src/documents/install.rs"
+      ],
+      "frozen_oracles": [
+        "rust/tests/fixtures/general-python-baseline.json"
+      ],
+      "verification_relationship": "contract area and native integration; not a one-to-one translation of every original test method",
+      "notes": "Machine-local configuration defaults and paths remain data; original direct execution was a no-op."
+    },
+    {
+      "oldpath": "scripts/sleep_idle_sessions.py",
+      "kind": "runtime",
+      "nativecommand": "herdr-theme sleep-idle-sessions",
+      "native_modules": [
+        "rust/src/observers/sleep.rs",
+        "rust/src/observers/stub.rs",
+        "rust/src/observers/sessions.rs"
+      ],
+      "primary_tests": [
+        "rust/src/observers/contracts.rs",
+        "rust/tests/observer_cli.rs",
+        "rust/tests/stub_pty.rs",
+        "rust/tests/process_contracts.rs"
+      ],
+      "frozen_oracles": [
+        "rust/tests/fixtures/observer-contracts.json",
+        "rust/tests/fixtures/observer-inspect.json"
+      ],
+      "verification_relationship": "contract area and native integration; not a one-to-one translation of every original test method"
+    },
+    {
+      "oldpath": "scripts/space_job_evidence.py",
+      "kind": "import-only",
+      "nativecommand": "herdr-theme space-job-evidence",
+      "native_modules": [
+        "rust/src/observers/jobs.rs"
+      ],
+      "primary_tests": [
+        "rust/src/observers/contracts.rs",
+        "rust/tests/observer_cli.rs"
+      ],
+      "frozen_oracles": [
+        "rust/tests/fixtures/observer-contracts.json",
+        "rust/tests/fixtures/observer-inspect.json"
+      ],
+      "verification_relationship": "contract area and native integration; not a one-to-one translation of every original test method",
+      "notes": "Job-evidence parsers are native; original direct execution was a no-op."
+    },
+    {
+      "oldpath": "scripts/tui_bridge.py",
+      "kind": "runtime",
+      "nativecommand": "herdr-theme tui-bridge",
+      "native_modules": [
+        "rust/src/automation/bridge.rs"
+      ],
+      "primary_tests": [
+        "rust/src/automation/contracts.rs",
+        "rust/src/automation/bridge.rs",
+        "rust/tests/process_contracts.rs"
+      ],
+      "frozen_oracles": [
+        "rust/tests/fixtures/general-python-baseline.json"
+      ],
+      "verification_relationship": "contract area and native integration; not a one-to-one translation of every original test method"
+    },
+    {
+      "oldpath": "scripts/update_install.py",
+      "kind": "runtime",
+      "nativecommand": "herdr-theme update-install",
+      "native_modules": [
+        "rust/src/documents/update.rs",
+        "rust/src/documents/migration.rs",
+        "rust/src/documents/observers.rs"
+      ],
+      "primary_tests": [
+        "rust/tests/documents_sandbox.rs",
+        "rust/tests/documents_cli.rs",
+        "rust/tests/observer_install_migration.rs"
+      ],
+      "frozen_oracles": [],
+      "verification_relationship": "contract area and native integration; not a one-to-one translation of every original test method"
+    },
+    {
+      "oldpath": "scripts/workspace.py",
+      "kind": "runtime",
+      "nativecommand": "herdr-theme workspace",
+      "native_modules": [
+        "rust/src/automation/mod.rs",
+        "rust/src/automation/tiers.rs"
+      ],
+      "primary_tests": [
+        "rust/src/automation/contracts.rs",
+        "tests/computers.test.mjs"
+      ],
+      "frozen_oracles": [
+        "rust/tests/fixtures/general-python-baseline.json"
+      ],
+      "verification_relationship": "contract area and native integration; not a one-to-one translation of every original test method"
+    },
+    {
+      "oldpath": "scripts/workspace_mods.py",
+      "kind": "import-only",
+      "nativecommand": "herdr-theme workspace-mods",
+      "native_modules": [
+        "rust/src/documents/install.rs",
+        "rust/src/documents/pinned/mod.rs"
+      ],
+      "primary_tests": [
+        "rust/src/documents/install.rs",
+        "rust/tests/documents_sandbox.rs"
+      ],
+      "frozen_oracles": [],
+      "verification_relationship": "contract area and native integration; not a one-to-one translation of every original test method",
+      "notes": "Pin verification, Git checkout and native payload adaptation are internal APIs; original direct execution was a no-op."
+    },
+    {
+      "oldpath": "tests/native_collaboration.py",
+      "kind": "tool",
+      "nativecommand": "herdr-theme native-collaboration",
+      "native_modules": [
+        "rust/src/observers/native.rs"
+      ],
+      "primary_tests": [
+        "rust/tests/process_contracts.rs"
+      ],
+      "frozen_oracles": [],
+      "verification_relationship": "contract area and native integration; not a one-to-one translation of every original test method",
+      "notes": "Disposable native UI diagnostic entrypoint. Ported tool presence is not evidence that a live app was exercised on every platform."
+    },
+    {
+      "oldpath": "tests/native_doc_tabs.py",
+      "kind": "tool",
+      "nativecommand": "herdr-theme native-doc-tabs",
+      "native_modules": [
+        "rust/src/observers/native.rs"
+      ],
+      "primary_tests": [
+        "rust/tests/process_contracts.rs"
+      ],
+      "frozen_oracles": [],
+      "verification_relationship": "contract area and native integration; not a one-to-one translation of every original test method",
+      "notes": "Disposable native UI diagnostic entrypoint. Ported tool presence is not evidence that a live app was exercised on every platform."
+    },
+    {
+      "oldpath": "tests/native_ui_reload.py",
+      "kind": "tool",
+      "nativecommand": "herdr-theme native-ui-reload",
+      "native_modules": [
+        "rust/src/observers/native_ui.rs"
+      ],
+      "primary_tests": [
+        "rust/tests/process_contracts.rs"
+      ],
+      "frozen_oracles": [],
+      "verification_relationship": "contract area and native integration; not a one-to-one translation of every original test method",
+      "notes": "Disposable native UI diagnostic entrypoint. Ported tool presence is not evidence that a live app was exercised on every platform."
+    },
+    {
+      "oldpath": "tests/test_agent_env.py",
+      "native_modules": [
+        "rust/src/automation/mod.rs"
+      ],
+      "primary_tests": [
+        "rust/src/automation/contracts.rs"
+      ],
+      "frozen_oracles": [
+        "rust/tests/fixtures/general-python-baseline.json"
+      ],
+      "verification_relationship": "contract area and native integration; not a one-to-one translation of every original test method",
+      "kind": "test",
+      "nativecommand": null,
+      "notes": "Mapped verification area. Original unittest methods are not claimed to have been translated one-to-one."
+    },
+    {
+      "oldpath": "tests/test_base_install.py",
+      "native_modules": [
+        "rust/src/documents/install.rs",
+        "rust/src/documents/migration.rs"
+      ],
+      "primary_tests": [
+        "rust/tests/documents_sandbox.rs",
+        "rust/tests/documents_cli.rs",
+        "rust/src/documents/migration.rs"
+      ],
+      "frozen_oracles": [],
+      "verification_relationship": "contract area and native integration; not a one-to-one translation of every original test method",
+      "kind": "test",
+      "nativecommand": null,
+      "notes": "Mapped verification area. Original unittest methods are not claimed to have been translated one-to-one."
+    },
+    {
+      "oldpath": "tests/test_close_finished_spaces.py",
+      "native_modules": [
+        "rust/src/observers/spaces.rs",
+        "rust/src/observers/sessions.rs",
+        "rust/src/observers/jobs.rs"
+      ],
+      "primary_tests": [
+        "rust/src/observers/contracts.rs",
+        "rust/tests/observer_cli.rs",
+        "rust/tests/process_contracts.rs"
+      ],
+      "frozen_oracles": [
+        "rust/tests/fixtures/observer-contracts.json",
+        "rust/tests/fixtures/observer-inspect.json"
+      ],
+      "verification_relationship": "contract area and native integration; not a one-to-one translation of every original test method",
+      "kind": "test",
+      "nativecommand": null,
+      "notes": "Mapped verification area. Original unittest methods are not claimed to have been translated one-to-one."
+    },
+    {
+      "oldpath": "tests/test_collaborate.py",
+      "native_modules": [
+        "rust/src/automation/collaboration.rs"
+      ],
+      "primary_tests": [
+        "rust/tests/automation_cli.rs",
+        "rust/src/automation/contracts.rs"
+      ],
+      "frozen_oracles": [
+        "rust/tests/fixtures/general-python-baseline.json"
+      ],
+      "verification_relationship": "contract area and native integration; not a one-to-one translation of every original test method",
+      "kind": "test",
+      "nativecommand": null,
+      "notes": "Mapped verification area. Original unittest methods are not claimed to have been translated one-to-one."
+    },
+    {
+      "oldpath": "tests/test_computers.py",
+      "native_modules": [
+        "rust/src/automation/mod.rs"
+      ],
+      "primary_tests": [
+        "rust/src/automation/contracts.rs",
+        "tests/computers.test.mjs"
+      ],
+      "frozen_oracles": [
+        "rust/tests/fixtures/general-python-baseline.json"
+      ],
+      "verification_relationship": "contract area and native integration; not a one-to-one translation of every original test method",
+      "kind": "test",
+      "nativecommand": null,
+      "notes": "Mapped verification area. Original unittest methods are not claimed to have been translated one-to-one."
+    },
+    {
+      "oldpath": "tests/test_doc_catalog.py",
+      "native_modules": [
+        "rust/src/documents/catalog.rs",
+        "rust/src/documents/casefold.rs"
+      ],
+      "primary_tests": [
+        "rust/tests/documents_differential.rs",
+        "rust/src/documents/catalog.rs"
+      ],
+      "frozen_oracles": [
+        "rust/tests/fixtures/documents-python-baseline.json"
+      ],
+      "verification_relationship": "contract area and native integration; not a one-to-one translation of every original test method",
+      "kind": "test",
+      "nativecommand": null,
+      "notes": "Mapped verification area. Original unittest methods are not claimed to have been translated one-to-one."
+    },
+    {
+      "oldpath": "tests/test_doc_pins.py",
+      "native_modules": [
+        "rust/src/documents/pins.rs",
+        "rust/src/documents/catalog.rs",
+        "rust/src/documents/routing.rs"
+      ],
+      "primary_tests": [
+        "rust/tests/documents_differential.rs",
+        "rust/src/documents/pins.rs",
+        "tests/doc-tabs.test.mjs"
+      ],
+      "frozen_oracles": [
+        "rust/tests/fixtures/documents-python-baseline.json"
+      ],
+      "verification_relationship": "contract area and native integration; not a one-to-one translation of every original test method",
+      "kind": "test",
+      "nativecommand": null,
+      "notes": "Mapped verification area. Original unittest methods are not claimed to have been translated one-to-one."
+    },
+    {
+      "oldpath": "tests/test_doc_routing.py",
+      "native_modules": [
+        "rust/src/documents/routing.rs",
+        "rust/src/documents/pins.rs"
+      ],
+      "primary_tests": [
+        "rust/src/documents/routing.rs",
+        "rust/tests/documents_differential.rs"
+      ],
+      "frozen_oracles": [
+        "rust/tests/fixtures/documents-python-baseline.json"
+      ],
+      "verification_relationship": "contract area and native integration; not a one-to-one translation of every original test method",
+      "kind": "test",
+      "nativecommand": null,
+      "notes": "Mapped verification area. Original unittest methods are not claimed to have been translated one-to-one."
+    },
+    {
+      "oldpath": "tests/test_doc_tabs_install.py",
+      "native_modules": [
+        "rust/src/documents/install.rs",
+        "rust/src/documents/pins.rs"
+      ],
+      "primary_tests": [
+        "rust/tests/documents_differential.rs",
+        "rust/tests/documents_sandbox.rs",
+        "rust/tests/documents_cli.rs",
+        "rust/tests/renderers_macos.rs"
+      ],
+      "frozen_oracles": [
+        "rust/tests/fixtures/documents-python-baseline.json"
+      ],
+      "verification_relationship": "contract area and native integration; not a one-to-one translation of every original test method",
+      "kind": "test",
+      "nativecommand": null,
+      "notes": "Mapped verification area. Original unittest methods are not claimed to have been translated one-to-one."
+    },
+    {
+      "oldpath": "tests/test_docs.py",
+      "native_modules": [
+        "rust/src/documents/pins.rs",
+        "rust/src/documents/common.rs"
+      ],
+      "primary_tests": [
+        "rust/src/documents/pins.rs",
+        "rust/tests/documents_sandbox.rs",
+        "tests/docs.test.mjs"
+      ],
+      "frozen_oracles": [],
+      "verification_relationship": "contract area and native integration; not a one-to-one translation of every original test method",
+      "kind": "test",
+      "nativecommand": null,
+      "notes": "Mapped verification area. Original unittest methods are not claimed to have been translated one-to-one."
+    },
+    {
+      "oldpath": "tests/test_grid.py",
+      "native_modules": [
+        "rust/src/automation/mod.rs",
+        "rust/src/automation/format.rs"
+      ],
+      "primary_tests": [
+        "rust/tests/rpc_cli.rs",
+        "rust/src/automation/contracts.rs"
+      ],
+      "frozen_oracles": [
+        "rust/tests/fixtures/general-python-baseline.json"
+      ],
+      "verification_relationship": "contract area and native integration; not a one-to-one translation of every original test method",
+      "kind": "test",
+      "nativecommand": null,
+      "notes": "Mapped verification area. Original unittest methods are not claimed to have been translated one-to-one."
+    },
+    {
+      "oldpath": "tests/test_model_tier.py",
+      "native_modules": [
+        "rust/src/automation/tiers.rs"
+      ],
+      "primary_tests": [
+        "rust/src/automation/contracts.rs"
+      ],
+      "frozen_oracles": [
+        "rust/tests/fixtures/general-python-baseline.json"
+      ],
+      "verification_relationship": "contract area and native integration; not a one-to-one translation of every original test method",
+      "kind": "test",
+      "nativecommand": null,
+      "notes": "Mapped verification area. Original unittest methods are not claimed to have been translated one-to-one."
+    },
+    {
+      "oldpath": "tests/test_open_doc_tab.py",
+      "native_modules": [
+        "rust/src/documents/pins.rs"
+      ],
+      "primary_tests": [
+        "rust/tests/documents_differential.rs",
+        "rust/tests/documents_cli.rs",
+        "tests/docs.test.mjs"
+      ],
+      "frozen_oracles": [
+        "rust/tests/fixtures/documents-python-baseline.json"
+      ],
+      "verification_relationship": "contract area and native integration; not a one-to-one translation of every original test method",
+      "kind": "test",
+      "nativecommand": null,
+      "notes": "Mapped verification area. Original unittest methods are not claimed to have been translated one-to-one."
+    },
+    {
+      "oldpath": "tests/test_prepush_setup.py",
+      "kind": "test",
+      "nativecommand": null,
+      "native_modules": [
+        "scripts/pre-push",
+        "scripts/check-native.mjs"
+      ],
+      "primary_tests": [
+        "tests/prepush-native.test.mjs"
+      ],
+      "frozen_oracles": [],
+      "verification_relationship": "native pre-push behavior replaces interpreter-discovery-specific checks"
+    },
+    {
+      "oldpath": "tests/test_preview_install.py",
+      "native_modules": [
+        "rust/src/documents/install.rs"
+      ],
+      "primary_tests": [
+        "rust/src/documents/install.rs",
+        "rust/tests/documents_sandbox.rs",
+        "rust/tests/renderers_macos.rs"
+      ],
+      "frozen_oracles": [],
+      "verification_relationship": "contract area and native integration; not a one-to-one translation of every original test method",
+      "kind": "test",
+      "nativecommand": null,
+      "notes": "Mapped verification area. Original unittest methods are not claimed to have been translated one-to-one."
+    },
+    {
+      "oldpath": "tests/test_render_html.py",
+      "native_modules": [
+        "rust/src/documents/render.rs"
+      ],
+      "primary_tests": [
+        "rust/tests/documents_differential.rs",
+        "rust/src/documents/render.rs",
+        "rust/tests/documents_cli.rs",
+        "rust/tests/renderers_macos.rs"
+      ],
+      "frozen_oracles": [
+        "rust/tests/fixtures/documents-python-baseline.json"
+      ],
+      "verification_relationship": "contract area and native integration; not a one-to-one translation of every original test method",
+      "kind": "test",
+      "nativecommand": null,
+      "notes": "Mapped verification area. Original unittest methods are not claimed to have been translated one-to-one."
+    },
+    {
+      "oldpath": "tests/test_render_mermaid.py",
+      "native_modules": [
+        "rust/src/documents/render.rs"
+      ],
+      "primary_tests": [
+        "rust/tests/documents_differential.rs",
+        "rust/src/documents/render.rs",
+        "rust/tests/renderers_macos.rs"
+      ],
+      "frozen_oracles": [
+        "rust/tests/fixtures/documents-python-baseline.json"
+      ],
+      "verification_relationship": "contract area and native integration; not a one-to-one translation of every original test method",
+      "kind": "test",
+      "nativecommand": null,
+      "notes": "Mapped verification area. Original unittest methods are not claimed to have been translated one-to-one."
+    },
+    {
+      "oldpath": "tests/test_route.py",
+      "native_modules": [
+        "rust/src/automation/routing.rs"
+      ],
+      "primary_tests": [
+        "rust/tests/automation_cli.rs",
+        "rust/src/automation/contracts.rs"
+      ],
+      "frozen_oracles": [
+        "rust/tests/fixtures/general-python-baseline.json"
+      ],
+      "verification_relationship": "contract area and native integration; not a one-to-one translation of every original test method",
+      "kind": "test",
+      "nativecommand": null,
+      "notes": "Mapped verification area. Original unittest methods are not claimed to have been translated one-to-one."
+    },
+    {
+      "oldpath": "tests/test_seed_workspace_pins.py",
+      "native_modules": [
+        "rust/src/documents/install.rs"
+      ],
+      "primary_tests": [
+        "rust/src/documents/install.rs",
+        "rust/tests/documents_sandbox.rs",
+        "rust/tests/documents_workspace_cli.rs"
+      ],
+      "frozen_oracles": [
+        "rust/tests/fixtures/documents-workspace-cli.json"
+      ],
+      "verification_relationship": "contract area and native integration; not a one-to-one translation of every original test method",
+      "kind": "test",
+      "nativecommand": null,
+      "notes": "Four unchanged original seed-function scenarios capture exact app action order, local casefold matching, failed creation finally restoration and empty original selections. Native subprocess tests use an explicitly configured refusing fixture executable; an opt-in original CLI comparison exercises the same fixture. No live app is contacted; this does not assert a one-to-one translation of every original test method."
+    },
+    {
+      "oldpath": "tests/test_session_sleep.py",
+      "native_modules": [
+        "rust/src/observers/sleep.rs",
+        "rust/src/observers/stub.rs",
+        "rust/src/observers/sessions.rs"
+      ],
+      "primary_tests": [
+        "rust/src/observers/contracts.rs",
+        "rust/tests/observer_cli.rs",
+        "rust/tests/stub_pty.rs",
+        "rust/tests/process_contracts.rs"
+      ],
+      "frozen_oracles": [
+        "rust/tests/fixtures/observer-contracts.json",
+        "rust/tests/fixtures/observer-inspect.json"
+      ],
+      "verification_relationship": "contract area and native integration; not a one-to-one translation of every original test method",
+      "kind": "test",
+      "nativecommand": null,
+      "notes": "Mapped verification area. Original unittest methods are not claimed to have been translated one-to-one."
+    },
+    {
+      "oldpath": "tests/test_space_cleanup_install.py",
+      "native_modules": [
+        "rust/src/documents/observers.rs"
+      ],
+      "primary_tests": [
+        "rust/tests/observer_install_migration.rs",
+        "rust/src/documents/observers.rs"
+      ],
+      "frozen_oracles": [
+        "rust/tests/fixtures/observer-approval-policy.json"
+      ],
+      "verification_relationship": "contract area and native integration; not a one-to-one translation of every original test method",
+      "kind": "test",
+      "nativecommand": null,
+      "notes": "Mapped verification area. Original unittest methods are not claimed to have been translated one-to-one."
+    },
+    {
+      "oldpath": "tests/test_space_job_evidence.py",
+      "native_modules": [
+        "rust/src/observers/jobs.rs"
+      ],
+      "primary_tests": [
+        "rust/src/observers/contracts.rs",
+        "rust/tests/observer_cli.rs"
+      ],
+      "frozen_oracles": [
+        "rust/tests/fixtures/observer-contracts.json",
+        "rust/tests/fixtures/observer-inspect.json"
+      ],
+      "verification_relationship": "contract area and native integration; not a one-to-one translation of every original test method",
+      "kind": "test",
+      "nativecommand": null,
+      "notes": "Mapped verification area. Original unittest methods are not claimed to have been translated one-to-one."
+    },
+    {
+      "oldpath": "tests/test_tui_bridge.py",
+      "native_modules": [
+        "rust/src/automation/bridge.rs"
+      ],
+      "primary_tests": [
+        "rust/src/automation/contracts.rs",
+        "rust/src/automation/bridge.rs",
+        "rust/tests/process_contracts.rs"
+      ],
+      "frozen_oracles": [
+        "rust/tests/fixtures/general-python-baseline.json"
+      ],
+      "verification_relationship": "contract area and native integration; not a one-to-one translation of every original test method",
+      "kind": "test",
+      "nativecommand": null,
+      "notes": "Mapped verification area. Original unittest methods are not claimed to have been translated one-to-one."
+    },
+    {
+      "oldpath": "tests/test_update_install.py",
+      "native_modules": [
+        "rust/src/documents/update.rs",
+        "rust/src/documents/migration.rs",
+        "rust/src/documents/observers.rs"
+      ],
+      "primary_tests": [
+        "rust/tests/documents_sandbox.rs",
+        "rust/tests/documents_cli.rs",
+        "rust/tests/observer_install_migration.rs"
+      ],
+      "frozen_oracles": [],
+      "verification_relationship": "contract area and native integration; not a one-to-one translation of every original test method",
+      "kind": "test",
+      "nativecommand": null,
+      "notes": "Mapped verification area. Original unittest methods are not claimed to have been translated one-to-one."
+    },
+    {
+      "oldpath": "tests/test_windows_helpers.py",
+      "native_modules": [
+        "rust/src/documents/render.rs"
+      ],
+      "primary_tests": [
+        "rust/tests/documents_cli.rs",
+        "tests/docs.test.mjs"
+      ],
+      "frozen_oracles": [],
+      "verification_relationship": "contract area and native integration; not a one-to-one translation of every original test method",
+      "kind": "test",
+      "nativecommand": null,
+      "notes": "Mapped verification area. Original unittest methods are not claimed to have been translated one-to-one."
+    },
+    {
+      "oldpath": "tests/test_workflow_collector.py",
+      "native_modules": [
+        "rust/src/automation/workflow.rs"
+      ],
+      "primary_tests": [
+        "rust/src/automation/contracts.rs",
+        "rust/src/automation/workflow.rs",
+        "rust/tests/process_contracts.rs"
+      ],
+      "frozen_oracles": [
+        "rust/tests/fixtures/general-python-baseline.json"
+      ],
+      "verification_relationship": "contract area and native integration; not a one-to-one translation of every original test method",
+      "kind": "test",
+      "nativecommand": null,
+      "notes": "Mapped verification area. Original unittest methods are not claimed to have been translated one-to-one."
+    },
+    {
+      "oldpath": "tests/test_workspace.py",
+      "native_modules": [
+        "rust/src/automation/mod.rs",
+        "rust/src/automation/tiers.rs"
+      ],
+      "primary_tests": [
+        "rust/src/automation/contracts.rs",
+        "tests/computers.test.mjs"
+      ],
+      "frozen_oracles": [
+        "rust/tests/fixtures/general-python-baseline.json"
+      ],
+      "verification_relationship": "contract area and native integration; not a one-to-one translation of every original test method",
+      "kind": "test",
+      "nativecommand": null,
+      "notes": "Mapped verification area. Original unittest methods are not claimed to have been translated one-to-one."
+    },
+    {
+      "oldpath": "tests/test_workspace_mods.py",
+      "native_modules": [
+        "rust/src/documents/install.rs",
+        "rust/src/documents/pinned/mod.rs"
+      ],
+      "primary_tests": [
+        "rust/src/documents/install.rs",
+        "rust/tests/documents_sandbox.rs"
+      ],
+      "frozen_oracles": [],
+      "verification_relationship": "contract area and native integration; not a one-to-one translation of every original test method",
+      "kind": "test",
+      "nativecommand": null,
+      "notes": "Mapped verification area. Original unittest methods are not claimed to have been translated one-to-one."
+    },
+    {
+      "oldpath": "voice/app_backend.py",
+      "kind": "import-only",
+      "nativecommand": "herdr-theme app-backend",
+      "native_modules": [
+        "rust/src/voice/native.rs",
+        "rust/src/voice/queue.rs"
+      ],
+      "primary_tests": [
+        "rust/src/voice/probe.rs",
+        "rust/src/voice/queue.rs"
+      ],
+      "frozen_oracles": [
+        "rust/src/voice/parity-fixtures.json"
+      ],
+      "verification_relationship": "contract area and native integration; not a one-to-one translation of every original test method",
+      "notes": "App backend APIs are native; original direct execution was a no-op."
+    },
+    {
+      "oldpath": "voice/codex_focus.py",
+      "kind": "runtime",
+      "nativecommand": "herdr-theme codex-focus",
+      "native_modules": [
+        "rust/src/voice/queue.rs"
+      ],
+      "primary_tests": [
+        "rust/src/voice/queue.rs",
+        "rust/src/voice/probe.rs"
+      ],
+      "frozen_oracles": [
+        "rust/src/voice/parity-fixtures.json"
+      ],
+      "verification_relationship": "contract area and native integration; not a one-to-one translation of every original test method"
+    },
+    {
+      "oldpath": "voice/focus_queue.py",
+      "kind": "runtime",
+      "nativecommand": "herdr-theme focus-queue",
+      "native_modules": [
+        "rust/src/voice/queue.rs",
+        "rust/src/voice/native.rs"
+      ],
+      "primary_tests": [
+        "rust/src/voice/queue.rs",
+        "rust/src/voice/probe.rs"
+      ],
+      "frozen_oracles": [
+        "rust/src/voice/parity-fixtures.json"
+      ],
+      "verification_relationship": "contract area and native integration; not a one-to-one translation of every original test method"
+    },
+    {
+      "oldpath": "voice/install.py",
+      "kind": "runtime",
+      "nativecommand": "herdr-theme voice-install",
+      "native_modules": [
+        "rust/src/voice/install.rs"
+      ],
+      "primary_tests": [
+        "voice/tests/native-install.test.mjs",
+        "rust/src/voice/install.rs"
+      ],
+      "frozen_oracles": [],
+      "verification_relationship": "contract area and native integration; not a one-to-one translation of every original test method"
+    },
+    {
+      "oldpath": "voice/install_codex_focus.py",
+      "kind": "runtime",
+      "nativecommand": "herdr-theme install-codex-focus",
+      "native_modules": [
+        "rust/src/voice/install.rs"
+      ],
+      "primary_tests": [
+        "voice/tests/native-install.test.mjs",
+        "rust/src/voice/install.rs"
+      ],
+      "frozen_oracles": [],
+      "verification_relationship": "contract area and native integration; not a one-to-one translation of every original test method"
+    },
+    {
+      "oldpath": "voice/tests/_isolate.py",
+      "kind": "import-only",
+      "nativecommand": null,
+      "native_modules": [
+        "rust/src/voice/settings.rs",
+        "rust/src/voice/probe.rs"
+      ],
+      "primary_tests": [
+        "voice/tests/native-install.test.mjs",
+        "rust/src/voice/probe.rs"
+      ],
+      "frozen_oracles": [],
+      "verification_relationship": "Python test-only home isolation replaced by native temporary homes/environment injection",
+      "notes": "No product runtime behavior and no standalone CLI existed."
+    },
+    {
+      "oldpath": "voice/tests/check_other_device.py",
+      "kind": "tool",
+      "nativecommand": "herdr-theme voice-check-other-device",
+      "native_modules": [
+        "rust/src/voice/evaluate.rs",
+        "rust/src/voice/probe.rs"
+      ],
+      "primary_tests": [
+        "rust/src/voice/evaluate.rs",
+        "rust/src/voice/probe.rs",
+        "voice/tests/native-eval-differential.test.mjs"
+      ],
+      "frozen_oracles": [
+        "rust/src/voice/parity-fixtures.json"
+      ],
+      "verification_relationship": "contract area and native integration; not a one-to-one translation of every original test method",
+      "notes": "Developer evaluation tool; actual model/audio/platform runs are explicit validation, separate from deterministic fixture checks."
+    },
+    {
+      "oldpath": "voice/tests/check_voice_settings.py",
+      "kind": "tool",
+      "nativecommand": "herdr-theme voice-check-settings",
+      "native_modules": [
+        "rust/src/voice/evaluate.rs",
+        "rust/src/voice/probe.rs"
+      ],
+      "primary_tests": [
+        "rust/src/voice/evaluate.rs",
+        "rust/src/voice/probe.rs",
+        "voice/tests/native-eval-differential.test.mjs"
+      ],
+      "frozen_oracles": [
+        "rust/src/voice/parity-fixtures.json"
+      ],
+      "verification_relationship": "contract area and native integration; not a one-to-one translation of every original test method",
+      "notes": "Developer evaluation tool; actual model/audio/platform runs are explicit validation, separate from deterministic fixture checks."
+    },
+    {
+      "oldpath": "voice/tests/eval_gate_chain.py",
+      "kind": "tool",
+      "nativecommand": "herdr-theme voice-eval-gate-chain",
+      "native_modules": [
+        "rust/src/voice/evaluate.rs",
+        "rust/src/voice/probe.rs"
+      ],
+      "primary_tests": [
+        "rust/src/voice/evaluate.rs",
+        "rust/src/voice/probe.rs",
+        "voice/tests/native-eval-differential.test.mjs"
+      ],
+      "frozen_oracles": [
+        "rust/src/voice/parity-fixtures.json"
+      ],
+      "verification_relationship": "contract area and native integration; not a one-to-one translation of every original test method",
+      "notes": "Developer evaluation tool; actual model/audio/platform runs are explicit validation, separate from deterministic fixture checks."
+    },
+    {
+      "oldpath": "voice/tests/eval_voice_models.py",
+      "kind": "tool",
+      "nativecommand": "herdr-theme voice-eval-models",
+      "native_modules": [
+        "rust/src/voice/evaluate.rs",
+        "rust/src/voice/probe.rs"
+      ],
+      "primary_tests": [
+        "rust/src/voice/evaluate.rs",
+        "rust/src/voice/probe.rs",
+        "voice/tests/native-eval-differential.test.mjs"
+      ],
+      "frozen_oracles": [
+        "rust/src/voice/parity-fixtures.json"
+      ],
+      "verification_relationship": "contract area and native integration; not a one-to-one translation of every original test method",
+      "notes": "Developer evaluation tool; actual model/audio/platform runs are explicit validation, separate from deterministic fixture checks."
+    },
+    {
+      "oldpath": "voice/tests/eval_voice_vad.py",
+      "kind": "tool",
+      "nativecommand": "herdr-theme voice-eval-vad",
+      "native_modules": [
+        "rust/src/voice/evaluate.rs",
+        "rust/src/voice/probe.rs"
+      ],
+      "primary_tests": [
+        "rust/src/voice/evaluate.rs",
+        "rust/src/voice/probe.rs",
+        "voice/tests/native-eval-differential.test.mjs"
+      ],
+      "frozen_oracles": [
+        "rust/src/voice/parity-fixtures.json"
+      ],
+      "verification_relationship": "contract area and native integration; not a one-to-one translation of every original test method",
+      "notes": "Developer evaluation tool; actual model/audio/platform runs are explicit validation, separate from deterministic fixture checks."
+    },
+    {
+      "oldpath": "voice/tests/replay_voice_policy.py",
+      "kind": "tool",
+      "nativecommand": "herdr-theme voice-replay-policy",
+      "native_modules": [
+        "rust/src/voice/evaluate.rs",
+        "rust/src/voice/probe.rs"
+      ],
+      "primary_tests": [
+        "rust/src/voice/evaluate.rs",
+        "rust/src/voice/probe.rs",
+        "voice/tests/native-eval-differential.test.mjs"
+      ],
+      "frozen_oracles": [
+        "rust/src/voice/parity-fixtures.json"
+      ],
+      "verification_relationship": "contract area and native integration; not a one-to-one translation of every original test method",
+      "notes": "Developer evaluation tool; actual model/audio/platform runs are explicit validation, separate from deterministic fixture checks."
+    },
+    {
+      "oldpath": "voice/tests/test_app_backend.py",
+      "native_modules": [
+        "rust/src/voice/native.rs",
+        "rust/src/voice/queue.rs"
+      ],
+      "primary_tests": [
+        "rust/src/voice/probe.rs",
+        "rust/src/voice/queue.rs"
+      ],
+      "frozen_oracles": [
+        "rust/src/voice/parity-fixtures.json"
+      ],
+      "verification_relationship": "contract area and native integration; not a one-to-one translation of every original test method",
+      "kind": "test",
+      "nativecommand": null,
+      "notes": "Mapped verification area, including captured deterministic contracts. This is not a one-to-one per-method port claim."
+    },
+    {
+      "oldpath": "voice/tests/test_app_dictation.py",
+      "native_modules": [
+        "rust/src/voice/queue.rs",
+        "rust/src/voice/native.rs"
+      ],
+      "primary_tests": [
+        "rust/src/voice/queue.rs",
+        "rust/src/voice/probe.rs"
+      ],
+      "frozen_oracles": [
+        "rust/src/voice/parity-fixtures.json"
+      ],
+      "verification_relationship": "contract area and native integration; not a one-to-one translation of every original test method",
+      "kind": "test",
+      "nativecommand": null,
+      "notes": "Mapped verification area, including captured deterministic contracts. This is not a one-to-one per-method port claim."
+    },
+    {
+      "oldpath": "voice/tests/test_codex_focus_guard.py",
+      "native_modules": [
+        "rust/src/voice/queue.rs",
+        "rust/src/voice/native.rs"
+      ],
+      "primary_tests": [
+        "rust/src/voice/queue.rs",
+        "rust/src/voice/probe.rs"
+      ],
+      "frozen_oracles": [
+        "rust/src/voice/parity-fixtures.json"
+      ],
+      "verification_relationship": "contract area and native integration; not a one-to-one translation of every original test method",
+      "kind": "test",
+      "nativecommand": null,
+      "notes": "Mapped verification area, including captured deterministic contracts. This is not a one-to-one per-method port claim."
+    },
+    {
+      "oldpath": "voice/tests/test_codex_voice_focus.py",
+      "native_modules": [
+        "rust/src/voice/queue.rs"
+      ],
+      "primary_tests": [
+        "rust/src/voice/queue.rs",
+        "rust/src/voice/probe.rs"
+      ],
+      "frozen_oracles": [
+        "rust/src/voice/parity-fixtures.json"
+      ],
+      "verification_relationship": "contract area and native integration; not a one-to-one translation of every original test method",
+      "kind": "test",
+      "nativecommand": null,
+      "notes": "Mapped verification area, including captured deterministic contracts. This is not a one-to-one per-method port claim."
+    },
+    {
+      "oldpath": "voice/tests/test_dictation.py",
+      "native_modules": [
+        "rust/src/voice/queue.rs",
+        "rust/src/voice/native.rs"
+      ],
+      "primary_tests": [
+        "rust/src/voice/queue.rs",
+        "rust/src/voice/probe.rs"
+      ],
+      "frozen_oracles": [
+        "rust/src/voice/parity-fixtures.json"
+      ],
+      "verification_relationship": "contract area and native integration; not a one-to-one translation of every original test method",
+      "kind": "test",
+      "nativecommand": null,
+      "notes": "Mapped verification area, including captured deterministic contracts. This is not a one-to-one per-method port claim."
+    },
+    {
+      "oldpath": "voice/tests/test_install.py",
+      "native_modules": [
+        "rust/src/voice/install.rs"
+      ],
+      "primary_tests": [
+        "voice/tests/native-install.test.mjs",
+        "rust/src/voice/install.rs"
+      ],
+      "frozen_oracles": [],
+      "verification_relationship": "contract area and native integration; not a one-to-one translation of every original test method",
+      "kind": "test",
+      "nativecommand": null,
+      "notes": "Mapped verification area, including captured deterministic contracts. This is not a one-to-one per-method port claim."
+    },
+    {
+      "oldpath": "voice/tests/test_voice_device_recovery.py",
+      "native_modules": [
+        "rust/src/voice/recovery.rs",
+        "rust/src/voice/native.rs"
+      ],
+      "primary_tests": [
+        "rust/src/voice/recovery.rs",
+        "rust/src/voice/probe.rs"
+      ],
+      "frozen_oracles": [
+        "rust/src/voice/parity-fixtures.json"
+      ],
+      "verification_relationship": "contract area and native integration; not a one-to-one translation of every original test method",
+      "kind": "test",
+      "nativecommand": null,
+      "notes": "Mapped verification area, including captured deterministic contracts. This is not a one-to-one per-method port claim."
+    },
+    {
+      "oldpath": "voice/tests/test_voice_policy.py",
+      "native_modules": [
+        "rust/src/voice/policy.rs"
+      ],
+      "primary_tests": [
+        "rust/src/voice/policy.rs",
+        "rust/src/voice/probe.rs"
+      ],
+      "frozen_oracles": [
+        "rust/src/voice/parity-fixtures.json"
+      ],
+      "verification_relationship": "contract area and native integration; not a one-to-one translation of every original test method",
+      "kind": "test",
+      "nativecommand": null,
+      "notes": "Mapped verification area, including captured deterministic contracts. This is not a one-to-one per-method port claim."
+    },
+    {
+      "oldpath": "voice/tests/test_voice_recovery.py",
+      "native_modules": [
+        "rust/src/voice/recovery.rs",
+        "rust/src/voice/native.rs"
+      ],
+      "primary_tests": [
+        "rust/src/voice/recovery.rs",
+        "rust/src/voice/probe.rs"
+      ],
+      "frozen_oracles": [
+        "rust/src/voice/parity-fixtures.json"
+      ],
+      "verification_relationship": "contract area and native integration; not a one-to-one translation of every original test method",
+      "kind": "test",
+      "nativecommand": null,
+      "notes": "Mapped verification area, including captured deterministic contracts. This is not a one-to-one per-method port claim."
+    },
+    {
+      "oldpath": "voice/tests/test_voice_settings.py",
+      "native_modules": [
+        "rust/src/voice/settings.rs"
+      ],
+      "primary_tests": [
+        "rust/src/voice/settings.rs",
+        "rust/src/voice/probe.rs"
+      ],
+      "frozen_oracles": [
+        "rust/src/voice/parity-fixtures.json"
+      ],
+      "verification_relationship": "contract area and native integration; not a one-to-one translation of every original test method",
+      "kind": "test",
+      "nativecommand": null,
+      "notes": "Mapped verification area, including captured deterministic contracts. This is not a one-to-one per-method port claim."
+    },
+    {
+      "oldpath": "voice/tests/test_voicegate_learner.py",
+      "native_modules": [
+        "rust/src/voice/gate.rs",
+        "rust/src/voice/linalg.rs",
+        "rust/src/voice/native.rs"
+      ],
+      "primary_tests": [
+        "rust/src/voice/gate.rs",
+        "rust/src/voice/probe.rs",
+        "voice/tests/native-model-differential.test.mjs",
+        "voice/tests/native-eval-differential.test.mjs"
+      ],
+      "frozen_oracles": [
+        "rust/src/voice/parity-fixtures.json"
+      ],
+      "verification_relationship": "contract area and native integration; not a one-to-one translation of every original test method",
+      "kind": "test",
+      "nativecommand": null,
+      "notes": "Mapped verification area, including captured deterministic contracts. This is not a one-to-one per-method port claim."
+    },
+    {
+      "oldpath": "voice/voice_policy.py",
+      "kind": "import-only",
+      "nativecommand": "herdr-theme voice-policy",
+      "native_modules": [
+        "rust/src/voice/policy.rs"
+      ],
+      "primary_tests": [
+        "rust/src/voice/policy.rs",
+        "rust/src/voice/probe.rs"
+      ],
+      "frozen_oracles": [
+        "rust/src/voice/parity-fixtures.json"
+      ],
+      "verification_relationship": "contract area and native integration; not a one-to-one translation of every original test method",
+      "notes": "Policy APIs are native; original direct execution was a no-op."
+    },
+    {
+      "oldpath": "voice/voice_recovery.py",
+      "kind": "runtime",
+      "nativecommand": "herdr-theme voice-recovery",
+      "native_modules": [
+        "rust/src/voice/recovery.rs",
+        "rust/src/voice/native.rs"
+      ],
+      "primary_tests": [
+        "rust/src/voice/recovery.rs",
+        "rust/src/voice/probe.rs"
+      ],
+      "frozen_oracles": [
+        "rust/src/voice/parity-fixtures.json"
+      ],
+      "verification_relationship": "contract area and native integration; not a one-to-one translation of every original test method"
+    },
+    {
+      "oldpath": "voice/voice_settings.py",
+      "kind": "import-only",
+      "nativecommand": "herdr-theme voice-settings",
+      "native_modules": [
+        "rust/src/voice/settings.rs"
+      ],
+      "primary_tests": [
+        "rust/src/voice/settings.rs",
+        "rust/src/voice/probe.rs"
+      ],
+      "frozen_oracles": [
+        "rust/src/voice/parity-fixtures.json"
+      ],
+      "verification_relationship": "contract area and native integration; not a one-to-one translation of every original test method",
+      "notes": "Settings APIs are native; original direct execution was a no-op."
+    },
+    {
+      "oldpath": "voice/voice_submit_hook.py",
+      "kind": "runtime",
+      "nativecommand": "herdr-theme voice-submit-hook",
+      "native_modules": [
+        "rust/src/voice/policy.rs"
+      ],
+      "primary_tests": [
+        "rust/src/voice/policy.rs",
+        "rust/src/voice/probe.rs"
+      ],
+      "frozen_oracles": [
+        "rust/src/voice/parity-fixtures.json"
+      ],
+      "verification_relationship": "contract area and native integration; not a one-to-one translation of every original test method"
+    },
+    {
+      "oldpath": "voice/voicegate.py",
+      "kind": "runtime",
+      "nativecommand": "herdr-theme voicegate",
+      "native_modules": [
+        "rust/src/voice/gate.rs",
+        "rust/src/voice/linalg.rs",
+        "rust/src/voice/native.rs"
+      ],
+      "primary_tests": [
+        "rust/src/voice/gate.rs",
+        "rust/src/voice/probe.rs",
+        "voice/tests/native-model-differential.test.mjs",
+        "voice/tests/native-eval-differential.test.mjs"
+      ],
+      "frozen_oracles": [
+        "rust/src/voice/parity-fixtures.json"
+      ],
+      "verification_relationship": "contract area and native integration; not a one-to-one translation of every original test method",
+      "notes": "Actual model differential runners are explicit validation tools using an isolated immutable external Python reference, not a product runtime dependency."
+    }
+  ],
+  "extensionless_entrypoints": [
+    {
+      "oldpath": "voice/focusq",
+      "kind": "runtime",
+      "nativecommand": "herdr-theme focusq",
+      "native_modules": [
+        "rust/src/voice/install.rs"
+      ],
+      "primary_tests": [
+        "rust/src/voice/install.rs",
+        "voice/tests/native-install.test.mjs"
+      ],
+      "frozen_oracles": [],
+      "verification_relationship": "extensionless former Python entrypoint is now a shell launcher for the native CLI"
+    }
+  ],
+  "bundled_external_python": {
+    "repository": "https://github.com/chanyang721/herdr-workspace-mods",
+    "commit": "9aa50108fc3cc3c3af0fb376f0bb1760c90af3a6",
+    "source_lock": "workspace-mods.lock.json",
+    "record_count": 11,
+    "runtime_payload_adaptation": "rust/src/documents/install.rs::source_payload filters Python helpers from known pinned modules and rewrites their exact JavaScript helper calls to native commands.",
+    "files": [
+      {
+        "oldpath": "agent-usage/mods/agent-usage/collect.py",
+        "kind": "runtime",
+        "nativecommand": "herdr-theme pinned-agent-usage",
+        "native_modules": [
+          "rust/src/documents/pinned/agent.rs",
+          "rust/src/documents/pinned/sessions.rs"
+        ],
+        "primary_tests": [
+          "rust/tests/pinned_agent_plan_differential.rs"
+        ],
+        "frozen_oracles": [
+          "rust/tests/fixtures/pinned-agent-plan-baseline.json"
+        ],
+        "verification_relationship": "pinned dependency contract area; not an all-upstream-tests one-to-one claim"
+      },
+      {
+        "oldpath": "agent-usage/mods/agent-usage/meta.py",
+        "kind": "import-only",
+        "nativecommand": null,
+        "native_modules": [
+          "rust/src/documents/pinned/agent.rs"
+        ],
+        "primary_tests": [
+          "rust/tests/pinned_agent_plan_differential.rs"
+        ],
+        "frozen_oracles": [
+          "rust/tests/fixtures/pinned-agent-plan-baseline.json"
+        ],
+        "verification_relationship": "pinned dependency contract area; not an all-upstream-tests one-to-one claim"
+      },
+      {
+        "oldpath": "agent-usage/mods/agent-usage/scan_insights.py",
+        "kind": "runtime",
+        "nativecommand": "herdr-theme pinned-scan-insights",
+        "native_modules": [
+          "rust/src/documents/pinned/agent.rs"
+        ],
+        "primary_tests": [
+          "rust/tests/documents_cli.rs",
+          "rust/tests/pinned_agent_plan_differential.rs"
+        ],
+        "frozen_oracles": [
+          "rust/tests/fixtures/pinned-agent-plan-baseline.json"
+        ],
+        "verification_relationship": "pinned dependency contract area; not an all-upstream-tests one-to-one claim"
+      },
+      {
+        "oldpath": "agent-usage/mods/agent-usage/sessions.py",
+        "kind": "import-only",
+        "nativecommand": null,
+        "native_modules": [
+          "rust/src/documents/pinned/sessions.rs"
+        ],
+        "primary_tests": [
+          "rust/src/documents/pinned/sessions.rs",
+          "rust/tests/pinned_agent_plan_differential.rs"
+        ],
+        "frozen_oracles": [
+          "rust/tests/fixtures/pinned-agent-plan-baseline.json"
+        ],
+        "verification_relationship": "pinned dependency contract area; not an all-upstream-tests one-to-one claim",
+        "notes": "Process ownership and read-only metadata identify sessions; portable parsing fixtures do not assert every live process-discovery backend."
+      },
+      {
+        "oldpath": "cli-status/mods/cli-status/status.py",
+        "kind": "runtime",
+        "nativecommand": "herdr-theme pinned-cli-status",
+        "native_modules": [
+          "rust/src/documents/pinned/status.rs",
+          "rust/src/documents/pinned/status/runtime.rs"
+        ],
+        "primary_tests": [
+          "rust/src/documents/pinned/status/contracts.rs"
+        ],
+        "frozen_oracles": [
+          "rust/tests/fixtures/pinned-status.json"
+        ],
+        "verification_relationship": "pinned dependency contract area; not an all-upstream-tests one-to-one claim"
+      },
+      {
+        "oldpath": "mcp-status/mods/mcp-status/status.py",
+        "kind": "runtime",
+        "nativecommand": "herdr-theme pinned-mcp-status",
+        "native_modules": [
+          "rust/src/documents/pinned/status.rs",
+          "rust/src/documents/pinned/status/runtime.rs"
+        ],
+        "primary_tests": [
+          "rust/src/documents/pinned/status/contracts.rs"
+        ],
+        "frozen_oracles": [
+          "rust/tests/fixtures/pinned-status.json"
+        ],
+        "verification_relationship": "pinned dependency contract area; not an all-upstream-tests one-to-one claim"
+      },
+      {
+        "oldpath": "plan-usage/mods/plan-usage/usage.py",
+        "kind": "runtime",
+        "nativecommand": "herdr-theme pinned-plan-usage",
+        "native_modules": [
+          "rust/src/documents/pinned/plan.rs"
+        ],
+        "primary_tests": [
+          "rust/tests/pinned_agent_plan_differential.rs"
+        ],
+        "frozen_oracles": [
+          "rust/tests/fixtures/pinned-agent-plan-baseline.json"
+        ],
+        "verification_relationship": "pinned dependency contract area; not an all-upstream-tests one-to-one claim",
+        "notes": "Tests use synthetic provider replies; they do not consume real reset credits or establish live provider acceptance."
+      },
+      {
+        "oldpath": "plan-usage/mods/plan-usage/resets.py",
+        "kind": "runtime",
+        "nativecommand": "herdr-theme pinned-codex-resets",
+        "native_modules": [
+          "rust/src/documents/pinned/plan.rs"
+        ],
+        "primary_tests": [
+          "rust/tests/pinned_agent_plan_differential.rs"
+        ],
+        "frozen_oracles": [
+          "rust/tests/fixtures/pinned-agent-plan-baseline.json"
+        ],
+        "verification_relationship": "pinned dependency contract area; not an all-upstream-tests one-to-one claim",
+        "notes": "Tests use synthetic provider replies; they do not consume real reset credits or establish live provider acceptance."
+      },
+      {
+        "oldpath": "system-metrics/mods/system-metrics/sample.py",
+        "kind": "runtime",
+        "nativecommand": "herdr-theme pinned-system-metrics",
+        "native_modules": [
+          "rust/src/automation/metrics.rs"
+        ],
+        "primary_tests": [
+          "rust/src/automation/metrics.rs"
+        ],
+        "frozen_oracles": [],
+        "verification_relationship": "pinned dependency contract area; not an all-upstream-tests one-to-one claim",
+        "notes": "Separate from the older theme extra; retains this pinned mod's Windows/macOS/Linux behavior."
+      },
+      {
+        "oldpath": "document-viewer/scripts/install_preview.py",
+        "kind": "runtime",
+        "nativecommand": "herdr-theme install-preview",
+        "native_modules": [
+          "rust/src/documents/install.rs"
+        ],
+        "primary_tests": [
+          "rust/src/documents/install.rs",
+          "rust/tests/renderers_macos.rs"
+        ],
+        "frozen_oracles": [],
+        "verification_relationship": "pinned dependency contract area; not an all-upstream-tests one-to-one claim",
+        "notes": "Native base installer directly invokes its pinned viewer installation implementation and assets; it never executes the upstream Python installer."
+      },
+      {
+        "oldpath": "document-viewer/scripts/open_document.py",
+        "kind": "tool",
+        "nativecommand": "herdr-theme open-document",
+        "native_modules": [
+          "rust/src/documents/pins.rs"
+        ],
+        "primary_tests": [
+          "tests/docs.test.mjs",
+          "rust/tests/documents_cli.rs"
+        ],
+        "frozen_oracles": [],
+        "verification_relationship": "pinned dependency contract area; not an all-upstream-tests one-to-one claim",
+        "notes": "Same side-panel request/command sequence as the theme helper. Upstream Python tool is not installed as a runtime dependency."
+      }
+    ]
+  },
+  "upstream_delta": {
+    "commit": "fb3c2343843254ae7aee81fb6de3b014b7597d60",
+    "relationship": "Additional upstream behavior preserved after the original 97-file migration baseline; the original baseline count and source hashes remain unchanged.",
+    "modified_runtime": [
+      {
+        "oldpath": "scripts/workspace.py",
+        "nativecommand": "herdr-theme workspace",
+        "native_modules": [
+          "rust/src/automation/mod.rs",
+          "rust/src/automation/workspace_focus.rs"
+        ],
+        "primary_tests": [
+          "rust/src/automation/workspace_focus.rs",
+          "rust/tests/workspace_focus_cli.rs"
+        ],
+        "frozen_oracles": [
+          "rust/tests/fixtures/workspace-focus-upstream.json"
+        ]
+      }
+    ],
+    "added_python": [
+      {
+        "oldpath": "tests/test_workspace_focus.py",
+        "kind": "test",
+        "native_modules": [
+          "rust/src/automation/workspace_focus.rs"
+        ],
+        "primary_tests": [
+          "rust/src/automation/workspace_focus.rs",
+          "rust/tests/workspace_focus_cli.rs"
+        ],
+        "frozen_oracles": [
+          "rust/tests/fixtures/workspace-focus-upstream.json"
+        ],
+        "verification_relationship": "All ten unchanged original Window scenarios are captured at the restoration boundary; separate native CLI subprocess cases exercise success/failure finally integration. This does not claim a physical desktop test."
+      }
+    ],
+    "known_limit": "If creation fails or returns no created IDs, another process can concurrently create a new terminal which the person selects. The new-terminal fallback cannot distinguish it from the partially created terminal and restores the earlier selection over that choice. This upstream limitation is preserved and explicitly tested."
+  },
+  "embedded_python": [
+    {
+      "oldpath": "mods/project-docs-tabs/vendor/media.js",
+      "symbol": "PYTHON_IMAGE",
+      "baseline_commit": "8c5b71d2f1074bb5d1d831fa395617bf4ae2abc8",
+      "script_sha256": "22d2321d600d312d7f67d59600dc3860051e1264198e42cef9509b0be094752b",
+      "nativecommand": "herdr-theme media-image",
+      "native_modules": [
+        "rust/src/documents/render.rs"
+      ],
+      "primary_tests": [
+        "rust/tests/media_cli.rs"
+      ],
+      "frozen_oracles": [
+        "rust/tests/fixtures/media-image-baseline.json"
+      ],
+      "notes": "Linux/Windows fallback retains the original 1 MiB dimension-parsing limit and copies the full source to the cache. The separate macOS Foundation/AppKit/PDFKit script remains native JavaScript for Automation, including full-file SVG reads; it was never Python."
+    }
+  ]
+}

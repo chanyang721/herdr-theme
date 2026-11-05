@@ -23,6 +23,25 @@ import { watchAsks, askSection, hasAsks } from './asks.js';
 import { askFor } from './ask-model.js';
 
 const hasPanel=node=>node?.id==='panel'||(node?.children||[]).some(hasPanel);
+const native = () => `${appHome()}/scripts/sixfold/herdr-theme${(typeof window==='function' && window()?.platform==='windows') || /^(?:[A-Za-z]:[\\/]|\\\\)/.test(appHome())?'.exe':''}`;
+const helperPath = path => {
+  const normalized=path.replace(/\\/g,'/').replace(/\/+$/,'');
+  return /^[A-Za-z]:\//.test(normalized) || normalized.startsWith('//')?normalized.toLowerCase():normalized;
+};
+// Only the installed theme's own script paths migrate implicitly. Explicit
+// external adapters retain their interpreter and argument contract.
+export const helperInvocation = (configured, command, args=[]) => {
+  if (Array.isArray(configured) && configured.length) return [configured[0],[...configured.slice(1),...args]];
+  if (typeof configured === 'string' && /\.py$/i.test(configured)) {
+    const bundled=helperPath(configured)===helperPath(`${appHome()}/scripts/sixfold/${command}.py`);
+    if (!bundled) return ['python3',[configured,...args]];
+  } else if (configured) return [configured,[command,...args]];
+  return [native(),[command,...args]];
+};
+const invokeHelper = (configured, command, args=[]) => {
+  const [program,argv]=helperInvocation(configured,command,args);
+  return exec(program,argv);
+};
 
 const marks = { blocked: '!', done: '✓', working: '●', idle: '○' };
 // One slow pass of the dot along a link pipe while computers work together.
@@ -118,7 +137,7 @@ export default class SixfoldDesk extends View {
           const optional=(text,fallback)=>{try{return JSON.parse(text);}catch{return fallback;}};
           const config = optional(routing,{script:this.routeScript});
           const collaboration = optional(collaborationText,null);
-          this.collaborationScript = collaboration?.enabled === true && typeof collaboration.script === "string" ? collaboration.script : null;
+          this.collaborationScript = collaboration?.enabled === true ? collaboration.command || collaboration.script || null : null;
           const requests = optional(queue,{requests:this.queuedRoutes}).requests ?? [];
           const addresses = new Set(terminals().map(item => item.address));
           const workflow = optional(workflowText,{nodes:this.workflowNodes,events:this.workflowEvents});
@@ -132,7 +151,7 @@ export default class SixfoldDesk extends View {
           this.pendingFlows.push(...freshMessages(this.previousEvents, events).filter(event => addresses.has(event.source) && addresses.has(event.target)));
           this.previousEvents = events;
           this.messageEvents = events;
-          this.routeScript = config?.script;
+          this.routeScript = config?.command || config?.script;
           this.queuedRoutes = requests.map(({id,source,project,hold,error})=>({id,source,project,hold,error}));
           this.messageSnapshot = snapshot;
           this.startFlows(cx);
@@ -182,7 +201,7 @@ export default class SixfoldDesk extends View {
       computersBusy=true;computersAt=Date.now();
       cx.spawn(async cx=>{
         try {
-          const result=await exec('python3',[`${appHome()}/scripts/sixfold/collect_computers.py`]);
+          const result=await exec(native(),['collect_computers']);
           if(result.code!==0)throw Error('status unavailable');
           const status=JSON.parse(result.stdout);
           if(status.error || !Array.isArray(status.peers))throw Error('status unavailable');
@@ -216,7 +235,7 @@ export default class SixfoldDesk extends View {
       if (this.routeBusy || !this.routeScript || !this.queuedRoutes.some(item=>!item.hold)) return;
       this.routeBusy = true;
       cx.spawn(async cx => {
-        try { await exec('python3',[this.routeScript,'--drain']); }
+        try { await invokeHelper(this.routeScript,'route',['--drain']); }
         finally { this.routeBusy = false; }
       });
     });
@@ -225,7 +244,7 @@ export default class SixfoldDesk extends View {
       if (this.collaborationBusy || !this.collaborationScript) return;
       this.collaborationBusy = true;
       cx.spawn(async cx => {
-        try { await exec('python3',[this.collaborationScript,'drain']); }
+        try { await invokeHelper(this.collaborationScript,'collaborate',['drain']); }
         catch { /* The durable lease prevents blind retry after ambiguous delivery. */ }
         finally { this.collaborationBusy = false; }
       });
@@ -239,7 +258,7 @@ export default class SixfoldDesk extends View {
       cx.spawn(async cx=>{
         try {
           const config=JSON.parse(await readTextFile(`${appHome()}/data/sixfold/voice-integration.json`) || 'null');
-          if(!config?.script)return;
+          if(!config?.script && !config?.command)return;
           const f=focused(), facts=terminals(), current=facts.find(x=>x.address===f?.terminal);
           const state={at:Date.now(),active:window().active,terminal:f?.terminal,
             source:current?.labels?.['sixfold.source-pane'],
@@ -256,7 +275,9 @@ export default class SixfoldDesk extends View {
             // rechecks that heartbeat before sending any microphone controls.
             cx.spawn(async cx=>{
               try {
-                await exec('python3',[config.script,'--app-focus']);
+                if (Array.isArray(config.command)) await invokeHelper(config.command,'focus_queue',['--app-focus']);
+                else if(config.command) await exec(config.command,[...(config.args || ['focus_queue']),'--app-focus']);
+                else await invokeHelper(config.script,'focus_queue',['--app-focus']);
               } finally {voiceActionBusy=false;}
             });
           }

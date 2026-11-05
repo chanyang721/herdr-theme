@@ -178,7 +178,7 @@ test('local creation needs only Claude installed; Codex is not required for the 
   };
   const claudeOnly=await run([{key:'claude',installed:true},{key:'codex',installed:false}]);
   assert.equal(claudeOnly.error,'');assert.equal(claudeOnly.closed,true);
-  assert(claudeOnly.execCall.args.some(a=>a.endsWith('workspace.py')));
+  assert(claudeOnly.execCall.args.some(a=>a === 'workspace'));
   const noClaude=await run([{key:'claude',installed:false},{key:'codex',installed:true}]);
   assert.match(noClaude.error,/claude/);assert.equal(noClaude.execCall,null);assert.equal(noClaude.closed,false);
 });

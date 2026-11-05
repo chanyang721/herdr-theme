@@ -4,7 +4,7 @@
 이미 플러그인이 설치되어 있으면 다음 명령으로 이 제어기만 적용한다.
 
 ```sh
-/opt/homebrew/bin/python3 ~/work/projects/herdr-focus-queue/install_codex_focus.py
+herdr-theme install_codex_focus
 ```
 
 테마·레이아웃·키·settings와 Codex 설정 파일은 수정하지 않는다.
@@ -23,9 +23,9 @@ Codex가 음소거 상태를 표시하기 전 전송된 음성이나 이미 전�
 footer를 읽지 못하거나 core가 응답하지 않으면 음소거 성공을 보장할 수 없다.
 같은 프로세스에서 관찰 사이에 음성 연결을 종료/재시작하면 호출 세대까지 구분하지 못한다.
 
-검증은 `python3 -m unittest discover -s tests -p 'test_codex*py'`로 실행한다.
+검증은 `CARGO_BUILD_JOBS=1 cargo test --manifest-path rust/Cargo.toml voice::queue`로 실행한다.
 전체 기존 테스트 중 중첩 블록이 많은 파일은 Python 3.14에서 실행한다.
 실제 마이크 수신, 채팅 반영, 재생, 녹음 저장은 각각 별도 검증이 필요하다.
 
-감시기만 제거하려면 `python3 install_codex_focus.py --uninstall`을 실행한다.
+감시기만 제거하려면 `herdr-theme install_codex_focus --uninstall`을 실행한다.
 이 명령은 음성 연결을 종료하거나 마이크를 다시 켜지 않는다. 플러그인 전체 제거는 `focusq uninstall`이다.

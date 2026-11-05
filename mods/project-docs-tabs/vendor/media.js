@@ -57,61 +57,6 @@ function run(args) {
   return JSON.stringify({ path: 'mods/project-docs-tabs/.cache/' + name, width: width, height: height, pages: pages, page: pageNumber, signature: signature });
 }`;
 
-// Linux/Windows fallback needs Python 3, but no third-party Python packages.
-export const PYTHON_IMAGE = String.raw`
-import hashlib, json, os, re, shutil, struct, sys, tempfile
-source, cache = sys.argv[1:3]
-stat = os.stat(source)
-signature = source + ':' + str(stat.st_mtime_ns) + ':' + str(stat.st_size)
-ext = source.rsplit('.', 1)[-1].lower()
-with open(source, 'rb') as handle:
-    data = handle.read(1024 * 1024)
-if ext == 'svg':
-    text = data.decode('utf-8-sig')
-    box = re.search(r'\bviewBox\s*=\s*[\x22\x27]([^\x22\x27]+)', text, re.I)
-    box = [float(n) for n in re.split(r'[ ,]+', box[1].strip())] if box else [0, 0, 300, 150]
-    def dimension(key, fallback):
-        match = re.search(r'\b' + key + r'\s*=\s*[\x22\x27]([\d.]+)(?:px)?[\x22\x27]', text, re.I)
-        return float(match[1]) if match else fallback
-    width, height = dimension('width', box[2]), dimension('height', box[3])
-elif data.startswith(b'\x89PNG\r\n\x1a\n'):
-    width, height = struct.unpack('>II', data[16:24])
-elif data.startswith(b'\xff\xd8'):
-    i = 2
-    while i < len(data):
-        if data[i] != 255: i += 1; continue
-        while data[i] == 255: i += 1
-        marker = data[i]; i += 1
-        if marker in (0xD8, 0xD9) or 0xD0 <= marker <= 0xD7: continue
-        size = int.from_bytes(data[i:i+2], 'big')
-        if marker in (0xC0, 0xC1, 0xC2, 0xC3, 0xC5, 0xC6, 0xC7, 0xC9, 0xCA, 0xCB, 0xCD, 0xCE, 0xCF):
-            height, width = struct.unpack('>HH', data[i+3:i+7]); break
-        if size < 2: raise ValueError('Invalid JPEG')
-        i += size
-    else: raise ValueError('Cannot read JPEG dimensions')
-elif data[:4] == b'RIFF' and data[8:12] == b'WEBP':
-    if data[12:16] == b'VP8X':
-        width, height = 1 + int.from_bytes(data[24:27], 'little'), 1 + int.from_bytes(data[27:30], 'little')
-    elif data[12:16] == b'VP8L':
-        bits = int.from_bytes(data[21:25], 'little'); width, height = (bits & 0x3fff) + 1, ((bits >> 14) & 0x3fff) + 1
-    else:
-        width, height = struct.unpack('<HH', data[26:30]); width &= 0x3fff; height &= 0x3fff
-else: raise ValueError('This image format cannot be decoded')
-if width <= 0 or height <= 0: raise ValueError('Invalid image dimensions')
-os.makedirs(cache, exist_ok=True)
-name = hashlib.sha256(signature.encode()).hexdigest() + '.' + ext
-destination = os.path.join(cache, name)
-if not os.path.exists(destination):
-    fd, temporary = tempfile.mkstemp(dir=cache)
-    os.close(fd)
-    try:
-        shutil.copyfile(source, temporary)
-        os.replace(temporary, destination)
-    finally:
-        if os.path.exists(temporary): os.unlink(temporary)
-print(json.dumps(dict(path='mods/project-docs-tabs/.cache/' + name, width=width, height=height, pages=1, page=1, signature=signature)))
-`;
-
 export async function loadMedia(target, page = 1, type = "image") {
   if (target.on) throw new Error("Image and PDF previews are only available for local files.");
   const platform = window()?.platform;
@@ -119,7 +64,7 @@ export async function loadMedia(target, page = 1, type = "image") {
   const cache = `${appHome()}/mods/project-docs-tabs/.cache`;
   const result = platform === "macos"
     ? await exec("osascript", ["-l", "JavaScript", "-e", MAC_MEDIA, target.file, cache, String(page), type])
-    : await exec(platform === "windows" ? "python" : "python3", ["-c", PYTHON_IMAGE, target.file, cache]);
+    : await exec(`${appHome()}/scripts/sixfold/herdr-theme${platform === "windows" ? ".exe" : ""}`, ["media_image", target.file, cache]);
   if (result.code !== 0) throw new Error(result.stderr.trim() || "Cannot preview this file.");
   const media = JSON.parse(result.stdout.trim());
   if (!media.path?.startsWith("mods/project-docs-tabs/.cache/") || !(media.width > 0 && media.height > 0 && media.pages > 0)) throw new Error("The media preview returned invalid data.");

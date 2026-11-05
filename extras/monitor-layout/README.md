@@ -8,7 +8,7 @@
 
 설치본의 문서 어댑터 `sixfold-files`, `sixfold-docs`는 이미 `extras/preview/mods`와 일치합니다. 다운로드한 upstream, 라이선스, 캐시, 레이아웃의 `.state`와 백업 파일은 이 스냅샷에 포함하지 않습니다.
 
-테마 비교: `sixfold-day`·`sixfold-night`는 최초 비교에서 저장소와 설치본이 일치했습니다. `themes/atom-one-dark.json`·`themes/win98.json`은 Herdr 설치본에서 가져온 팔레트입니다. 기본 설치기는 동일 이름의 기존 팔레트가 있으면 보존합니다. 설치된 `core_api.py`보다 저장소의 thread/queue 타임아웃 처리가 최신이므로, 설치본의 이전 `select` 구현으로 되돌리지 않습니다.
+테마 비교: `sixfold-day`·`sixfold-night`는 최초 비교에서 저장소와 설치본이 일치했습니다. `themes/atom-one-dark.json`·`themes/win98.json`은 Herdr 설치본에서 가져온 팔레트입니다. 기본 설치기는 동일 이름의 기존 팔레트가 있으면 보존합니다. JSON-RPC의 타임아웃과 자식 프로세스 정리는 `rust/src/automation/mod.rs`의 네이티브 구현을 사용합니다.
 
 격리 화면 검증 뒤 Day의 오프라인 아이콘용 `dim`, Win98의 `dim` 및 어두운 ANSI 색을 보정했습니다. Win98은 실제 터미널에 `colors.background`의 검정 배경이 적용되므로 ANSI 대비는 검정 배경에서 확인합니다. 테마 선택 설정은 바꾸지 않습니다.
 

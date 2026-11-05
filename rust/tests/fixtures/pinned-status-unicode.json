@@ -1,0 +1,729 @@
+[
+  {
+    "fn": "config_value",
+    "label": "ASCII",
+    "args": [
+      {
+        "aws": {
+          "profiles": [
+            "a"
+          ]
+        },
+        "github": false,
+        "kubectl": false,
+        "docker": false,
+        "salesforce": {
+          "orgs": [
+            "a"
+          ]
+        }
+      }
+    ],
+    "value": {
+      "aws": {
+        "profiles": [
+          "a"
+        ]
+      },
+      "github": false,
+      "kubectl": false,
+      "docker": false,
+      "salesforce": {
+        "orgs": [
+          "a"
+        ]
+      }
+    }
+  },
+  {
+    "fn": "config_value",
+    "label": "underscore",
+    "args": [
+      {
+        "aws": {
+          "profiles": [
+            "_"
+          ]
+        },
+        "github": false,
+        "kubectl": false,
+        "docker": false,
+        "salesforce": {
+          "orgs": [
+            "_"
+          ]
+        }
+      }
+    ],
+    "value": {
+      "aws": {
+        "profiles": [
+          "_"
+        ]
+      },
+      "github": false,
+      "kubectl": false,
+      "docker": false,
+      "salesforce": {
+        "orgs": [
+          "_"
+        ]
+      }
+    }
+  },
+  {
+    "fn": "config_value",
+    "label": "superscript-two",
+    "args": [
+      {
+        "aws": {
+          "profiles": [
+            "²"
+          ]
+        },
+        "github": false,
+        "kubectl": false,
+        "docker": false,
+        "salesforce": {
+          "orgs": [
+            "²"
+          ]
+        }
+      }
+    ],
+    "value": {
+      "aws": {
+        "profiles": [
+          "²"
+        ]
+      },
+      "github": false,
+      "kubectl": false,
+      "docker": false,
+      "salesforce": {
+        "orgs": [
+          "²"
+        ]
+      }
+    }
+  },
+  {
+    "fn": "config_value",
+    "label": "fraction-quarter",
+    "args": [
+      {
+        "aws": {
+          "profiles": [
+            "¼"
+          ]
+        },
+        "github": false,
+        "kubectl": false,
+        "docker": false,
+        "salesforce": {
+          "orgs": [
+            "¼"
+          ]
+        }
+      }
+    ],
+    "value": {
+      "aws": {
+        "profiles": [
+          "¼"
+        ]
+      },
+      "github": false,
+      "kubectl": false,
+      "docker": false,
+      "salesforce": {
+        "orgs": [
+          "¼"
+        ]
+      }
+    }
+  },
+  {
+    "fn": "config_value",
+    "label": "combining-acute",
+    "args": [
+      {
+        "aws": {
+          "profiles": [
+            "́"
+          ]
+        },
+        "github": false,
+        "kubectl": false,
+        "docker": false,
+        "salesforce": {
+          "orgs": [
+            "́"
+          ]
+        }
+      }
+    ],
+    "value": {
+      "aws": {
+        "profiles": []
+      },
+      "github": false,
+      "kubectl": false,
+      "docker": false,
+      "salesforce": {
+        "orgs": []
+      }
+    }
+  },
+  {
+    "fn": "config_value",
+    "label": "decomposed-e-acute",
+    "args": [
+      {
+        "aws": {
+          "profiles": [
+            "é"
+          ]
+        },
+        "github": false,
+        "kubectl": false,
+        "docker": false,
+        "salesforce": {
+          "orgs": [
+            "é"
+          ]
+        }
+      }
+    ],
+    "value": {
+      "aws": {
+        "profiles": []
+      },
+      "github": false,
+      "kubectl": false,
+      "docker": false,
+      "salesforce": {
+        "orgs": []
+      }
+    }
+  },
+  {
+    "fn": "config_value",
+    "label": "precomposed-e-acute",
+    "args": [
+      {
+        "aws": {
+          "profiles": [
+            "é"
+          ]
+        },
+        "github": false,
+        "kubectl": false,
+        "docker": false,
+        "salesforce": {
+          "orgs": [
+            "é"
+          ]
+        }
+      }
+    ],
+    "value": {
+      "aws": {
+        "profiles": [
+          "é"
+        ]
+      },
+      "github": false,
+      "kubectl": false,
+      "docker": false,
+      "salesforce": {
+        "orgs": [
+          "é"
+        ]
+      }
+    }
+  },
+  {
+    "fn": "config_value",
+    "label": "zero-width-joiner",
+    "args": [
+      {
+        "aws": {
+          "profiles": [
+            "‍"
+          ]
+        },
+        "github": false,
+        "kubectl": false,
+        "docker": false,
+        "salesforce": {
+          "orgs": [
+            "‍"
+          ]
+        }
+      }
+    ],
+    "value": {
+      "aws": {
+        "profiles": []
+      },
+      "github": false,
+      "kubectl": false,
+      "docker": false,
+      "salesforce": {
+        "orgs": []
+      }
+    }
+  },
+  {
+    "fn": "config_value",
+    "label": "zero-width-nonjoiner",
+    "args": [
+      {
+        "aws": {
+          "profiles": [
+            "‌"
+          ]
+        },
+        "github": false,
+        "kubectl": false,
+        "docker": false,
+        "salesforce": {
+          "orgs": [
+            "‌"
+          ]
+        }
+      }
+    ],
+    "value": {
+      "aws": {
+        "profiles": []
+      },
+      "github": false,
+      "kubectl": false,
+      "docker": false,
+      "salesforce": {
+        "orgs": []
+      }
+    }
+  },
+  {
+    "fn": "config_value",
+    "label": "undertie",
+    "args": [
+      {
+        "aws": {
+          "profiles": [
+            "‿"
+          ]
+        },
+        "github": false,
+        "kubectl": false,
+        "docker": false,
+        "salesforce": {
+          "orgs": [
+            "‿"
+          ]
+        }
+      }
+    ],
+    "value": {
+      "aws": {
+        "profiles": []
+      },
+      "github": false,
+      "kubectl": false,
+      "docker": false,
+      "salesforce": {
+        "orgs": []
+      }
+    }
+  },
+  {
+    "fn": "config_value",
+    "label": "new-cyrillic-TJE",
+    "args": [
+      {
+        "aws": {
+          "profiles": [
+            "Ᲊ"
+          ]
+        },
+        "github": false,
+        "kubectl": false,
+        "docker": false,
+        "salesforce": {
+          "orgs": [
+            "Ᲊ"
+          ]
+        }
+      }
+    ],
+    "value": {
+      "aws": {
+        "profiles": []
+      },
+      "github": false,
+      "kubectl": false,
+      "docker": false,
+      "salesforce": {
+        "orgs": []
+      }
+    }
+  },
+  {
+    "fn": "config_value",
+    "label": "new-Ol-Onal-digit-one",
+    "args": [
+      {
+        "aws": {
+          "profiles": [
+            "𞗲"
+          ]
+        },
+        "github": false,
+        "kubectl": false,
+        "docker": false,
+        "salesforce": {
+          "orgs": [
+            "𞗲"
+          ]
+        }
+      }
+    ],
+    "value": {
+      "aws": {
+        "profiles": []
+      },
+      "github": false,
+      "kubectl": false,
+      "docker": false,
+      "salesforce": {
+        "orgs": []
+      }
+    }
+  },
+  {
+    "fn": "config_value",
+    "label": "new-CJK-extension-I",
+    "args": [
+      {
+        "aws": {
+          "profiles": [
+            "𮯰"
+          ]
+        },
+        "github": false,
+        "kubectl": false,
+        "docker": false,
+        "salesforce": {
+          "orgs": [
+            "𮯰"
+          ]
+        }
+      }
+    ],
+    "value": {
+      "aws": {
+        "profiles": []
+      },
+      "github": false,
+      "kubectl": false,
+      "docker": false,
+      "salesforce": {
+        "orgs": []
+      }
+    }
+  },
+  {
+    "fn": "mask",
+    "args": [
+      "AAAAAAAAAAAAAAAAAAAAAAAÁ"
+    ],
+    "value": "<가림>́"
+  },
+  {
+    "fn": "clean_reason",
+    "args": [
+      "AAAAAAAAAAAAAAAAAAAAAAAÁ"
+    ],
+    "value": "<가림>́"
+  },
+  {
+    "fn": "mask",
+    "args": [
+      "́AAAAAAAAAAAAAAAAAAAAAAAA"
+    ],
+    "value": "́<가림>"
+  },
+  {
+    "fn": "clean_reason",
+    "args": [
+      "́AAAAAAAAAAAAAAAAAAAAAAAA"
+    ],
+    "value": "́<가림>"
+  },
+  {
+    "fn": "mask",
+    "args": [
+      "AAAAAAAAAAAAAAAAAAAAAAAA‍"
+    ],
+    "value": "<가림>‍"
+  },
+  {
+    "fn": "clean_reason",
+    "args": [
+      "AAAAAAAAAAAAAAAAAAAAAAAA‍"
+    ],
+    "value": "<가림>‍"
+  },
+  {
+    "fn": "mask",
+    "args": [
+      "²AAAAAAAAAAAAAAAAAAAAAAAA"
+    ],
+    "value": "²AAAAAAAAAAAAAAAAAAAAAAAA"
+  },
+  {
+    "fn": "clean_reason",
+    "args": [
+      "²AAAAAAAAAAAAAAAAAAAAAAAA"
+    ],
+    "value": "²AAAAAAAAAAAAAAAAAAAAAAAA"
+  },
+  {
+    "fn": "mask",
+    "args": [
+      "Bearer\u001cfixture-secret"
+    ],
+    "value": "Bearer fixture-secret"
+  },
+  {
+    "fn": "clean_reason",
+    "args": [
+      "Bearer\u001cfixture-secret"
+    ],
+    "value": "Bearer <가림>"
+  },
+  {
+    "fn": "mask",
+    "args": [
+      "\u001cfixture reason\u001f"
+    ],
+    "value": "fixture reason"
+  },
+  {
+    "fn": "clean_reason",
+    "args": [
+      "\u001cfixture reason\u001f"
+    ],
+    "value": "fixture reason"
+  },
+  {
+    "fn": "parse_claude",
+    "label": "separator-U+001C",
+    "args": [
+      "a: fixture - ✔ Connected\u001cb: fixture - ✘ Failed"
+    ],
+    "value": [
+      {
+        "agent": "claude",
+        "name": "a",
+        "state": "connected",
+        "reason": "Connected"
+      },
+      {
+        "agent": "claude",
+        "name": "b",
+        "state": "failed",
+        "reason": "Failed"
+      }
+    ]
+  },
+  {
+    "fn": "parse_claude",
+    "label": "separator-U+001D",
+    "args": [
+      "a: fixture - ✔ Connected\u001db: fixture - ✘ Failed"
+    ],
+    "value": [
+      {
+        "agent": "claude",
+        "name": "a",
+        "state": "connected",
+        "reason": "Connected"
+      },
+      {
+        "agent": "claude",
+        "name": "b",
+        "state": "failed",
+        "reason": "Failed"
+      }
+    ]
+  },
+  {
+    "fn": "parse_claude",
+    "label": "separator-U+001E",
+    "args": [
+      "a: fixture - ✔ Connected\u001eb: fixture - ✘ Failed"
+    ],
+    "value": [
+      {
+        "agent": "claude",
+        "name": "a",
+        "state": "connected",
+        "reason": "Connected"
+      },
+      {
+        "agent": "claude",
+        "name": "b",
+        "state": "failed",
+        "reason": "Failed"
+      }
+    ]
+  },
+  {
+    "fn": "parse_claude",
+    "label": "separator-U+001F",
+    "args": [
+      "a: fixture - ✔ Connected\u001fb: fixture - ✘ Failed"
+    ],
+    "value": [
+      {
+        "agent": "claude",
+        "name": "a",
+        "state": "failed",
+        "reason": "Failed"
+      }
+    ]
+  },
+  {
+    "fn": "parse_claude",
+    "label": "separator-U+0085",
+    "args": [
+      "a: fixture - ✔ Connectedb: fixture - ✘ Failed"
+    ],
+    "value": [
+      {
+        "agent": "claude",
+        "name": "a",
+        "state": "connected",
+        "reason": "Connected"
+      },
+      {
+        "agent": "claude",
+        "name": "b",
+        "state": "failed",
+        "reason": "Failed"
+      }
+    ]
+  },
+  {
+    "fn": "parse_claude",
+    "label": "separator-U+2028",
+    "args": [
+      "a: fixture - ✔ Connected b: fixture - ✘ Failed"
+    ],
+    "value": [
+      {
+        "agent": "claude",
+        "name": "a",
+        "state": "connected",
+        "reason": "Connected"
+      },
+      {
+        "agent": "claude",
+        "name": "b",
+        "state": "failed",
+        "reason": "Failed"
+      }
+    ]
+  },
+  {
+    "fn": "parse_claude",
+    "label": "separator-U+2029",
+    "args": [
+      "a: fixture - ✔ Connected b: fixture - ✘ Failed"
+    ],
+    "value": [
+      {
+        "agent": "claude",
+        "name": "a",
+        "state": "connected",
+        "reason": "Connected"
+      },
+      {
+        "agent": "claude",
+        "name": "b",
+        "state": "failed",
+        "reason": "Failed"
+      }
+    ]
+  },
+  {
+    "fn": "aws_profile",
+    "label": "non-ASCII-decimal",
+    "args": [
+      "fixture"
+    ],
+    "responses": {
+      "region": [
+        0,
+        "us-east-1",
+        ""
+      ],
+      "identity": [
+        0,
+        "{\"Account\": \"\\u0661\\u0661\\u0661\\u0661\\u0661\\u0661\\u0661\\u0661\\u0661\\u0661\\u0661\\u0661\"}",
+        ""
+      ],
+      "expiry": [
+        0,
+        "{}",
+        ""
+      ]
+    },
+    "value": {
+      "kind": "aws",
+      "name": "fixture",
+      "state": "ok",
+      "region": "us-east-1",
+      "account": "١١١١",
+      "expires": null,
+      "reason": null
+    }
+  },
+  {
+    "fn": "aws_profile",
+    "label": "non-ASCII-decimal",
+    "args": [
+      "fixture"
+    ],
+    "responses": {
+      "region": [
+        0,
+        "us-east-1",
+        ""
+      ],
+      "identity": [
+        0,
+        "{\"Account\": \"\\u0967\\u0967\\u0967\\u0967\\u0967\\u0967\\u0967\\u0967\\u0967\\u0967\\u0967\\u0967\"}",
+        ""
+      ],
+      "expiry": [
+        0,
+        "{}",
+        ""
+      ]
+    },
+    "value": {
+      "kind": "aws",
+      "name": "fixture",
+      "state": "ok",
+      "region": "us-east-1",
+      "account": "११११",
+      "expires": null,
+      "reason": null
+    }
+  }
+]

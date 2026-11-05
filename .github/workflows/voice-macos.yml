@@ -17,7 +17,16 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-node@v4
         with:
-          python-version: '3.12'
-      - run: python3 -m unittest discover -s voice/tests -p 'test_*.py'
+          node-version: '22'
+      - run: cargo test --manifest-path rust/Cargo.toml --locked --jobs 1 voice:: -- --test-threads=1
+        env:
+          CARGO_BUILD_JOBS: '1'
+      - run: cargo build --manifest-path rust/Cargo.toml --locked --bin herdr-theme --jobs 1
+        env:
+          CARGO_BUILD_JOBS: '1'
+      - run: node --test voice/tests/native-install.test.mjs
+        env:
+          HERDR_THEME_BIN: ${{ github.workspace }}/rust/target/debug/herdr-theme

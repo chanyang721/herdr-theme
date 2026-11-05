@@ -9,6 +9,7 @@ for (const native of [false,true]) test(`background messages refresh through ${n
   let notifications = 0;
   let pinText='{}';
   let malformedAuxiliary=false;
+  let appLocation='/app';
   const tasks = [];
   const timers = [];
   const cx = {
@@ -18,7 +19,7 @@ for (const native of [false,true]) test(`background messages refresh through ${n
   };
   const runtime = {
     ...(native?{messageEvents:()=>JSON.parse(log).events}:{}),
-    props:()=>({role:'sidebar'}), appHome:()=>'/app',
+    props:()=>({role:'sidebar'}), appHome:()=>appLocation,
     terminals:()=>[{address:'source'},{address:'target'}],
     readTextFile:async path=>{
       if(path.endsWith('/workspace-pins.local.json'))return pinText;
@@ -47,7 +48,16 @@ for (const native of [false,true]) test(`background messages refresh through ${n
   source = source.replace(/import \{ panePet \} from '.\/pets.js';/,'const panePet=()=>null;')
   source = source.replace(/import \{ paneUsage \} from '.\/session-usage.js';/,'const paneUsage=()=>null;').replace(/import \{ paneMeta, paneMetaChip, showPaneIndex, showTitle \} from '.\/pane-meta.js';/,'const paneMeta=()=>null,paneMetaChip=()=>null,showPaneIndex=()=>false,showTitle=()=>true;');
   source = source.replace(/import \{ watchBadges, workspaceBadges \} from '.\/badges.js';/,'const watchBadges=()=>{},workspaceBadges=()=>null;').replace(/import \{ watchAsks[^}]*\} from '.\/asks.js';/,'const watchAsks=()=>{},askSection=()=>null,hasAsks=()=>false;').replace(/import \{ askFor \} from '.\/ask-model.js';/,'const askFor=()=>null;');
-  const {default: Sidebar} = await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64')+`#native=${native}`);
+  const {default: Sidebar,helperInvocation} = await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64')+`#native=${native}`);
+  assert.deepEqual(helperInvocation('/app/scripts/sixfold/route.py','route',['--drain']),['/app/scripts/sixfold/herdr-theme',['route','--drain']]);
+  assert.deepEqual(helperInvocation('/custom/scripts/sixfold/route.py','route',['--drain']),['python3',['/custom/scripts/sixfold/route.py','--drain']]);
+  assert.deepEqual(helperInvocation('/custom/collaboration.py','collaborate',['drain']),['python3',['/custom/collaboration.py','drain']]);
+  assert.deepEqual(helperInvocation(['/custom/native','adapter'],'route',['--drain']),['/custom/native',['adapter','--drain']]);
+  assert.deepEqual(helperInvocation('/custom/voice.py','focus_queue',['--app-focus']),['python3',['/custom/voice.py','--app-focus']]);
+  appLocation='\\\\fixture-host\\share\\app';
+  assert.deepEqual(helperInvocation(null,'route',['--drain']),[`${appLocation}/scripts/sixfold/herdr-theme.exe`,['route','--drain']]);
+  assert.deepEqual(helperInvocation('\\\\FIXTURE-HOST\\SHARE\\APP\\scripts\\sixfold\\route.py','route',['--drain']),[`${appLocation}/scripts/sixfold/herdr-theme.exe`,['route','--drain']]);
+  appLocation='/app';
   const view = new Sidebar();
   view.init({},cx);
   // Ignore the forever-pending command listener; settle the finite reload task.

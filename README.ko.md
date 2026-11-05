@@ -24,7 +24,7 @@ Herdr Theme은 레이아웃과 사이드바입니다. 설치기는 [Herdr Worksp
 
 ## 운영체제별 지원
 
-2026-11-04 Windows 11에서 각 부분을 직접 실행해 확인했습니다. 테마는 macOS에서 만들어졌습니다.
+표는 지원 동작과 이전 릴리스의 확인 결과입니다. 네이티브 이전의 검증 결과와 남은 플랫폼 확인은 [네이티브 이전 기록](docs/native-rust-migration.md)을 참고하세요.
 
 | 부분 | macOS | Windows |
 | --- | --- | --- |
@@ -42,7 +42,7 @@ Linux는 따로 적은 곳 외에는 macOS와 같지만 이번 버전에서 확�
 
 ## 요구 사항
 
-- Herdr 앱 0.1.11 이상, Python 3, Git. 컴퓨터 목록과 원격 워크스페이스는 머신 레이아웃을 지원하는 앱·코어가 필요합니다(0.1.17에서 확인).
+- Herdr 앱 0.1.11 이상과 Git이 필요합니다. 네이티브 도우미를 빌드하려면 안정판 Rust와 C 컴파일러도 필요합니다. 컴퓨터 목록과 원격 워크스페이스는 머신 레이아웃을 지원하는 앱·코어가 필요합니다(0.1.17에서 확인).
 - 메시지 애니메이션에는 네이티브 메시지 이벤트가 필요합니다: `messageEvents()`를 제공하는 앱과 `message_sent`를 내보내는 코어. 정식 릴리스에 들어가기 전까지는 둘 다 소스에서 빌드합니다. 앱은 [`feat/message-sent-events`](https://github.com/chanyang721/herdr-app/tree/feat/message-sent-events) 브랜치, 코어는 [herdrdev/herdr-core#90](https://github.com/herdrdev/herdr-core/pull/90)입니다. 앱과 코어를 함께 설치하고, 전송을 보고 싶은 모든 컴퓨터의 코어를 교체하세요(메시지를 전달하는 쪽 코어가 이벤트를 냅니다). 없어도 나머지는 동작하고 전송 애니메이션만 나오지 않습니다.
 - Agent Usage는 [Insights](https://github.com/GaganSD/coding-agent-toolkit/tree/main/herdr-insights) mod의 로컬 저장소를 읽습니다(따로 설치, Node.js 필요).
 
@@ -53,38 +53,40 @@ macOS / Linux:
 ```sh
 git clone https://github.com/chanyang721/herdr-theme.git
 cd herdr-theme
-python3 scripts/install.py
+cargo build --manifest-path rust/Cargo.toml --locked --release --bin herdr-theme --jobs 1
+./rust/target/release/herdr-theme install
 herdr-app do layout.switch --name sixfold
 ```
 
-Windows(PowerShell, Python 실행기):
+Windows(PowerShell, 네이티브 실행 파일):
 
 ```powershell
 git clone https://github.com/chanyang721/herdr-theme.git
 cd herdr-theme
-py -3 scripts/install.py
+cargo build --manifest-path rust/Cargo.toml --locked --release --bin herdr-theme --jobs 1
+.\rust\target\release\herdr-theme.exe install
 herdr-app do layout.switch --name sixfold
 ```
 
 설치기가 하는 일:
 
-- 테마의 mod·레이아웃·팔레트·도우미 스크립트를 앱 홈에 설치합니다(모든 운영체제에서 `~/.config/herdr-app`, `HERDR_APP_HOME`으로 변경 가능).
+- 테마의 mod·레이아웃·팔레트·네이티브 도우미를 앱 홈에 설치합니다(모든 운영체제에서 `~/.config/herdr-app`, `HERDR_APP_HOME`으로 변경 가능).
 - [`workspace-mods.lock.json`](workspace-mods.lock.json)에 고정된 커밋의 Herdr Workspace Mods를 `~/.local/share/herdr-sixfold/vendor/herdr-workspace-mods/<커밋 앞 12자>`(커밋마다 폴더 하나, 받기에 성공했을 때만 생김)으로 받아 정확히 그 커밋이고 로컬 변경이 없는지 확인한 뒤 그 커밋이 추적하는 파일로 `system-metrics`, `mcp-status`, `cli-status`, `plan-usage`, `agent-usage`를 테마와 함께 설치합니다. 설치한 버전은 `data/sixfold/workspace-mods.json`에 기록합니다.
-- Files 패널이 있는 레이아웃이 있으면(Herdr를 처음 켜면 `main`이 생김) Document Viewer 자체 설치기를 실행하고, 없으면 나중에 실행할 명령을 출력합니다. macOS가 아니면 Markdown만 설치합니다.
+- Files 패널이 있는 레이아웃이 있으면(Herdr를 처음 켜면 `main`이 생김) 고정된 Document Viewer 자산을 네이티브 설치기로 설치하고, 없으면 나중에 실행할 명령을 출력합니다. macOS가 아니면 Markdown만 설치합니다.
 - 이미 있는 파일이나 `layout:sixfold` 키 섹션은 덮어쓰지 않고 다른 레이아웃·설정·단축키는 보존합니다. `--update`는 전에 설치한 것을 갱신하되 직접 바꾼 레이아웃·팔레트는 그대로 둡니다.
 
 옵션: `--without-workspace-mods`는 테마만 설치합니다(이때 `sixfold` 레이아웃의 모니터 줄 mod는 따로 설치해야 함). `--workspace-mods-source 경로`는 받지 않고 이미 고정 커밋에 있는 로컬 checkout에서 설치합니다. 넓은 화면에서는 `sixfold` 레이아웃이 모니터 줄을 한 줄로 두고, 작은 Windows 창에서는 스크린샷처럼 [`extras/windows-layout`](extras/windows-layout/README.md)의 두 줄 배치를 씁니다.
 
 ### 설치본 갱신
 
-첫 설치 이후에는 **`scripts/update_install.py`만 씁니다. 실행 중인 앱에 파일을 직접 복사하지 않습니다.** 검토한 테마 파일을 지정하면 같은 실행에서 Workspace Mods도 고정 버전으로 맞춥니다(내용이 같은 파일은 건너뛰어 불필요한 재로드가 없음).
+첫 설치 이후에는 **`herdr-theme update_install`만 씁니다. 실행 중인 앱에 파일을 직접 복사하지 않습니다.** 검토한 테마 파일을 지정하면 같은 실행에서 Workspace Mods도 고정 버전으로 맞춥니다(내용이 같은 파일은 건너뛰어 불필요한 재로드가 없음).
 
 ```sh
-python3 scripts/update_install.py mods/sixfold-desk/main.js mods/sixfold-desk/model.js
-python3 scripts/update_install.py            # Workspace Mods만 고정 버전으로 맞춤
+herdr-theme update_install mods/sixfold-desk/main.js mods/sixfold-desk/model.js
+herdr-theme update_install            # Workspace Mods만 고정 버전으로 맞춤
 ```
 
-(Windows는 `py -3`.) `--without-workspace-mods`는 Workspace Mods를 그대로 두며, `voice`만 지정한 실행은 건드리지 않습니다.
+예시는 빌드한 실행 파일이 PATH에 있다고 가정합니다. 대신 `./rust/target/release/herdr-theme` 또는 `.\rust\target\release\herdr-theme.exe`를 쓸 수 있습니다. 도우미 코드 갱신에는 `scripts/herdr-theme`(Windows는 `scripts/herdr-theme.exe`)도 지정합니다. `--without-workspace-mods`는 Workspace Mods를 그대로 두며, `voice`만 지정한 실행은 건드리지 않습니다.
 
 updater는 `data/sixfold/install.lock`을 잡고, 바뀌는 mod 전체를 `mods/` 밖에 만들어 각각 `herdr-app check`로 검사하고, `backups/sixfold-update-*/`에 전체 백업을 둔 뒤 mod 폴더를 교체합니다. macOS·Linux는 원자적으로 교환하고, Windows는 디렉터리 교환이 없어 그 순간 mod 경로가 잠깐 비며 실패하면 설치본을 되돌립니다. 이후 `status.errors`가 1초간 비어 있고 워크스페이스·탭·포커스가 그대로여야 통과하고, 아니면 되돌립니다(그 사이 다른 작성자의 변경은 보존하고 보고). 결과는 백업의 영수증에 남습니다. `status` 통과는 화면 확인이 아니므로 `herdr-app shot`도 보세요.
 
@@ -164,18 +166,20 @@ Windows 11 실제 앱에서 `sixfold-night`·`sixfold-day`와 데모 워크스�
 
 전송은 앱 메모리의 `messageEvents()`에서 읽습니다([요구 사항](#요구-사항) 참고). 이벤트에는 보낸 쪽·받는 쪽·시각·관측된 `started` 결과만 있고 본문은 없습니다. 코어 CLI로 직접 보냅니다: `hc send 대상 "메시지"`.
 
-**이전 추적 실행기 제거.** 예전의 Python 실행기는 제거했습니다. 설치했었다면 PATH에서 `~/.local/share/herdr-sixfold/bin`을 빼고 `hc_trace.py` 호출을 멈추고, `hc`가 코어 CLI를 가리키는지 확인하고(`Get-Command hc -All` / `command -v hc`), 실행기를 가리키는 `~/.local/bin/hc` 심볼릭 링크를 되돌리고, `~/.local/share/herdr-sixfold/` 아래의 `hc_trace.py`, `bin/hc`, `bin/hc.cmd`를 지우고, 설치된 `route.py`와 `collect_workflow.py`를 갱신하세요.
+**이전 추적 실행기 제거.** 예전의 Python 실행기는 제거했습니다. 설치했었다면 PATH에서 `~/.local/share/herdr-sixfold/bin`을 빼고 `hc_trace.py` 호출을 멈추고, `hc`가 코어 CLI를 가리키는지 확인하고(`Get-Command hc -All` / `command -v hc`), 실행기를 가리키는 `~/.local/bin/hc` 심볼릭 링크를 되돌리고, `~/.local/share/herdr-sixfold/` 아래의 `hc_trace.py`, `bin/hc`, `bin/hc.cmd`를 지우고, 설치된 `herdr-theme route`와 `herdr-theme collect_workflow`를 갱신하세요.
 
 ## 서브에이전트 트리와 워크플로 수집기
 
-서브에이전트는 부모 행의 `▸ N`으로 펼치고, 새 위임이 생기면 트리를 펼치며 흐름을 보여 줍니다. `scripts/collect_workflow.py`는 Claude 메타데이터·읽기 전용 Codex DB·hc 부모 관계로 `data/sixfold/workflow.json`을 만듭니다(`--once`, 또는 3초마다 바뀐 것만 기록). macOS·Linux·Windows에서 동작하며 Windows에서는 콘솔 창을 띄우지 않습니다.
+서브에이전트는 부모 행의 `▸ N`으로 펼치고, 새 위임이 생기면 트리를 펼치며 흐름을 보여 줍니다. `herdr-theme collect_workflow`는 Claude 메타데이터·읽기 전용 Codex DB·hc 부모 관계로 `data/sixfold/workflow.json`을 만듭니다(`--once`, 또는 3초마다 바뀐 것만 기록). macOS·Linux·Windows에서 동작하며 Windows에서는 콘솔 창을 띄우지 않습니다.
 
-첫 설치에는 수집기가 없고 백그라운드 등록도 하지 않습니다. updater로 설치합니다(`python3 scripts/update_install.py scripts/collect_workflow.py`, Windows는 `py -3`). Windows에서는 로그온 때 창 없이, 한 번에 하나만 실행할 수 있습니다.
+설치된 네이티브 실행 파일에 수집기가 포함되지만 백그라운드 등록·시작은 하지 않습니다. Windows에서는 로그온 때 창 없이, 한 번에 하나만 실행할 수 있습니다.
 
 ```powershell
-$pyw = Join-Path (Split-Path (py -3 -c "import sys; print(sys.executable)")) 'pythonw.exe'
 $home_ = "$HOME\.config\herdr-app"
-$action = New-ScheduledTaskAction -Execute $pyw -Argument "`"$home_\scripts\sixfold\collect_workflow.py`"" -WorkingDirectory $home_
+$collector = "$home_\scripts\sixfold\herdr-theme.exe"
+$command = "Start-Process -WindowStyle Hidden -Wait -FilePath '$collector' -ArgumentList 'collect_workflow'"
+$encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($command))
+$action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument "-NoProfile -NonInteractive -WindowStyle Hidden -EncodedCommand $encoded" -WorkingDirectory $home_
 $trigger = New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME
 $settings = New-ScheduledTaskSettingsSet -MultipleInstances IgnoreNew -ExecutionTimeLimit 0 -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
 Register-ScheduledTask -TaskName 'Herdr Theme workflow collector' -Action $action -Trigger $trigger -Settings $settings
@@ -186,7 +190,7 @@ Start-ScheduledTask -TaskName 'Herdr Theme workflow collector'
 
 ## Workspace Mods
 
-[Herdr Workspace Mods](https://github.com/chanyang721/herdr-workspace-mods)에서 오며 테마와 함께 설치됩니다. 각각 단독으로도 쓸 수 있습니다(그 저장소 참고). 모니터 줄의 도우미는 mod가 실행하는 Python 스크립트이며 Windows에서는 콘솔 창 없이 돌고, 눌러서 복사는 `Set-Clipboard`(macOS `pbcopy`, Linux `wl-copy`/`xclip`)를 씁니다.
+[Herdr Workspace Mods](https://github.com/chanyang721/herdr-workspace-mods)에서 오며 테마와 함께 설치됩니다. 각각 단독으로도 쓸 수 있습니다(그 저장소 참고). 모니터 줄의 도우미는 mod가 실행하는 네이티브 명령이며 Windows에서는 콘솔 창 없이 돌고, 눌러서 복사는 `Set-Clipboard`(macOS `pbcopy`, Linux `wl-copy`/`xclip`)를 씁니다.
 
 ### System Metrics
 
@@ -241,23 +245,23 @@ Codex·Claude 한도를 브랜드 아이콘·막대·백분율로: 5시간·7일
 
 **채널 알림.** `data/sixfold/project-alerts.json`의 새 채널 메시지는 워크스페이스 제목 아래 줄에 나오고, `sixfold-slack-inbox` mod는 `data/sixfold/slack-mentions.json`의 멘션을 스레드별로 보여 줍니다. Slack에서 모으는 일은 별도 도구가 합니다.
 
-**분할과 새 워크스페이스.** `scripts/balance_grid.py`는 아무것도 재시작하지 않고 6개 터미널 탭을 같은 크기로 맞추고, `scripts/workspace.py "Example" /path`는 **+ Space**처럼 워크스페이스를 만듭니다(`--shells`는 셸만, `--tiers high`는 그 한 칸을 해당 난이도의 모델로 엽니다. `scripts/model_tier.py` 참고).
+**분할과 새 워크스페이스.** `herdr-theme balance_grid`는 아무것도 재시작하지 않고 6개 터미널 탭을 같은 크기로 맞추고, `herdr-theme workspace "Example" /path`는 **+ Space**처럼 워크스페이스를 만듭니다(`--shells`는 셸만, `--tiers high`는 그 한 칸을 해당 난이도의 모델로 엽니다. `rust/src/automation/tiers.rs` 참고). 새 워크스페이스가 선택을 가져간 경우 이전 공간·탭·칸으로 되돌리며, 사용자가 다른 칸이나 탭을 직접 고른 경우에는 유지합니다. 알려진 한계: 생성이 중간에 실패하고 다른 프로세스가 동시에 만든 새 터미널을 사용자가 고르면, 그 선택 위로 이전 선택을 복원할 수 있습니다.
 
-**고정 표시·아이콘·로컬 설정.** `data/sixfold/workspace-pins.local.json`(`{"spaces":[{"id":"…","machine":null}]}`)은 정확히 그 워크스페이스에 핀과 강조 테두리를 붙입니다. `scripts/set_workspace_icon.py 'ID 또는 이름' icon.png`는 프로젝트 아이콘(SVG/PNG/JPEG/WebP)을 지정합니다. 사람마다 다른 이름·색·폴더·Slack 주소는 `data/sixfold/site.local.json`(`config/site.example.json`에서 시작)에 두며, `"pane_header_index": true`는 칸 번호를 다시 보여 줍니다. `*.local.json`은 git이 무시합니다.
+**고정 표시·아이콘·로컬 설정.** `data/sixfold/workspace-pins.local.json`(`{"spaces":[{"id":"…","machine":null}]}`)은 정확히 그 워크스페이스에 핀과 강조 테두리를 붙입니다. `herdr-theme set_workspace_icon 'ID 또는 이름' icon.png`는 프로젝트 아이콘(SVG/PNG/JPEG/WebP)을 지정합니다. 사람마다 다른 이름·색·폴더·Slack 주소는 `data/sixfold/site.local.json`(`config/site.example.json`에서 시작)에 두며, `"pane_header_index": true`는 칸 번호를 다시 보여 줍니다. `*.local.json`은 git이 무시합니다.
 
-**macOS 전용.** 대기 세션 절전과 끝난 워크스페이스 목록은 두 LaunchAgent 관찰기(`install_session_sleep.py`, `install_space_cleanup.py`)가 하며, apply를 켜기 전까지는 기록만 합니다. 워크스페이스는 `space_close_enabled: true`를 직접 넣기 전에는 닫지 않습니다. 하네스로 끝난 세션(최종 보고 확인)의 칸은 같은 탭에 다른 칸이 남을 때 닫고(`close_finished_panes`, 기본 켜짐), 공간마다·탭마다 최소 1칸은 남깁니다. 관찰기 사본을 바꾸는 설치(`update_install.py`, `install_*.py --refresh`)는 그 소스 커밋의 하네스 교차 검수가 PASS이거나 설치·실동작 확인만 남은 CONDITIONAL이면 새 사본 해시를 승인(actor auto-policy, 근거는 설정의 `reviewed_by_policy`)하고, 그 밖에는 승인 없이 기다립니다. 실시간 TUI 연결(`scripts/tui_bridge.py`, Linux도)은 기존 Herdr TUI 칸을 가져오지 않고 연결합니다. [`voice/`](voice/README.md)의 음성 플러그인은 포커스된 칸만 녹음합니다.
+**macOS 전용.** 대기 세션 절전과 끝난 워크스페이스 목록은 두 LaunchAgent 관찰기(`herdr-theme install_session_sleep`, `herdr-theme install_space_cleanup`)가 하며, apply를 켜기 전까지는 기록만 합니다. 워크스페이스는 `space_close_enabled: true`를 직접 넣기 전에는 닫지 않습니다. 하네스로 끝난 세션(최종 보고 확인)의 칸은 같은 탭에 다른 칸이 남을 때 닫고(`close_finished_panes`, 기본 켜짐), 공간마다·탭마다 최소 1칸은 남깁니다. 관찰기 사본을 바꾸는 설치(`herdr-theme update_install`, `herdr-theme install_* --refresh`)는 그 소스 커밋의 하네스 교차 검수가 PASS이거나 설치·실동작 확인만 남은 CONDITIONAL이면 새 사본 해시를 승인(actor auto-policy, 근거는 설정의 `reviewed_by_policy`)하고, 그 밖에는 승인 없이 기다립니다. 실시간 TUI 연결(`herdr-theme tui_bridge`, Linux도)은 기존 Herdr TUI 칸을 가져오지 않고 연결합니다. [`voice/`](voice/README.md)의 음성 플러그인은 포커스된 칸만 녹음합니다.
 
 공용 워크스페이스와 프로젝트 칸 사이 메시지 전달: [COMMON_ROUTING.md](COMMON_ROUTING.md). 과부하 때의 협업: [docs/overload-collaboration.md](docs/overload-collaboration.md). 프로젝트 문서 추적: [docs/project-documents.md](docs/project-documents.md).
 
 ## 실행하는 것
 
-UI는 Herdr의 워크스페이스·에이전트 API만 쓰고 자체 네트워크 요청을 하지 않습니다. 도우미는 이 컴퓨터의 `hc`, `herdr-app`, Python, 계정 CLI를 실행하고, 설치기는 고정 버전을 받기 위해 Git을 실행합니다. 개인 설정·계정 정보·세션 대응표는 이 저장소에 두지 않습니다.
+UI는 Herdr의 워크스페이스·에이전트 API를 사용합니다. 네이티브 도우미는 이 컴퓨터의 `hc`, `herdr-app`, 계정 CLI를 실행하고, 설치기는 고정 버전을 받기 위해 Git을 실행합니다. 사용량 공급자 조회처럼 기존 도우미의 네트워크 기능은 네이티브로 유지됩니다. 선택 설정한 외부 명령의 실행 환경은 그 연동의 소유자가 제공합니다. 개인 설정·계정 정보·세션 대응표는 이 저장소에 두지 않습니다.
 
 ## 개발
 
 ```sh
 npm test
-python3 -m unittest discover -s tests -p 'test_*.py'
+cargo test --manifest-path rust/Cargo.toml --locked --jobs 1 -- --test-threads=1
 herdr-app check ~/.config/herdr-app/mods/sixfold-desk
 ```
 

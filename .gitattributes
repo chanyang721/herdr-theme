@@ -3,3 +3,6 @@
 * text=auto eol=lf
 # Stored with CRLF on purpose; left byte-for-byte.
 extras/windows-layout/sixfold.json -text
+
+# Preserve checksum-pinned upstream whitespace without editing vendored source.
+rust/vendor/pocketfft/pocketfft_hdronly.h whitespace=-blank-at-eol

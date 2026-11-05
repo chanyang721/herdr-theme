@@ -1,6 +1,6 @@
 import {View,div,svg} from 'gpui-kit';
 import {h_flex} from 'gpui-base';
-import {exec,appHome,theme} from 'herdr';
+import {exec,appHome,theme,window} from 'herdr';
 export default class SystemMetrics extends View {
   init(_props,cx) {
     this.history=[];this.data=null;this.busy=false;this.error=null;
@@ -11,7 +11,7 @@ export default class SystemMetrics extends View {
     this.busy=true;
     cx.spawn(async cx=>{
       try {
-        const result=await exec('python3',[`${appHome()}/mods/system-metrics/sample.py`]);
+        const result=await exec(`${appHome()}/scripts/sixfold/herdr-theme${window()?.platform==='windows' || /^(?:[A-Za-z]:[\\/]|\\\\)/.test(appHome())?'.exe':''}`,['system_metrics']);
         const data=JSON.parse(result.stdout);
         if(data.error||result.code!==0||![data.cpu,data.memory,data.total].every(Number.isFinite)||data.cpu<0||data.cpu>100||data.memory<0||data.total<=0)throw new Error(data.error||'Metrics unavailable');
         this.data=data;this.history=[...this.history,{cpu:data.cpu,memory:100*data.memory/data.total}].slice(-16);this.error=null;

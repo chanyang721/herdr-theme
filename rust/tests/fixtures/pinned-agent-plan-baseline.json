@@ -1,0 +1,2942 @@
+{
+  "baseline": "herdr-workspace-mods 9aa50108fc3cc3c3af0fb376f0bb1760c90af3a6",
+  "tests": 81,
+  "failures": 0,
+  "errors": 0,
+  "skips": [
+    {
+      "test": "pinned_collect_tests.NamedCodexDiscoveryTests.test_bridged_codex_matches_the_source_pane_title_and_folder",
+      "reason": "POSIX named-session fallback fixture bypassed by Windows RestartManager branch"
+    },
+    {
+      "test": "pinned_collect_tests.NamedCodexDiscoveryTests.test_fallback_rechecks_name_and_process_but_ignores_spinner_frame",
+      "reason": "POSIX named-session fallback fixture bypassed by Windows RestartManager branch"
+    },
+    {
+      "test": "pinned_collect_tests.SessionDiscoveryTests.test_recorded_subagents_do_not_make_the_foreground_root_ambiguous",
+      "reason": "Original fixture leaves SQLite connection alive through Windows temp cleanup"
+    },
+    {
+      "test": "pinned_scan_tests.FindNodeTests.test_nothing_installed_is_none",
+      "reason": "POSIX executable-node fixtures unavailable on Windows"
+    },
+    {
+      "test": "pinned_scan_tests.FindNodeTests.test_path_wins_when_node_is_on_it",
+      "reason": "POSIX executable-node fixtures unavailable on Windows"
+    },
+    {
+      "test": "pinned_scan_tests.FindNodeTests.test_system_path_falls_back_to_the_nvm_default_alias",
+      "reason": "POSIX executable-node fixtures unavailable on Windows"
+    },
+    {
+      "test": "pinned_scan_tests.FindNodeTests.test_without_a_usable_alias_the_newest_install_is_used",
+      "reason": "POSIX executable-node fixtures unavailable on Windows"
+    },
+    {
+      "test": "pinned_scan_tests.ScanTests.test_a_collector_that_hangs_is_stopped",
+      "reason": "POSIX executable-node fixtures unavailable on Windows"
+    },
+    {
+      "test": "pinned_scan_tests.ScanTests.test_failure_reports_exit_code_and_last_line",
+      "reason": "POSIX executable-node fixtures unavailable on Windows"
+    },
+    {
+      "test": "pinned_scan_tests.ScanTests.test_missing_collector",
+      "reason": "POSIX executable-node fixtures unavailable on Windows"
+    },
+    {
+      "test": "pinned_scan_tests.ScanTests.test_success",
+      "reason": "POSIX executable-node fixtures unavailable on Windows"
+    },
+    {
+      "test": "pinned_usage_tests.PlanUsageTests.test_session_reports_from_codex_log_kind_and_time_only",
+      "reason": "Original fixture leaves SQLite connection alive through Windows temp cleanup"
+    }
+  ],
+  "cases": [
+    {
+      "function": "collect.token_count",
+      "input": {
+        "value": -1
+      },
+      "error": "invalid_store"
+    },
+    {
+      "function": "collect.aggregate",
+      "input": {
+        "store": {
+          "version": 1,
+          "files": {
+            "first": {
+              "rows": [
+                {
+                  "session": "codex:00000000-0000-4000-8000-000000000001",
+                  "harness": "codex",
+                  "model": "gpt-demo",
+                  "day": "2026-11-01",
+                  "project": "/private/DO-NOT-EXPOSE",
+                  "input": -1,
+                  "output": 20,
+                  "cacheRead": 30,
+                  "cacheWrite": 5,
+                  "reasoning": 10
+                }
+              ]
+            }
+          },
+          "lastScanAt": "2026-11-02T03:00:00.000Z"
+        },
+        "since": null,
+        "_fallback": "2026-10-31"
+      },
+      "error": "invalid_store"
+    },
+    {
+      "function": "collect.unknown",
+      "input": {
+        "terminal": {
+          "address": "t0",
+          "agent": "codex"
+        },
+        "reason": "store_unavailable"
+      },
+      "expected": {
+        "terminal": "t0",
+        "agent": "codex",
+        "known": false,
+        "input": null,
+        "output": null,
+        "cacheRead": null,
+        "cacheWrite": null,
+        "total": null,
+        "models": [],
+        "reason": "store_unavailable"
+      }
+    },
+    {
+      "function": "collect.token_count",
+      "input": {
+        "value": true
+      },
+      "error": "invalid_store"
+    },
+    {
+      "function": "collect.aggregate",
+      "input": {
+        "store": {
+          "version": 1,
+          "files": {
+            "first": {
+              "rows": [
+                {
+                  "session": "codex:00000000-0000-4000-8000-000000000001",
+                  "harness": "codex",
+                  "model": "gpt-demo",
+                  "day": "2026-11-01",
+                  "project": "/private/DO-NOT-EXPOSE",
+                  "input": true,
+                  "output": 20,
+                  "cacheRead": 30,
+                  "cacheWrite": 5,
+                  "reasoning": 10
+                }
+              ]
+            }
+          },
+          "lastScanAt": "2026-11-02T03:00:00.000Z"
+        },
+        "since": null,
+        "_fallback": "2026-10-31"
+      },
+      "error": "invalid_store"
+    },
+    {
+      "function": "collect.token_count",
+      "input": {
+        "value": "100"
+      },
+      "error": "invalid_store"
+    },
+    {
+      "function": "collect.aggregate",
+      "input": {
+        "store": {
+          "version": 1,
+          "files": {
+            "first": {
+              "rows": [
+                {
+                  "session": "codex:00000000-0000-4000-8000-000000000001",
+                  "harness": "codex",
+                  "model": "gpt-demo",
+                  "day": "2026-11-01",
+                  "project": "/private/DO-NOT-EXPOSE",
+                  "input": "100",
+                  "output": 20,
+                  "cacheRead": 30,
+                  "cacheWrite": 5,
+                  "reasoning": 10
+                }
+              ]
+            }
+          },
+          "lastScanAt": "2026-11-02T03:00:00.000Z"
+        },
+        "since": null,
+        "_fallback": "2026-10-31"
+      },
+      "error": "invalid_store"
+    },
+    {
+      "function": "collect.token_count",
+      "input": {
+        "value": null
+      },
+      "error": "invalid_store"
+    },
+    {
+      "function": "collect.aggregate",
+      "input": {
+        "store": {
+          "version": 1,
+          "files": {
+            "first": {
+              "rows": [
+                {
+                  "session": "codex:00000000-0000-4000-8000-000000000001",
+                  "harness": "codex",
+                  "model": "gpt-demo",
+                  "day": "2026-11-01",
+                  "project": "/private/DO-NOT-EXPOSE",
+                  "input": null,
+                  "output": 20,
+                  "cacheRead": 30,
+                  "cacheWrite": 5,
+                  "reasoning": 10
+                }
+              ]
+            }
+          },
+          "lastScanAt": "2026-11-02T03:00:00.000Z"
+        },
+        "since": null,
+        "_fallback": "2026-10-31"
+      },
+      "error": "invalid_store"
+    },
+    {
+      "function": "collect.token_count",
+      "input": {
+        "value": 1.2
+      },
+      "error": "invalid_store"
+    },
+    {
+      "function": "collect.aggregate",
+      "input": {
+        "store": {
+          "version": 1,
+          "files": {
+            "first": {
+              "rows": [
+                {
+                  "session": "codex:00000000-0000-4000-8000-000000000001",
+                  "harness": "codex",
+                  "model": "gpt-demo",
+                  "day": "2026-11-01",
+                  "project": "/private/DO-NOT-EXPOSE",
+                  "input": 1.2,
+                  "output": 20,
+                  "cacheRead": 30,
+                  "cacheWrite": 5,
+                  "reasoning": 10
+                }
+              ]
+            }
+          },
+          "lastScanAt": "2026-11-02T03:00:00.000Z"
+        },
+        "since": null,
+        "_fallback": "2026-10-31"
+      },
+      "error": "invalid_store"
+    },
+    {
+      "function": "collect.token_count",
+      "input": {
+        "value": 0
+      },
+      "expected": 0
+    },
+    {
+      "function": "collect.weighted",
+      "input": {
+        "row": {
+          "session": "codex:00000000-0000-4000-8000-000000000001",
+          "harness": "codex",
+          "model": "gpt-demo",
+          "day": "2026-11-01",
+          "project": "/private/DO-NOT-EXPOSE",
+          "input": 0,
+          "output": 0,
+          "cacheRead": 0,
+          "cacheWrite": 0,
+          "reasoning": 10
+        },
+        "kind": "codex"
+      },
+      "expected": 0.0
+    },
+    {
+      "function": "collect.aggregate",
+      "input": {
+        "store": {
+          "version": 1,
+          "files": {
+            "first": {
+              "rows": [
+                {
+                  "session": "codex:00000000-0000-4000-8000-000000000001",
+                  "harness": "codex",
+                  "model": "gpt-demo",
+                  "day": "2026-11-01",
+                  "project": "/private/DO-NOT-EXPOSE",
+                  "input": 0,
+                  "output": 0,
+                  "cacheRead": 0,
+                  "cacheWrite": 0,
+                  "reasoning": 10
+                }
+              ]
+            }
+          },
+          "lastScanAt": "2026-11-02T03:00:00.000Z"
+        },
+        "since": null,
+        "_fallback": "2026-10-31"
+      },
+      "expected": {
+        "codex:00000000-0000-4000-8000-000000000001": {
+          "input": 0,
+          "output": 0,
+          "cacheRead": 0,
+          "cacheWrite": 0,
+          "models": [
+            "gpt-demo"
+          ],
+          "week": 0.0,
+          "total": 0
+        }
+      }
+    },
+    {
+      "function": "collect.token_count",
+      "input": {
+        "value": 100
+      },
+      "expected": 100
+    },
+    {
+      "function": "collect.token_count",
+      "input": {
+        "value": 20
+      },
+      "expected": 20
+    },
+    {
+      "function": "collect.token_count",
+      "input": {
+        "value": 30
+      },
+      "expected": 30
+    },
+    {
+      "function": "collect.token_count",
+      "input": {
+        "value": 5
+      },
+      "expected": 5
+    },
+    {
+      "function": "collect.weighted",
+      "input": {
+        "row": {
+          "session": "codex:00000000-0000-4000-8000-000000000001",
+          "harness": "codex",
+          "model": "gpt-demo",
+          "day": "2026-11-01",
+          "project": "/private/DO-NOT-EXPOSE",
+          "input": 100,
+          "output": 20,
+          "cacheRead": 30,
+          "cacheWrite": 5,
+          "reasoning": 10
+        },
+        "kind": "codex"
+      },
+      "expected": 268.0
+    },
+    {
+      "function": "collect.token_count",
+      "input": {
+        "value": 155
+      },
+      "expected": 155
+    },
+    {
+      "function": "collect.aggregate",
+      "input": {
+        "store": {
+          "version": 1,
+          "files": {
+            "first": {
+              "rows": [
+                {
+                  "session": "codex:00000000-0000-4000-8000-000000000001",
+                  "harness": "codex",
+                  "model": "gpt-demo",
+                  "day": "2026-11-01",
+                  "project": "/private/DO-NOT-EXPOSE",
+                  "input": 100,
+                  "output": 20,
+                  "cacheRead": 30,
+                  "cacheWrite": 5,
+                  "reasoning": 10
+                }
+              ]
+            }
+          },
+          "lastScanAt": "2026-11-02T03:00:00.000Z"
+        },
+        "since": null,
+        "_fallback": "2026-10-31"
+      },
+      "expected": {
+        "codex:00000000-0000-4000-8000-000000000001": {
+          "input": 100,
+          "output": 20,
+          "cacheRead": 30,
+          "cacheWrite": 5,
+          "models": [
+            "gpt-demo"
+          ],
+          "week": 268.0,
+          "total": 155
+        }
+      }
+    },
+    {
+      "function": "collect.weighted",
+      "input": {
+        "row": {
+          "session": "codex:00000000-0000-4000-8000-000000000002",
+          "harness": "codex",
+          "model": "gpt-demo",
+          "day": "2026-11-01",
+          "project": "/private/DO-NOT-EXPOSE",
+          "input": 100,
+          "output": 0,
+          "cacheRead": 0,
+          "cacheWrite": 0,
+          "reasoning": 10
+        },
+        "kind": "codex"
+      },
+      "expected": 100.0
+    },
+    {
+      "function": "collect.aggregate",
+      "input": {
+        "store": {
+          "version": 1,
+          "files": {
+            "first": {
+              "rows": [
+                {
+                  "session": "claude:00000000-0000-4000-8000-000000000001",
+                  "harness": "claude",
+                  "model": "gpt-demo",
+                  "day": "2026-11-01",
+                  "project": "/private/DO-NOT-EXPOSE",
+                  "input": 100,
+                  "output": 0,
+                  "cacheRead": 0,
+                  "cacheWrite": 0,
+                  "reasoning": 10
+                },
+                {
+                  "session": "codex:00000000-0000-4000-8000-000000000002",
+                  "harness": "codex",
+                  "model": "gpt-demo",
+                  "day": "2026-11-01",
+                  "project": "/private/DO-NOT-EXPOSE",
+                  "input": 100,
+                  "output": 0,
+                  "cacheRead": 0,
+                  "cacheWrite": 0,
+                  "reasoning": 10
+                }
+              ]
+            }
+          },
+          "lastScanAt": "2026-11-02T03:00:00.000Z"
+        },
+        "since": {
+          "claude": "2026-11-02",
+          "codex": "2026-10-30"
+        },
+        "_fallback": "2026-10-31"
+      },
+      "expected": {
+        "claude:00000000-0000-4000-8000-000000000001": {
+          "input": 100,
+          "output": 0,
+          "cacheRead": 0,
+          "cacheWrite": 0,
+          "models": [
+            "gpt-demo"
+          ],
+          "week": 0.0,
+          "total": 100
+        },
+        "codex:00000000-0000-4000-8000-000000000002": {
+          "input": 100,
+          "output": 0,
+          "cacheRead": 0,
+          "cacheWrite": 0,
+          "models": [
+            "gpt-demo"
+          ],
+          "week": 100.0,
+          "total": 100
+        }
+      }
+    },
+    {
+      "function": "collect.unknown",
+      "input": {
+        "terminal": {
+          "address": "t1",
+          "agent": "codex"
+        },
+        "reason": "store_missing"
+      },
+      "expected": {
+        "terminal": "t1",
+        "agent": "codex",
+        "known": false,
+        "input": null,
+        "output": null,
+        "cacheRead": null,
+        "cacheWrite": null,
+        "total": null,
+        "models": [],
+        "reason": "store_missing"
+      }
+    },
+    {
+      "function": "collect.unknown",
+      "input": {
+        "terminal": {
+          "address": "t1",
+          "agent": "codex"
+        },
+        "reason": "store_unavailable"
+      },
+      "expected": {
+        "terminal": "t1",
+        "agent": "codex",
+        "known": false,
+        "input": null,
+        "output": null,
+        "cacheRead": null,
+        "cacheWrite": null,
+        "total": null,
+        "models": [],
+        "reason": "store_unavailable"
+      }
+    },
+    {
+      "function": "collect.aggregate",
+      "input": {
+        "store": {
+          "version": 1,
+          "files": {
+            "first": {
+              "rows": [
+                {
+                  "session": "codex:00000000-0000-4000-8000-000000000001",
+                  "harness": "codex",
+                  "model": "gpt-demo",
+                  "day": "2026-11-01",
+                  "project": "/private/DO-NOT-EXPOSE",
+                  "input": 100,
+                  "output": 20,
+                  "cacheWrite": 5,
+                  "reasoning": 10
+                }
+              ]
+            }
+          },
+          "lastScanAt": "2026-11-02T03:00:00.000Z"
+        },
+        "since": null,
+        "_fallback": "2026-10-31"
+      },
+      "error": "invalid_store"
+    },
+    {
+      "function": "collect.unknown",
+      "input": {
+        "terminal": {
+          "address": "t1w",
+          "agent": "codex",
+          "sleepSession": "00000000-0000-4000-8000-000000000002"
+        },
+        "reason": "session_not_indexed"
+      },
+      "expected": {
+        "terminal": "t1w",
+        "agent": "codex",
+        "known": false,
+        "input": null,
+        "output": null,
+        "cacheRead": null,
+        "cacheWrite": null,
+        "total": null,
+        "models": [],
+        "reason": "session_not_indexed",
+        "sleeping": true
+      }
+    },
+    {
+      "function": "collect.weighted",
+      "input": {
+        "row": {
+          "session": "claude:00000000-0000-4000-8000-000000000001",
+          "harness": "claude",
+          "model": "gpt-demo",
+          "day": "2026-11-01",
+          "project": "/private/DO-NOT-EXPOSE",
+          "input": 100,
+          "output": 20,
+          "cacheRead": 30,
+          "cacheWrite": 5,
+          "reasoning": 10
+        },
+        "kind": "claude"
+      },
+      "expected": 209.25
+    },
+    {
+      "function": "collect.aggregate",
+      "input": {
+        "store": {
+          "version": 1,
+          "files": {
+            "first": {
+              "rows": [
+                {
+                  "session": "claude:00000000-0000-4000-8000-000000000001",
+                  "harness": "claude",
+                  "model": "gpt-demo",
+                  "day": "2026-11-01",
+                  "project": "/private/DO-NOT-EXPOSE",
+                  "input": 100,
+                  "output": 20,
+                  "cacheRead": 30,
+                  "cacheWrite": 5,
+                  "reasoning": 10
+                }
+              ]
+            }
+          },
+          "lastScanAt": "2026-11-02T03:00:00.000Z"
+        },
+        "since": null,
+        "_fallback": "2026-10-31"
+      },
+      "expected": {
+        "claude:00000000-0000-4000-8000-000000000001": {
+          "input": 100,
+          "output": 20,
+          "cacheRead": 30,
+          "cacheWrite": 5,
+          "models": [
+            "gpt-demo"
+          ],
+          "week": 209.25,
+          "total": 155
+        }
+      }
+    },
+    {
+      "function": "collect.unknown",
+      "input": {
+        "terminal": {
+          "address": "t0",
+          "agent": "codex"
+        },
+        "reason": "session_not_indexed"
+      },
+      "expected": {
+        "terminal": "t0",
+        "agent": "codex",
+        "known": false,
+        "input": null,
+        "output": null,
+        "cacheRead": null,
+        "cacheWrite": null,
+        "total": null,
+        "models": [],
+        "reason": "session_not_indexed"
+      }
+    },
+    {
+      "function": "collect.token_count",
+      "input": {
+        "value": 200
+      },
+      "expected": 200
+    },
+    {
+      "function": "collect.token_count",
+      "input": {
+        "value": 40
+      },
+      "expected": 40
+    },
+    {
+      "function": "collect.token_count",
+      "input": {
+        "value": 60
+      },
+      "expected": 60
+    },
+    {
+      "function": "collect.token_count",
+      "input": {
+        "value": 10
+      },
+      "expected": 10
+    },
+    {
+      "function": "collect.weighted",
+      "input": {
+        "row": {
+          "session": "codex:00000000-0000-4000-8000-000000000001",
+          "harness": "codex",
+          "model": "gpt-other",
+          "day": "2026-11-02",
+          "project": "/private/DO-NOT-EXPOSE",
+          "input": 100,
+          "output": 20,
+          "cacheRead": 30,
+          "cacheWrite": 5,
+          "reasoning": 19
+        },
+        "kind": "codex"
+      },
+      "expected": 268.0
+    },
+    {
+      "function": "collect.token_count",
+      "input": {
+        "value": 310
+      },
+      "expected": 310
+    },
+    {
+      "function": "collect.aggregate",
+      "input": {
+        "store": {
+          "version": 1,
+          "files": {
+            "first": {
+              "rows": [
+                {
+                  "session": "codex:00000000-0000-4000-8000-000000000001",
+                  "harness": "codex",
+                  "model": "gpt-demo",
+                  "day": "2026-11-01",
+                  "project": "/private/DO-NOT-EXPOSE",
+                  "input": 100,
+                  "output": 20,
+                  "cacheRead": 30,
+                  "cacheWrite": 5,
+                  "reasoning": 10
+                },
+                {
+                  "session": "codex:00000000-0000-4000-8000-000000000001",
+                  "harness": "codex",
+                  "model": "gpt-other",
+                  "day": "2026-11-02",
+                  "project": "/private/DO-NOT-EXPOSE",
+                  "input": 100,
+                  "output": 20,
+                  "cacheRead": 30,
+                  "cacheWrite": 5,
+                  "reasoning": 19
+                }
+              ]
+            }
+          },
+          "lastScanAt": "2026-11-02T03:00:00.000Z"
+        },
+        "since": null,
+        "_fallback": "2026-10-31"
+      },
+      "expected": {
+        "codex:00000000-0000-4000-8000-000000000001": {
+          "input": 200,
+          "output": 40,
+          "cacheRead": 60,
+          "cacheWrite": 10,
+          "models": [
+            "gpt-demo",
+            "gpt-other"
+          ],
+          "week": 536.0,
+          "total": 310
+        }
+      }
+    },
+    {
+      "function": "collect.unknown",
+      "input": {
+        "terminal": {
+          "address": "t2",
+          "agent": "codex"
+        },
+        "reason": "session_unconfirmed"
+      },
+      "expected": {
+        "terminal": "t2",
+        "agent": "codex",
+        "known": false,
+        "input": null,
+        "output": null,
+        "cacheRead": null,
+        "cacheWrite": null,
+        "total": null,
+        "models": [],
+        "reason": "session_unconfirmed"
+      }
+    },
+    {
+      "function": "collect.unknown",
+      "input": {
+        "terminal": {
+          "address": "t3",
+          "agent": "codex"
+        },
+        "reason": "session_not_indexed"
+      },
+      "expected": {
+        "terminal": "t3",
+        "agent": "codex",
+        "known": false,
+        "input": null,
+        "output": null,
+        "cacheRead": null,
+        "cacheWrite": null,
+        "total": null,
+        "models": [],
+        "reason": "session_not_indexed"
+      }
+    },
+    {
+      "function": "collect.token_count",
+      "input": {
+        "value": 25
+      },
+      "expected": 25
+    },
+    {
+      "function": "collect.weighted",
+      "input": {
+        "row": {
+          "session": "codex:00000000-0000-4000-8000-000000000001",
+          "harness": "codex",
+          "model": "gpt-demo",
+          "day": "2026-11-01",
+          "project": "/private/DO-NOT-EXPOSE",
+          "input": 0,
+          "output": 5,
+          "cacheRead": 0,
+          "cacheWrite": 0,
+          "reasoning": 5
+        },
+        "kind": "codex"
+      },
+      "expected": 40.0
+    },
+    {
+      "function": "collect.token_count",
+      "input": {
+        "value": 160
+      },
+      "expected": 160
+    },
+    {
+      "function": "collect.aggregate",
+      "input": {
+        "store": {
+          "version": 1,
+          "files": {
+            "first": {
+              "rows": [
+                {
+                  "session": "codex:00000000-0000-4000-8000-000000000001",
+                  "harness": "codex",
+                  "model": "gpt-demo",
+                  "day": "2026-11-01",
+                  "project": "/private/DO-NOT-EXPOSE",
+                  "input": 100,
+                  "output": 20,
+                  "cacheRead": 30,
+                  "cacheWrite": 5,
+                  "reasoning": 10
+                }
+              ]
+            },
+            "continuation": {
+              "rows": [
+                {
+                  "session": "codex:00000000-0000-4000-8000-000000000001",
+                  "harness": "codex",
+                  "model": "gpt-demo",
+                  "day": "2026-11-01",
+                  "project": "/private/DO-NOT-EXPOSE",
+                  "input": 0,
+                  "output": 5,
+                  "cacheRead": 0,
+                  "cacheWrite": 0,
+                  "reasoning": 5
+                }
+              ],
+              "state": {
+                "total_tokens": 999999
+              }
+            },
+            "duplicate": {
+              "rows": []
+            }
+          },
+          "lastScanAt": "2026-11-02T03:00:00.000Z",
+          "dedup": {
+            "synthetic-stream-key": [
+              1,
+              0,
+              999999
+            ]
+          },
+          "tasks": {
+            "synthetic-task": [
+              999999
+            ]
+          }
+        },
+        "since": null,
+        "_fallback": "2026-10-31"
+      },
+      "expected": {
+        "codex:00000000-0000-4000-8000-000000000001": {
+          "input": 100,
+          "output": 25,
+          "cacheRead": 30,
+          "cacheWrite": 5,
+          "models": [
+            "gpt-demo"
+          ],
+          "week": 308.0,
+          "total": 160
+        }
+      }
+    },
+    {
+      "function": "collect.aggregate",
+      "input": {
+        "store": {
+          "version": 2,
+          "files": {
+            "first": {
+              "rows": [
+                {
+                  "session": "codex:00000000-0000-4000-8000-000000000001",
+                  "harness": "codex",
+                  "model": "gpt-demo",
+                  "day": "2026-11-01",
+                  "project": "/private/DO-NOT-EXPOSE",
+                  "input": 100,
+                  "output": 20,
+                  "cacheRead": 30,
+                  "cacheWrite": 5,
+                  "reasoning": 10
+                }
+              ]
+            }
+          },
+          "lastScanAt": "2026-11-02T03:00:00.000Z"
+        },
+        "since": null,
+        "_fallback": "2026-10-31"
+      },
+      "error": "invalid_store"
+    },
+    {
+      "function": "collect.unknown",
+      "input": {
+        "terminal": {
+          "address": "t0",
+          "agent": "codex"
+        },
+        "reason": "session_unconfirmed"
+      },
+      "expected": {
+        "terminal": "t0",
+        "agent": "codex",
+        "known": false,
+        "input": null,
+        "output": null,
+        "cacheRead": null,
+        "cacheWrite": null,
+        "total": null,
+        "models": [],
+        "reason": "session_unconfirmed"
+      }
+    },
+    {
+      "function": "collect.unknown",
+      "input": {
+        "terminal": {
+          "address": "t1",
+          "agent": "codex"
+        },
+        "reason": "session_not_indexed"
+      },
+      "expected": {
+        "terminal": "t1",
+        "agent": "codex",
+        "known": false,
+        "input": null,
+        "output": null,
+        "cacheRead": null,
+        "cacheWrite": null,
+        "total": null,
+        "models": [],
+        "reason": "session_not_indexed"
+      }
+    },
+    {
+      "function": "collect.unknown",
+      "input": {
+        "terminal": {
+          "address": "t2",
+          "agent": "codex"
+        },
+        "reason": "ambiguous_session"
+      },
+      "expected": {
+        "terminal": "t2",
+        "agent": "codex",
+        "known": false,
+        "input": null,
+        "output": null,
+        "cacheRead": null,
+        "cacheWrite": null,
+        "total": null,
+        "models": [],
+        "reason": "ambiguous_session"
+      }
+    },
+    {
+      "function": "collect.weighted",
+      "input": {
+        "row": {
+          "session": "claude:00000000-0000-4000-8000-000000000001",
+          "harness": "claude",
+          "model": "gpt-demo",
+          "day": "2026-11-03",
+          "project": "/private/DO-NOT-EXPOSE",
+          "input": 100,
+          "output": 0,
+          "cacheRead": 0,
+          "cacheWrite": 0,
+          "reasoning": 10
+        },
+        "kind": "claude"
+      },
+      "expected": 100.0
+    },
+    {
+      "function": "collect.weighted",
+      "input": {
+        "row": {
+          "session": "claude:00000000-0000-4000-8000-000000000002",
+          "harness": "claude",
+          "model": "gpt-demo",
+          "day": "2026-11-02",
+          "project": "/private/DO-NOT-EXPOSE",
+          "input": 0,
+          "output": 60,
+          "cacheRead": 0,
+          "cacheWrite": 0,
+          "reasoning": 10
+        },
+        "kind": "claude"
+      },
+      "expected": 300.0
+    },
+    {
+      "function": "collect.token_count",
+      "input": {
+        "value": 10000
+      },
+      "expected": 10000
+    },
+    {
+      "function": "collect.token_count",
+      "input": {
+        "value": 10100
+      },
+      "expected": 10100
+    },
+    {
+      "function": "collect.aggregate",
+      "input": {
+        "store": {
+          "version": 1,
+          "files": {
+            "first": {
+              "rows": [
+                {
+                  "session": "claude:00000000-0000-4000-8000-000000000001",
+                  "harness": "claude",
+                  "model": "gpt-demo",
+                  "day": "2026-11-03",
+                  "project": "/private/DO-NOT-EXPOSE",
+                  "input": 100,
+                  "output": 0,
+                  "cacheRead": 0,
+                  "cacheWrite": 0,
+                  "reasoning": 10
+                },
+                {
+                  "session": "claude:00000000-0000-4000-8000-000000000002",
+                  "harness": "claude",
+                  "model": "gpt-demo",
+                  "day": "2026-11-02",
+                  "project": "/private/DO-NOT-EXPOSE",
+                  "input": 0,
+                  "output": 60,
+                  "cacheRead": 0,
+                  "cacheWrite": 0,
+                  "reasoning": 10
+                },
+                {
+                  "session": "claude:00000000-0000-4000-8000-000000000001",
+                  "harness": "claude",
+                  "model": "gpt-demo",
+                  "day": "2026-10-20",
+                  "project": "/private/DO-NOT-EXPOSE",
+                  "input": 10000,
+                  "output": 0,
+                  "cacheRead": 0,
+                  "cacheWrite": 0,
+                  "reasoning": 10
+                }
+              ]
+            }
+          },
+          "lastScanAt": "2026-11-02T03:00:00.000Z"
+        },
+        "since": "2026-10-28",
+        "_fallback": "2026-10-31"
+      },
+      "expected": {
+        "claude:00000000-0000-4000-8000-000000000001": {
+          "input": 10100,
+          "output": 0,
+          "cacheRead": 0,
+          "cacheWrite": 0,
+          "models": [
+            "gpt-demo"
+          ],
+          "week": 100.0,
+          "total": 10100
+        },
+        "claude:00000000-0000-4000-8000-000000000002": {
+          "input": 0,
+          "output": 60,
+          "cacheRead": 0,
+          "cacheWrite": 0,
+          "models": [
+            "gpt-demo"
+          ],
+          "week": 300.0,
+          "total": 60
+        }
+      }
+    },
+    {
+      "function": "collect.aggregate",
+      "input": {
+        "store": {
+          "version": 1,
+          "files": {
+            "first": {
+              "rows": [
+                {
+                  "session": "claude:00000000-0000-4000-8000-000000000001",
+                  "harness": "claude",
+                  "model": "gpt-demo",
+                  "day": "2026-11-03",
+                  "project": "/private/DO-NOT-EXPOSE",
+                  "input": 100,
+                  "output": 0,
+                  "cacheRead": 0,
+                  "cacheWrite": 0,
+                  "reasoning": 10
+                },
+                {
+                  "session": "claude:00000000-0000-4000-8000-000000000002",
+                  "harness": "claude",
+                  "model": "gpt-demo",
+                  "day": "2026-11-02",
+                  "project": "/private/DO-NOT-EXPOSE",
+                  "input": 0,
+                  "output": 60,
+                  "cacheRead": 0,
+                  "cacheWrite": 0,
+                  "reasoning": 10
+                },
+                {
+                  "session": "claude:00000000-0000-4000-8000-000000000001",
+                  "harness": "claude",
+                  "model": "gpt-demo",
+                  "day": "2026-10-20",
+                  "project": "/private/DO-NOT-EXPOSE",
+                  "input": 10000,
+                  "output": 0,
+                  "cacheRead": 0,
+                  "cacheWrite": 0,
+                  "reasoning": 10
+                }
+              ]
+            }
+          },
+          "lastScanAt": "2026-11-02T03:00:00.000Z"
+        },
+        "since": null,
+        "_fallback": "2026-10-28"
+      },
+      "expected": {
+        "claude:00000000-0000-4000-8000-000000000001": {
+          "input": 10100,
+          "output": 0,
+          "cacheRead": 0,
+          "cacheWrite": 0,
+          "models": [
+            "gpt-demo"
+          ],
+          "week": 100.0,
+          "total": 10100
+        },
+        "claude:00000000-0000-4000-8000-000000000002": {
+          "input": 0,
+          "output": 60,
+          "cacheRead": 0,
+          "cacheWrite": 0,
+          "models": [
+            "gpt-demo"
+          ],
+          "week": 300.0,
+          "total": 60
+        }
+      }
+    },
+    {
+      "function": "meta.choice",
+      "input": {
+        "value": "claude-opus-5-5",
+        "allowed": null
+      },
+      "expected": "claude-opus-5-5"
+    },
+    {
+      "function": "meta.choice",
+      "input": {
+        "value": "fast",
+        "allowed": null
+      },
+      "expected": "fast"
+    },
+    {
+      "function": "meta.choice",
+      "input": {
+        "value": "high",
+        "allowed": null
+      },
+      "expected": "high"
+    },
+    {
+      "function": "meta.choice",
+      "input": {
+        "value": "bypassPermissions",
+        "allowed": [
+          "acceptEdits",
+          "auto",
+          "bypassPermissions",
+          "default",
+          "dontAsk",
+          "plan"
+        ]
+      },
+      "expected": "bypassPermissions"
+    },
+    {
+      "function": "meta.claude_meta",
+      "input": {
+        "records": [
+          {
+            "record": {
+              "type": "permission-mode",
+              "permissionMode": "default"
+            },
+            "repeat": 1
+          },
+          {
+            "record": {
+              "type": "attachment",
+              "pad": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+            },
+            "repeat": 700
+          },
+          {
+            "record": {
+              "type": "assistant",
+              "effort": "low",
+              "message": {
+                "model": "claude-sonnet-5-5",
+                "usage": {
+                  "speed": "standard"
+                }
+              }
+            },
+            "repeat": 1
+          },
+          {
+            "record": {
+              "type": "permission-mode",
+              "permissionMode": "bypassPermissions"
+            },
+            "repeat": 1
+          },
+          {
+            "record": {
+              "type": "assistant",
+              "effort": "high",
+              "message": {
+                "model": "claude-opus-5-5",
+                "usage": {
+                  "speed": "fast"
+                }
+              }
+            },
+            "repeat": 1
+          },
+          {
+            "record": {
+              "type": "assistant",
+              "isSidechain": true,
+              "message": {
+                "model": "claude-haiku-5-5",
+                "usage": {}
+              }
+            },
+            "repeat": 1
+          }
+        ]
+      },
+      "expected": {
+        "model": "claude-opus-5-5",
+        "speed": "빠름",
+        "effort": "high",
+        "permission": "bypassPermissions"
+      }
+    },
+    {
+      "function": "meta.model_name",
+      "input": {
+        "model": "claude-opus-5-5"
+      },
+      "expected": "Opus 5.5"
+    },
+    {
+      "function": "meta.permission_level",
+      "input": {
+        "label": "bypassPermissions"
+      },
+      "expected": "full"
+    },
+    {
+      "function": "meta.choice",
+      "input": {
+        "value": "gpt-6.1-sol",
+        "allowed": null
+      },
+      "expected": "gpt-6.1-sol"
+    },
+    {
+      "function": "meta.choice",
+      "input": {
+        "value": null,
+        "allowed": null
+      },
+      "expected": null
+    },
+    {
+      "function": "meta.choice",
+      "input": {
+        "value": "medium",
+        "allowed": null
+      },
+      "expected": "medium"
+    },
+    {
+      "function": "meta.choice",
+      "input": {
+        "value": "never",
+        "allowed": null
+      },
+      "expected": "never"
+    },
+    {
+      "function": "meta.choice",
+      "input": {
+        "value": ":danger-full-access",
+        "allowed": null
+      },
+      "expected": ":danger-full-access"
+    },
+    {
+      "function": "meta.sandbox_of",
+      "input": {
+        "settings": {
+          "model": "gpt-6.1-sol",
+          "reasoning_effort": "medium",
+          "approval_policy": "never",
+          "service_tier": "fast",
+          "permission_profile": {
+            "type": "disabled"
+          },
+          "active_permission_profile": {
+            "id": ":danger-full-access"
+          }
+        }
+      },
+      "expected": "danger-full-access"
+    },
+    {
+      "function": "meta.codex_meta",
+      "input": {
+        "records": [
+          {
+            "record": {
+              "type": "turn_context",
+              "payload": {
+                "model": "gpt-6-luna",
+                "effort": "low",
+                "approval_policy": "on-request",
+                "sandbox_policy": {
+                  "type": "workspace-write"
+                }
+              }
+            },
+            "repeat": 1
+          },
+          {
+            "record": {
+              "type": "event_msg",
+              "payload": {
+                "type": "thread_settings_applied",
+                "thread_settings": {
+                  "model": "gpt-6.1-sol",
+                  "reasoning_effort": "medium",
+                  "approval_policy": "never",
+                  "service_tier": "fast",
+                  "permission_profile": {
+                    "type": "disabled"
+                  },
+                  "active_permission_profile": {
+                    "id": ":danger-full-access"
+                  }
+                }
+              }
+            },
+            "repeat": 1
+          }
+        ]
+      },
+      "expected": {
+        "model": "gpt-6.1-sol",
+        "effort": "medium",
+        "speed": "빠름",
+        "permission": "YOLO"
+      }
+    },
+    {
+      "function": "meta.model_name",
+      "input": {
+        "model": "gpt-6.1-sol"
+      },
+      "expected": "GPT-6.1-Sol"
+    },
+    {
+      "function": "meta.permission_level",
+      "input": {
+        "label": "YOLO"
+      },
+      "expected": "full"
+    },
+    {
+      "function": "meta.choice",
+      "input": {
+        "value": "gpt-6-luna",
+        "allowed": null
+      },
+      "expected": "gpt-6-luna"
+    },
+    {
+      "function": "meta.choice",
+      "input": {
+        "value": "low",
+        "allowed": null
+      },
+      "expected": "low"
+    },
+    {
+      "function": "meta.choice",
+      "input": {
+        "value": "on-request",
+        "allowed": null
+      },
+      "expected": "on-request"
+    },
+    {
+      "function": "meta.choice",
+      "input": {
+        "value": "workspace-write",
+        "allowed": null
+      },
+      "expected": "workspace-write"
+    },
+    {
+      "function": "meta.sandbox_of",
+      "input": {
+        "settings": {
+          "model": "gpt-6-luna",
+          "effort": "low",
+          "approval_policy": "on-request",
+          "sandbox_policy": {
+            "type": "workspace-write"
+          }
+        }
+      },
+      "expected": "workspace-write"
+    },
+    {
+      "function": "meta.codex_meta",
+      "input": {
+        "records": [
+          {
+            "record": {
+              "type": "turn_context",
+              "payload": {
+                "model": "gpt-6-luna",
+                "effort": "low",
+                "approval_policy": "on-request",
+                "sandbox_policy": {
+                  "type": "workspace-write"
+                }
+              }
+            },
+            "repeat": 1
+          }
+        ]
+      },
+      "expected": {
+        "model": "gpt-6-luna",
+        "effort": "low",
+        "speed": null,
+        "permission": "on-request·workspace"
+      }
+    },
+    {
+      "function": "meta.model_name",
+      "input": {
+        "model": "gpt-6-luna"
+      },
+      "expected": "GPT-6-Luna"
+    },
+    {
+      "function": "meta.permission_level",
+      "input": {
+        "label": "on-request·workspace"
+      },
+      "expected": "ask"
+    },
+    {
+      "function": "meta.model_name",
+      "input": {
+        "model": "claude-sonnet-5-5[1m]"
+      },
+      "expected": "Sonnet 5.5 1M"
+    },
+    {
+      "function": "meta.model_name",
+      "input": {
+        "model": "claude-haiku-5-5-20261001"
+      },
+      "expected": "Haiku 5.5"
+    },
+    {
+      "function": "meta.model_name",
+      "input": {
+        "model": "o9"
+      },
+      "expected": "o9"
+    },
+    {
+      "function": "meta.choice",
+      "input": {
+        "value": "claude-fable-5-1",
+        "allowed": null
+      },
+      "expected": "claude-fable-5-1"
+    },
+    {
+      "function": "meta.choice",
+      "input": {
+        "value": "standard",
+        "allowed": null
+      },
+      "expected": "standard"
+    },
+    {
+      "function": "meta.choice",
+      "input": {
+        "value": "plan",
+        "allowed": [
+          "acceptEdits",
+          "auto",
+          "bypassPermissions",
+          "default",
+          "dontAsk",
+          "plan"
+        ]
+      },
+      "expected": "plan"
+    },
+    {
+      "function": "meta.claude_meta",
+      "input": {
+        "records": [
+          {
+            "record": {
+              "type": "permission-mode",
+              "permissionMode": "plan"
+            },
+            "repeat": 1
+          },
+          {
+            "record": {
+              "type": "attachment",
+              "pad": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+            },
+            "repeat": 900
+          },
+          {
+            "record": {
+              "type": "assistant",
+              "effort": "medium",
+              "message": {
+                "model": "claude-fable-5-1",
+                "usage": {
+                  "speed": "standard"
+                }
+              }
+            },
+            "repeat": 1
+          }
+        ]
+      },
+      "expected": {
+        "model": "claude-fable-5-1",
+        "speed": "표준",
+        "effort": "medium",
+        "permission": "plan"
+      }
+    },
+    {
+      "function": "meta.model_name",
+      "input": {
+        "model": "claude-fable-5-1"
+      },
+      "expected": "Fable 5.1"
+    },
+    {
+      "function": "meta.permission_level",
+      "input": {
+        "label": "plan"
+      },
+      "expected": "ask"
+    },
+    {
+      "function": "meta.choice",
+      "input": {
+        "value": null,
+        "allowed": [
+          "acceptEdits",
+          "auto",
+          "bypassPermissions",
+          "default",
+          "dontAsk",
+          "plan"
+        ]
+      },
+      "expected": null
+    },
+    {
+      "function": "meta.claude_meta",
+      "input": {
+        "records": [
+          {
+            "record": {
+              "type": "user"
+            },
+            "repeat": 1
+          }
+        ]
+      },
+      "expected": {}
+    },
+    {
+      "function": "usage.percent",
+      "input": {
+        "value": "x"
+      },
+      "expected": null
+    },
+    {
+      "function": "usage.percent",
+      "input": {
+        "value": true
+      },
+      "expected": null
+    },
+    {
+      "function": "usage.claude_windows",
+      "input": {
+        "data": {
+          "five_hour": {
+            "utilization": "x"
+          },
+          "seven_day": {
+            "utilization": true
+          }
+        }
+      },
+      "expected": []
+    },
+    {
+      "function": "usage.percent",
+      "input": {
+        "value": null
+      },
+      "expected": null
+    },
+    {
+      "function": "usage.codex_rate",
+      "input": {
+        "rate": {
+          "primary_window": {
+            "used_percent": null
+          }
+        }
+      },
+      "expected": []
+    },
+    {
+      "function": "usage.codex_rate",
+      "input": {
+        "rate": null
+      },
+      "expected": []
+    },
+    {
+      "function": "usage.codex_windows",
+      "input": {
+        "data": {
+          "rate_limit": {
+            "primary_window": {
+              "used_percent": null
+            }
+          }
+        }
+      },
+      "expected": []
+    },
+    {
+      "function": "usage.percent",
+      "input": {
+        "value": 37.0
+      },
+      "expected": 37.0
+    },
+    {
+      "function": "usage.epoch",
+      "input": {
+        "value": "2030-01-07T23:00:00+00:00"
+      },
+      "expected": 1894057200
+    },
+    {
+      "function": "usage.percent",
+      "input": {
+        "value": 4.0
+      },
+      "expected": 4.0
+    },
+    {
+      "function": "usage.epoch",
+      "input": {
+        "value": null
+      },
+      "expected": null
+    },
+    {
+      "function": "usage.percent",
+      "input": {
+        "value": 37
+      },
+      "expected": 37.0
+    },
+    {
+      "function": "usage.claude_scope",
+      "input": {
+        "scope": null
+      },
+      "expected": null
+    },
+    {
+      "function": "usage.percent",
+      "input": {
+        "value": 12
+      },
+      "expected": 12.0
+    },
+    {
+      "function": "usage.short_name",
+      "input": {
+        "value": "Fable"
+      },
+      "expected": "Fable"
+    },
+    {
+      "function": "usage.claude_scope",
+      "input": {
+        "scope": {
+          "model": {
+            "id": null,
+            "display_name": "Fable"
+          },
+          "surface": null
+        }
+      },
+      "expected": "Fable"
+    },
+    {
+      "function": "usage.percent",
+      "input": {
+        "value": 3
+      },
+      "expected": 3.0
+    },
+    {
+      "function": "usage.short_name",
+      "input": {
+        "value": null
+      },
+      "expected": null
+    },
+    {
+      "function": "usage.short_name",
+      "input": {
+        "value": "model-x"
+      },
+      "expected": "model-x"
+    },
+    {
+      "function": "usage.claude_scope",
+      "input": {
+        "scope": {
+          "model": {
+            "id": "model-x",
+            "display_name": null
+          }
+        }
+      },
+      "expected": "model-x"
+    },
+    {
+      "function": "usage.percent",
+      "input": {
+        "value": 9
+      },
+      "expected": 9.0
+    },
+    {
+      "function": "usage.claude_windows",
+      "input": {
+        "data": {
+          "five_hour": null,
+          "seven_day": {
+            "utilization": 37.0,
+            "resets_at": "2030-01-07T23:00:00+00:00"
+          },
+          "seven_day_opus": null,
+          "seven_day_oauth_apps": {
+            "utilization": 4.0,
+            "resets_at": null
+          },
+          "limits": [
+            {
+              "kind": "weekly_all",
+              "percent": 37,
+              "resets_at": "2030-01-07T23:00:00+00:00",
+              "scope": null
+            },
+            {
+              "kind": "weekly_scoped",
+              "percent": 12,
+              "resets_at": "2030-01-07T23:00:00+00:00",
+              "scope": {
+                "model": {
+                  "id": null,
+                  "display_name": "Fable"
+                },
+                "surface": null
+              }
+            },
+            {
+              "kind": "weekly_scoped",
+              "percent": null,
+              "scope": {
+                "model": {
+                  "display_name": "Other"
+                }
+              }
+            },
+            {
+              "kind": "session_scoped",
+              "percent": 3,
+              "resets_at": null,
+              "scope": {
+                "model": {
+                  "id": "model-x",
+                  "display_name": null
+                }
+              }
+            },
+            {
+              "kind": "mystery",
+              "percent": 9,
+              "scope": null
+            },
+            "junk"
+          ]
+        }
+      },
+      "expected": [
+        {
+          "label": "7d",
+          "used": 37.0,
+          "reset": 1894057200
+        },
+        {
+          "label": "Oauth Apps 7d",
+          "used": 4.0,
+          "reset": null
+        },
+        {
+          "label": "Fable 7d",
+          "used": 12.0,
+          "reset": 1894057200
+        },
+        {
+          "label": "model-x 5h",
+          "used": 3.0,
+          "reset": null
+        }
+      ]
+    },
+    {
+      "function": "usage.percent",
+      "input": {
+        "value": 20
+      },
+      "expected": 20.0
+    },
+    {
+      "function": "usage.epoch",
+      "input": {
+        "value": 1893970800
+      },
+      "expected": 1893970800
+    },
+    {
+      "function": "usage.claude_windows",
+      "input": {
+        "data": {
+          "seven_day": null,
+          "limits": [
+            {
+              "kind": "weekly_all",
+              "percent": 20,
+              "resets_at": 1893970800,
+              "scope": null
+            }
+          ]
+        }
+      },
+      "expected": [
+        {
+          "label": "7d",
+          "used": 20.0,
+          "reset": 1893970800
+        }
+      ]
+    },
+    {
+      "function": "usage.claude_windows",
+      "input": {
+        "data": {
+          "seven_day": {
+            "utilization": 12
+          }
+        }
+      },
+      "expected": [
+        {
+          "label": "7d",
+          "used": 12.0,
+          "reset": null
+        }
+      ]
+    },
+    {
+      "function": "usage.percent",
+      "input": {
+        "value": 23
+      },
+      "expected": 23.0
+    },
+    {
+      "function": "usage.epoch",
+      "input": {
+        "value": "2026-11-03T16:00:00+00:00"
+      },
+      "expected": 1793721600
+    },
+    {
+      "function": "usage.percent",
+      "input": {
+        "value": 140
+      },
+      "expected": 100.0
+    },
+    {
+      "function": "usage.claude_windows",
+      "input": {
+        "data": {
+          "five_hour": {
+            "utilization": 23,
+            "resets_at": "2026-11-03T16:00:00+00:00"
+          },
+          "seven_day": {
+            "utilization": 140
+          }
+        }
+      },
+      "expected": [
+        {
+          "label": "5h",
+          "used": 23.0,
+          "reset": 1793721600
+        },
+        {
+          "label": "7d",
+          "used": 100.0,
+          "reset": null
+        }
+      ]
+    },
+    {
+      "function": "usage.percent",
+      "input": {
+        "value": 1
+      },
+      "expected": 1.0
+    },
+    {
+      "function": "usage.label_for",
+      "input": {
+        "seconds": 604800,
+        "fallback": "5h"
+      },
+      "expected": "7d"
+    },
+    {
+      "function": "usage.codex_rate",
+      "input": {
+        "rate": {
+          "primary_window": {
+            "used_percent": 1,
+            "limit_window_seconds": 604800,
+            "reset_at": 1893970800
+          },
+          "secondary_window": null
+        }
+      },
+      "expected": [
+        {
+          "label": "7d",
+          "used": 1.0,
+          "reset": 1893970800
+        }
+      ]
+    },
+    {
+      "function": "usage.short_name",
+      "input": {
+        "value": "Spark"
+      },
+      "expected": "Spark"
+    },
+    {
+      "function": "usage.percent",
+      "input": {
+        "value": 5
+      },
+      "expected": 5.0
+    },
+    {
+      "function": "usage.codex_rate",
+      "input": {
+        "rate": {
+          "primary_window": {
+            "used_percent": 5,
+            "limit_window_seconds": 604800,
+            "reset_at": 1893970800
+          }
+        }
+      },
+      "expected": [
+        {
+          "label": "7d",
+          "used": 5.0,
+          "reset": 1893970800
+        }
+      ]
+    },
+    {
+      "function": "usage.short_name",
+      "input": {
+        "value": "Empty"
+      },
+      "expected": "Empty"
+    },
+    {
+      "function": "usage.percent",
+      "input": {
+        "value": 2
+      },
+      "expected": 2.0
+    },
+    {
+      "function": "usage.codex_rate",
+      "input": {
+        "rate": {
+          "primary_window": {
+            "used_percent": 2,
+            "limit_window_seconds": 604800,
+            "reset_at": 1893970800
+          }
+        }
+      },
+      "expected": [
+        {
+          "label": "7d",
+          "used": 2.0,
+          "reset": 1893970800
+        }
+      ]
+    },
+    {
+      "function": "usage.codex_windows",
+      "input": {
+        "data": {
+          "rate_limit": {
+            "primary_window": {
+              "used_percent": 1,
+              "limit_window_seconds": 604800,
+              "reset_at": 1893970800
+            },
+            "secondary_window": null
+          },
+          "additional_rate_limits": [
+            {
+              "limit_name": "Spark",
+              "rate_limit": {
+                "primary_window": {
+                  "used_percent": 5,
+                  "limit_window_seconds": 604800,
+                  "reset_at": 1893970800
+                }
+              }
+            },
+            {
+              "limit_name": "Empty",
+              "rate_limit": null
+            },
+            null
+          ],
+          "code_review_rate_limit": {
+            "primary_window": {
+              "used_percent": 2,
+              "limit_window_seconds": 604800,
+              "reset_at": 1893970800
+            }
+          }
+        }
+      },
+      "expected": [
+        {
+          "label": "7d",
+          "used": 1.0,
+          "reset": 1893970800
+        },
+        {
+          "label": "Spark 7d",
+          "used": 5.0,
+          "reset": 1893970800
+        },
+        {
+          "label": "code_review 7d",
+          "used": 2.0,
+          "reset": 1893970800
+        }
+      ]
+    },
+    {
+      "function": "usage.codex_windows",
+      "input": {
+        "data": {
+          "rate_limit": {
+            "primary_window": {
+              "used_percent": 1,
+              "limit_window_seconds": 604800,
+              "reset_at": 1893970800
+            },
+            "secondary_window": null
+          },
+          "additional_rate_limits": null,
+          "code_review_rate_limit": null
+        }
+      },
+      "expected": [
+        {
+          "label": "7d",
+          "used": 1.0,
+          "reset": 1893970800
+        }
+      ]
+    },
+    {
+      "function": "usage.percent",
+      "input": {
+        "value": 100
+      },
+      "expected": 100.0
+    },
+    {
+      "function": "usage.epoch",
+      "input": {
+        "value": 1793776210
+      },
+      "expected": 1793776210
+    },
+    {
+      "function": "usage.percent",
+      "input": {
+        "value": 12.34
+      },
+      "expected": 12.3
+    },
+    {
+      "function": "usage.label_for",
+      "input": {
+        "seconds": 18000,
+        "fallback": "7d"
+      },
+      "expected": "5h"
+    },
+    {
+      "function": "usage.epoch",
+      "input": {
+        "value": 1793700000
+      },
+      "expected": 1793700000
+    },
+    {
+      "function": "usage.codex_rate",
+      "input": {
+        "rate": {
+          "primary_window": {
+            "used_percent": 100,
+            "limit_window_seconds": 604800,
+            "reset_at": 1793776210
+          },
+          "secondary_window": {
+            "used_percent": 12.34,
+            "limit_window_seconds": 18000,
+            "reset_at": 1793700000
+          }
+        }
+      },
+      "expected": [
+        {
+          "label": "5h",
+          "used": 12.3,
+          "reset": 1793700000
+        },
+        {
+          "label": "7d",
+          "used": 100.0,
+          "reset": 1793776210
+        }
+      ]
+    },
+    {
+      "function": "usage.codex_windows",
+      "input": {
+        "data": {
+          "rate_limit": {
+            "primary_window": {
+              "used_percent": 100,
+              "limit_window_seconds": 604800,
+              "reset_at": 1793776210
+            },
+            "secondary_window": {
+              "used_percent": 12.34,
+              "limit_window_seconds": 18000,
+              "reset_at": 1793700000
+            }
+          }
+        }
+      },
+      "expected": [
+        {
+          "label": "5h",
+          "used": 12.3,
+          "reset": 1793700000
+        },
+        {
+          "label": "7d",
+          "used": 100.0,
+          "reset": 1793776210
+        }
+      ]
+    },
+    {
+      "function": "usage.codex_credits",
+      "input": {
+        "data": {}
+      },
+      "expected": null
+    },
+    {
+      "function": "usage.codex_credits",
+      "input": {
+        "data": {
+          "credits": []
+        }
+      },
+      "expected": null
+    },
+    {
+      "function": "usage.codex_credits",
+      "input": {
+        "data": {
+          "credits": {
+            "balance": 0,
+            "has_credits": false
+          }
+        }
+      },
+      "expected": {
+        "balance": "0",
+        "has_credits": false,
+        "unlimited": false
+      }
+    },
+    {
+      "function": "usage.codex_credits",
+      "input": {
+        "data": {
+          "credits": {
+            "unlimited": true
+          }
+        }
+      },
+      "expected": {
+        "balance": null,
+        "has_credits": null,
+        "unlimited": true
+      }
+    },
+    {
+      "function": "usage.codex_credits",
+      "input": {
+        "data": {
+          "credits": {
+            "balance": true,
+            "has_credits": "yes"
+          }
+        }
+      },
+      "expected": {
+        "balance": null,
+        "has_credits": null,
+        "unlimited": false
+      }
+    },
+    {
+      "function": "usage.codex_credits",
+      "input": {
+        "data": {
+          "credits": {
+            "balance": -1,
+            "has_credits": "yes"
+          }
+        }
+      },
+      "expected": {
+        "balance": null,
+        "has_credits": null,
+        "unlimited": false
+      }
+    },
+    {
+      "function": "usage.codex_credits",
+      "input": {
+        "data": {
+          "credits": {
+            "balance": "NaN",
+            "has_credits": "yes"
+          }
+        }
+      },
+      "expected": {
+        "balance": null,
+        "has_credits": null,
+        "unlimited": false
+      }
+    },
+    {
+      "function": "usage.codex_credits",
+      "input": {
+        "data": {
+          "credits": {
+            "balance": "Infinity",
+            "has_credits": "yes"
+          }
+        }
+      },
+      "expected": {
+        "balance": null,
+        "has_credits": null,
+        "unlimited": false
+      }
+    },
+    {
+      "function": "usage.codex_credits",
+      "input": {
+        "data": {
+          "credits": {
+            "balance": "private backend text",
+            "has_credits": "yes"
+          }
+        }
+      },
+      "expected": {
+        "balance": null,
+        "has_credits": null,
+        "unlimited": false
+      }
+    },
+    {
+      "function": "usage.codex_credits",
+      "input": {
+        "data": {
+          "credits": {
+            "balance": "1e100",
+            "has_credits": "yes"
+          }
+        }
+      },
+      "expected": {
+        "balance": null,
+        "has_credits": null,
+        "unlimited": false
+      }
+    },
+    {
+      "function": "usage.codex_credits",
+      "input": {
+        "data": {
+          "credits": {
+            "balance": {},
+            "has_credits": "yes"
+          }
+        }
+      },
+      "expected": {
+        "balance": null,
+        "has_credits": null,
+        "unlimited": false
+      }
+    },
+    {
+      "function": "usage.codex_credits",
+      "input": {
+        "data": {
+          "credits": {
+            "balance": null,
+            "has_credits": "yes"
+          }
+        }
+      },
+      "expected": {
+        "balance": null,
+        "has_credits": null,
+        "unlimited": false
+      }
+    },
+    {
+      "function": "usage.label_for",
+      "input": {
+        "seconds": null,
+        "fallback": "5h"
+      },
+      "expected": "5h"
+    },
+    {
+      "function": "usage.codex_rate",
+      "input": {
+        "rate": {
+          "limit_reached": true,
+          "primary_window": {
+            "used_percent": 100
+          }
+        }
+      },
+      "expected": [
+        {
+          "label": "5h",
+          "used": 100.0,
+          "reset": null
+        }
+      ]
+    },
+    {
+      "function": "usage.codex_windows",
+      "input": {
+        "data": {
+          "rate_limit": {
+            "limit_reached": true,
+            "primary_window": {
+              "used_percent": 100
+            }
+          },
+          "credits": {
+            "balance": "1234.50",
+            "has_credits": true,
+            "unlimited": false
+          }
+        }
+      },
+      "expected": [
+        {
+          "label": "5h",
+          "used": 100.0,
+          "reset": null
+        }
+      ]
+    },
+    {
+      "function": "usage.codex_credits",
+      "input": {
+        "data": {
+          "rate_limit": {
+            "limit_reached": true,
+            "primary_window": {
+              "used_percent": 100
+            }
+          },
+          "credits": {
+            "balance": "1234.50",
+            "has_credits": true,
+            "unlimited": false
+          }
+        }
+      },
+      "expected": {
+        "balance": "1234.5",
+        "has_credits": true,
+        "unlimited": false
+      }
+    },
+    {
+      "function": "usage.codex_workspace",
+      "input": {
+        "data": {
+          "rate_limit": {
+            "limit_reached": true,
+            "primary_window": {
+              "used_percent": 100
+            }
+          },
+          "credits": {
+            "balance": "1234.50",
+            "has_credits": true,
+            "unlimited": false
+          }
+        }
+      },
+      "expected": {
+        "spend_reached": null,
+        "overage_reached": null,
+        "reached_type": null
+      }
+    },
+    {
+      "function": "usage.response_shape",
+      "input": {
+        "value": "secret-plan",
+        "depth": 1
+      },
+      "expected": "str"
+    },
+    {
+      "function": "usage.response_shape",
+      "input": {
+        "value": true,
+        "depth": 2
+      },
+      "expected": "bool"
+    },
+    {
+      "function": "usage.response_shape",
+      "input": {
+        "value": null,
+        "depth": 2
+      },
+      "expected": "null"
+    },
+    {
+      "function": "usage.response_shape",
+      "input": {
+        "value": {
+          "allowed": true,
+          "primary_window": null
+        },
+        "depth": 1
+      },
+      "expected": {
+        "allowed": "bool",
+        "primary_window": "null"
+      }
+    },
+    {
+      "function": "usage.response_shape",
+      "input": {
+        "value": "x@example.com",
+        "depth": 3
+      },
+      "expected": "str"
+    },
+    {
+      "function": "usage.response_shape",
+      "input": {
+        "value": 3,
+        "depth": 3
+      },
+      "expected": "int"
+    },
+    {
+      "function": "usage.response_shape",
+      "input": {
+        "value": {
+          "name": "x@example.com",
+          "n": 3
+        },
+        "depth": 2
+      },
+      "expected": {
+        "name": "str",
+        "n": "int"
+      }
+    },
+    {
+      "function": "usage.response_shape",
+      "input": {
+        "value": [
+          {
+            "name": "x@example.com",
+            "n": 3
+          }
+        ],
+        "depth": 1
+      },
+      "expected": [
+        {
+          "name": "str",
+          "n": "int"
+        }
+      ]
+    },
+    {
+      "function": "usage.response_shape",
+      "input": {
+        "value": [],
+        "depth": 1
+      },
+      "expected": []
+    },
+    {
+      "function": "usage.response_shape",
+      "input": {
+        "value": {
+          "plan_type": "secret-plan",
+          "rate_limit": {
+            "allowed": true,
+            "primary_window": null
+          },
+          "items": [
+            {
+              "name": "x@example.com",
+              "n": 3
+            }
+          ],
+          "empty": []
+        },
+        "depth": 0
+      },
+      "expected": {
+        "plan_type": "str",
+        "rate_limit": {
+          "allowed": "bool",
+          "primary_window": "null"
+        },
+        "items": [
+          {
+            "name": "str",
+            "n": "int"
+          }
+        ],
+        "empty": []
+      }
+    },
+    {
+      "function": "usage.codex_workspace",
+      "input": {
+        "data": {
+          "spend_control": {
+            "reached": true,
+            "individual_limit": null
+          },
+          "credits": {
+            "overage_limit_reached": false
+          },
+          "rate_limit_reached_type": "workspace_credits"
+        }
+      },
+      "expected": {
+        "spend_reached": true,
+        "overage_reached": false,
+        "reached_type": "workspace_credits"
+      }
+    },
+    {
+      "function": "usage.codex_workspace",
+      "input": {
+        "data": {
+          "spend_control": {
+            "reached": "yes"
+          },
+          "rate_limit_reached_type": "Some Text!"
+        }
+      },
+      "expected": {
+        "spend_reached": null,
+        "overage_reached": null,
+        "reached_type": null
+      }
+    },
+    {
+      "function": "resets.window_label",
+      "input": {
+        "seconds": 604800
+      },
+      "expected": "7일"
+    },
+    {
+      "function": "resets.usable",
+      "input": {
+        "details": {
+          "credits": [
+            {
+              "id": "late",
+              "status": "available",
+              "reset_type": "codex_rate_limits",
+              "expires_at": "2026-12-01T00:00:00Z"
+            },
+            {
+              "id": "used",
+              "status": "redeemed",
+              "expires_at": "2026-11-01T00:00:00Z"
+            },
+            {
+              "id": "plan",
+              "status": "available",
+              "is_supported_by_plan": false,
+              "expires_at": "2026-11-02T00:00:00Z"
+            },
+            {
+              "id": "other",
+              "status": "available",
+              "reset_type": "something_else",
+              "expires_at": "2026-11-03T00:00:00Z"
+            },
+            {
+              "id": "undated",
+              "status": "available"
+            },
+            {
+              "id": "soon",
+              "status": "available",
+              "reset_type": "codex_rate_limits",
+              "expires_at": "2026-11-06T00:00:00Z"
+            }
+          ]
+        }
+      },
+      "expected": [
+        {
+          "id": "soon",
+          "expires": "2026-11-06T00:00:00Z"
+        },
+        {
+          "id": "late",
+          "expires": "2026-12-01T00:00:00Z"
+        },
+        {
+          "id": "undated",
+          "expires": null
+        }
+      ]
+    },
+    {
+      "function": "resets.summary",
+      "input": {
+        "usage": {
+          "rate_limit": {
+            "allowed": false,
+            "limit_reached": true,
+            "primary_window": {
+              "used_percent": 100,
+              "limit_window_seconds": 604800,
+              "reset_at": 1793776210
+            }
+          }
+        },
+        "details": {
+          "credits": [
+            {
+              "id": "late",
+              "status": "available",
+              "reset_type": "codex_rate_limits",
+              "expires_at": "2026-12-01T00:00:00Z"
+            },
+            {
+              "id": "used",
+              "status": "redeemed",
+              "expires_at": "2026-11-01T00:00:00Z"
+            },
+            {
+              "id": "plan",
+              "status": "available",
+              "is_supported_by_plan": false,
+              "expires_at": "2026-11-02T00:00:00Z"
+            },
+            {
+              "id": "other",
+              "status": "available",
+              "reset_type": "something_else",
+              "expires_at": "2026-11-03T00:00:00Z"
+            },
+            {
+              "id": "undated",
+              "status": "available"
+            },
+            {
+              "id": "soon",
+              "status": "available",
+              "reset_type": "codex_rate_limits",
+              "expires_at": "2026-11-06T00:00:00Z"
+            }
+          ]
+        }
+      },
+      "expected": {
+        "available": 3,
+        "expiries": [
+          "2026-11-06T00:00:00Z",
+          "2026-12-01T00:00:00Z",
+          null
+        ],
+        "limited": true,
+        "windows": [
+          {
+            "label": "7일",
+            "used": 100,
+            "reset": 1793776210
+          }
+        ],
+        "error": null
+      }
+    },
+    {
+      "function": "resets.usable",
+      "input": {
+        "details": {
+          "credits": []
+        }
+      },
+      "expected": []
+    }
+  ]
+}

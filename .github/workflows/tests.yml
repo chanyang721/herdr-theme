@@ -23,25 +23,124 @@ jobs:
       - run: node --check mods/sixfold-desk/main.js
       - run: node --check mods/sixfold-new-space/main.js
 
-  python:
-    # The optional collectors use POSIX fcntl and executable fixtures.
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
+  rust:
+    strategy:
+      fail-fast: false
+      matrix:
+        # Explicit Mac labels cover both architectures; see actions/runner-images.
+        os: [ubuntu-latest, windows-latest, macos-15, macos-15-intel]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    env:
+      CARGO_BUILD_JOBS: '1'
     steps:
       - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: cargo fmt --manifest-path rust/Cargo.toml --all -- --check
+      - run: cargo test --manifest-path rust/Cargo.toml --locked --jobs 1 -- --test-threads=1
+      - run: cargo build --manifest-path rust/Cargo.toml --locked --release --bin herdr-theme --jobs 1
+      # Python is only an isolated immutable reference, never an installed runtime.
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - run: python3 -m unittest discover -s tests -p 'test_*.py'
+      - name: Compare native models with the frozen external reference
+        shell: bash
+        run: |
+          binary=rust/target/release/herdr-theme
+          if [ "$RUNNER_OS" = Windows ]; then binary="$binary.exe"; fi
+          node voice/tests/native-model-differential.mjs --binary "$binary" --python python --work-dir .migration-oracle/voice-model-differential
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: native-model-${{ matrix.os }}
+          path: .migration-oracle/voice-model-differential/model-differential-summary.json
+          if-no-files-found: warn
+      - name: Compare complete native evaluation paths with the frozen reference
+        shell: bash
+        run: |
+          binary=rust/target/release/herdr-theme
+          if [ "$RUNNER_OS" = Windows ]; then binary="$binary.exe"; fi
+          node voice/tests/native-eval-differential.mjs --binary "$binary" --work-dir .migration-oracle/voice-model-differential
+      - name: Compare all supported audio containers and dataset identifier types
+        shell: bash
+        run: |
+          binary=rust/target/release/herdr-theme
+          if [ "$RUNNER_OS" = Windows ]; then binary="$binary.exe"; fi
+          node voice/tests/native-audio-differential.mjs --binary "$binary" --work-dir .migration-oracle/voice-model-differential
+          node voice/tests/native-dataset-differential.mjs --binary "$binary" --work-dir .migration-oracle/voice-model-differential
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: native-audio-dataset-${{ matrix.os }}
+          path: |
+            .migration-oracle/voice-model-differential/audio/audio-differential-summary.json
+            .migration-oracle/voice-model-differential/dataset/dataset-differential-summary.json
+          if-no-files-found: warn
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: native-evaluation-${{ matrix.os }}
+          path: .migration-oracle/voice-model-differential/eval/eval-differential-summary.json
+          if-no-files-found: warn
+      - if: runner.os == 'macOS'
+        run: node --test voice/tests/native-install.test.mjs
+        env:
+          HERDR_THEME_BIN: ${{ github.workspace }}/rust/target/release/herdr-theme
+      - name: Exercise real Swift and WebKit renderers in scratch space
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          fixture="$RUNNER_TEMP/native-mermaid"
+          mkdir -p "$fixture"
+          npm pack mermaid@11.12.1 --ignore-scripts --pack-destination "$fixture"
+          archive="$fixture/mermaid-11.12.1.tgz"
+          node -e 'const fs=require("node:fs"),crypto=require("node:crypto");const actual=crypto.createHash("sha512").update(fs.readFileSync(process.argv[1])).digest("base64");if(actual!=="UlIZrRariB11TY1RtTgUWp65tphtBv4CSq7vyS2ZZ2TgoMjs2nloq+wFqxiwcxlhHUvs7DPGgMjs2aeQxz5h9g==")throw Error("Mermaid fixture integrity mismatch");' "$archive"
+          tar -xzf "$archive" -C "$fixture" package/dist/mermaid.min.js
+          HERDR_RENDER_LIVE=1 HERDR_TEST_MERMAID_JS="$fixture/package/dist/mermaid.min.js" HERDR_RENDER_EVIDENCE=.migration-oracle/renderers/summary.json cargo test --manifest-path rust/Cargo.toml --locked --jobs 1 --test renderers_macos -- --ignored --test-threads=1
+      - uses: actions/upload-artifact@v4
+        if: always() && runner.os == 'macOS'
+        with:
+          name: native-renderers-${{ matrix.os }}
+          path: .migration-oracle/renderers/summary.json
+          if-no-files-found: warn
+      - run: node scripts/check-native.mjs
+      - name: Package the exact tested native executable and provenance
+        shell: bash
+        run: |
+          binary=rust/target/release/herdr-theme
+          if [ "$RUNNER_OS" = Windows ]; then binary="$binary.exe"; fi
+          node scripts/package-native.mjs --binary "$binary" --out artifacts/native-dist --archive artifacts/native.tar.gz
+      - uses: actions/upload-artifact@v4
+        with:
+          name: native-executable-${{ matrix.os }}
+          path: |
+            artifacts/native.tar.gz
+            artifacts/native.tar.gz.sha256
+          if-no-files-found: error
+
+  # Keep existing required-check contexts; they now require every native matrix
+  # row (including the frozen external-reference comparison) to succeed.
+  python:
+    if: always()
+    needs: rust
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - run: test "$RESULT" = success
+        env:
+          RESULT: ${{ needs.rust.result }}
 
   workflow-windows:
-    # Exercise the GUI collector's real child process, not only its JSON output.
-    runs-on: windows-latest
-    timeout-minutes: 15
+    if: always()
+    needs: rust
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-      - run: python -m unittest discover -s tests -p 'test_workflow_collector.py'
-      - run: python -m unittest discover -s tests -p 'test_windows_helpers.py'
+      - run: test "$RESULT" = success
+        env:
+          RESULT: ${{ needs.rust.result }}

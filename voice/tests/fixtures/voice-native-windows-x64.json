@@ -1,0 +1,50 @@
+{
+  "schema": 1,
+  "status": "pass-for-recorded-offline-scope",
+  "platform": "win32-x64",
+  "baseline_commit": "8c5b71d2f1074bb5d1d831fa395617bf4ae2abc8",
+  "native_binary": {
+    "sha256": "87d3a959fc3d2d8aaf93ac5f0ea4821962dd20f764bc32202f3f356471b493d5",
+    "bytes": 50591232
+  },
+  "native_path_empty": true,
+  "checks": {
+    "audio_exact_float32_formats": 22,
+    "audio_matched_rejections": 6,
+    "parquet_id_types": 9,
+    "evaluation_commands": 4,
+    "evaluation_max_absolute_difference": 0,
+    "exact_judge_boundaries": 24,
+    "model_embedding_max_absolute_difference": 0,
+    "matrix_max_absolute_difference": 0
+  },
+  "reports": {
+    "model-native-windows-x64.json": {
+      "sha256": "21816aef75e919345b4002509aa7cbb1009f7c0115d8ac83b25096d2bcfdd758",
+      "status": "pass"
+    },
+    "evaluation-native-windows-x64.json": {
+      "sha256": "7c6a1d9488b48fbc6f525b510f7d21404f83685336535de72d00954bf75dbfe9",
+      "status": "pass"
+    },
+    "audio-native-windows-x64.json": {
+      "sha256": "69101da6745965c6c2a9e169ece80d2e76e571924de25961e8761dddab721571",
+      "status": "pass"
+    },
+    "dataset-native-windows-x64.json": {
+      "sha256": "dcf25ce1a8a1c5eb1a3a9f1b24308572dedab347f392d8ee0e592d69d45e3bee",
+      "status": "pass"
+    }
+  },
+  "remaining": [
+    "Native comparisons and required CI on other supported platforms.",
+    "Separate macOS microphone/default-device/recovery/physical-key/focus/in-flight dictation observations.",
+    "Independent review and project acceptance are coordinated separately."
+  ],
+  "limitations": [
+    "Synthetic identities exercise algorithms, not speaker discrimination accuracy.",
+    "Time and RSS telemetry are measured independently and cannot be numerically equal.",
+    "Windows frozen oracle has a resource telemetry shim and a rejecting sounddevice import shim; original Unix-only CLI availability is not established.",
+    "External oracle stdout uses explicitly requested UTF-8 encoding."
+  ]
+}
