@@ -1,0 +1,59 @@
+#!/bin/sh
+# Fast checks before every push: a failure stops the push.
+# Install once per clone: sh scripts/install-git-hooks.sh
+# Skip on purpose:         git push --no-verify   (or SKIP_PREPUSH_TESTS=1 git push)
+# Same script in herdr-theme, herdr-harness and dotfiles; only checks() differs.
+
+checks() {
+  npm test &&
+  node --check mods/sixfold-desk/main.js &&
+  node --check mods/sixfold-new-space/main.js
+}
+
+# ---- shared part --------------------------------------------------------------
+set -u
+# Tests make their own repos; git's hook variables must not point them at this one.
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_PREFIX GIT_COMMON_DIR GIT_OBJECT_DIRECTORY
+if [ "${SKIP_PREPUSH_TESTS:-}" = 1 ]; then
+  echo "pre-push: SKIP_PREPUSH_TESTS=1, checks skipped" >&2
+  exit 0
+fi
+if command -v py >/dev/null 2>&1 && py -3.12 -c '' >/dev/null 2>&1; then PY='py -3.12'
+elif command -v python3 >/dev/null 2>&1 && python3 -c '' >/dev/null 2>&1; then PY=python3
+else PY=python; fi
+export PYTHONUTF8=1
+
+shas=''
+while read -r _ lsha _ _; do
+  case "$lsha" in *[!0]*) ;; *) continue ;; esac   # empty line or a deleted ref
+  case " $shas " in *" $lsha "*) ;; *) shas="$shas $lsha" ;; esac
+done
+[ -n "$shas" ] || exit 0
+
+top=$(git rev-parse --show-toplevel) || exit 1
+head=$(git rev-parse -q --verify HEAD 2>/dev/null || true)
+common=$(git rev-parse --path-format=absolute --git-common-dir) || exit 1
+tmp=''
+cleanup() { [ -n "$tmp" ] && git worktree remove --force "$tmp" >/dev/null 2>&1; tmp=''; }
+trap 'cleanup; exit 130' INT TERM
+
+for sha in $shas; do
+  # Check exactly what is pushed: in place when it is the clean HEAD, else in a throwaway worktree.
+  if [ "$sha" = "$head" ] && [ -z "$(git status --porcelain --untracked-files=no)" ]; then
+    dir=$top
+  else
+    # A fresh folder per run: two pushes of the same commit must not share or remove each other's.
+    tmp=$(mktemp -d "$common/prepush-XXXXXX") || { echo "pre-push: cannot make a temporary folder" >&2; exit 1; }
+    git worktree add -q --detach "$tmp" "$sha" || { rmdir "$tmp" 2>/dev/null; tmp=''; echo "pre-push: cannot check out $sha" >&2; exit 1; }
+    dir=$tmp
+  fi
+  echo "pre-push: checking $(git log -1 --format='%h %s' "$sha")" >&2
+  (cd "$dir" && checks) </dev/null
+  rc=$?
+  cleanup
+  if [ "$rc" -ne 0 ]; then
+    echo "pre-push: checks failed (exit $rc), push stopped. Fix it, or skip on purpose: git push --no-verify" >&2
+    exit 1
+  fi
+done
+exit 0

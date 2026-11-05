@@ -9,6 +9,7 @@ permissions:
 
 jobs:
   javascript:
+    timeout-minutes: 15
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest]
@@ -25,6 +26,7 @@ jobs:
   python:
     # The optional collectors use POSIX fcntl and executable fixtures.
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -32,19 +34,10 @@ jobs:
           python-version: '3.12'
       - run: python3 -m unittest discover -s tests -p 'test_*.py'
 
-  voice:
-    # The voice plugin reads macOS audio devices and installs a LaunchAgent.
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-      - run: python3 -m unittest discover -s voice/tests -p 'test_*.py'
-
   workflow-windows:
     # Exercise the GUI collector's real child process, not only its JSON output.
     runs-on: windows-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

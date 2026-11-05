@@ -1,0 +1,23 @@
+name: Voice (macOS)
+
+# Hosted macOS runners are often not assigned in time, and an unassigned job
+# fails the run. So this runs only by hand and once a week, never on push.
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 3 * * 1'
+
+permissions:
+  contents: read
+
+jobs:
+  voice:
+    # The voice plugin reads macOS audio devices and installs a LaunchAgent.
+    runs-on: macos-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python3 -m unittest discover -s voice/tests -p 'test_*.py'

@@ -1,0 +1,5 @@
+# Same line endings on every OS: Windows checkouts turned LF into CRLF and broke tests
+# that read files (2026-11-04).
+* text=auto eol=lf
+# Stored with CRLF on purpose; left byte-for-byte.
+extras/windows-layout/sixfold.json -text
