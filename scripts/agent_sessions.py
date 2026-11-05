@@ -545,7 +545,11 @@ def report_gate(entries, item, adapter, config, now):
         # answers it, so the session is not asked again.
         idle_since = (item.get('status_ms') or 0) / 1000
         if idle_since and not worked:
-            since = utc_iso(idle_since - cfg.get('report_lookback_seconds', 900))
+            # Its last prompt was an earlier report request (it answered 'already submitted'): no
+            # work since then, so the report it pointed to may be older than the usual 15 minutes.
+            lookback = cfg.get('answered_lookback_seconds', 6 * 3600) if item.get('answered_report') \
+                else cfg.get('report_lookback_seconds', 900)
+            since = utc_iso(idle_since - lookback)
             ok, detail = adapter.close_status(config, item, since)
             if ok:
                 entries[address] = {'session_id': sid, 'requested_at': now, 'since': since, 'turn': turn,

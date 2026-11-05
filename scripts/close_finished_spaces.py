@@ -304,13 +304,15 @@ def inspect(space, snapshot, adapter, config):
         if mapping and mapping.get('session_id'):
             sessions.append({'address': address, 'app': agent, 'session_id': mapping['session_id'], 'space_id': space['id'],
                              'space_name': space.get('name'), 'title': terminal.get('title'), 'cwd': terminal.get('cwd'),
-                             'turn': terminal.get('turn'), 'status_ms': terminal.get('status_ms')})
+                             'turn': terminal.get('turn'), 'status_ms': terminal.get('status_ms'),
+                             'answered_report': last_prompt_is_report_request(text)})
         elif child:
             # No session file or transcript (started inside another agent): it still reports and is
             # parked under its pane session id, and reopens as a new session reading the workspace memory.
             sessions.append({'address': address, 'app': agent, 'session_id': child['session_id'], 'space_id': space['id'],
                              'space_name': space.get('name'), 'title': terminal.get('title'), 'cwd': terminal.get('cwd'),
-                             'turn': terminal.get('turn'), 'status_ms': terminal.get('status_ms'), 'no_resume': True})
+                             'turn': terminal.get('turn'), 'status_ms': terminal.get('status_ms'), 'no_resume': True,
+                             'answered_report': last_prompt_is_report_request(text)})
         else:
             reasons.append(f'{address}: session id unverified (harness record impossible)')
         evidence.append([address, terminal.get('pid'), terminal.get('status_ms'), terminal.get('turn'), pids, jobs_fingerprint, hashlib.sha256(text.encode()).hexdigest()])

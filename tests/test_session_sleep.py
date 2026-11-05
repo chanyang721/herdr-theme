@@ -644,6 +644,12 @@ class AlreadyReportedTests(unittest.TestCase):
         decision, _ = agent_sessions.report_gate({}, self.item(now - 600), adapter, self.CONFIG, now)
         self.assertEqual((decision, adapter.asked), ('requested', ['t38']))
 
+    def test_a_session_that_answered_an_earlier_request_points_to_its_older_report(self):
+        now = 1_793_000_000.0
+        adapter = self.Adapter(report_at=now - 3600)              # reported, then only answered requests
+        item = {**self.item(now - 1800), 'answered_report': True}
+        self.assertEqual((agent_sessions.report_gate({}, item, adapter, self.CONFIG, now)[0], adapter.asked), ('ready', []))
+
     def test_work_after_the_request_still_asks_again(self):
         now = 1_793_000_000.0
         adapter = self.Adapter(report_at=now + 10)
