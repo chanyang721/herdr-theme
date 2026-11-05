@@ -103,6 +103,13 @@ class FakeLive:
     def request_report(self, address, text):
         self.notifications.append(('ask', address))
 
+    gate_blockers = ()
+
+    def close_gate(self, config, item):
+        self.gates = getattr(self, 'gates', []) + [item['address']]
+        assert not self.closed, 'the harness gate is asked before space.close'
+        return (not self.gate_blockers), list(self.gate_blockers)
+
     def close_status(self, config, item, since):
         return (True, {'report_id': 'REP1', 'task_id': 'TASK1'}) if self.reported else (False, 'no close report yet')
 
@@ -296,12 +303,12 @@ class CleanupPolicyTests(unittest.TestCase):
                 self.assertEqual(result['trial']['samples'], 1)
         self.assertFalse(self.live.closed)
 
-    def test_focus_race_immediately_before_close_blocks_operation(self):
+    def test_focus_race_onto_the_space_immediately_before_close_blocks_operation(self):
         def race(live):
             if live.snapshots == 2:
-                live.data['status']['focused_pane'] = 'user-changed-pane'
+                live.data['status']['space'] = 'temporary'
         self.live.before_snapshot = race
-        self.assert_blocked('focus changed')
+        self.assert_blocked('the person is viewing this space')
         self.assertFalse(self.reports.exists())
 
     def test_evidence_race_immediately_before_close_blocks_operation(self):
@@ -329,6 +336,23 @@ class CleanupPolicyTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, 'focus changed after close'):
             cleanup.cycle(self.live, self.config, state, NOW, apply=True, report_dir=self.reports)
         self.assertEqual(self.live.closed, ['temporary'])
+
+    def test_the_person_moving_elsewhere_does_not_stop_cleanup(self):
+        def move(live):
+            if live.snapshots == 2:
+                live.data['status'].update(space='current', tab='tab-elsewhere', focused_pane='pane-elsewhere')
+        self.live.before_snapshot = move
+        result = self.cycle()
+        self.assertEqual((result['results'][0]['action'], self.live.closed), ('closed', ['temporary']), result['results'][0]['reasons'])
+
+    def test_the_space_the_person_is_viewing_is_kept(self):
+        def look(live):
+            if live.snapshots == 2:
+                live.data['status'].update(space='temporary')
+        self.live.before_snapshot = look
+        result = self.cycle()
+        self.assertEqual(self.live.closed, [])
+        self.assertIn('the person is viewing this space', result['results'][0]['reasons'])
 
     def test_close_exception_is_not_reported_as_success(self):
         self.live.close_error = RuntimeError('close failed')
@@ -500,6 +524,88 @@ class ArchiveBeforeCloseTests(CleanupPolicyTests.__base__):
         self.assertEqual(self.cycle(self.ready_state(quiet=21600))['results'][0]['action'], 'closed')
 
 
+class FinishedClaudeSpaceTests(CleanupPolicyTests.__base__):
+    """Claude panes: a faint prompt suggestion is not input, and a session without a transcript
+    (opened inside another agent) is reported, parked, archived and closed without a manual step."""
+    setUp = CleanupPolicyTests.setUp
+    target = CleanupPolicyTests.target
+    inspect = CleanupPolicyTests.inspect
+    ready_state = CleanupPolicyTests.ready_state
+    cycle = CleanupPolicyTests.cycle
+    BORDER = '─' * 30
+
+    def claude(self, typed):
+        t = self.live.data['terminals']['t-test']
+        t['status']['app'] = 'claude-code'
+        self.live.data['processes'][101]['name'] = 'claude'
+        self.live.text = f'done\n{self.BORDER}\n❯ {typed}\n{self.BORDER}\n  ⏵⏵ auto mode on (shift+tab to cycle)\n'
+
+    def test_a_faint_suggestion_is_empty_input_but_typed_text_is_not(self):
+        self.claude('push 완료했어, worktree 정리해')
+        self.live.styled_screen = lambda address: f'❯\xa0\x1b[0m\x1b[2mpush 완료했어, worktree 정리해\x1b[0m\r\n'
+        self.assertTrue(self.inspect()['safe'], self.inspect()['reasons'])
+        for raw in ('❯\xa0\x1b[0mpush 완료했어, worktree 정리해\r\n', '❯\xa0\x1b[2mpush\x1b[22m 완료했어, worktree 정리해\r\n', ''):
+            self.live.styled_screen = lambda address, raw=raw: raw
+            self.assertIn('t-test: empty input unverified', self.inspect()['reasons'], raw)
+        del self.live.styled_screen
+        self.assertIn('t-test: empty input unverified', self.inspect()['reasons'])
+
+    def child(self):
+        self.claude('')
+        self.live.session_known = False
+        why = 'backend jobs unverified: cannot resume: Claude runs as an inherited child session (no session file or transcript)'
+        self.live.backend = lambda terminal, config, clean=False: (False, why, '')
+        self.live.child = lambda terminal: {'session_id': 'aaaaaaaa-bbbb-5ccc-8ddd-eeeeeeeeeeee', 'no_resume': True}
+
+    def test_answering_the_report_request_keeps_the_idle_window(self):
+        # Without this, every report request restarted the window at 0 and nothing ever closed.
+        self.claude('')
+        state = self.ready_state(quiet=300)
+        self.live.text = (f'done\n❯ [세션 정리 보고 요청] 관찰기가 이 세션을 곧 정리합니다.\n⏺ 01REPORT\n'
+                          f'{self.BORDER}\n❯ \n{self.BORDER}\n  ⏵⏵ auto mode on (shift+tab to cycle)\n')
+        self.cycle(state)
+        self.assertEqual(state['spaces']['temporary']['since'], NOW - 300)
+        self.live.text = f'done\n❯ 다른 일\n⏺ ok\n{self.BORDER}\n❯ \n{self.BORDER}\n  ⏵⏵ auto mode on\n'
+        self.cycle(state, now=NOW + 60)
+        self.assertEqual(state['spaces']['temporary']['since'], NOW + 60)   # real new work restarts it
+
+    def test_a_description_mentioning_check_needed_is_not_a_decision(self):
+        text = "- 툴팁 첫 줄에는 '모두 정상' 또는 '확인 필요 n개'가 나옵니다.\n❯ \n"
+        self.assertFalse(cleanup.decision_pending(text))
+        self.assertTrue(cleanup.decision_pending('배포 전에 사용자 확인 필요\n'))
+        self.assertTrue(cleanup.decision_pending('진행하려면 확인이 필요합니다.\n'))
+
+    def test_a_session_without_a_transcript_is_reported_parked_archived_and_closed(self):
+        self.child()
+        self.config['close_report'] = {'enabled': True}
+        state = self.ready_state()
+        first = self.cycle(state)               # no report yet: it is asked once
+        self.assertEqual(first['results'][0]['action'], 'keep')
+        self.assertIn(('ask', 't-test'), self.live.notifications)
+        self.live.reported = True                # it answers
+        result = self.cycle(state)
+        self.assertEqual(result['results'][0]['action'], 'closed', result['results'][0]['reasons'])
+        self.assertEqual([(e, sid) for e, _, sid in self.live.parks],
+                         [('close_requested', 'aaaaaaaa-bbbb-5ccc-8ddd-eeeeeeeeeeee'), ('closed', 'aaaaaaaa-bbbb-5ccc-8ddd-eeeeeeeeeeee')])
+        pane = self.live.archives[0]['tabs'][0]['panes'][0]
+        self.assertTrue(pane['no_transcript'])
+        self.assertNotIn('session_id', pane)
+
+    def test_a_child_session_with_a_running_process_is_kept(self):
+        self.child()
+        self.live.data['processes'][102] = {'pid': 102, 'parent': 101, 'name': 'npm'}
+        reasons = self.inspect()['reasons']
+        self.assertTrue(any('child processes' in r for r in reasons), reasons)
+        self.assertTrue(any('inherited child session' in r for r in reasons), reasons)
+
+    def test_the_workspace_record_masks_denylisted_names(self):
+        item = {'id': 'sp1', 'name': 'Acme 정리', 'summary': 'acme 배포 확인', 'folders': []}
+        path = Path(cleanup.record_space(item, self.reports, NOW, ['acme']))
+        text = path.read_text(encoding='utf-8')
+        self.assertNotIn('acme', (path.name + text).lower())
+        self.assertIn('[가림]', path.name)
+
+
 class DecisionScreenTests(unittest.TestCase):
     """2026-11-04 false alarm: 'Blocked by auto mode' while a Monitor ran was reported as a user decision."""
     SCREEN = ('⏺ Bash(kill 4242)\n  ⎿  Blocked by auto mode · /permissions to review\n'
@@ -545,3 +651,59 @@ class HelperProcessTests(unittest.TestCase):
         self.assertTrue(h({'args': 'caffeinate -i -t 300'}))
         self.assertFalse(h({'args': 'caffeinate -i make build'}))
         self.assertFalse(h({'args': 'caffeinate -dims'}))
+
+
+class HarnessCloseGateTests(CleanupPolicyTests.__base__):
+    """Only a space whose sessions' reports were accepted (and learnt) closes."""
+    setUp = CleanupPolicyTests.setUp
+    target = CleanupPolicyTests.target
+    inspect = CleanupPolicyTests.inspect
+    ready_state = CleanupPolicyTests.ready_state
+    cycle = CleanupPolicyTests.cycle
+
+    def test_not_accepted_keeps_the_space_and_writes_nothing(self):
+        self.live.gate_blockers = ('final report not accepted by a trusted actor',)
+        result = self.cycle()
+        item = result['results'][0]
+        self.assertEqual((item['action'], self.live.closed, self.live.parks, self.live.archives), ('keep', [], [], None))
+        self.assertTrue(any('harness close gate' in r and 'not accepted' in r for r in item['reasons']), item['reasons'])
+        self.assertFalse(self.reports.exists())
+
+    def test_accepted_closes_after_the_gate(self):
+        result = self.cycle()
+        self.assertEqual(result['results'][0]['action'], 'closed')
+        self.assertEqual(self.live.gates, ['t-test'])
+
+    def test_open_task_or_escalation_keeps_it(self):
+        for why in ('open task in this workspace: 모델 분배 (pending)', 'open escalation in this workspace (decision)'):
+            self.live.gate_blockers = (why,)
+            item = self.cycle()['results'][0]
+            self.assertEqual((item['action'], self.live.closed), ('keep', []))
+            self.assertTrue(any(why in r for r in item['reasons']))
+
+    def test_an_adapter_without_the_gate_never_closes(self):
+        del FakeLive.close_gate
+        try:
+            item = self.cycle()['results'][0]
+        finally:
+            FakeLive.close_gate = HarnessCloseGateTests._gate
+        self.assertEqual((item['action'], self.live.closed), ('keep', []))
+        self.assertIn('harness close gate: close gate unavailable', item['reasons'])
+
+
+HarnessCloseGateTests._gate = FakeLive.close_gate
+
+
+class HarnessCloseGateCallTests(unittest.TestCase):
+    def test_the_gate_command_and_fail_closed_answers(self):
+        A = cleanup.agent_sessions
+        config = {'harness': {'python': 'py', 'script': 'harness.py'}}
+        item = {'address': 't3', 'app': 'claude-code', 'session_id': '11111111-2222-3333-4444-555555555555', 'space_id': 'sp1'}
+        seen = []
+        ok = lambda out, code=0: (lambda a: (seen.append(a), subprocess.CompletedProcess(a, code, out, ''))[1])
+        self.assertEqual(A.harness_close_gate(config, item, runner=ok('{"ok": true, "blockers": []}')), (True, []))
+        self.assertEqual(seen[0][2:], ['close-gate', 't3', '--provider', 'claude', '--session-id', item['session_id'], '--space-id', 'sp1'])
+        self.assertEqual(A.harness_close_gate(config, item, runner=ok('{"ok": false, "blockers": ["x"]}')), (False, ['x']))
+        self.assertFalse(A.harness_close_gate(config, item, runner=ok('not json'))[0])
+        self.assertFalse(A.harness_close_gate(config, item, runner=ok('{"ok": true}', 2))[0])
+        self.assertFalse(A.harness_close_gate({}, item)[0])

@@ -5,6 +5,7 @@ sleep). Everything here fails closed: when a fact cannot be read it is reported 
 unverified, never as "no work".
 """
 import json
+import math
 import os
 from pathlib import Path
 import re
@@ -26,7 +27,8 @@ HELPERS = [re.compile(p, re.I) for p in (
 
 
 def run(argv, *, timeout=12, env=None):
-    result = subprocess.run([str(v) for v in argv], capture_output=True, text=True, timeout=timeout, env=env, creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
+    # ps cuts long Korean args mid-character; a strict decode would fail the whole observer.
+    result = subprocess.run([str(v) for v in argv], capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=timeout, env=env, creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
     if result.returncode:
         raise RuntimeError(f'{Path(str(argv[0])).name} {argv[1:2]} exited {result.returncode}: {result.stderr.strip()[:180]}')
     return result.stdout
@@ -148,6 +150,28 @@ def session_mapping(terminal, config=None):
     return {**base, 'session_id': sid}, ''
 
 
+def pane_session_id(address, created_ms, agent_pid):
+    """The stand-in session id of a Claude without a transcript (an inherited child session).
+
+    The harness derives the same value (runtime/lifecycle.pane_session_id) when that session runs
+    `harness.py close-report`, so park, close-status and the session's own report all match. It
+    never resumes anything: the pane comes back as a new session reading the workspace memory."""
+    import uuid
+    return str(uuid.uuid5(uuid.NAMESPACE_URL, f'herdr-pane-session:{address}:{created_ms}:{agent_pid}'))
+
+
+def child_session(terminal, reader=None):
+    """{session_id, no_resume} for a Claude that runs as an inherited child session, else None."""
+    fg = terminal.get('foreground') or {}
+    app = (terminal.get('status') or {}).get('app')
+    pid, created = fg.get('pid') if isinstance(fg, dict) else None, terminal.get('created_ms')
+    if provider(app) != 'claude' or not isinstance(pid, int) or not created or not terminal.get('address'):
+        return None
+    if not inherited_child_session(pid, reader):
+        return None
+    return {'session_id': pane_session_id(terminal['address'], created, pid), 'no_resume': True}
+
+
 def inherited_child_session(pid, reader=None):
     """True when the process environment carries CLAUDE_CODE_CHILD_SESSION=1 (read with ps, never printed)."""
     reader = reader or (lambda p: run(['ps', 'eww', '-p', str(p), '-o', 'command=']))
@@ -204,27 +228,116 @@ def suggestion_only(text_value, raw, marker='❯'):
     return bool(visible) and all(visible) and shown == text_value.strip()
 
 
-def resume_argv(app, argv, session_id):
-    """The original agent command with the same flags, resuming `session_id`."""
+def styled_screen(core, address, env=None, limit=3.0, quiet=0.4):
+    """The pane's repaint with colours, from a watch-only attach (never types or resizes)."""
+    import select
+    import time
+    proc = subprocess.Popen([core, 'attach', '--observe', address], stdin=subprocess.DEVNULL,
+                            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, env=env, creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
+    data, end, last = b'', time.time() + limit, None
+    try:
+        while time.time() < end:
+            ready, _, _ = select.select([proc.stdout], [], [], 0.1)
+            if ready:
+                chunk = os.read(proc.stdout.fileno(), 65536)
+                if not chunk:
+                    break
+                data, last = data + chunk, time.time()
+            elif last and time.time() - last >= quiet:
+                break
+    finally:
+        proc.terminate()
+        try:
+            proc.wait(timeout=2)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+    if not data:
+        raise RuntimeError('styled screen unavailable')
+    return data.decode('utf-8', 'replace')
+
+
+def new_session_argv(app, argv):
+    """A new session of the same agent for a pane that cannot be resumed: the program alone, never
+    the old first prompt (it would run the old task again)."""
     argv = list(argv or [])
     name = Path(argv[0]).name if argv else ''
     if provider(app) == 'claude':
-        out, skip = [argv[0] if name == 'claude' else 'claude'], False
-        for i, arg in enumerate(argv[1:], 1):
-            if skip:
-                skip = False; continue
-            if arg in ('--resume', '-r', '--session-id'):
-                skip = True; continue
-            if arg in ('--continue', '-c') or arg.startswith('--resume='):
-                continue
-            out.append(arg)
-        return out + ['--resume', session_id]
+        return [argv[0] if name == 'claude' else 'claude']
+    if provider(app) == 'codex':
+        return [argv[0] if name == 'codex' else 'codex']
+    raise ValueError(f'unknown agent {app!r}')
+
+
+# Launch flags kept across sleep; anything else positional is a prompt and is dropped, so waking
+# never sends an old instruction again. Values: flags that take one value / a list of values.
+CLAUDE_VALUE = {'--model', '--permission-mode', '--append-system-prompt', '--system-prompt', '--settings',
+                '--setting-sources', '--agents', '--agent', '--fallback-model', '--permission-prompt-tool',
+                '--append-system-prompt-file', '--system-prompt-file', '--debug-file', '--name', '-n'}
+CLAUDE_LIST = {'--add-dir', '--allowedTools', '--allowed-tools', '--disallowedTools', '--disallowed-tools',
+               '--mcp-config', '--tools', '--betas', '--plugin-dir'}
+# One-shot or session-picking flags: never carried into the resumed session.
+CLAUDE_DROP = {'-p', '--print', '-c', '--continue', '--fork-session', '--replay-user-messages',
+               '--include-partial-messages', '--no-session-persistence'}
+CLAUDE_DROP_VALUE = {'--resume', '-r', '--session-id', '--output-format', '--input-format', '--max-turns',
+                     '--max-budget-usd', '--json-schema', '--from-pr'}
+CODEX_VALUE = {'-m', '--model', '-c', '--config', '-p', '--profile', '-s', '--sandbox', '-a', '--ask-for-approval',
+               '-C', '--cd', '--add-dir', '--enable', '--disable', '--local-provider'}
+CODEX_LIST = {'-i', '--image'}
+
+
+def _looks_like_value(arg):
+    """A list flag's item (path, tool name), never a sentence-like prompt."""
+    return bool(arg) and not arg.startswith('-') and not re.search(r'\s|<', arg)
+
+
+def launch_flags(argv, *, value, many=(), drop=(), drop_value=(), stop=()):
+    """Flags (with their values) of an agent command; positional prompts and dropped flags removed."""
+    out, i = [], 0
+    while i < len(argv):
+        arg = argv[i]
+        head = arg.split('=', 1)[0]
+        if arg in stop:
+            break
+        if not arg.startswith('-') or arg == '-':
+            i += 1; continue                    # a prompt (or anything positional)
+        if '=' in arg and arg.startswith('--'):
+            if head not in drop and head not in drop_value:
+                out.append(arg)
+            i += 1; continue
+        if arg in drop:
+            i += 1; continue
+        if arg in drop_value:
+            i += 2; continue
+        if arg in value:
+            if i + 1 < len(argv):
+                out += [arg, argv[i + 1]]
+            i += 2; continue
+        if arg in many:
+            j = i + 1
+            while j < len(argv) and _looks_like_value(argv[j]):
+                j += 1
+            out += argv[i:j]
+            i = j; continue
+        out.append(arg)                         # unknown flags are taken as on/off switches
+        i += 1
+    return out
+
+
+def resume_argv(app, argv, session_id):
+    """`claude [flags] --resume <id>` / `codex [flags] resume <id>`: the original launch flags only.
+    Prompts given on the original command line are dropped (they would run the old task again)."""
+    argv = list(argv or [])
+    name = Path(argv[0]).name if argv else ''
+    if provider(app) == 'claude':
+        head = [argv[0] if name == 'claude' else 'claude']
+        flags = launch_flags(argv[1:], value=CLAUDE_VALUE, many=CLAUDE_LIST, drop=CLAUDE_DROP, drop_value=CLAUDE_DROP_VALUE)
+        return head + flags + ['--resume', session_id]
     if provider(app) == 'codex':
         head = [argv[0] if name == 'codex' else 'codex']
         rest = argv[1:]
-        if 'resume' in rest:
-            rest = rest[:rest.index('resume')]
-        return head + rest + ['resume', session_id]
+        # `codex exec …` is a one-shot run; its flags before the subcommand still apply.
+        flags = launch_flags(rest, value=CODEX_VALUE, many=CODEX_LIST, stop={'resume', 'exec', 'e', 'fork'})
+        return head + flags + ['resume', session_id]
     raise ValueError(f'unknown agent {app!r}')
 
 
@@ -250,13 +363,40 @@ def _clean(text, limit):
     return text[:limit]
 
 
+MASK = '[가림]'
+
+
+def denylist(config=None):
+    """The harness's local denylist (company, customer and people names); [] when there is none.
+    Read only to mask, never printed or copied anywhere."""
+    harness = (config or {}).get('harness') or {}
+    local = os.environ.get('HERDR_HARNESS_LOCAL') or str(Path(os.environ.get('HERDR_APP_HOME', Path.home() / '.config/herdr-app')) / 'data/sixfold/harness-local')
+    path = Path(harness.get('denylist') or Path(local) / 'denylist.txt').expanduser()
+    try:
+        lines = path.read_text(encoding='utf-8').splitlines()
+    except OSError:
+        return []
+    return [line.strip() for line in lines if line.strip() and not line.startswith('#')]
+
+
+def mask_text(text, terms):
+    """Every denylisted term as [가림] (case-insensitive, longest first), like the harness's spec.mask."""
+    terms = sorted({t for t in terms or () if t}, key=len, reverse=True)
+    if not terms or not text:
+        return text
+    return re.sub('|'.join(re.escape(t) for t in terms), MASK, text, flags=re.I)
+
+
 def summary(item):
     """The harness summary for one session (no transcript, no path)."""
     git = item.get('git') or {}
     sid, app = item['session_id'], item['app']
     done = _clean(f"{item.get('space_name') or '?'} {item['address']}: {item.get('title') or '제목 없음'}", 280)
-    command = f'claude --resume {sid}' if provider(app) == 'claude' else f'codex resume {sid}'
-    remaining = f'다시 열기: 그 칸에서 Enter, 또는 {command}'
+    if item.get('no_resume'):
+        remaining = '다시 열기: 전사 없는 세션이라 이어 열 수 없음. 그 칸에서 Enter 또는 harness.py reopen 으로 새 세션이 워크스페이스 기억을 읽고 시작'
+    else:
+        command = f'claude --resume {sid}' if provider(app) == 'claude' else f'codex resume {sid}'
+        remaining = f'다시 열기: 그 칸에서 Enter, 또는 {command}'
     if git.get('branch') is None:
         risks = 'git 상태 미확인 또는 git 폴더 아님'
     else:
@@ -321,9 +461,9 @@ def close_report_message(config):
             "1) 레포 밖 임시 파일(예: $TMPDIR/experience-close.json)에 experience JSON을 씁니다: "
             '{"judgments": [{"situation": "무엇을 판단했나", "expected": "예상", "actual": "실제", "error": "MATCHED|PARTIAL|WRONG"}]} '
             "(판단 1~5개, 선택: cause·surprise·pattern_candidates). "
-            f"2) {python} {script} close-report --done \"이 세션이 한 일\" --remaining \"남은 일\" --experience <그 파일> 를 실행합니다. "
+            f"2) {python} {script} close-report --mask --done \"이 세션이 한 일\" --remaining \"남은 일\" --experience <그 파일> 를 실행합니다. "
             "확정한 결정은 --decision \"…\"(여러 번), 만들거나 고친 문서는 --doc <파일>(여러 번, 원본은 그대로)을 붙입니다. "
-            "3) 고객·회사·제품 이름 대신 워크스페이스 id를 씁니다. 거부되면 문장을 고쳐 다시 실행합니다. "
+            "3) 고객·회사·제품 이름 대신 워크스페이스 id를 씁니다(--mask가 남은 이름을 [가림]으로 바꿉니다). 다른 이유로 거부되면 문장을 고쳐 다시 실행합니다. "
             "다른 세션에 보고하지 말고, 보고 id만 한 줄로 답하고 끝내세요. 승인은 사람이 기억함에서 합니다.")
 
 
@@ -344,8 +484,30 @@ def harness_close_status(config, item, since, *, runner=None):
     if result.returncode != 0 or not isinstance(value, dict):
         return False, 'close-status refused'
     if value.get('ok') and value.get('report_id'):
-        return True, {'report_id': value['report_id'], 'task_id': value.get('task_id')}
+        return True, {'report_id': value['report_id'], 'task_id': value.get('task_id'), 'at': value.get('at')}
     return False, 'no close report yet'
+
+
+def harness_close_gate(config, item, *, runner=None):
+    """(ok, blockers): `harness.py close-gate` — the session's report accepted and learnt, nothing
+    else open in its workspace. Any failure to ask is a blocker (fail-closed)."""
+    harness = config.get('harness') or {}
+    python, script = harness.get('python'), harness.get('script')
+    if not python or not script:
+        return False, ['harness not configured']
+    argv = [python, script, 'close-gate', item['address'], '--provider', provider(item['app']),
+            '--session-id', item['session_id']]
+    if item.get('space_id'):
+        argv += ['--space-id', item['space_id']]
+    runner = runner or (lambda a: subprocess.run([str(v) for v in a], capture_output=True, text=True, timeout=60, creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0)))
+    try:
+        result = runner(argv)
+        value = json.loads((result.stdout or '').strip().splitlines()[-1])
+    except (OSError, subprocess.TimeoutExpired, ValueError, IndexError) as exc:
+        return False, [f'close-gate unavailable: {exc}'[:200]]
+    if result.returncode != 0 or not isinstance(value, dict):
+        return False, ['close-gate refused']
+    return bool(value.get('ok')), [str(b) for b in value.get('blockers') or []]
 
 
 def self_core_id():
@@ -371,7 +533,8 @@ def harness_archive(config, data, *, runner=None):
             json.dump(data, stream, ensure_ascii=False)
         runner = runner or (lambda a: subprocess.run([str(v) for v in a], capture_output=True, text=True, timeout=60, creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0)))
         try:
-            result = runner([python, script, 'archive', '--file', path])
+            # Space names and pane titles may name a customer: [가림] in the archive (WORKSPACE-TREE).
+            result = runner([python, script, 'archive', '--file', path, '--mask'])
         except (OSError, subprocess.TimeoutExpired) as exc:
             return False, f'harness call failed: {exc}'
         if result.returncode != 0:
@@ -382,6 +545,15 @@ def harness_archive(config, data, *, runner=None):
             return False, 'harness output unreadable'
     finally:
         os.unlink(path)
+
+
+def in_time(at, deadline):
+    """True when the ISO UTC record time `at` is not later than the epoch `deadline`."""
+    import datetime as _dt
+    try:
+        return _dt.datetime.fromisoformat(str(at).replace('Z', '+00:00')).timestamp() <= deadline
+    except ValueError:
+        return False
 
 
 def utc_iso(epoch):
@@ -409,22 +581,51 @@ def report_gate(entries, item, adapter, config, now):
     entry = entries.get(address)
     if entry and entry.get('session_id') != sid:
         entry = None
+    worked = False
     if entry and isinstance(turn, int) and isinstance(entry.get('turn'), int) and turn > entry['turn'] + turns:
-        entry = None   # the person worked with it after the request
+        entry, worked = None, True   # the person worked with it after the request: a new report is due
     if entry and entry.get('failed_at'):
         if now - entry['failed_at'] < retry:
             return 'failed', f"no close report (asked {int((now - entry['requested_at']) // 60)} minutes ago): kept, asks again later"
         entry = None
     if entry is None:
         entries.pop(address, None)
+        # Already reported for its last work (another observer asked, or an earlier cycle's state
+        # is gone): a final report written no earlier than shortly before the session went idle
+        # answers it, so the session is not asked again.
+        idle_since = (item.get('status_ms') or 0) / 1000
+        if idle_since and not worked:
+            # Its last prompt was an earlier report request (it answered 'already submitted'): no
+            # work since then, so the report it pointed to may be older than the usual 15 minutes.
+            lookback = cfg.get('answered_lookback_seconds', 6 * 3600) if item.get('answered_report') \
+                else cfg.get('report_lookback_seconds', 900)
+            since = utc_iso(idle_since - lookback)
+            ok, detail = adapter.close_status(config, item, since)
+            if ok:
+                entries[address] = {'session_id': sid, 'requested_at': now, 'since': since, 'turn': turn,
+                                    'report': detail, 'earlier': True}
+                return 'ready', detail
         adapter.request_report(address, close_report_message(config))
-        entries[address] = {'session_id': sid, 'requested_at': now, 'since': utc_iso(now - 5), 'turn': turn}
+        # Only a report written after the request answers it: `since` is the request time rounded
+        # up to the record's whole-second clock (Codex review 2026-11-05 P2).
+        entries[address] = {'session_id': sid, 'requested_at': now, 'since': utc_iso(math.ceil(now)), 'turn': turn}
         return 'requested', None
+    if entry.get('report'):
+        return 'ready', entry['report']   # accepted in time on an earlier cycle
+    deadline = entry['requested_at'] + timeout
     ok, detail = adapter.close_status(config, item, entry['since'])
-    if ok:
+    if not ok and item.get('answered_report'):
+        # It answered the request with a report it had already written (nothing sent to it since but
+        # report requests): that earlier report is the answer, within the answered lookback.
+        earlier = utc_iso(entry['requested_at'] - cfg.get('answered_lookback_seconds', 6 * 3600))
+        ok, found = adapter.close_status(config, item, earlier)
+        detail = found if ok else detail
+    # A report counts when it was written before the limit, however late the observer looks;
+    # one written after it (or without a readable time once the limit has passed) does not.
+    if ok and (in_time(detail.get('at'), deadline) or (detail.get('at') is None and now < deadline)):
         entry['report'] = detail
         return 'ready', detail
-    if now - entry['requested_at'] >= timeout:
+    if now >= deadline:
         entry['failed_at'] = now
         return 'failed', f'no close report within {timeout // 60} minutes: kept (fail-closed)'
-    return 'waiting', detail
+    return 'waiting', detail if not ok else 'report after the limit'

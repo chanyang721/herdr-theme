@@ -21,6 +21,8 @@ CLEANUP = {
     'script': 'close_finished_spaces.py',
     # The order matches close_finished_spaces.OBSERVER_FILES (the reviewed hash).
     'files': ('close_finished_spaces.py', 'space_job_evidence.py', 'agent_sessions.py', 'site_config.py'),
+    # Imported helpers copied beside the observer (not part of the reviewed hash).
+    'support': ('file_lock.py', 'agent_env.py'),
     'config': 'close-finished-spaces.json',
     'example': 'config/close-finished-spaces.example.json',
     'state': 'close-finished-spaces-state.json',
@@ -99,6 +101,9 @@ def install_observer(home, source, spec, *, apply=False, user_approved=False, ex
         return result
     for name in present:
         write_changed(base / name, code[name])
+    for name in spec.get('support', ()):
+        if (source / 'scripts' / name).exists():
+            write_changed(base / name, (source / 'scripts' / name).read_bytes())
     write_changed(config_path, (json.dumps(config, ensure_ascii=False, indent=2) + '\n').encode())
     changed = write_changed(plist_path, plistlib.dumps(plist))
     service = f'gui/{os.getuid()}/{label}'
@@ -117,17 +122,83 @@ def install(home, source, *, apply=False, user_approved=False, execute=False):
     return install_observer(home, source, CLEANUP, apply=apply, user_approved=user_approved, execute=execute)
 
 
+def spec_hash(folder, spec):
+    paths = [Path(folder) / name for name in spec['files']]
+    return hashlib.sha256(b''.join(p.read_bytes() for p in paths)).hexdigest() if all(p.exists() for p in paths) else None
+
+
+def refresh_installed(home, source, specs=None):
+    """Bring the observer copies that are already registered with launchd to `source`: no plist,
+    no launchctl. Each file is replaced atomically while both observers' run locks are held, so a
+    run never imports a mix of versions. The person's apply approval carries over only when it was
+    given for exactly the copy being replaced; otherwise the new code waits for a review as before."""
+    import file_lock
+    from close_finished_spaces import OBSERVER_FILES as CLEANUP_FILES
+    from sleep_idle_sessions import OBSERVER_FILES as SLEEP_FILES
+    assert tuple(CLEANUP['files']) == tuple(CLEANUP_FILES), 'cleanup file list drifted from the observer hash'
+    home, source = Path(home), Path(source)
+    if specs is None:
+        import install_session_sleep
+        specs = (CLEANUP, install_session_sleep.SLEEP)
+    assert all(tuple(s['files']) == tuple(SLEEP_FILES) for s in specs if s['job'] == 'sleep-idle-sessions')
+    site = site_config.load(home)
+    base = site_config.folder('state_dir', home, site)
+    registered = [spec for spec in specs if (home / 'Library/LaunchAgents' / (site_config.label(spec['job'], home, site) + '.plist')).exists()
+                  and (base / spec['script']).exists()]
+    if not registered:
+        return {'refreshed': [], 'why': 'no registered observer copy (first install goes through --install)'}
+    names = []
+    for spec in registered:
+        names += [n for n in (*spec['files'], *spec.get('support', ())) if n not in names and (source / 'scripts' / n).exists()]
+    before = {spec['job']: spec_hash(base, spec) for spec in registered}
+    locks = []
+    try:
+        for spec in registered:
+            lock = (base / spec['state']).with_suffix('.lock').open('a')
+            locks.append(lock)
+            for _ in range(120):
+                try:
+                    file_lock.flock(lock, file_lock.LOCK_EX | file_lock.LOCK_NB)
+                    break
+                except BlockingIOError:
+                    time.sleep(1)
+            else:
+                raise RuntimeError(f"{spec['job']} is still running after 2 minutes; nothing replaced")
+        changed = [n for n in names if write_changed(base / n, (source / 'scripts' / n).read_bytes())]
+        result = {'refreshed': [s['job'] for s in registered], 'changed': changed, 'observers': {}}
+        for spec in registered:
+            after = spec_hash(base, spec)
+            config_path = base / spec['config']
+            config = json.loads(config_path.read_text(encoding='utf-8')) if config_path.exists() else {}
+            carried = bool(config.get('user_approved_apply')) and before[spec['job']] is not None \
+                and config.get('reviewed_observer_sha256') == before[spec['job']] and after != before[spec['job']]
+            if carried:
+                config['reviewed_observer_sha256'] = after
+                write_changed(config_path, (json.dumps(config, ensure_ascii=False, indent=2) + '\n').encode())
+            result['observers'][spec['job']] = {'observer_sha256': after, 'approval_carried': carried,
+                                                'approved_for_this_copy': config.get('reviewed_observer_sha256') == after}
+        return result
+    finally:
+        for lock in locks:
+            lock.close()
+
+
 def main(spec=CLEANUP):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--home', type=Path, default=Path.home())
     parser.add_argument('--source', type=Path, default=Path(__file__).resolve().parents[1])
     parser.add_argument('--install', action='store_true', help='write files and register launchd; default is a plan')
     parser.add_argument('--enable-apply', action='store_true', help='review the saved trial and switch to real actions')
+    parser.add_argument('--refresh', action='store_true',
+                        help='only replace the registered observer copies with this source (no plist, no launchctl)')
     parser.add_argument('--user-approved', action='store_true',
                         help='with --enable-apply: the person approved apply; one recorded dry-run of this code suffices')
     args = parser.parse_args()
     if args.user_approved and not args.enable_apply:
         parser.error('--user-approved only goes with --enable-apply')
+    if args.refresh:
+        print(json.dumps(refresh_installed(args.home, args.source), ensure_ascii=False))
+        return
     print(json.dumps(install_observer(args.home, args.source, spec, apply=args.enable_apply, user_approved=args.user_approved,
                                       execute=args.install), ensure_ascii=False))
 

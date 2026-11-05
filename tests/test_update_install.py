@@ -41,7 +41,7 @@ elif sys.argv[1]=='status':
  errors=['broken'] if config.get('unhealthy') or (current=='old' and config.get('pre_errors')) or (current!='old' and config.get('post_fail')) else []
  if current=='new' and config.get('concurrent'):
   target.write_text('other writer');errors=['broken']
- print(json.dumps({'errors':errors,'space':'space','tab':'tab','focused_pane':'moved' if current=='new' and config.get('focus_change') else 'pane'}))
+ print(json.dumps({'errors':errors,'space':'space','tab':'tab','focused_pane':'moved' if (current=='new' and config.get('focus_change')) or (config.get('focus_always') and (home/'probe.txt').exists()) else 'pane'}))
 else:sys.exit(4)
 ''')
         script.chmod(0o755)
@@ -126,6 +126,22 @@ else:sys.exit(4)
             self.install()
         self.assertEqual((self.target / 'main.js').read_text(), 'old')
         self.assertTrue(all(call['argv'][0] in ('status', 'check') for call in self.calls()))
+
+    def test_a_person_using_the_app_does_not_roll_back_helper_scripts(self):
+        (self.repo / 'scripts').mkdir()
+        (self.repo / 'scripts/helper.py').write_text('# new helper\n')
+        (self.home / 'probe.txt').write_text('focus moves after the first status')
+        self.configure(focus_always=True)
+        def moving_status(cli, env, real=__import__('update_install').read_status, seen=[]):
+            status = real(cli, env)
+            seen.append(1)
+            if len(seen) == 1:
+                status['focused_pane'] = 'pane'
+            return status
+        import update_install
+        with patch.object(update_install, 'read_status', moving_status):
+            self.install(['scripts/helper.py'])
+        self.assertEqual((self.home / 'scripts/sixfold/helper.py').read_text(), '# new helper\n')
 
     def test_existing_installation_lock_refuses_all_cli_and_file_changes(self):
         lock = self.home / 'data/sixfold/install.lock'

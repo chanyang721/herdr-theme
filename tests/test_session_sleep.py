@@ -204,6 +204,24 @@ class SleepTests(unittest.TestCase):
         self.assertTrue(agent_sessions.inherited_child_session(1, reader=lambda p: env))
         self.assertFalse(agent_sessions.inherited_child_session(1, reader=lambda p: 'claude HOME=/x'))
 
+    def test_a_child_session_reports_sleeps_and_wakes_as_a_new_session(self):
+        # Opened inside another agent: no transcript, nothing to resume. It is parked under its pane
+        # session id and its stub starts a new session (never the old first prompt again).
+        self.mapping.stop()
+        self.live.data['terminals']['t12']['foreground']['argv'] = ['claude', '사용자 요청: 오래된 첫 지시']
+        self.live.jobs = (False, 'should not be asked', '')
+        with patch.object(agent_sessions, 'session_mapping', lambda t, c=None: (None, 'cannot resume: Claude runs as an inherited child session (no session file or transcript)')), \
+                patch.object(agent_sessions, 'inherited_child_session', lambda pid, reader=None: True):
+            self.live.child = agent_sessions.child_session
+            got = self.run_cycle()
+        self.mapping.start()
+        pane_sid = agent_sessions.pane_session_id('t12', 5, 201)
+        self.assertEqual(got['t12']['action'], 'slept', got['t12']['reasons'])
+        ticket = json.loads((self.paths['tickets'] / 't12.json').read_text())
+        self.assertEqual((ticket['argv'], ticket['session_id'], ticket['new_session']), (['claude'], pane_sid, True))
+        label = [c for c in self.live.calls if c[0] == 'label' and c[1] == 't12'][0][2]
+        self.assertEqual((label['sixfold.sleep'], label['sixfold.sleep.new']), (f'claude:{pane_sid}', '1'))
+
     def test_an_agent_that_is_the_terminal_program_never_sleeps(self):
         # /exit would end the terminal and could remove the pane, maybe a space's last one.
         self.live.data['terminals']['t12']['argv'] = ['claude', '--resume', SID]
@@ -379,11 +397,11 @@ class CloseReportTests(unittest.TestCase):
 
     def test_close_status_parses_the_harness_answer(self):
         class R:
-            returncode, stdout, stderr = 0, '{"ok": true, "report_id": "R", "task_id": "T"}', ''
+            returncode, stdout, stderr = 0, '{"ok": true, "report_id": "R", "task_id": "T", "at": "2026-11-05T00:56:03Z"}', ''
         item = {'address': 't12', 'app': 'claude-code', 'session_id': SID}
         cfg = {'harness': {'python': 'py', 'script': 'h.py'}}
         self.assertEqual(agent_sessions.harness_close_status(cfg, item, 'S', runner=lambda a: R()),
-                         (True, {'report_id': 'R', 'task_id': 'T'}))
+                         (True, {'report_id': 'R', 'task_id': 'T', 'at': '2026-11-05T00:56:03Z'}))
         R.stdout = '{"ok": false}'
         self.assertEqual(agent_sessions.harness_close_status(cfg, item, 'S', runner=lambda a: R())[0], False)
         self.assertEqual(agent_sessions.harness_close_status({}, item, 'S')[0], False)
@@ -415,6 +433,23 @@ class EvidenceTests(unittest.TestCase):
                          ['/opt/homebrew/bin/codex', '--model', 'm', '--sandbox', 'x', 'resume', SID])
         self.assertEqual(agent_sessions.resume_argv('claude-code', ['claude', '--resume', 'old', '--model', 'opus'], SID),
                          ['claude', '--model', 'opus', '--resume', SID])
+
+    def test_pane_session_id_matches_the_harness_and_is_a_uuid(self):
+        # the harness's runtime/lifecycle.pane_session_id('t38', 1, 2) gives the same value.
+        self.assertEqual(agent_sessions.pane_session_id('t38', 1, 2), '901ebaf1-e70d-5c12-aff5-2ab7a207eba4')
+        self.assertRegex(agent_sessions.pane_session_id('t1', 5, 6), agent_sessions.UUID)
+
+    def test_cleanup_records_are_masked(self):
+        self.assertIn('close-report --mask', agent_sessions.close_report_message({}))
+        class R:
+            returncode, stdout, stderr = 0, '{"ok": true, "archive": "A.json"}', ''
+        seen = []
+        ok, _ = agent_sessions.harness_archive({'harness': {'python': 'py', 'script': 'h.py'}}, {'workspace_id': 'm-sp'},
+                                               runner=lambda a: seen.append(a) or R())
+        self.assertTrue(ok)
+        self.assertEqual(seen[0][-1], '--mask')
+        self.assertEqual(agent_sessions.mask_text('Acme 정리 · ACME-2', ['acme']), '[가림] 정리 · [가림]-2')
+        self.assertIn('새 세션', agent_sessions.summary({'session_id': SID, 'app': 'claude', 'address': 't1', 'no_resume': True})['remaining'])
 
     def test_summary_carries_no_paths(self):
         item = {'address': 't12', 'app': 'claude-code', 'session_id': SID, 'space_name': 'Project B',
@@ -490,6 +525,11 @@ class StubTests(unittest.TestCase):
             args, cwd = json.loads(line[len('AGENT '):])
             return args, Path(cwd).resolve() == root.resolve(), labels
 
+    def test_the_agent_starts_without_inherited_child_markers(self):
+        env = {'CLAUDECODE': '1', 'CLAUDE_CODE_CHILD_SESSION': '1', 'HC_TERMINAL_ID': 't13', 'HERDR_PANE_ID': 'w1:p1', 'PATH': '/bin'}
+        clean = stub.agent_env(env)
+        self.assertEqual(clean, {'HC_TERMINAL_ID': 't13', 'PATH': '/bin'})
+
     def test_enter_as_a_bare_cr_resumes_in_the_original_folder_and_clears_labels(self):
         args, same_folder, labels = self.run_stub_in_pty(b'\r')
         self.assertEqual(args, ['resume', SID])
@@ -534,3 +574,161 @@ class InstallTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class ReportGateTimingTests(unittest.TestCase):
+    """Codex review 2026-11-05 P2: only a report written after the request, and within the limit, counts."""
+    class Adapter:
+        def __init__(self, report_at):
+            self.report_at, self.asked = report_at, []
+
+        def request_report(self, address, text):
+            self.asked.append(address)
+
+        def close_status(self, config, item, since):
+            ok = agent_sessions.utc_iso(self.report_at) >= since   # what harness close-status compares
+            return ((True, {'report_id': 'R', 'task_id': 'T', 'at': agent_sessions.utc_iso(self.report_at)}) if ok
+                    else (False, 'no close report yet'))
+
+    ITEM = {'address': 't12', 'session_id': SID, 'turn': 3}
+    CONFIG = {'close_report': {'timeout_seconds': 900, 'retry_seconds': 3600}}
+
+    def test_a_report_written_before_the_request_is_not_an_answer(self):
+        now = 1_793_000_000.4
+        adapter, entries = self.Adapter(report_at=now - 3), {}
+        self.assertEqual(agent_sessions.report_gate(entries, dict(self.ITEM), adapter, self.CONFIG, now)[0], 'requested')
+        self.assertEqual(agent_sessions.report_gate(entries, dict(self.ITEM), adapter, self.CONFIG, now + 60)[0], 'waiting')
+        adapter.report_at = now + 30
+        self.assertEqual(agent_sessions.report_gate(entries, dict(self.ITEM), adapter, self.CONFIG, now + 90)[0], 'ready')
+
+    def test_a_report_after_the_limit_is_not_accepted(self):
+        now = 1_793_000_000.0
+        adapter, entries = self.Adapter(report_at=now + 901), {}
+        agent_sessions.report_gate(entries, dict(self.ITEM), adapter, self.CONFIG, now)
+        decision, detail = agent_sessions.report_gate(entries, dict(self.ITEM), adapter, self.CONFIG, now + 905)
+        self.assertEqual(decision, 'failed')
+        self.assertIn('fail-closed', detail)
+
+    def test_a_report_written_in_time_counts_even_when_the_observer_looks_late(self):
+        now = 1_793_000_000.0
+        adapter, entries = self.Adapter(report_at=now + 50), {}
+        agent_sessions.report_gate(entries, dict(self.ITEM), adapter, self.CONFIG, now)
+        self.assertEqual(agent_sessions.report_gate(entries, dict(self.ITEM), adapter, self.CONFIG, now + 1200)[0], 'ready')
+
+    def test_a_report_accepted_in_time_stays_ready_on_later_cycles(self):
+        now = 1_793_000_000.0
+        adapter, entries = self.Adapter(report_at=now + 30), {}
+        agent_sessions.report_gate(entries, dict(self.ITEM), adapter, self.CONFIG, now)
+        self.assertEqual(agent_sessions.report_gate(entries, dict(self.ITEM), adapter, self.CONFIG, now + 60)[0], 'ready')
+        self.assertEqual(agent_sessions.report_gate(entries, dict(self.ITEM), adapter, self.CONFIG, now + 1000)[0], 'ready')
+
+
+class AlreadyReportedTests(unittest.TestCase):
+    """A session that already reported is not asked again, and its 'waiting in the
+    memory window' answer is not a user decision."""
+    Adapter = ReportGateTimingTests.Adapter
+    CONFIG = ReportGateTimingTests.CONFIG
+
+    def item(self, idle_since, turn=3):
+        return {'address': 't38', 'session_id': SID, 'turn': turn, 'status_ms': int(idle_since * 1000)}
+
+    def test_a_report_from_its_last_work_is_ready_without_asking(self):
+        now = 1_793_000_000.0
+        adapter = self.Adapter(report_at=now - 9 * 3600)            # reported at 09:56 for the other observer
+        decision, detail = agent_sessions.report_gate({}, self.item(now - 9 * 3600 + 5), adapter, self.CONFIG, now)
+        self.assertEqual((decision, adapter.asked), ('ready', []))
+
+    def test_an_old_report_before_later_work_does_not_count(self):
+        now = 1_793_000_000.0
+        adapter = self.Adapter(report_at=now - 3 * 3600)
+        decision, _ = agent_sessions.report_gate({}, self.item(now - 600), adapter, self.CONFIG, now)
+        self.assertEqual((decision, adapter.asked), ('requested', ['t38']))
+
+    def test_a_session_that_answered_an_earlier_request_points_to_its_older_report(self):
+        now = 1_793_000_000.0
+        adapter = self.Adapter(report_at=now - 3600)              # reported, then only answered requests
+        item = {**self.item(now - 1800), 'answered_report': True}
+        self.assertEqual((agent_sessions.report_gate({}, item, adapter, self.CONFIG, now)[0], adapter.asked), ('ready', []))
+
+    def test_answering_a_pending_request_with_an_earlier_report_is_ready(self):
+        # It answered with the id of the report it wrote an hour before this request.
+        now = 1_793_000_000.0
+        adapter, entries = self.Adapter(report_at=now - 3600), {}
+        item = self.item(now - 60)
+        entries['t38'] = {'session_id': SID, 'requested_at': now - 300, 'since': agent_sessions.utc_iso(now - 300), 'turn': 3}
+        self.assertEqual(agent_sessions.report_gate(entries, item, adapter, self.CONFIG, now)[0], 'waiting')
+        self.assertEqual(agent_sessions.report_gate(entries, {**item, 'answered_report': True}, adapter, self.CONFIG, now)[0], 'ready')
+
+    def test_work_after_the_request_still_asks_again(self):
+        now = 1_793_000_000.0
+        adapter = self.Adapter(report_at=now + 10)
+        entries = {}
+        agent_sessions.report_gate(entries, self.item(now - 60), adapter, self.CONFIG, now)
+        adapter.asked.clear()
+        decision, _ = agent_sessions.report_gate(entries, self.item(now + 15, turn=6), adapter, self.CONFIG, now + 60)
+        self.assertEqual((decision, adapter.asked), ('requested', ['t38']))
+
+    SCREEN = ('❯ [세션 정리 보고 요청] 관찰기가 이 세션을 곧 정리(절전)합니다. 새 작업은 시작하지 말고 아래만 하세요.\n'
+              '  다른 세션에 보고하지 말고, 보고 id만 한 줄로 답하고 끝내세요. 승인은 사람이 기억함에서 합니다.\n'
+              '⏺ 01ARZ3NDEKTSV4RRFFQ69G5FAV (이미 제출함, 기억함에서 승인 대기 중)\n'
+              '✻ Cogitated for 4s · done 오전 10:21\n────────\n❯ \n────────\n  ⏵⏵ auto mode on\n')
+
+    def test_the_memory_window_answer_is_not_a_user_decision(self):
+        self.assertFalse(sleep.spaces.decision_pending(self.SCREEN))
+        self.assertTrue(sleep.spaces.decision_pending(self.SCREEN + '사용자 승인 대기: 배포 범위\n'))
+        self.assertTrue(sleep.spaces.decision_pending('Do you want to proceed?\n❯ 1. Yes\n'))
+
+
+class ProcessTableDecodeTests(unittest.TestCase):
+    def test_ps_args_cut_mid_character_do_not_fail_the_observer(self):
+        # ps truncates long args by bytes; a Korean prompt can end in half a character.
+        cut = '세션 절전'.encode('utf-8')[:-1]
+        outputs = {'pid=,ppid=,comm=': b'  10     1 /usr/local/bin/claude\n',
+                   'pid=,args=': b'  10 claude ' + cut + b'\n'}
+
+        class Done:
+            def __init__(self, out):
+                self.returncode, self.stderr = 0, ''
+                self.stdout = out.decode('utf-8', 'replace')
+
+        def fake_run(argv, **kwargs):
+            self.assertEqual((kwargs.get('encoding'), kwargs.get('errors')), ('utf-8', 'replace'))
+            return Done(outputs[argv[2]])
+
+        with patch.object(agent_sessions.subprocess, 'run', fake_run):
+            rows = agent_sessions.process_table()
+        self.assertEqual(rows[10]['name'], 'claude')
+        self.assertTrue(rows[10]['args'].startswith('claude 세션 절'))
+
+
+
+class TicketArgvTests(unittest.TestCase):
+    """Waking a pane must not send the original command-line prompts again (2026-11-05, ticket t11)."""
+    OLD = ['claude', '<hc from="t3">11/4 요청 …', '<hc from="t3">번역 확인 …', '--resume', 'old-id']
+
+    def test_claude_prompts_and_one_shot_flags_are_dropped(self):
+        argv = ['/x/claude', '--dangerously-skip-permissions', '--model', 'opus', '--add-dir', '/a', '/b',
+                '첫 지시 문장', '-p', '--output-format', 'json', '--continue', '--session-id', 'z']
+        self.assertEqual(agent_sessions.resume_argv('claude-code', argv, SID),
+                         ['/x/claude', '--dangerously-skip-permissions', '--model', 'opus', '--add-dir', '/a', '/b', '--resume', SID])
+        self.assertEqual(agent_sessions.resume_argv('claude-code', self.OLD, SID), ['claude', '--resume', SID])
+
+    def test_codex_prompt_dropped_flags_kept(self):
+        self.assertEqual(agent_sessions.resume_argv('codex', ['codex', '--no-daemon', '-m', 'gpt-5', '고쳐 줘', 'resume', 'old'], SID),
+                         ['codex', '--no-daemon', '-m', 'gpt-5', 'resume', SID])
+
+    def test_ticket_written_by_observer_has_no_prompt(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            item = {'address': 't11', 'app': 'claude-code', 'session_id': SID, 'argv': self.OLD, 'space_id': 'sp', 'space_name': 'Medihomes'}
+            data = json.loads(sleep.ticket(item, tmp).read_text(encoding='utf-8'))
+        self.assertEqual(data['argv'], ['claude', '--resume', SID])
+
+    def test_old_ticket_is_cleaned_when_woken_and_screen_is_short(self):
+        ticket = {'app': 'claude-code', 'session_id': SID, 'argv': self.OLD + [SID]}
+        self.assertEqual(stub.command(ticket, None), ['claude', '--resume', SID])
+        self.assertEqual(stub.command(ticket, '새 메시지'), ['claude', '--resume', SID, '새 메시지'])
+        self.assertEqual(stub.shown(stub.launch(ticket)), f'claude --resume {SID}')
+        self.assertLessEqual(len(stub.shown(['claude', *['--add-dir', '/very/long/path'] * 20])), 72)
+
+    def test_new_session_ticket_left_as_written(self):
+        self.assertEqual(stub.command({'app': 'claude-code', 'session_id': SID, 'argv': ['claude'], 'new_session': True}, None), ['claude'])

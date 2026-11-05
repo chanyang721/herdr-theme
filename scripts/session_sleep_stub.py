@@ -17,7 +17,7 @@ import select
 import subprocess
 import sys
 
-LABELS = ('sixfold.sleep', 'sixfold.title')
+LABELS = ('sixfold.sleep', 'sixfold.title', 'sixfold.sleep.new')
 
 
 PASTE = ('\x1b[200~', '\x1b[201~')   # bracketed-paste markers around a pasted message
@@ -101,22 +101,42 @@ def record_resumed(ticket):
             provider = 'claude' if ticket['app'] in ('claude', 'claude-code') else 'codex'
             subprocess.run([harness['python'], harness['script'], 'park', ticket['address'], '--provider', provider,
                             '--session-id', ticket['session_id'], '--space-id', ticket['space_id'], '--event', 'resumed',
-                            '--done', f"{ticket.get('space_name') or '?'} {ticket['address']}: resumed from sleep"],
+                            '--done', f"{ticket.get('space_name') or '?'} {ticket['address']}: resumed from sleep", '--mask'],
                            capture_output=True, timeout=30, creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
     except (OSError, ValueError, KeyError, subprocess.SubprocessError):
         pass
 
 
-def command(ticket, message):
+def launch(ticket):
+    """The ticket's command, cleaned again: a ticket written before prompts were dropped must not run
+    its old first instructions when the pane wakes."""
     argv = list(ticket['argv'])
+    if ticket.get('new_session') or not ticket.get('session_id') or not argv or Path(argv[0]).name not in ('claude', 'codex'):
+        return argv
+    try:
+        import agent_sessions
+        return agent_sessions.resume_argv(ticket.get('app') or Path(argv[0]).name, argv, ticket['session_id'])
+    except Exception:   # noqa: BLE001 - an unknown agent keeps the ticket as written
+        return argv
+
+
+def command(ticket, message):
+    argv = launch(ticket)
     return argv + [message] if message else argv
+
+
+def shown(argv, limit=72):
+    """Short form for the sleep screen: program name and flags, never a long command line."""
+    text = ' '.join([Path(argv[0]).name, *argv[1:]]) if argv else ''
+    text = ' '.join(text.split())
+    return text if len(text) <= limit else text[:limit - 1] + '…'
 
 
 def main(argv=None):
     argv = sys.argv[1:] if argv is None else argv
     ticket = json.loads(Path(argv[0]).read_text(encoding='utf-8'))
     title = ticket.get('title') or ''
-    resume = ' '.join(ticket['argv'])
+    resume = shown(launch(ticket))
     fd = sys.stdin.fileno()
     saved = tty_input(fd)   # before the note, so nothing typed meanwhile is read the old way
     print(f"\n  절전 중 — {ticket.get('space_name') or ''} {ticket['address']} {title}".rstrip())
@@ -132,12 +152,30 @@ def main(argv=None):
     if not data:
         return 0
     message = message_of(data)
+    try:   # the ticket may have been cleaned while this screen waited
+        ticket = {**ticket, **json.loads(Path(argv[0]).read_text(encoding='utf-8'))}
+    except (OSError, ValueError, TypeError):
+        pass
     clear_labels(ticket.get('address'))
     record_resumed(ticket)
     if ticket.get('cwd') and Path(ticket['cwd']).is_dir():
         os.chdir(ticket['cwd'])
     args = command(ticket, message)
-    os.execvp(args[0], args)
+    os.execvpe(args[0], args, agent_env(os.environ))
+
+
+def agent_env(env):
+    """The agent starts without the markers of whatever agent opened this pane's shell: an
+    inherited CLAUDE_CODE_CHILD_SESSION would turn transcript saving off again."""
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    try:
+        import agent_env as cleaner
+        return cleaner.clean_env(env)
+    except ImportError:
+        drop = ('CLAUDECODE', 'CLAUDE_CODE_CHILD_SESSION', 'CLAUDE_CODE_ENTRYPOINT', 'CLAUDE_CODE_SESSION_ID', 'CLAUDE_PID', 'CODEX_THREAD_ID')
+        return {k: v for k, v in env.items() if k not in drop}
+    finally:
+        sys.path.pop(0)
 
 
 if __name__ == '__main__':

@@ -19,7 +19,7 @@ import agent_sessions  # noqa: E402
 import site_config  # noqa: E402
 
 BASE = site_config.folder('state_dir')
-DECISION = re.compile(r'승인\s*대기|확인\s*필요|결정\s*대기|사용자.{0,12}(?:확인|승인).{0,8}(?:대기|기다)|awaiting\s+(?:approval|confirmation)|waiting\s+for\s+(?:your|user)\s+(?:approval|confirmation)|allow\s+(?:once|always)', re.I)
+DECISION = re.compile(r'승인\s*대기|(?:사용자|직접|당신의?)\s*확인\s*필요|확인이\s*필요합니다|결정\s*대기|사용자.{0,12}(?:확인|승인).{0,8}(?:대기|기다)|awaiting\s+(?:approval|confirmation)|waiting\s+for\s+(?:your|user)\s+(?:approval|confirmation)|allow\s+(?:once|always)', re.I)
 # The agent's own command refused or let through by Claude's auto mode: a log line, not a question.
 AUTO_MODE = re.compile(r'(?:Blocked|Allowed)\s+by\s+auto\s+mode|/permissions\s+to\s+review', re.I)
 # A real question for the person: Claude's permission dialog or a question with numbered choices.
@@ -28,9 +28,37 @@ PROMPTED = re.compile(r'Do you want to (?:proceed|make this edit|create|run|allo
 RUNNING = re.compile(r'\b\d+\s+(?:monitors?|shells?|background\s+(?:tasks?|shells?|jobs?))(?:\s+still\s+running)?\b', re.I)
 
 
+# Harness memory-window approvals (accepting a report, approving a brain proposal) happen later
+# inside the harness; a session saying its report waits there is not waiting for the person.
+MEMORY_WINDOW = re.compile(r'기억함|memory window', re.I)
+
+
+PROMPT_LINE = re.compile(r'^\s*[❯›>]\s+\S')
+
+
+def last_prompt_is_report_request(text):
+    """True when the last thing sent to the agent was the observer's close-report request."""
+    prompts = [l for l in text.splitlines() if PROMPT_LINE.match(l)]
+    return bool(prompts) and agent_sessions.REPORT_MARK in prompts[-1]
+
+
 def decision_pending(text):
-    """A question, approval or input the person must answer; auto-mode log lines are not one."""
-    lines = [l for l in text.splitlines() if not AUTO_MODE.search(l)]
+    """A question, approval or input the person must answer. Not one: auto-mode log lines, the
+    observer's own close-report request (it ends at the next agent line), and memory-window
+    approvals the harness handles later."""
+    lines, in_request = [], False
+    for line in text.splitlines():
+        if agent_sessions.REPORT_MARK in line:
+            in_request = True
+            continue
+        if in_request:
+            if line.lstrip().startswith(('⏺', '•', '─')):
+                in_request = False
+            else:
+                continue
+        if AUTO_MODE.search(line) or MEMORY_WINDOW.search(line):
+            continue
+        lines.append(line)
     rest = '\n'.join(lines)
     return bool(DECISION.search(rest) or PROMPTED.search(rest))
 
@@ -86,6 +114,27 @@ def empty_prompt(text, agent):
     return all(not line.strip() or footer.match(line.strip()) for line in lines[i + 1:])
 
 
+def claude_suggestion(text, app, adapter, address):
+    """True when the only thing in Claude's input row is its faint prompt suggestion (SGR 2 in the
+    pane's colour repaint). Text the person typed is drawn plain and is never treated as empty."""
+    if agent_sessions.provider(app) != 'claude' or not hasattr(adapter, 'styled_screen'):
+        return False
+    lines = text.splitlines()
+    rows = [i for i, line in enumerate(lines) if line.lstrip().startswith('❯')]
+    if not rows:
+        return False
+    i = rows[-1]
+    value = lines[i].strip()[1:].strip()
+    blank = '\n'.join(lines[:i] + ['❯'] + lines[i + 1:])
+    if not value or not empty_prompt(blank, app):
+        return False
+    try:
+        raw = adapter.styled_screen(address)
+    except (OSError, RuntimeError, ValueError):
+        return False
+    return agent_sessions.suggestion_only(value, raw)
+
+
 def process_rows():
     return agent_sessions.process_table()
 
@@ -105,6 +154,14 @@ class Live:
         terminals = {item['address']: json.loads(run([self.core, 'get', item['address'], '--json'])) for item in listing if item.get('state') == 'live'}
         return {'status': status, 'spaces': spaces, 'terminals': terminals, 'processes': process_rows()}
 
+    def styled_screen(self, address):
+        return agent_sessions.styled_screen(self.core, address, env=self._env())
+
+    @staticmethod
+    def _env():
+        # Without a caller terminal, hc pastes the text as it is (no <hc> wrapper).
+        return {k: v for k, v in os.environ.items() if k not in ('HC_TERMINAL_ID', 'HC_SCOPE')}
+
     def screen(self, address):
         value = json.loads(run([self.core, 'read', address, '--json', '--lines', '0']))
         if not value.get('complete') or value.get('how') != 'screen' or not isinstance(value.get('text'), str):
@@ -123,6 +180,9 @@ class Live:
         configured = (config.get('sessions') or {}).get(terminal.get('address'))
         return configured or agent_sessions.session_mapping(terminal, config)[0]
 
+    def child(self, terminal):
+        return agent_sessions.child_session(terminal)
+
     def park(self, config, item, event, reason=None):
         return agent_sessions.harness_park(config, item, event, reason=reason)
 
@@ -130,12 +190,13 @@ class Live:
         return agent_sessions.git_brief(folder)
 
     def request_report(self, address, text):
-        # Without a caller terminal, hc pastes the text as it is (no <hc> wrapper).
-        env = {k: v for k, v in os.environ.items() if k not in ('HC_TERMINAL_ID', 'HC_SCOPE')}
-        return agent_sessions.run([self.core, 'send', address, text], env=env, timeout=30)
+        return agent_sessions.run([self.core, 'send', address, text], env=self._env(), timeout=30)
 
     def close_status(self, config, item, since):
         return agent_sessions.harness_close_status(config, item, since)
+
+    def close_gate(self, config, item):
+        return agent_sessions.harness_close_gate(config, item)
 
     def archive(self, config, data):
         return agent_sessions.harness_archive(config, data)
@@ -175,9 +236,12 @@ def slept_session(terminal, space):
     provider, sid = label.split(':', 1)
     if provider not in ('claude', 'codex') or not re.fullmatch(r'[0-9a-f-]{36}', sid):
         return None
+    labels = terminal.get('labels') or {}
     return {'address': terminal.get('address'), 'app': 'claude-code' if provider == 'claude' else 'codex', 'session_id': sid,
-            'space_id': space['id'], 'space_name': space.get('name'), 'title': (terminal.get('labels') or {}).get('sixfold.title'),
-            'cwd': terminal.get('cwd'), 'turn': terminal.get('turn'), 'slept': True}
+            'space_id': space['id'], 'space_name': space.get('name'), 'title': labels.get('sixfold.title'),
+            'cwd': terminal.get('cwd'), 'turn': terminal.get('turn'), 'slept': True,
+            # slept without a transcript: it wakes as a new session, so nothing is resumed on reopen
+            **({'no_resume': True} if labels.get('sixfold.sleep.new') else {})}
 
 
 def inspect(space, snapshot, adapter, config):
@@ -223,35 +287,59 @@ def inspect(space, snapshot, adapter, config):
         if not valid:
             reasons.append(f'{address}: {why}')
         jobs_ok, jobs_reason, jobs_fingerprint = adapter.backend(terminal, config, valid)
-        child = 'inherited child session' in (jobs_reason or '')
-        if not jobs_ok and not (child and valid and config.get('_manual')):
+        child = adapter.child(terminal) if 'inherited child session' in (jobs_reason or '') and hasattr(adapter, 'child') else None
+        # A Claude opened inside another agent has no transcript to read its jobs from. Its process
+        # tree (no shell, build or other child) and the footer below are the evidence instead.
+        if not jobs_ok and not (child and valid):
             reasons.append(f'{address}: {jobs_reason}')
         text = adapter.screen(address)
         if background_running(text):
             reasons.append(f'{address}: in progress: a monitor or background shell is still running')
         elif decision_pending(text):
             reasons.append(f'{address}: user decision pending')
-        if not empty_prompt(text, agent):
+        if not empty_prompt(text, agent) and not claude_suggestion(text, agent, adapter, address):
             reasons.append(f'{address}: empty input unverified')
         screens.append(text)
         mapping = adapter.mapping(terminal, config) if hasattr(adapter, 'mapping') else None
         if mapping and mapping.get('session_id'):
             sessions.append({'address': address, 'app': agent, 'session_id': mapping['session_id'], 'space_id': space['id'],
                              'space_name': space.get('name'), 'title': terminal.get('title'), 'cwd': terminal.get('cwd'),
-                             'turn': terminal.get('turn')})
-        elif child and config.get('_manual'):
-            # No session file or transcript (started inside another Claude): it is archived as a
-            # pane that reopens as a new session with the workspace memory injected.
-            sessions.append({'address': address, 'app': agent, 'session_id': None, 'space_id': space['id'],
+                             'turn': terminal.get('turn'), 'status_ms': terminal.get('status_ms'),
+                             'answered_report': last_prompt_is_report_request(text)})
+        elif child:
+            # No session file or transcript (started inside another agent): it still reports and is
+            # parked under its pane session id, and reopens as a new session reading the workspace memory.
+            sessions.append({'address': address, 'app': agent, 'session_id': child['session_id'], 'space_id': space['id'],
                              'space_name': space.get('name'), 'title': terminal.get('title'), 'cwd': terminal.get('cwd'),
-                             'turn': terminal.get('turn'), 'no_resume': True})
+                             'turn': terminal.get('turn'), 'status_ms': terminal.get('status_ms'), 'no_resume': True,
+                             'answered_report': last_prompt_is_report_request(text)})
         else:
             reasons.append(f'{address}: session id unverified (harness record impossible)')
         evidence.append([address, terminal.get('pid'), terminal.get('status_ms'), terminal.get('turn'), pids, jobs_fingerprint, hashlib.sha256(text.encode()).hexdigest()])
     fingerprint = hashlib.sha256(json.dumps(evidence, sort_keys=True).encode()).hexdigest()
+    answered = bool(screens) and all(last_prompt_is_report_request(t) for t in screens)
     return {'id': space['id'], 'name': space['name'], 'safe': not reasons, 'reasons': reasons, 'fingerprint': fingerprint,
+            'answered_report': answered,
             'folders': sorted({t.get('cwd') for a, t in all_terms.items() if a in addresses and t.get('cwd')} | ({space['folder']} if space.get('folder') else set())),
             'summary': '\n'.join('\n'.join(s.splitlines()[-8:]) for s in screens)[:2400], 'sessions': sessions}
+
+
+def close_gate_blockers(item, adapter, config):
+    """['tX: why', …] from `harness.py close-gate` for every agent session in the space; empty
+    means the space may close. Off only with config close_gate.enabled false; any error keeps it."""
+    if (config.get('close_gate') or {}).get('enabled', True) is False:
+        return []
+    if not hasattr(adapter, 'close_gate'):
+        return ['close gate unavailable']
+    out = []
+    for session in item.get('sessions', []):
+        if not session.get('session_id'):
+            out.append(f"{session['address']}: no session id for the harness gate")
+            continue
+        ok, blockers = adapter.close_gate(config, session)
+        if not ok:
+            out.append(f"{session['address']}: " + ', '.join(blockers or ['refused'])[:300])
+    return out
 
 
 def archive_of(space, item, parked, snapshot, adapter):
@@ -268,7 +356,9 @@ def archive_of(space, item, parked, snapshot, adapter):
             pane = {'address': address, 'agent': s.get('app') or t.get('app'), 'cwd': s.get('cwd') or term.get('cwd'),
                     'last_state': 'slept' if s.get('slept') else t.get('status'),
                     'git': s.get('git') or (adapter.git(term.get('cwd')) if hasattr(adapter, 'git') else None)}
-            if s.get('session_id'):
+            if s.get('no_resume'):
+                pane['no_transcript'] = True   # reopen starts a new session; the pane id is not resumable
+            elif s.get('session_id'):
                 pane['session_id'] = s['session_id']
             if s.get('title'):
                 pane['title'] = str(s['title'])[:120]
@@ -288,21 +378,27 @@ def git_info(folder):
     return info
 
 
-def record_space(item, report_dir, now):
+def record_space(item, report_dir, now, terms=()):
+    """The workspace record (~/…/워크스페이스-기록/<YYYYMMDD>_<이름>.md). Denylisted names become
+    [가림] in its name and text, like every other record the cleanup writes."""
     stamp = dt.datetime.fromtimestamp(now).astimezone()
-    name = re.sub(r'[\\/:*?"<>|\x00-\x1f]', '-', unicodedata.normalize('NFC', item['name'])).replace(' ', '-')[:90] or 'workspace'
+    mask = lambda text: agent_sessions.mask_text(text, terms)  # noqa: E731
+    name = re.sub(r'[\\/:*?"<>|\x00-\x1f]', '-', mask(unicodedata.normalize('NFC', item['name']))).replace(' ', '-')[:90] or 'workspace'
     path = Path(report_dir) / f'{stamp:%Y%m%d}_{name}.md'
     path.parent.mkdir(parents=True, exist_ok=True)
     line = f'\n- 자동 정리 시각: {stamp.isoformat()} · space {item["id"]}\n'
     if path.exists():
-        with path.open('a') as file:
+        with path.open('a', encoding='utf-8') as file:
             file.write(line)
     else:
         details = [git_info(folder) for folder in item.get('folders', [])]
-        with path.open('x') as file:
-            file.write(f'# {item["name"]} 자동 정리 기록\n\n- 공간: {item["id"]}\n')
-            file.write('\n마지막 화면 일부(관측 자료):\n\n' + '\n'.join('> ' + v for v in item.get('summary', '').splitlines()) + '\n')
-            file.write('\n폴더·브랜치·최근 커밋·남은 미커밋·worktree 목록(삭제하지 않음):\n\n```json\n' + json.dumps(details, ensure_ascii=False, indent=2) + '\n```\n' + line)
+        body = (f'# {item["name"]} 자동 정리 기록\n\n- 공간: {item["id"]}\n'
+                + (f'- 하네스 보관: {item["archive"]}\n' if item.get('archive') else '')
+                + '\n마지막 화면 일부(관측 자료):\n\n' + '\n'.join('> ' + v for v in item.get('summary', '').splitlines()) + '\n'
+                + '\n폴더·브랜치·최근 커밋·남은 미커밋·worktree 목록(삭제하지 않음):\n\n```json\n'
+                + json.dumps(details, ensure_ascii=False, indent=2) + '\n```\n' + line)
+        with path.open('x', encoding='utf-8') as file:
+            file.write(mask(body))
     return str(path)
 
 
@@ -328,6 +424,9 @@ def cycle(adapter, config, state, now, *, apply=False, only_space=None, report_d
         item = inspect(space, snapshot, adapter, config)
         old = previous.get(space['id'], {})
         same = fresh and item['safe'] and old.get('fingerprint') == item.get('fingerprint')
+        # Answering the observer's own close-report request changes the screen but is not new work:
+        # the idle window keeps counting instead of restarting after every request.
+        same = same or bool(fresh and item['safe'] and old.get('since') and old.get('fingerprint') and item.get('answered_report'))
         since = old.get('since', now) if same else now
         quiet = now - since
         item.update(quiet_seconds=quiet, action='keep')
@@ -353,8 +452,12 @@ def cycle(adapter, config, state, now, *, apply=False, only_space=None, report_d
                 # Immediately recheck every prerequisite and the original user focus.
                 check = adapter.snapshot()
                 target = next((s for s in check['spaces'] if s['id'] == space['id']), None)
-                if target is None or focus(check['status']) != initial_focus:
-                    item['action'] = 'keep'; item['reasons'].append('space/focus changed before close')
+                # The person moving around elsewhere does not stop cleanup; only the space they are
+                # looking at right now is skipped.
+                if target is None:
+                    item['action'] = 'keep'; item['reasons'].append('space changed before close')
+                elif check['status'].get('space') == space['id']:
+                    item['action'] = 'keep'; item['reasons'].append('the person is viewing this space')
                 else:
                     latest = inspect(target, check, adapter, config)
                     if not latest['safe'] or latest.get('fingerprint') != item.get('fingerprint'):
@@ -366,11 +469,7 @@ def cycle(adapter, config, state, now, *, apply=False, only_space=None, report_d
                         for session in item.get('sessions', []):
                             if session.get('slept'):
                                 continue   # it reported (or was parked) when it was put to sleep
-                            if session.get('no_resume'):
-                                # it cannot be resumed, but it can still answer: ask it like any other
-                                session = {**session, 'session_id': session.get('session_id') or ''}
-                                if not session['session_id']:
-                                    continue
+                            # a session without a transcript cannot be resumed, but it answers like any other
                             decision, detail = agent_sessions.report_gate(reports, session, adapter, config, now)
                             if decision == 'ready':
                                 session['report_task_id'] = detail.get('task_id')
@@ -378,6 +477,12 @@ def cycle(adapter, config, state, now, *, apply=False, only_space=None, report_d
                                 waiting.append(f"{session['address']}: {decision}" + (f' ({detail})' if isinstance(detail, str) else ''))
                         if waiting:
                             item['action'] = 'keep'; item['reasons'].append('close report: ' + '; '.join(waiting))
+                            result.append(item); continue
+                        # The harness decides: each session's report must be accepted (and learnt) by a
+                        # trusted actor, with no other open task or escalation in the workspace.
+                        held = close_gate_blockers(item, adapter, config)
+                        if held:
+                            item['action'] = 'keep'; item['reasons'].append('harness close gate: ' + '; '.join(held))
                             result.append(item); continue
                         # Harness first: no record, no close (each agent session in the space).
                         parked, refused = [], None
@@ -402,12 +507,16 @@ def cycle(adapter, config, state, now, *, apply=False, only_space=None, report_d
                             item['action'] = 'keep'; item['reasons'].append(f'harness archive failed: {detail}')
                             result.append(item); continue
                         item['archive'] = detail
-                        item['record'] = record_space(item, report_dir, now)
+                        item['record'] = record_space(item, report_dir, now, agent_sessions.denylist(config))
+                        before = adapter.snapshot()['status']
+                        if before.get('space') == space['id']:
+                            item['action'] = 'keep'; item['reasons'].append('the person is viewing this space')
+                            result.append(item); continue
                         adapter.close(space['id'], {**config, 'space_close_enabled': True} if manual else config)
                         after = adapter.snapshot()
                         if any(s['id'] == space['id'] for s in after['spaces']):
                             raise RuntimeError('space.close not confirmed')
-                        if focus(after['status']) != initial_focus:
+                        if focus(after['status']) != focus(before):   # the close itself moved the person
                             raise RuntimeError('focus changed after close; further cleanup stopped')
                         item['action'] = 'closed'
                         del tracking[space['id']]
