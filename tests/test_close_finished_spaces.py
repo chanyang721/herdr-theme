@@ -707,3 +707,67 @@ class HarnessCloseGateCallTests(unittest.TestCase):
         self.assertFalse(A.harness_close_gate(config, item, runner=ok('not json'))[0])
         self.assertFalse(A.harness_close_gate(config, item, runner=ok('{"ok": true}', 2))[0])
         self.assertFalse(A.harness_close_gate({}, item)[0])
+
+
+class LookupFailureTests(CleanupPolicyTests):
+    """t1 decision 2026-11-05: one lookup timing out keeps only that space; an unreadable app at the
+    start skips the cycle; neither is an observer error that stops apply."""
+
+    def test_an_unreadable_app_at_the_start_skips_the_cycle(self):
+        def boom(live):
+            raise TimeoutError("Command ['herdr-core', 'ls', '--all', '--json'] timed out after 12 seconds")
+        self.live.before_snapshot = boom
+        with self.assertRaises(cleanup.agent_sessions.SkipCycle):
+            self.cycle()
+        self.assertEqual(self.live.closed, [])
+
+    def test_a_failing_space_lookup_keeps_that_space_only(self):
+        real = cleanup.inspect
+        def inspect(space, snapshot, adapter, config):
+            if space['id'] == 'temporary':
+                raise TimeoutError('herdr-core get t2f timed out')
+            return real(space, snapshot, adapter, config)
+        state = self.ready_state()
+        with patch.object(cleanup, 'inspect', inspect):
+            result = cleanup.cycle(self.live, self.config, state, NOW, apply=True, report_dir=self.reports)
+        got = {r['id']: r for r in result['results']}
+        self.assertEqual(got['temporary']['action'], 'keep')
+        self.assertIn('lookup failed: herdr-core get t2f timed out', got['temporary']['reasons'])
+        self.assertEqual(self.live.closed, [])
+        self.assertGreater(len(got), 1)   # the other spaces were still looked at
+
+    def test_a_failing_recheck_keeps_the_space_without_an_error(self):
+        state = self.ready_state()
+        calls = {'n': 0}
+        def second(live):
+            calls['n'] += 1
+            if calls['n'] == 2:
+                raise TimeoutError('status timed out')
+        self.live.before_snapshot = second
+        got = self.cycle(state)['results'][0]
+        self.assertEqual(got['action'], 'keep')
+        self.assertTrue(any(r.startswith('recheck lookup failed') for r in got['reasons']), got['reasons'])
+        self.assertEqual(self.live.closed, [])
+
+
+class TrialRecoveryTests(unittest.TestCase):
+    def test_an_error_stops_apply_until_three_healthy_cycles_in_a_row(self):
+        settle = cleanup.agent_sessions.settle_trial
+        state = {'trial': {'started_at': 1, 'samples': 5, 'error_count': 0}}
+        settle(state, {}, ok=False)
+        self.assertEqual(state['trial']['error_count'], 1)
+        settle(state, {}, ok=True); settle(state, {}, ok=True)
+        self.assertEqual(state['trial']['error_count'], 1)
+        settle(state, {}, ok=False)                      # a new error restarts the streak
+        for _ in range(2):
+            settle(state, {}, ok=True)
+        self.assertEqual(state['trial']['error_count'], 2)
+        settle(state, {}, ok=True)
+        self.assertEqual(state['trial']['error_count'], 0)
+        state = {'trial': {'error_count': 1, 'healthy': 0}}
+        settle(state, {'error_reset_after': 1}, ok=True)
+        self.assertEqual(state['trial']['error_count'], 0)
+
+    def test_the_streak_survives_the_next_cycle(self):
+        trial = cleanup.agent_sessions.trial_of({'trial': {'started_at': 5, 'samples': 2, 'error_count': 1, 'healthy': 2}}, 9, True)
+        self.assertEqual((trial['error_count'], trial['healthy'], trial['samples']), (1, 2, 3))

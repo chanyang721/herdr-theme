@@ -26,6 +26,42 @@ HELPERS = [re.compile(p, re.I) for p in (
 )]
 
 
+class SkipCycle(Exception):
+    """The app/core could not be read at the start of a cycle (e.g. `herdr-core ls --all` timed
+    out): nothing was decided, so the cycle is skipped and is not counted as an observer error."""
+
+
+ERROR_RESET_AFTER = 3   # healthy cycles in a row that clear an earlier error (t1 decision 2026-11-05)
+
+
+def first_snapshot(adapter):
+    try:
+        return adapter.snapshot()
+    except Exception as exc:   # noqa: BLE001 — any read failure here only skips this cycle
+        raise SkipCycle(f'app/core lookup failed: {str(exc)[:200]}') from exc
+
+
+def trial_of(state, now, fresh):
+    """The trial carried into this cycle (error_count and the healthy streak included)."""
+    old = state.get('trial', {}) if fresh else {}
+    return {'started_at': old.get('started_at', now), 'samples': old.get('samples', 0) + 1,
+            'error_count': old.get('error_count', 0), 'healthy': old.get('healthy', 0)}
+
+
+def settle_trial(state, config, ok):
+    """After a cycle: an error counts and breaks the streak; enough healthy cycles in a row clear
+    earlier errors, so one transient failure no longer stops apply for good."""
+    trial = state.setdefault('trial', {})
+    if not ok:
+        trial['error_count'] = trial.get('error_count', 0) + 1
+        trial['healthy'] = 0
+        return trial
+    trial['healthy'] = trial.get('healthy', 0) + 1
+    if trial.get('error_count') and trial['healthy'] >= config.get('error_reset_after', ERROR_RESET_AFTER):
+        trial['error_count'] = 0
+    return trial
+
+
 def run(argv, *, timeout=12, env=None):
     # ps cuts long Korean args mid-character; a strict decode would fail the whole observer.
     result = subprocess.run([str(v) for v in argv], capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=timeout, env=env, creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))

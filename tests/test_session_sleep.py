@@ -879,18 +879,18 @@ class PaneCloseTests(unittest.TestCase):
         # Codex re-review P2 (1): the retry list was put into the state only at the cycle's end.
         self.config['exclude_addresses'] = []
         self.park_then(None, fail_closed=2)
-        real_screen = self.live.screen
-        def screen(address):
+        real_focus = sleep.spaces.focus
+        def focus(status):
             if ('pane.close', 'p12') in self.live.calls:
-                raise RuntimeError('screen read failed')
-            return real_screen(address)
+                raise RuntimeError('focus read failed')
+            return real_focus(status)
         state = self.state()
-        self.live.screen = screen
-        with self.assertRaisesRegex(RuntimeError, 'screen read failed'):
-            sleep.cycle(self.live, self.config, state, NOW, apply=True, paths=self.paths)
+        with patch.object(sleep.spaces, 'focus', focus):
+            with self.assertRaisesRegex(RuntimeError, 'focus read failed'):
+                sleep.cycle(self.live, self.config, state, NOW, apply=True, paths=self.paths)
         self.assertNotIn('t12', pane_of_names(self.live))
         self.assertEqual([(e['address'], e['pending']) for e in state['unrecorded_closes']], [('t12', 'unrecorded')])
-        self.live.screen, self.live.calls[:] = real_screen, []
+        self.live.calls[:] = []
         state['last_at'] = NOW - 300
         sleep.cycle(self.live, self.config, state, NOW, apply=True, paths=self.paths)
         self.assertIn(('park', 'closed', 't12'), self.live.calls)
@@ -927,6 +927,56 @@ class PaneCloseTests(unittest.TestCase):
         sleep.cycle(self.live, self.config, state, NOW, apply=True, paths=self.paths)
         self.assertEqual([c for c in self.live.calls if c[0] == 'park'][0], ('park', 'close_aborted', 't12'))
         self.assertEqual(state['unrecorded_closes'], [])
+
+    def test_an_unreadable_app_at_the_start_skips_the_cycle(self):
+        def boom():
+            raise TimeoutError("Command ['herdr-core', 'ls', '--all', '--json'] timed out after 12 seconds")
+        state = self.state()
+        self.live.snapshot = boom
+        with self.assertRaises(sleep.agent_sessions.SkipCycle):
+            sleep.cycle(self.live, self.config, state, NOW, apply=True, paths=self.paths)
+        self.assertFalse([c for c in self.live.calls if c[0] in ('pane.close', 'keys', 'ask', 'park')])
+
+    def test_one_pane_lookup_timing_out_keeps_only_that_pane(self):
+        real = sleep.inspect
+        def inspect(address, *a, **k):
+            if address == 't3':
+                raise TimeoutError("Command ['herdr-core', 'get', 't3', '--json'] timed out after 12 seconds")
+            return real(address, *a, **k)
+        state = self.state()
+        with patch.object(sleep, 'inspect', inspect):
+            got = {r['address']: r for r in sleep.cycle(self.live, self.config, state, NOW, apply=True, paths=self.paths)['results']}
+        self.assertEqual(got['t3']['action'], 'keep')
+        self.assertTrue(got['t3']['reasons'][0].startswith('lookup failed:'))
+        self.assertEqual(got['t12']['action'], 'closed', got['t12']['reasons'])   # the others go on
+
+    def test_a_recheck_lookup_failure_before_close_settles_and_keeps(self):
+        self.park_then(lambda: setattr(self.live, 'snapshot', lambda: (_ for _ in ()).throw(TimeoutError('ls timed out'))))
+        got = self.run_cycle()['t12']
+        self.assertEqual(got['action'], 'keep')
+        self.assertFalse([c for c in self.live.calls if c[0] == 'pane.close'])
+        self.assertEqual([c[1] for c in self.live.calls if c[0] == 'park'], ['close_requested', 'close_aborted'])
+
+    def test_main_skips_without_counting_an_error_and_errors_clear_after_healthy_cycles(self):
+        import io, contextlib
+        folder = Path(self.paths['notes']).parent
+        config_path, state_path, log = folder / 'c.json', folder / 's.json', folder / 'l.jsonl'
+        config_path.write_text(json.dumps({**self.config, 'idle_seconds': 1200}))
+        state_path.write_text(json.dumps({'observer_sha256': sleep.observer_sha256(Path(sleep.__file__).parent),
+                                          'trial': {'started_at': NOW, 'samples': 3, 'error_count': 1, 'healthy': 0}}))
+        class Broken:
+            def __init__(self, *a): pass
+            def snapshot(self):
+                raise TimeoutError('ls timed out')
+        argv = ['sleep', '--config', str(config_path), '--state', str(state_path), '--log', str(log), '--data', str(folder), '--dry-run']
+        with patch.object(sleep, 'Live', Broken), patch.object(sys, 'argv', argv), contextlib.redirect_stdout(io.StringIO()):
+            sleep.main()
+        self.assertEqual(json.loads(state_path.read_text())['trial']['error_count'], 1)   # skipped: not counted
+        self.assertIn('skipped', json.loads(log.read_text().splitlines()[-1]))
+        with patch.object(sleep, 'Live', lambda *a: self.live), patch.object(sys, 'argv', argv), contextlib.redirect_stdout(io.StringIO()):
+            for _ in range(3):
+                sleep.main()
+        self.assertEqual(json.loads(state_path.read_text())['trial']['error_count'], 0)
 
     def test_a_failing_pane_close_is_settled_with_close_aborted_and_stops(self):
         def boom(pane_id):

@@ -403,13 +403,11 @@ def record_space(item, report_dir, now, terms=()):
 
 
 def cycle(adapter, config, state, now, *, apply=False, only_space=None, report_dir=None):
-    snapshot = adapter.snapshot()
+    snapshot = agent_sessions.first_snapshot(adapter)   # unreadable: SkipCycle, not an error
     previous = state.get('spaces', {})
     gap = now - state.get('last_at', now)
     fresh = 0 <= gap <= config.get('max_sample_gap_seconds', 660)
-    trial = state.get('trial', {}) if fresh else {}
-    trial = {'started_at': trial.get('started_at', now), 'samples': trial.get('samples', 0) + 1,
-             'error_count': trial.get('error_count', 0)}
+    trial = agent_sessions.trial_of(state, now, fresh)
     # The person may approve apply after one recorded dry-run of this exact code
     # (user_approved_apply), instead of the 30-minute trial review.
     approved = bool(config.get('user_approved_apply')) and config.get('reviewed_observer_sha256') == state.get('observer_sha256')
@@ -421,7 +419,11 @@ def cycle(adapter, config, state, now, *, apply=False, only_space=None, report_d
     for space in snapshot['spaces']:
         if only_space and space['id'] != only_space:
             continue
-        item = inspect(space, snapshot, adapter, config)
+        try:
+            item = inspect(space, snapshot, adapter, config)
+        except Exception as exc:   # noqa: BLE001 — this space only (a pane lookup timed out); the cycle goes on
+            item = {'id': space['id'], 'name': space.get('name'), 'safe': False,
+                    'reasons': [f'lookup failed: {str(exc)[:160]}']}
         old = previous.get(space['id'], {})
         same = fresh and item['safe'] and old.get('fingerprint') == item.get('fingerprint')
         # Answering the observer's own close-report request changes the screen but is not new work:
@@ -450,7 +452,11 @@ def cycle(adapter, config, state, now, *, apply=False, only_space=None, report_d
                 item['reasons'].append('dry-run review not recorded')
             elif apply:
                 # Immediately recheck every prerequisite and the original user focus.
-                check = adapter.snapshot()
+                try:
+                    check = adapter.snapshot()
+                except Exception as exc:   # noqa: BLE001 — nothing was done yet: keep it, next cycle
+                    item['action'] = 'keep'; item['reasons'].append(f'recheck lookup failed: {str(exc)[:160]}')
+                    result.append(item); continue
                 target = next((s for s in check['spaces'] if s['id'] == space['id']), None)
                 # The person moving around elsewhere does not stop cleanup; only the space they are
                 # looking at right now is skipped.
@@ -584,8 +590,12 @@ def main():
         state = {'observer_sha256': observer_hash}
     try:
         observation = cycle(Live(args.app, args.core), config, state, time.time(), apply=args.apply, only_space=args.only_space, report_dir=args.report_dir)
+        agent_sessions.settle_trial(state, config, ok=True)
+    except agent_sessions.SkipCycle as exc:
+        observation = {'at': dt.datetime.now().astimezone().isoformat(), 'mode': 'apply' if args.apply else 'dry-run',
+                       'skipped': str(exc), 'results': []}
     except Exception as exc:
-        state.setdefault('trial', {})['error_count'] = state.get('trial', {}).get('error_count', 0) + 1
+        agent_sessions.settle_trial(state, config, ok=False)
         observation = {'at': dt.datetime.now().astimezone().isoformat(), 'mode': 'apply' if args.apply else 'dry-run', 'error': str(exc), 'results': []}
     save(args.state, state)
     args.log.parent.mkdir(parents=True, exist_ok=True)

@@ -402,7 +402,10 @@ def close_one(item, adapter, config, paths, now, snapshot, closed=()):
         ok_, detail_ = adapter.park(config, item, 'close_aborted', reason=f'pane close failed: {why}'[:200])
         item['harness_abort'] = detail_ if ok_ else f'close_aborted not recorded: {detail_}'
 
-    why, _snap = close_recheck(item, adapter, config, closed)
+    try:
+        why, _snap = close_recheck(item, adapter, config, closed)
+    except Exception as exc:   # noqa: BLE001 — nothing was closed: settle the request, keep the pane
+        why = [f'lookup failed: {str(exc)[:120]}']
     if why:
         aborted('recheck: ' + '; '.join(why))
         item['reasons'].append('recheck before close: ' + '; '.join(why))
@@ -442,13 +445,18 @@ def shlex_quote(value):
     return shlex.quote(value)
 
 
+def lookup_failed(address, space, exc):
+    """One pane's lookup failed (a timeout, an unreadable answer): only that pane is kept."""
+    return {'address': address, 'space_id': space.get('id'), 'space_name': space.get('name'),
+            'reasons': [f'lookup failed: {str(exc)[:160]}']}
+
+
 def cycle(adapter, config, state, now, *, apply=False, paths=None):
-    snapshot = adapter.snapshot()
+    snapshot = agent_sessions.first_snapshot(adapter)   # unreadable: SkipCycle, not an error
     previous = state.get('sessions', {})
     gap = now - state.get('last_at', now)
     fresh = 0 <= gap <= config.get('max_sample_gap_seconds', 660)
-    trial = state.get('trial', {}) if fresh else {}
-    trial = {'started_at': trial.get('started_at', now), 'samples': trial.get('samples', 0) + 1, 'error_count': trial.get('error_count', 0)}
+    trial = agent_sessions.trial_of(state, now, fresh)
     approved = bool(config.get('user_approved_apply')) and config.get('reviewed_observer_sha256') == state.get('observer_sha256')
     ready = approved and trial['samples'] >= 2 and trial['error_count'] == 0
     idle = config.get('idle_seconds', 1200)
@@ -469,7 +477,10 @@ def cycle(adapter, config, state, now, *, apply=False, paths=None):
     if pending:
         stop_reason = f"{len(pending)} closed pane(s) still without a harness record; retried next cycle"
     for address, (space, tab) in sorted(pane_of(snapshot).items()):
-        item = inspect(address, space, snapshot, adapter, config, tab)
+        try:
+            item = inspect(address, space, snapshot, adapter, config, tab)
+        except Exception as exc:   # noqa: BLE001 — this pane only; the cycle goes on
+            item = lookup_failed(address, space, exc)
         old = previous.get(address, {})
         safe = not blockers(item)          # nothing blocks closing or asking for the report
         sleepable = not item['reasons']    # nothing blocks the /exit sleep either
@@ -511,9 +522,14 @@ def cycle(adapter, config, state, now, *, apply=False, paths=None):
                 # The person moves around while a cycle runs. A fresh recheck of this pane
                 # (shown tab, focused pane, evidence) is what matters, not where the focus
                 # was when the cycle began.
-                check = adapter.snapshot()
-                where = pane_of(check).get(address)
-                latest = inspect(address, where[0], check, adapter, config, where[1]) if where else None
+                try:
+                    check = adapter.snapshot()
+                    where = pane_of(check).get(address)
+                    latest = inspect(address, where[0], check, adapter, config, where[1]) if where else None
+                except Exception as exc:   # noqa: BLE001 — nothing acted yet: keep it, try next cycle
+                    check, where, latest = None, None, None
+                    item['reasons'].append(f'recheck lookup failed: {str(exc)[:160]}')
+                    stop_reason = 'a recheck lookup failed; next cycle'
                 if not latest:
                     item['reasons'].append('pane moved or closed before sleep')
                 elif blockers(latest):
@@ -617,8 +633,12 @@ def main():
     paths = {'notes': args.data / 'notes', 'tickets': args.data / 'tickets', 'stub': Path(__file__).with_name('session_sleep_stub.py')}
     try:
         observation = cycle(Live(args.app, args.core), config, state, time.time(), apply=args.apply, paths=paths)
+        agent_sessions.settle_trial(state, config, ok=True)
+    except agent_sessions.SkipCycle as exc:
+        observation = {'at': dt.datetime.now().astimezone().isoformat(), 'mode': 'apply' if args.apply else 'dry-run',
+                       'skipped': str(exc), 'results': []}
     except Exception as exc:
-        state.setdefault('trial', {})['error_count'] = state.get('trial', {}).get('error_count', 0) + 1
+        agent_sessions.settle_trial(state, config, ok=False)
         observation = {'at': dt.datetime.now().astimezone().isoformat(), 'mode': 'apply' if args.apply else 'dry-run', 'error': str(exc), 'results': []}
     spaces.save(args.state, state)
     if args.log.exists() and args.log.stat().st_size > 8 * 1024 * 1024:
