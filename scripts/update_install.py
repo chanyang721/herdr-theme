@@ -399,6 +399,23 @@ def update(repo, home, names, cli='herdr-app', verify_timeout=10, allow_unhealth
                 raise InstallError(f'{error}; {receipt["phase"]}; receipt: {backup / "receipt.json"}') from error
 
 
+OBSERVER_SOURCES = {'close_finished_spaces.py', 'sleep_idle_sessions.py', 'agent_sessions.py', 'space_job_evidence.py',
+                    'session_sleep_stub.py', 'site_config.py', 'file_lock.py', 'agent_env.py'}
+
+
+def refresh_observers(repo, observer_home, names):
+    """An install that touches an observer's scripts also brings the registered launchd copies to
+    the same version (files only, see install_space_cleanup.refresh_installed)."""
+    if not any(Path(n).parts[:1] == ('scripts',) and Path(n).name in OBSERVER_SOURCES for n in names):
+        return None
+    sys.path.insert(0, str(Path(repo) / 'scripts'))
+    try:
+        import install_space_cleanup
+        return install_space_cleanup.refresh_installed(observer_home, repo)
+    finally:
+        sys.path.remove(str(Path(repo) / 'scripts'))
+
+
 def install_voice(repo, home):
     """The voice plugin is a herdr plugin with its own entry points (hook,
     LaunchAgent, app routing), so it installs as one unit and checks itself."""
@@ -423,6 +440,8 @@ def main():
     parser.add_argument('--cli', default='herdr-app')
     parser.add_argument('--verify-timeout', type=float, default=10)
     parser.add_argument('--allow-unhealthy-before', action='store_true', help='Authorized repair only; post-install status must still become error-free')
+    parser.add_argument('--observer-home', type=Path, default=Path.home(),
+                        help='Home whose registered cleanup/sleep observer copies follow an install of their scripts')
     args = parser.parse_args()
     if args.verify_timeout < 1.5:
         parser.error('--verify-timeout must be at least 1.5 seconds')
@@ -446,10 +465,13 @@ def main():
             workspace_mods.record(args.home, pin)
         if voice:
             install_voice(args.repo, args.home)
-    except (InstallError, subprocess.SubprocessError, OSError, ValueError) as error:
+        observers = refresh_observers(args.repo, args.observer_home, app_files)
+    except (InstallError, subprocess.SubprocessError, OSError, ValueError, RuntimeError) as error:
         parser.exit(1, f'Install failed: {error}\n')
     if backup:
         print(f'Installed and verified errors=0; backup/receipt: {backup}')
+    if observers:
+        print('Observer copies: ' + json.dumps(observers, ensure_ascii=False))
 
 
 if __name__ == '__main__':
