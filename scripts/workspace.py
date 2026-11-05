@@ -59,6 +59,46 @@ def app(command, args):
     return json.loads(subprocess.check_output(['herdr-app','do',command,json.dumps(args)],text=True,encoding='utf-8'))
 
 
+def view():
+    """(space, tab, focused pane, {terminal: pane}) the window shows now, or None when unreadable.
+    `herdr-app ls` lists only terminals, so a mod pane or tab (a document, a sidebar) is never in the map."""
+    try:
+        status=json.loads(subprocess.check_output(['herdr-app','status'],text=True,encoding='utf-8'))
+        spaces=json.loads(subprocess.check_output(['herdr-app','ls']))['spaces']
+        panes={t.get('terminal'):t.get('pane') for space in spaces for tab in space.get('tabs',[]) for t in tab.get('terminals',[])}
+    except (OSError,ValueError,KeyError,TypeError,subprocess.SubprocessError):
+        return None
+    if not isinstance(status,dict):return None
+    return (status.get('space'),status.get('tab'),status.get('focused_pane'),panes)
+
+
+def took_selection(before,reply,after):
+    """True only when the selection sits on a tab or pane this creation made. When its reply names
+    what it created (pane, terminal or tab), only those ids count; whatever else appeared in the
+    window meanwhile belongs to someone else. Only when the creation failed or named nothing, so its
+    ids are unknown, is a terminal pane that was not listed before treated as ours. An old terminal
+    or a mod pane the person chose is never ours."""
+    reply=reply if isinstance(reply,dict) else {}
+    if any(reply.get(k) for k in ('pane','terminal','tab')):
+        mine={reply.get('pane'),after[3].get(reply.get('terminal'))}
+        mine.discard(None)
+        return after[2] in mine or bool(reply.get('tab') and after[1]==reply.get('tab'))
+    return after[2] in (set(after[3].values())-set(before[3].values()))
+
+
+def restore_view(before,reply):
+    """Creating a space must not change what the person is looking at. herdr-app's space.new has
+    no option for that, so the selection is compared afterwards. If what the creation made took
+    it, the earlier selection (space, tab, pane) is put back; a selection the person made on
+    anything else is left alone. Best effort: a failure here never undoes the new space."""
+    after=view()
+    if not before or not after or not took_selection(before,reply,after):return
+    for index,(command,key) in enumerate((('space.select','id'),('tab.select','id'),('pane.focus','pane'))):
+        if before[index] and after[index]!=before[index]:
+            try:app(command,{key:before[index]})
+            except (OSError,ValueError,subprocess.SubprocessError):pass
+
+
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('name');parser.add_argument('folder')
@@ -82,21 +122,26 @@ def main():
         launched.append({'kind':'claude','tier':tier,'tier_used':used,'model':(entry or {}).get('model'),
                          'effort':(entry or {}).get('effort')})
         spec={'argv':launch_argv(['claude']+model_tier.flags('claude',entry))}
-    new=app('space.new',{'name':args.name,'folder':args.folder,'tab':'개발',**spec})
-    # The core adoption can arrive after the creation acknowledgment. Identify
-    # the observed terminal rather than guessing an ID or duplicating the space.
-    first=None
-    for _ in range(40):
-        observed=json.loads(subprocess.check_output(['herdr-app','ls']))['spaces']
-        for space in observed:
-            for tab in space['tabs']:
-                match=next((t for t in tab['terminals'] if t['terminal']==new['terminal']),None)
-                if match:
-                    first=match;new.update(space=space['id'],tab=tab['id'])
-        if first:break
-        time.sleep(0.05)
-    if first is None:raise SystemExit('Terminal created but not yet visible; inspect herdr-app ls before retrying.')
-    app('space.rename',{'id':new['space'],'name':args.name})
+    before=view()
+    new=None
+    try:
+        new=app('space.new',{'name':args.name,'folder':args.folder,'tab':'개발',**spec})
+        # The core adoption can arrive after the creation acknowledgment. Identify
+        # the observed terminal rather than guessing an ID or duplicating the space.
+        first=None
+        for _ in range(40):
+            observed=json.loads(subprocess.check_output(['herdr-app','ls']))['spaces']
+            for space in observed:
+                for tab in space['tabs']:
+                    match=next((t for t in tab['terminals'] if t['terminal']==new['terminal']),None)
+                    if match:
+                        first=match;new.update(space=space['id'],tab=tab['id'])
+            if first:break
+            time.sleep(0.05)
+        if first is None:raise SystemExit('Terminal created but not yet visible; inspect herdr-app ls before retrying.')
+        app('space.rename',{'id':new['space'],'name':args.name})
+    finally:
+        restore_view(before,new)
     if args.agents:
         subprocess.run(['hc','label',first['terminal'],'sixfold.native-agent=claude'],check=True,capture_output=True, creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
         launched[0]['terminal']=first['terminal']
