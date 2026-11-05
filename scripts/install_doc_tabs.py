@@ -155,7 +155,7 @@ def copy_feature(repo, app_home):
             shutil.copy2(source_path, destination)
     scripts = app_home/'scripts/sixfold'
     scripts.mkdir(parents=True, exist_ok=True)
-    for name in ('install_doc_tabs.py', 'resolve_doc_pins.py', 'doc_catalog.py', 'collect_docs.py', 'core_api.py', 'render_mermaid.py', 'render_html.py', 'open_doc_tab.py',
+    for name in ('install_doc_tabs.py', 'resolve_doc_pins.py', 'doc_catalog.py', 'doc_routing.py', 'collect_docs.py', 'core_api.py', 'render_mermaid.py', 'render_html.py', 'open_doc_tab.py',
                  'site_config.py', 'file_lock.py', 'desktop.py'):
         shutil.copy2(repo/'scripts'/name, scripts/name)
     if sys.platform != 'darwin':

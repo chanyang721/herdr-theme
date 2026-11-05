@@ -164,18 +164,23 @@ def build(items, pins, kinds, today=None, recent_days=RECENT_DAYS):
         relative = Path(item.get('relativePath') or item['name'])
         stamp, dated = document_date(item['name'], relative.parts[:-1], item['mtime'])
         key, before, variant = family_key(item['name'])
+        kind = classify(item['name'], str(relative.parent) if str(relative.parent) != '.' else '', kinds)
+        if kind == OTHER['id'] and item.get('title'):
+            kind = classify(item['title'], '', kinds)
         row = {
             'id': doc_id(item['path']), 'path': item['path'], 'name': item['name'], 'label': label_of(item['name'], prefix),
-            'kind': classify(item['name'], str(relative.parent) if str(relative.parent) != '.' else '', kinds),
+            'kind': kind,
             # Dated copies in other folders are one document; README in two folders is two.
             'family': 'fam-' + hashlib.sha256('\0'.join(
                 [item['sourceRoot'], key] + ([] if dated else [str(relative.parent)])).encode()).hexdigest()[:16],
             'date': stamp.isoformat(), 'dated': dated, 'recent': since <= stamp <= today, 'mtime': item['mtime'],
+            'modified': datetime.fromtimestamp(item['mtime'] / 1000).date().isoformat(),
             'size': item.get('size'),
             'folder': str(relative.parent) if str(relative.parent) != '.' else '', 'pinned': False, 'status': 'ok',
             'state': 'archived' if item.get('archived') else 'latest', 'before': before, 'variant': variant,
-            'modified': datetime.fromtimestamp(item['mtime'] / 1000).date().isoformat(),
         }
+        if item.get('routedFrom'):
+            row['routedFrom'] = item['routedFrom']
         rows.append(row)
         if row['state'] != 'archived':
             families.setdefault(row['family'], []).append(row)

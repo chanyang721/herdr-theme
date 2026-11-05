@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "fallback": "Share",
+  "sources": [
+    {"path": "~/Documents/HerdrReports"},
+    {"path": "~/Downloads", "depth": 1, "requireMatch": true}
+  ],
+  "spaces": {
+    "Project A": {"terms": ["project-a", "프로젝트a"]},
+    "Project B": {"terms": ["project-b", "프로젝트b"]}
+  }
+}
