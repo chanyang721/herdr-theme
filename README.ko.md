@@ -243,7 +243,7 @@ Codex·Claude 한도를 브랜드 아이콘·막대·백분율로: 5시간·7일
 
 **고정 표시·아이콘·로컬 설정.** `data/sixfold/workspace-pins.local.json`(`{"spaces":[{"id":"…","machine":null}]}`)은 정확히 그 워크스페이스에 핀과 강조 테두리를 붙입니다. `scripts/set_workspace_icon.py 'ID 또는 이름' icon.png`는 프로젝트 아이콘(SVG/PNG/JPEG/WebP)을 지정합니다. 사람마다 다른 이름·색·폴더·Slack 주소는 `data/sixfold/site.local.json`(`config/site.example.json`에서 시작)에 두며, `"pane_header_index": true`는 칸 번호를 다시 보여 줍니다. `*.local.json`은 git이 무시합니다.
 
-**macOS 전용.** 대기 세션 절전과 끝난 워크스페이스 목록은 두 LaunchAgent 관찰기(`install_session_sleep.py`, `install_space_cleanup.py`)가 하며, apply를 켜기 전까지는 기록만 합니다. 워크스페이스는 `space_close_enabled: true`를 직접 넣기 전에는 닫지 않습니다. 하네스로 끝난 세션(최종 보고 확인)의 칸은 같은 공간에 다른 칸이 남을 때 닫고(`close_finished_panes`, 기본 켜짐), 공간마다 최소 1칸은 남깁니다. 실시간 TUI 연결(`scripts/tui_bridge.py`, Linux도)은 기존 Herdr TUI 칸을 가져오지 않고 연결합니다. [`voice/`](voice/README.md)의 음성 플러그인은 포커스된 칸만 녹음합니다.
+**macOS 전용.** 대기 세션 절전과 끝난 워크스페이스 목록은 두 LaunchAgent 관찰기(`install_session_sleep.py`, `install_space_cleanup.py`)가 하며, apply를 켜기 전까지는 기록만 합니다. 워크스페이스는 `space_close_enabled: true`를 직접 넣기 전에는 닫지 않습니다. 하네스로 끝난 세션(최종 보고 확인)의 칸은 같은 탭에 다른 칸이 남을 때 닫고(`close_finished_panes`, 기본 켜짐), 공간마다·탭마다 최소 1칸은 남깁니다. 실시간 TUI 연결(`scripts/tui_bridge.py`, Linux도)은 기존 Herdr TUI 칸을 가져오지 않고 연결합니다. [`voice/`](voice/README.md)의 음성 플러그인은 포커스된 칸만 녹음합니다.
 
 공용 워크스페이스와 프로젝트 칸 사이 메시지 전달: [COMMON_ROUTING.md](COMMON_ROUTING.md). 과부하 때의 협업: [docs/overload-collaboration.md](docs/overload-collaboration.md). 프로젝트 문서 추적: [docs/project-documents.md](docs/project-documents.md).
 

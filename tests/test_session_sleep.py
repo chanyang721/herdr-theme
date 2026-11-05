@@ -811,6 +811,16 @@ class PaneCloseTests(unittest.TestCase):
             self.run_cycle()
         self.assertEqual([c[1] for c in self.live.calls if c[0] == 'park'], ['close_requested'])
 
+    def test_the_last_pane_of_a_hidden_tab_is_not_closed_even_if_the_space_keeps_others(self):
+        # t1 decision 2026-11-05: a space keeps one pane and every tab keeps one (harness close gate).
+        tabs = self.live.data['spaces'][1]['tabs']
+        t3 = tabs[0]['terminals'].pop()
+        tabs.append({'id': 'tab-other', 'terminals': [t3]})   # t12 and t3 alone in their own tabs
+        got = self.run_cycle()['t12']
+        self.assertFalse([c for c in self.live.calls if c[0] == 'pane.close'])
+        self.assertEqual(got['action'], 'slept', got['reasons'])
+        self.assertIn('last pane in its tab: slept instead of closed', got['reasons'])
+
     def test_switched_off_it_sleeps(self):
         self.config['close_finished_panes'] = False
         got = self.run_cycle()['t12']
@@ -874,7 +884,7 @@ class PaneCloseTests(unittest.TestCase):
         add_pane(self.live, 0, 1, 't5', 500, 'p5')
         got = self.run_cycle()['t1']
         self.assertEqual(got['action'], 'reported', got['reasons'])
-        self.assertTrue(any('last pane of the shown tab' in r for r in got['reasons']))
+        self.assertTrue(any('last pane in its tab' in r for r in got['reasons']))
         self.assertFalse([c for c in self.live.calls if c in (('pane.close', 'p-focus'),) or c[:2] == ('keys', 't1')])
 
     def test_typed_input_or_a_float_blocks_closing_and_asking(self):

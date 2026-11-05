@@ -24,10 +24,10 @@ A session that finished through the harness (step 0 found its final report) is c
 of slept when its space keeps another pane (user rule, 2026-11-05; close_finished_panes, default
 true): harness `park --event close_requested` first (no record, no close), the local note, then
 `herdr-app do pane.close {"pane": <its pane id>}` (never "the focused pane"), a fresh snapshot
-must show the pane gone (else every further action stops), and `park --event closed`. Every
-space keeps at least one pane, fixed workspaces included: the last pane of a space sleeps as
-above instead, or is kept when its terminal program is not a shell. A pane alone in the shown tab
-is never closed (the tab would vanish under the person's eyes). Closing does not need a shell
+must show the pane gone (else every further action stops), and `park --event closed`. Every space
+keeps at least one pane and every tab keeps one (pane.close on a tab's last pane closes the tab;
+same as the harness close gate, t1 decision 2026-11-05), fixed workspaces included: such a pane
+sleeps as above instead, or is kept when its terminal program is not a shell. Closing does not need a shell
 (pane.close removes the terminal) and a pane in the shown tab may close, but the focused pane,
 a float/overlay, typed input, voice, a pending decision, work, subagents and jobs still block it,
 rechecked on a fresh snapshot right before.
@@ -158,8 +158,10 @@ def close_blocker(item, snapshot, tab, closed):
     others = [a for a, t in panes if a != item['address']]
     if not others:
         return 'last pane in its space'
-    if VISIBLE in item['reasons'] and not [a for a, t in panes if t == tab and a != item['address']]:
-        return 'last pane of the shown tab'
+    # pane.close on a tab's last pane closes the tab: every tab keeps one too, like the harness
+    # close gate (runtime/gate.py, t1 decision 2026-11-05).
+    if not [a for a, t in panes if t == tab and a != item['address']]:
+        return 'last pane in its tab'
     if not pane_id_of(pane_entry(snapshot, item['address'])):
         return 'pane id unavailable'
     return None
@@ -346,6 +348,7 @@ def close_one(item, adapter, config, paths, now, snapshot):
         item['reasons'].append(f'harness record failed: {detail}')
         return 'keep', None
     item['note'] = note(item, paths['notes'], now)
+
     adapter.close_pane(pane_id)
     after = adapter.snapshot()
     if item['address'] in pane_of(after) or any(pane_id_of(t) == pane_id for s in after['spaces']
