@@ -152,6 +152,10 @@ def main(argv=None):
     if not data:
         return 0
     message = message_of(data)
+    try:   # the ticket may have been cleaned while this screen waited
+        ticket = {**ticket, **json.loads(Path(argv[0]).read_text(encoding='utf-8'))}
+    except (OSError, ValueError, TypeError):
+        pass
     clear_labels(ticket.get('address'))
     record_resumed(ticket)
     if ticket.get('cwd') and Path(ticket['cwd']).is_dir():
