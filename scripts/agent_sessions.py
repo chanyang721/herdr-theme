@@ -5,6 +5,7 @@ sleep). Everything here fails closed: when a fact cannot be read it is reported 
 unverified, never as "no work".
 """
 import json
+import math
 import os
 from pathlib import Path
 import re
@@ -508,13 +509,18 @@ def report_gate(entries, item, adapter, config, now):
     if entry is None:
         entries.pop(address, None)
         adapter.request_report(address, close_report_message(config))
-        entries[address] = {'session_id': sid, 'requested_at': now, 'since': utc_iso(now - 5), 'turn': turn}
+        # Only a report written after the request answers it: `since` is the request time rounded
+        # up to the record's whole-second clock (Codex review 2026-11-05 P2).
+        entries[address] = {'session_id': sid, 'requested_at': now, 'since': utc_iso(math.ceil(now)), 'turn': turn}
         return 'requested', None
+    if entry.get('report'):
+        return 'ready', entry['report']   # accepted in time on an earlier cycle
+    if now - entry['requested_at'] >= timeout:
+        # The limit comes first: a report that shows up after it does not count (fail-closed).
+        entry['failed_at'] = now
+        return 'failed', f'no close report within {timeout // 60} minutes: kept (fail-closed)'
     ok, detail = adapter.close_status(config, item, entry['since'])
     if ok:
         entry['report'] = detail
         return 'ready', detail
-    if now - entry['requested_at'] >= timeout:
-        entry['failed_at'] = now
-        return 'failed', f'no close report within {timeout // 60} minutes: kept (fail-closed)'
     return 'waiting', detail

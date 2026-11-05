@@ -574,3 +574,43 @@ class InstallTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class ReportGateTimingTests(unittest.TestCase):
+    """Codex review 2026-11-05 P2: only a report written after the request, and within the limit, counts."""
+    class Adapter:
+        def __init__(self, report_at):
+            self.report_at, self.asked = report_at, []
+
+        def request_report(self, address, text):
+            self.asked.append(address)
+
+        def close_status(self, config, item, since):
+            ok = agent_sessions.utc_iso(self.report_at) >= since   # what harness close-status compares
+            return (True, {'report_id': 'R', 'task_id': 'T'}) if ok else (False, 'no close report yet')
+
+    ITEM = {'address': 't12', 'session_id': SID, 'turn': 3}
+    CONFIG = {'close_report': {'timeout_seconds': 900, 'retry_seconds': 3600}}
+
+    def test_a_report_written_before_the_request_is_not_an_answer(self):
+        now = 1_793_000_000.4
+        adapter, entries = self.Adapter(report_at=now - 3), {}
+        self.assertEqual(agent_sessions.report_gate(entries, dict(self.ITEM), adapter, self.CONFIG, now)[0], 'requested')
+        self.assertEqual(agent_sessions.report_gate(entries, dict(self.ITEM), adapter, self.CONFIG, now + 60)[0], 'waiting')
+        adapter.report_at = now + 30
+        self.assertEqual(agent_sessions.report_gate(entries, dict(self.ITEM), adapter, self.CONFIG, now + 90)[0], 'ready')
+
+    def test_a_report_after_the_limit_is_not_accepted(self):
+        now = 1_793_000_000.0
+        adapter, entries = self.Adapter(report_at=now + 901), {}
+        agent_sessions.report_gate(entries, dict(self.ITEM), adapter, self.CONFIG, now)
+        decision, detail = agent_sessions.report_gate(entries, dict(self.ITEM), adapter, self.CONFIG, now + 905)
+        self.assertEqual(decision, 'failed')
+        self.assertIn('fail-closed', detail)
+
+    def test_a_report_accepted_in_time_stays_ready_on_later_cycles(self):
+        now = 1_793_000_000.0
+        adapter, entries = self.Adapter(report_at=now + 30), {}
+        agent_sessions.report_gate(entries, dict(self.ITEM), adapter, self.CONFIG, now)
+        self.assertEqual(agent_sessions.report_gate(entries, dict(self.ITEM), adapter, self.CONFIG, now + 60)[0], 'ready')
+        self.assertEqual(agent_sessions.report_gate(entries, dict(self.ITEM), adapter, self.CONFIG, now + 1000)[0], 'ready')
