@@ -204,6 +204,24 @@ class SleepTests(unittest.TestCase):
         self.assertTrue(agent_sessions.inherited_child_session(1, reader=lambda p: env))
         self.assertFalse(agent_sessions.inherited_child_session(1, reader=lambda p: 'claude HOME=/x'))
 
+    def test_a_child_session_reports_sleeps_and_wakes_as_a_new_session(self):
+        # Opened inside another agent: no transcript, nothing to resume. It is parked under its pane
+        # session id and its stub starts a new session (never the old first prompt again).
+        self.mapping.stop()
+        self.live.data['terminals']['t12']['foreground']['argv'] = ['claude', '사용자 요청: 오래된 첫 지시']
+        self.live.jobs = (False, 'should not be asked', '')
+        with patch.object(agent_sessions, 'session_mapping', lambda t, c=None: (None, 'cannot resume: Claude runs as an inherited child session (no session file or transcript)')), \
+                patch.object(agent_sessions, 'inherited_child_session', lambda pid, reader=None: True):
+            self.live.child = agent_sessions.child_session
+            got = self.run_cycle()
+        self.mapping.start()
+        pane_sid = agent_sessions.pane_session_id('t12', 5, 201)
+        self.assertEqual(got['t12']['action'], 'slept', got['t12']['reasons'])
+        ticket = json.loads((self.paths['tickets'] / 't12.json').read_text())
+        self.assertEqual((ticket['argv'], ticket['session_id'], ticket['new_session']), (['claude'], pane_sid, True))
+        label = [c for c in self.live.calls if c[0] == 'label' and c[1] == 't12'][0][2]
+        self.assertEqual((label['sixfold.sleep'], label['sixfold.sleep.new']), (f'claude:{pane_sid}', '1'))
+
     def test_an_agent_that_is_the_terminal_program_never_sleeps(self):
         # /exit would end the terminal and could remove the pane, maybe a space's last one.
         self.live.data['terminals']['t12']['argv'] = ['claude', '--resume', SID]
@@ -416,6 +434,23 @@ class EvidenceTests(unittest.TestCase):
         self.assertEqual(agent_sessions.resume_argv('claude-code', ['claude', '--resume', 'old', '--model', 'opus'], SID),
                          ['claude', '--model', 'opus', '--resume', SID])
 
+    def test_pane_session_id_matches_the_harness_and_is_a_uuid(self):
+        # runtime/lifecycle.pane_session_id('t38', 1, 2) in herdr-harness gives the same value.
+        self.assertEqual(agent_sessions.pane_session_id('t38', 1, 2), '901ebaf1-e70d-5c12-aff5-2ab7a207eba4')
+        self.assertRegex(agent_sessions.pane_session_id('t1', 5, 6), agent_sessions.UUID)
+
+    def test_cleanup_records_are_masked(self):
+        self.assertIn('close-report --mask', agent_sessions.close_report_message({}))
+        class R:
+            returncode, stdout, stderr = 0, '{"ok": true, "archive": "A.json"}', ''
+        seen = []
+        ok, _ = agent_sessions.harness_archive({'harness': {'python': 'py', 'script': 'h.py'}}, {'workspace_id': 'm-sp'},
+                                               runner=lambda a: seen.append(a) or R())
+        self.assertTrue(ok)
+        self.assertEqual(seen[0][-1], '--mask')
+        self.assertEqual(agent_sessions.mask_text('Acme 정리 · ACME-2', ['acme']), '[가림] 정리 · [가림]-2')
+        self.assertIn('새 세션', agent_sessions.summary({'session_id': SID, 'app': 'claude', 'address': 't1', 'no_resume': True})['remaining'])
+
     def test_summary_carries_no_paths(self):
         item = {'address': 't12', 'app': 'claude-code', 'session_id': SID, 'space_name': 'Project B',
                 'title': 'edit /Users/someone/work/x.md', 'git': {'branch': 'main', 'head': 'abc', 'uncommitted': 0, 'worktrees': 1}}
@@ -489,6 +524,11 @@ class StubTests(unittest.TestCase):
             labels = (root / 'hc.log').read_text() if (root / 'hc.log').exists() else ''
             args, cwd = json.loads(line[len('AGENT '):])
             return args, Path(cwd).resolve() == root.resolve(), labels
+
+    def test_the_agent_starts_without_inherited_child_markers(self):
+        env = {'CLAUDECODE': '1', 'CLAUDE_CODE_CHILD_SESSION': '1', 'HC_TERMINAL_ID': 't13', 'HERDR_PANE_ID': 'w1:p1', 'PATH': '/bin'}
+        clean = stub.agent_env(env)
+        self.assertEqual(clean, {'HC_TERMINAL_ID': 't13', 'PATH': '/bin'})
 
     def test_enter_as_a_bare_cr_resumes_in_the_original_folder_and_clears_labels(self):
         args, same_folder, labels = self.run_stub_in_pty(b'\r')

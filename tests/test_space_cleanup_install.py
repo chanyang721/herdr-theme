@@ -54,6 +54,16 @@ class InstallTests(unittest.TestCase):
         self.assertEqual(sum(call[1]=='kickstart' for call in self.calls),1)
         self.assertFalse((self.home/'.config/herdr-app').exists(),'never writes app files')
 
+    def test_imported_helpers_are_copied_beside_the_observer_outside_the_reviewed_hash(self):
+        (self.source/'scripts/file_lock.py').write_text('# fixture lock\n')
+        (self.source/'scripts/agent_env.py').write_text('# fixture env\n')
+        before = installer.install(self.home,self.source)['observer_sha256']
+        with patch.object(installer.subprocess,'run',self.launchctl):
+            installed = installer.install(self.home,self.source,execute=True)
+        folder = Path(installed['script']).parent
+        self.assertEqual(((folder/'file_lock.py').read_text(), (folder/'agent_env.py').read_text()), ('# fixture lock\n', '# fixture env\n'))
+        self.assertEqual(installed['observer_sha256'], before)
+
     def test_existing_settings_are_preserved(self):
         base=self.home/'Library/Application Support/HerdrSixfold';base.mkdir(parents=True)
         existing={'fixed_names':['Custom'], 'fixed_spaces':[{'id':'stable'}], 'notify_terminal':'local-review'}

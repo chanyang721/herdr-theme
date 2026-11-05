@@ -500,6 +500,70 @@ class ArchiveBeforeCloseTests(CleanupPolicyTests.__base__):
         self.assertEqual(self.cycle(self.ready_state(quiet=21600))['results'][0]['action'], 'closed')
 
 
+class FinishedClaudeSpaceTests(CleanupPolicyTests.__base__):
+    """Claude panes: a faint prompt suggestion is not input, and a session without a transcript
+    (opened inside another agent) is reported, parked, archived and closed without a manual step."""
+    setUp = CleanupPolicyTests.setUp
+    target = CleanupPolicyTests.target
+    inspect = CleanupPolicyTests.inspect
+    ready_state = CleanupPolicyTests.ready_state
+    cycle = CleanupPolicyTests.cycle
+    BORDER = '─' * 30
+
+    def claude(self, typed):
+        t = self.live.data['terminals']['t-test']
+        t['status']['app'] = 'claude-code'
+        self.live.data['processes'][101]['name'] = 'claude'
+        self.live.text = f'done\n{self.BORDER}\n❯ {typed}\n{self.BORDER}\n  ⏵⏵ auto mode on (shift+tab to cycle)\n'
+
+    def test_a_faint_suggestion_is_empty_input_but_typed_text_is_not(self):
+        self.claude('push 완료했어, worktree 정리해')
+        self.live.styled_screen = lambda address: f'❯\xa0\x1b[0m\x1b[2mpush 완료했어, worktree 정리해\x1b[0m\r\n'
+        self.assertTrue(self.inspect()['safe'], self.inspect()['reasons'])
+        for raw in ('❯\xa0\x1b[0mpush 완료했어, worktree 정리해\r\n', '❯\xa0\x1b[2mpush\x1b[22m 완료했어, worktree 정리해\r\n', ''):
+            self.live.styled_screen = lambda address, raw=raw: raw
+            self.assertIn('t-test: empty input unverified', self.inspect()['reasons'], raw)
+        del self.live.styled_screen
+        self.assertIn('t-test: empty input unverified', self.inspect()['reasons'])
+
+    def child(self):
+        self.claude('')
+        self.live.session_known = False
+        why = 'backend jobs unverified: cannot resume: Claude runs as an inherited child session (no session file or transcript)'
+        self.live.backend = lambda terminal, config, clean=False: (False, why, '')
+        self.live.child = lambda terminal: {'session_id': 'aaaaaaaa-bbbb-5ccc-8ddd-eeeeeeeeeeee', 'no_resume': True}
+
+    def test_a_session_without_a_transcript_is_reported_parked_archived_and_closed(self):
+        self.child()
+        self.config['close_report'] = {'enabled': True}
+        self.live.reported = True
+        state = self.ready_state()
+        first = self.cycle(state)
+        self.assertEqual(first['results'][0]['action'], 'keep')
+        self.assertIn(('ask', 't-test'), self.live.notifications)
+        result = self.cycle(state)
+        self.assertEqual(result['results'][0]['action'], 'closed', result['results'][0]['reasons'])
+        self.assertEqual([(e, sid) for e, _, sid in self.live.parks],
+                         [('close_requested', 'aaaaaaaa-bbbb-5ccc-8ddd-eeeeeeeeeeee'), ('closed', 'aaaaaaaa-bbbb-5ccc-8ddd-eeeeeeeeeeee')])
+        pane = self.live.archives[0]['tabs'][0]['panes'][0]
+        self.assertTrue(pane['no_transcript'])
+        self.assertNotIn('session_id', pane)
+
+    def test_a_child_session_with_a_running_process_is_kept(self):
+        self.child()
+        self.live.data['processes'][102] = {'pid': 102, 'parent': 101, 'name': 'npm'}
+        reasons = self.inspect()['reasons']
+        self.assertTrue(any('child processes' in r for r in reasons), reasons)
+        self.assertTrue(any('inherited child session' in r for r in reasons), reasons)
+
+    def test_the_workspace_record_masks_denylisted_names(self):
+        item = {'id': 'sp1', 'name': 'Acme 정리', 'summary': 'acme 배포 확인', 'folders': []}
+        path = Path(cleanup.record_space(item, self.reports, NOW, ['acme']))
+        text = path.read_text(encoding='utf-8')
+        self.assertNotIn('acme', (path.name + text).lower())
+        self.assertIn('[가림]', path.name)
+
+
 class DecisionScreenTests(unittest.TestCase):
     """2026-11-04 false alarm: 'Blocked by auto mode' while a Monitor ran was reported as a user decision."""
     SCREEN = ('⏺ Bash(kill 4242)\n  ⎿  Blocked by auto mode · /permissions to review\n'
