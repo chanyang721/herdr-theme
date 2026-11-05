@@ -4,7 +4,7 @@ import * as herdrNative from 'herdr';
 import { agents, panes, spaces, terminals, focused, props, theme, run, shared, setShared, setAgentOrder, nextCommand, exec, window, layout, readTextFile, writeTextFile, appHome, openOverlay, settings } from 'herdr';
 import { WORDS, counts, title, cycle, priority, readThrough, unreadCount } from './model.js';
 
-import { computerActive, computerKind, computerSlots, computerStatus, computerAlert, tailscaleStatus, workspaceIdentity, workspaceLocal, workspacePinned } from './sidebar-identity.js';
+import { computerActive, computerHub, computerKind, computerSlots, computerStatus, computerAlert, tailscaleStatus, workspaceIdentity, workspaceLocal, workspacePinned } from './sidebar-identity.js';
 
 import { freshMessages, recentRoutes, simultaneousRoutes, crossMachine, followComputer, terminalMachine, machineHops, machineTraffic, trafficWake } from './flow.js';
 import { pipeline } from './pipeline.js';
@@ -276,7 +276,7 @@ export default class SixfoldDesk extends View {
           const p = current[Number(command.slice(5)) - 1];
           if (p) run('pane.focus', { pane: p.pane });
         } else if (/^computer-[1-9]$/.test(command)) {
-          // Same as clicking the sidebar row: only the list changes, never focus or connections.
+          // Same as clicking the sidebar card: list plus that computer's Share space and pane.
           const machines = typeof herdrNative.machines === 'function' ? herdrNative.machines() : [{ name: null, layout: 'ready' }];
           const key = computerSlots(machines)[Number(command.slice(9)) - 1];
           if (key) this.selectComputer(key);
@@ -316,9 +316,21 @@ export default class SixfoldDesk extends View {
   }
 
   selectComputer(key) {
-    // Listing another computer is independent of terminal focus and connectivity.
     (this.computerFollow ??= {}).follow = false;
     setShared('sixfold.computing.selected', key);
+    this.enterComputerHub(key);
+  }
+
+  // Cards and shortcuts also bring the shown space and focused pane to that computer's Share.
+  // Without one unambiguous Share (or for a Tailscale-only device) only the list changes.
+  enterComputerHub(key) {
+    const hub = computerHub(spaces(), key, this.site, this.computers);
+    if (!hub || focused()?.space === hub.id) return;
+    run('space.select', { id: hub.id });
+    const tab = hub.tabs.find(t => t.active) ?? hub.tabs[0];
+    const list = tab ? panes().filter(p => p.tab === tab.id) : [];
+    const pane = list.find(p => p.focused) ?? list.find(p => p.terminal);
+    if (pane) run('pane.focus', { pane: pane.pane });
   }
 
   newWorkspace(machine) {
