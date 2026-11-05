@@ -27,7 +27,8 @@ HELPERS = [re.compile(p, re.I) for p in (
 
 
 def run(argv, *, timeout=12, env=None):
-    result = subprocess.run([str(v) for v in argv], capture_output=True, text=True, timeout=timeout, env=env, creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
+    # ps cuts long Korean args mid-character; a strict decode would fail the whole observer.
+    result = subprocess.run([str(v) for v in argv], capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=timeout, env=env, creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
     if result.returncode:
         raise RuntimeError(f'{Path(str(argv[0])).name} {argv[1:2]} exited {result.returncode}: {result.stderr.strip()[:180]}')
     return result.stdout

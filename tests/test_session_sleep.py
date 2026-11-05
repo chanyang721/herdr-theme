@@ -677,3 +677,26 @@ class AlreadyReportedTests(unittest.TestCase):
         self.assertFalse(sleep.spaces.decision_pending(self.SCREEN))
         self.assertTrue(sleep.spaces.decision_pending(self.SCREEN + '사용자 승인 대기: 배포 범위\n'))
         self.assertTrue(sleep.spaces.decision_pending('Do you want to proceed?\n❯ 1. Yes\n'))
+
+
+class ProcessTableDecodeTests(unittest.TestCase):
+    def test_ps_args_cut_mid_character_do_not_fail_the_observer(self):
+        # ps truncates long args by bytes; a Korean prompt can end in half a character.
+        cut = '세션 절전'.encode('utf-8')[:-1]
+        outputs = {'pid=,ppid=,comm=': b'  10     1 /usr/local/bin/claude\n',
+                   'pid=,args=': b'  10 claude ' + cut + b'\n'}
+
+        class Done:
+            def __init__(self, out):
+                self.returncode, self.stderr = 0, ''
+                self.stdout = out.decode('utf-8', 'replace')
+
+        def fake_run(argv, **kwargs):
+            self.assertEqual((kwargs.get('encoding'), kwargs.get('errors')), ('utf-8', 'replace'))
+            return Done(outputs[argv[2]])
+
+        with patch.object(agent_sessions.subprocess, 'run', fake_run):
+            rows = agent_sessions.process_table()
+        self.assertEqual(rows[10]['name'], 'claude')
+        self.assertTrue(rows[10]['args'].startswith('claude 세션 절'))
+
