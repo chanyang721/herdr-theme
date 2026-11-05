@@ -23,6 +23,7 @@ class Window:
         self.new_takes_selection=True
         self.person_picks=None      # a click that lands while the space is being created
         self.hide_new_terminal=False
+        self.concurrent=None        # another job's pane, made and picked by the person during the creation
 
     def select(self,space,tab,pane):
         self.sel={'space':space,'tab':tab,'pane':pane}
@@ -30,6 +31,8 @@ class Window:
     def app(self,command,args):
         if command=='space.new':
             if self.person_picks:self.select(*self.person_picks)
+            if self.concurrent:
+                sp,tb,pn=self.concurrent;self.spaces[sp][tb]=[pn];self.select(*self.concurrent)
             self.spaces['sp-new']={'tb-new':['p-new']}
             if self.new_takes_selection:self.select('sp-new','tb-new','p-new')
             return {'terminal':'term-p-new','pane':'p-new','space':'sp-new','tab':'tb-new'}
@@ -95,6 +98,10 @@ class KeepFocusTests(unittest.TestCase):
     def test_the_new_space_taking_over_from_a_mod_pane_is_undone(self):
         win=Window();win.select(*self.MOD);self.create(win)
         self.assertEqual(tuple(win.sel.values()),self.MOD)
+
+    def test_another_jobs_new_pane_chosen_meanwhile_is_not_overridden(self):
+        win=Window();win.new_takes_selection=False;win.concurrent=('sp-other','tb-unrelated','p-unrelated');self.create(win)
+        self.assertEqual(tuple(win.sel.values()),win.concurrent)
 
 
 if __name__=='__main__':unittest.main()

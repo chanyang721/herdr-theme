@@ -73,13 +73,17 @@ def view():
 
 
 def took_selection(before,reply,after):
-    """True only when the selection sits on a tab or pane this creation made: the ids in its own
-    reply, or (when it failed after creating) a terminal pane that was not listed before. An old
-    terminal or a mod pane the person chose is neither, so it is never ours."""
+    """True only when the selection sits on a tab or pane this creation made. When its reply names
+    what it created (pane, terminal or tab), only those ids count; whatever else appeared in the
+    window meanwhile belongs to someone else. Only when the creation failed or named nothing, so its
+    ids are unknown, is a terminal pane that was not listed before treated as ours. An old terminal
+    or a mod pane the person chose is never ours."""
     reply=reply if isinstance(reply,dict) else {}
-    mine={reply.get('pane'),after[3].get(reply.get('terminal'))}|(set(after[3].values())-set(before[3].values()))
-    mine.discard(None)
-    return after[2] in mine or bool(reply.get('tab') and after[1]==reply.get('tab'))
+    if any(reply.get(k) for k in ('pane','terminal','tab')):
+        mine={reply.get('pane'),after[3].get(reply.get('terminal'))}
+        mine.discard(None)
+        return after[2] in mine or bool(reply.get('tab') and after[1]==reply.get('tab'))
+    return after[2] in (set(after[3].values())-set(before[3].values()))
 
 
 def restore_view(before,reply):
