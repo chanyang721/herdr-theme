@@ -33,19 +33,19 @@ if [ "${SKIP_PREPUSH_TESTS:-}" = 1 ]; then
   echo "pre-push: SKIP_PREPUSH_TESTS=1, checks skipped" >&2
   exit 0
 fi
-PY=auto  # @tool-py
-if [ "$PY" = auto ]; then
+PYBIN=auto; PYARGS=  # @tool-py
+if [ "$PYBIN" = auto ]; then
   # Resolved once to an absolute path and verified; the checks never search PATH for the interpreter.
+  # PYBIN is quoted at each use (paths may contain spaces); PYARGS holds plain arguments only.
   p=$(command -v py 2>/dev/null) || p=''
   case "$p" in /*) ;; *) p='' ;; esac
-  if [ -n "$p" ] && "$p" -3.12 -c '' >/dev/null 2>&1; then PY="$p -3.12"
+  if [ -n "$p" ] && "$p" -3.12 -c '' >/dev/null 2>&1; then PYBIN=$p; PYARGS=-3.12
   else
     p=$(command -v python3 2>/dev/null) || p=''
     case "$p" in /*) ;; *) echo "pre-push: no python 3 found by absolute path" >&2; exit 1 ;; esac
     "$p" -c '' >/dev/null 2>&1 || { echo "pre-push: $p does not run" >&2; exit 1; }
-    PY=$p
+    PYBIN=$p; PYARGS=
   fi
-  case "$PY" in *[[:space:]]*) echo "pre-push: the interpreter path has spaces; use one without" >&2; exit 1 ;; esac
 fi
 export PYTHONUTF8=1
 CYG=cygpath  # @tool-cygpath

@@ -20,7 +20,7 @@ FAKES = {
 }
 SUBSTITUTIONS = {
     'CYG=cygpath  # @tool-cygpath': "CYG='sh fakes/cygpath.sh'",
-    'PY=auto  # @tool-py': "PY='sh fakes/py.sh'",
+    'PYBIN=auto; PYARGS=  # @tool-py': 'PYBIN=sh; PYARGS=fakes/py.sh',
     'NPM=npm  # @tool-npm': "NPM='sh fakes/npm.sh'",
     ': # @tool-env': 'printf "PYTHONPATH=%s\\n" "${PYTHONPATH-unset}" >> calls.log',
 }
