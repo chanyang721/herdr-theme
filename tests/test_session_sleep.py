@@ -1257,3 +1257,171 @@ class EmptyAgentTests(unittest.TestCase):
         self.assertTrue(agent_sessions.empty_agent(codex, self.config, held=[]))
         self.assertFalse(agent_sessions.empty_agent(codex, self.config, held=['/x/rollout-1.jsonl']))
         self.assertFalse(agent_sessions.empty_agent(self.terminal(app='codex', argv=('codex', 'resume', SID)), self.config, held=[]))
+
+
+class TrimFixedTests(unittest.TestCase):
+    """User rule (2026-11-05): a trimmed fixed workspace keeps one pane (configured, else a working
+    one, else the agent used last); the others close through the harness. Protections stay."""
+
+    seeded, run_cycle = SpareCloseTests.seeded, SpareCloseTests.run_cycle
+    make_empty, make_asleep = SpareCloseTests.make_empty, SpareCloseTests.make_asleep
+
+    def setUp(self):
+        SpareCloseTests.setUp(self)
+        self.config['exclude_addresses'] = []
+        self.config['trim_fixed'] = {'names': ['Project B'], 'keep_addresses': []}
+        self.config['close_report'] = {'enabled': True, 'timeout_seconds': 900, 'retry_seconds': 3600, 'settle_seconds': 120}
+        self.live.data['terminals']['t12']['status_ms'] = (NOW - 1300) * 1000   # used last: the keeper
+        self.live.data['terminals']['t3']['status_ms'] = (NOW - 3600) * 1000
+
+    def keeper(self):
+        space = self.live.data['spaces'][1]
+        return sleep.trim_keeper(space, self.live.data, self.config)
+
+    def test_the_keeper_is_configured_else_working_else_the_agent_used_last(self):
+        self.assertEqual(self.keeper(), 't12')
+        self.live.data['terminals']['t3']['status']['state'] = 'working'
+        self.assertEqual(self.keeper(), 't3')
+        self.config['trim_fixed']['keep_addresses'] = ['t12']
+        self.assertEqual(self.keeper(), 't12')
+        self.assertIsNone(sleep.trim_keeper(self.live.data['spaces'][0], self.live.data, self.config))   # not trimmed
+        remote = {**self.live.data['spaces'][1], 'machine': 'home-main'}
+        self.assertIsNone(sleep.trim_keeper(remote, self.live.data, self.config))   # other computers: never
+
+    def test_an_asleep_pane_without_a_close_report_closes_with_its_records(self):
+        self.make_asleep('t3')
+        got = self.run_cycle(self.seeded())
+        self.assertEqual(got['t3']['action'], 'closed', got['t3'])
+        self.assertEqual([c[1] for c in self.live.calls if c[0] == 'park'], ['close_requested', 'closed'])
+        self.assertIn(('pane.close', 'p3'), self.live.calls)
+
+    def test_the_keeper_is_never_closed(self):
+        self.make_asleep('t12')
+        self.make_asleep('t3')
+        self.live.data['terminals']['t12']['status_ms'] = (NOW - 100) * 1000
+        self.live.reported = True   # both have reports: only the keeper rule keeps t12
+        got = self.run_cycle(self.seeded())
+        self.assertEqual(got['t3']['action'], 'closed', got['t3'])
+        self.assertNotIn(('pane.close', 'p12'), self.live.calls)
+        self.assertTrue(got['t12'].get('keeper'), got['t12'])
+
+    def asked_long_ago(self, address):
+        state = self.seeded(quiet=2400)
+        state['reports'] = {address: {'session_id': SID, 'requested_at': NOW - 1000, 'since': '2026-11-05T00:00:00Z',
+                                      'turn': 3, 'idle_ok': True}}
+        return state
+
+    def test_an_agent_without_a_report_in_time_is_closed_with_its_lifecycle(self):
+        got = self.run_cycle(self.asked_long_ago('t3'))
+        self.assertEqual(got['t3']['action'], 'closed', got['t3'])
+        self.assertEqual([c[1] for c in self.live.calls if c[0] == 'park'], ['close_requested', 'closed'])
+        self.assertIn(('pane.close', 'p3'), self.live.calls)
+
+    def test_outside_a_trimmed_workspace_no_report_still_keeps_the_pane(self):
+        self.config['trim_fixed'] = {'names': []}
+        got = self.run_cycle(self.asked_long_ago('t3'))
+        self.assertNotIn(('pane.close', 'p3'), self.live.calls)
+        self.assertNotEqual(got['t3']['action'], 'closed')
+
+    def test_protections_still_keep_a_trimmed_pane(self):
+        for name, change in {
+            'input': lambda: setattr(self.live, 'text', EMPTY.replace('❯ \n', '❯ 지금 하는 일\n')),
+            'working': lambda: self.live.data['terminals']['t3']['status'].update(state='working'),
+            'focus': lambda: self.live.data['status'].update(focused_pane='p3'),
+            'background job': lambda: setattr(self.live, 'jobs', (False, 'backend jobs unverified: Claude background job running', 'x')),
+        }.items():
+            with self.subTest(name):
+                self.setUp()
+                state = self.asked_long_ago('t3')
+                change()
+                got = self.run_cycle(state)
+                self.assertNotIn(('pane.close', 'p3'), self.live.calls, name)
+                self.assertNotEqual(got['t3']['action'], 'closed', name)
+
+    def make_shell(self, address, text='lukuku@mac ~ % '):
+        t = self.live.data['terminals'][address]
+        t.update(status={'app': None, 'state': None}, foreground={'pid': t['pid'], 'argv': ['-zsh'], 'name': 'zsh'})
+        self.live.data['processes'] = {p: i for p, i in self.live.data['processes'].items() if i['parent'] != t['pid']}
+        self.live.text = text + '\n'
+
+    def test_an_idle_shell_pane_closes_without_a_harness_record(self):
+        self.make_shell('t3')
+        got = self.run_cycle(self.seeded())
+        self.assertEqual(got['t3']['action'], 'closed', got['t3'])
+        self.assertFalse([c for c in self.live.calls if c[0] in ('park', 'ask')])
+
+    def test_a_shell_with_typed_text_or_a_running_command_stays(self):
+        self.make_shell('t3', 'lukuku@mac ~ % git push')
+        self.assertNotIn(('pane.close', 'p3'), self.live.calls, self.run_cycle(self.seeded()))
+        self.setUp()
+        self.make_shell('t3')
+        self.live.data['processes'][999] = {'pid': 999, 'parent': 300, 'name': 'vim', 'args': 'vim'}
+        self.run_cycle(self.seeded())
+        self.assertNotIn(('pane.close', 'p3'), self.live.calls)
+
+
+class BridgeTrimTests(unittest.TestCase):
+    """t1 decision (2026-11-05, B): a tui_bridge.py pane closes only after its own TUI agent got /exit
+    as keys (never a kill) and no agent process is left; it is never slept."""
+
+    seeded, run_cycle = SpareCloseTests.seeded, SpareCloseTests.run_cycle
+
+    def setUp(self):
+        SpareCloseTests.setUp(self)
+        self.config['exclude_addresses'] = []
+        self.config['trim_fixed'] = {'names': ['Project B'], 'keep_addresses': ['t12']}
+        self.config['close_report'] = {'enabled': True, 'timeout_seconds': 900, 'retry_seconds': 3600, 'settle_seconds': 120}
+        t = self.live.data['terminals']['t3']
+        t['foreground'] = {'pid': 301, 'argv': ['python3', '/repo/scripts/tui_bridge.py'], 'name': 'python3'}
+        self.live.data['processes'].update({301: {'pid': 301, 'parent': 300, 'name': 'python3', 'args': 'python3 tui_bridge.py'},
+                                            302: {'pid': 302, 'parent': 301, 'name': 'herdr', 'args': 'herdr --session default terminal attach term_abc --takeover'},
+                                            400: {'pid': 400, 'parent': 1, 'name': 'zsh', 'args': 'zsh'},
+                                            401: {'pid': 401, 'parent': 400, 'name': 'claude', 'args': 'claude --resume'}})
+        self.agent_alive, self.exit_works = True, True
+        live = self.live
+        def tui_process_info(pane):
+            return {'shell_pid': 400, 'foreground_processes': [{'pid': 401, 'name': 'claude', 'argv': ['claude', '--resume']}] if self.agent_alive else []}
+        def tui_agent(term):
+            if term != 'term_abc':
+                return None
+            return {'pane_id': 'w8:pR', 'terminal_id': term, 'agent': 'claude', 'agent_status': 'done',
+                    'agent_session': {'value': SID}, 'cwd': '/fixture', 'process_info': tui_process_info('w8:pR')}
+        def tui_keys(pane, text=None, keys=()):
+            live.calls.append(('tui', pane, text or '+'.join(keys)))
+            if text == '/exit' and self.exit_works:
+                self.agent_alive = False
+        live.tui_agent, live.tui_process_info, live.tui_keys = tui_agent, tui_process_info, tui_keys
+
+    def test_closed_after_report_park_and_its_agent_exiting(self):
+        self.live.reported = True
+        got = self.run_cycle(self.seeded())
+        self.assertEqual(got['t3']['action'], 'closed', got['t3'])
+        order = [c[:2] if c[0] != 'tui' else ('tui', c[2]) for c in self.live.calls
+                 if c[0] in ('tui', 'pane.close') or c[0] == 'park' and c[2] == 't3']
+        self.assertEqual(order, [('park', 'close_requested'), ('tui', '/exit'), ('tui', 'enter'), ('pane.close', 'p3'), ('park', 'closed')])
+        self.assertFalse([c for c in self.live.calls if c[0] in ('keys', 'type', 'label') and c[1] == 't3'])   # never slept
+
+    def test_an_agent_that_does_not_exit_keeps_the_pane(self):
+        self.live.reported, self.exit_works = True, False
+        got = self.run_cycle(self.seeded())
+        self.assertEqual(got['t3']['action'], 'keep')
+        self.assertNotIn(('pane.close', 'p3'), self.live.calls)
+        self.assertIn(('tui', 'w8:pR', 'esc'), self.live.calls)
+        self.assertEqual([c[1] for c in self.live.calls if c[0] == 'park' and c[2] == 't3'], ['close_requested', 'close_aborted'])
+
+    def test_a_bridge_is_never_slept_and_its_keeper_stays(self):
+        self.config['trim_fixed']['keep_addresses'] = ['t3']
+        self.live.reported = True
+        got = self.run_cycle(self.seeded())
+        self.assertNotIn(got['t3']['action'], ('closed', 'slept'))
+        self.assertFalse([c for c in self.live.calls if c[0] == 'tui'])
+
+    def test_a_working_or_unidentified_tui_agent_is_kept(self):
+        real = self.live.tui_agent
+        for change in (lambda a: {**a, 'agent_status': 'working'}, lambda a: {**a, 'agent_session': {}}):
+            self.live.calls.clear()
+            self.live.tui_agent = lambda term, c=change: c(real(term))
+            self.live.reported = True
+            got = self.run_cycle(self.seeded())
+            self.assertNotEqual(got['t3']['action'], 'closed')
+            self.assertFalse([c for c in self.live.calls if c[0] in ('tui', 'pane.close')])
