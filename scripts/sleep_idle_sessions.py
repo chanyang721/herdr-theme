@@ -72,6 +72,9 @@ BRIDGE = 'TUI bridge pane: closed after its agent exits, never slept'
 SLEEP_ONLY = (VISIBLE, NOT_SHELL, BRIDGE)
 ASLEEP = 'already asleep'
 TRIM_KEEP = 'kept: the one pane of this fixed workspace'
+USER_CONTROLLED = 'user-controlled workspace: no automatic sleep, report request, trim or close'
+# User rule (2026-11-05): Share is run by the person; observers never act there.
+DEFAULT_USER_CONTROLLED = ('Share',)
 PROMPT_END = re.compile(r'[$%#❯>]\s*$')
 
 
@@ -195,13 +198,19 @@ def close_blocker(item, snapshot, tab, closed):
     return None
 
 
+def user_controlled(space, config):
+    names = config.get('user_controlled_names', DEFAULT_USER_CONTROLLED)
+    return str(space.get('name') or '').casefold() in {str(n).casefold() for n in names}
+
+
 def trim_keeper(space, snapshot, config):
     """The one pane a trimmed fixed workspace keeps, or None when the space is not trimmed.
     User rule (2026-11-05): a configured address (Share keeps t1), else a working pane, else the
     agent pane used most recently. Other computers' spaces are never trimmed."""
     cfg = config.get('trim_fixed') or {}
     names = {str(n).casefold() for n in cfg.get('names', [])}
-    if space.get('machine') is not None or str(space.get('name') or '').casefold() not in names:
+    if space.get('machine') is not None or str(space.get('name') or '').casefold() not in names \
+            or user_controlled(space, config):
         return None
     addresses = [a for a, _ in space_panes(snapshot, space['id'])]
     for address in cfg.get('keep_addresses', []):
@@ -274,6 +283,9 @@ def inspect(address, space, snapshot, adapter, config, tab=None):
     status = snapshot['status']
     terminal = snapshot['terminals'].get(address)
     item = {'address': address, 'space_id': space['id'], 'space_name': space.get('name'), 'reasons': reasons}
+    if user_controlled(space, config):
+        reasons.append(USER_CONTROLLED)
+        return item
     keeper = trim_keeper(space, snapshot, config)
     if keeper:
         item['keeper' if keeper == address else 'trim'] = True

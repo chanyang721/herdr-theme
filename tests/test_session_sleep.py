@@ -29,7 +29,7 @@ def snapshot():
     return {
         'status': {'space': 'seen', 'tab': 'tab-seen', 'focused_pane': 'p-focus', 'errors': []},
         'spaces': [
-            {'id': 'seen', 'name': 'Share', 'machine': None, 'active': True,
+            {'id': 'seen', 'name': 'Shown space', 'machine': None, 'active': True,
              'tabs': [{'id': 'tab-seen', 'terminals': [pane('t1', 'p-focus')]}]},
             {'id': 'fixed', 'name': 'Project B', 'machine': None, 'active': False,
              'tabs': [{'id': 'tab-fixed', 'terminals': [pane('t12', 'p12'), pane('t3', 'p3')]}]},
@@ -1425,3 +1425,43 @@ class BridgeTrimTests(unittest.TestCase):
             got = self.run_cycle(self.seeded())
             self.assertNotEqual(got['t3']['action'], 'closed')
             self.assertFalse([c for c in self.live.calls if c[0] in ('tui', 'pane.close')])
+
+
+class ShareUserControlledTests(unittest.TestCase):
+    """User rule (2026-11-05): Share is run by the person. No sleep, report request, trim or close
+    there, even when its sessions are finished and Share is named as a trimmed fixed workspace."""
+    seeded, run_cycle = SpareCloseTests.seeded, SpareCloseTests.run_cycle
+    make_asleep = SpareCloseTests.make_asleep
+
+    def setUp(self):
+        SpareCloseTests.setUp(self)
+        self.config['exclude_addresses'] = []
+        self.config['trim_fixed'] = {'names': ['Share', 'Project B'], 'keep_addresses': ['t1']}
+        self.config['close_report'] = {'enabled': True, 'timeout_seconds': 900, 'retry_seconds': 3600, 'settle_seconds': 120}
+        share = self.live.data['spaces'][1]
+        share.update(name='Share', active=False)   # not the shown space: nothing else protects it
+        self.live.reported = True
+
+    def share_calls(self):
+        return [c for c in self.live.calls if c[0] != 'status' and ('t12' in c or 't3' in c or c[:2] in (('pane.close', 'p12'), ('pane.close', 'p3')))]
+
+    def test_share_panes_are_never_slept_asked_or_closed(self):
+        got = self.run_cycle(self.seeded())
+        self.assertEqual(self.share_calls(), [])
+        for address in ('t12', 't3'):
+            self.assertIn(sleep.USER_CONTROLLED, got[address]['reasons'])
+            self.assertEqual(got[address]['action'], 'keep')
+
+    def test_share_asleep_or_long_unreported_panes_stay_too(self):
+        self.make_asleep('t3')
+        state = self.seeded(quiet=2400)
+        state['reports'] = {'t12': {'session_id': SID, 'requested_at': NOW - 1000, 'since': '2026-11-05T00:00:00Z', 'turn': 3}}
+        self.live.reported = False
+        self.run_cycle(state)
+        self.assertEqual(self.share_calls(), [])
+        self.assertIsNone(sleep.trim_keeper(self.live.data['spaces'][1], self.live.data, self.config))
+
+    def test_the_same_panes_in_another_workspace_are_handled(self):
+        self.live.data['spaces'][1]['name'] = 'Project B'
+        self.run_cycle(self.seeded())
+        self.assertTrue([c for c in self.live.calls if c[0] in ('pane.close', 'keys')])
