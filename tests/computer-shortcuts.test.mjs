@@ -28,12 +28,11 @@ test('hub: explicit id or Share role name on that computer only; ambiguous or mi
   assert.equal(computerHub([sp('w/c','Chanyang','worker')],'remote:worker'),null,'a personal name is not a Share');
 });
 
-test('keys: cmd-shift-1..2 and cmd-ctrl-3..9 map to numbered computer commands and keep every existing key', () => {
+test('keys: cmd-ctrl-1..9 map to numbered computer commands and keep every existing key', () => {
   const now=JSON.parse(execFileSync('git',['show','HEAD:keys.json'],{cwd:new URL('..',import.meta.url),encoding:'utf8'}).toString());
   return readFile(new URL('../keys.json',import.meta.url),'utf8').then(text=>{
     const keys=JSON.parse(text), layout=keys['layout:sixfold'];
-    for(let i=1;i<=9;i++)assert.equal(layout[i<=2?`cmd-shift-${i}`:`cmd-ctrl-${i}`],`sixfold-desk.computer-${i}`);
-    assert.equal(layout['cmd-ctrl-1'],undefined); assert.equal(layout['cmd-ctrl-2'],undefined);
+    for(let i=1;i<=9;i++)assert.equal(layout[`cmd-ctrl-${i}`],`sixfold-desk.computer-${i}`);
     for(const [section,bindings] of Object.entries(now))
       for(const [key,action] of Object.entries(bindings))assert.equal(keys[section]?.[key],action,`${section} ${key} unchanged`);
     assert.equal(layout['cmd-alt-1'],'sixfold-desk.pane-1');
