@@ -13,6 +13,7 @@ SLEEP = {
     # The order matches sleep_idle_sessions.OBSERVER_FILES (the reviewed hash).
     'files': ('sleep_idle_sessions.py', 'agent_sessions.py', 'space_job_evidence.py', 'close_finished_spaces.py', 'session_sleep_stub.py',
               'site_config.py'),
+    'support': ('file_lock.py', 'agent_env.py'),
     'config': 'sleep-idle-sessions.json',
     'example': 'config/sleep-idle-sessions.example.json',
     'state': 'sleep-idle-sessions-state.json',

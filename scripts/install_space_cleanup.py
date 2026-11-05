@@ -21,6 +21,8 @@ CLEANUP = {
     'script': 'close_finished_spaces.py',
     # The order matches close_finished_spaces.OBSERVER_FILES (the reviewed hash).
     'files': ('close_finished_spaces.py', 'space_job_evidence.py', 'agent_sessions.py', 'site_config.py'),
+    # Imported helpers copied beside the observer (not part of the reviewed hash).
+    'support': ('file_lock.py', 'agent_env.py'),
     'config': 'close-finished-spaces.json',
     'example': 'config/close-finished-spaces.example.json',
     'state': 'close-finished-spaces-state.json',
@@ -99,6 +101,9 @@ def install_observer(home, source, spec, *, apply=False, user_approved=False, ex
         return result
     for name in present:
         write_changed(base / name, code[name])
+    for name in spec.get('support', ()):
+        if (source / 'scripts' / name).exists():
+            write_changed(base / name, (source / 'scripts' / name).read_bytes())
     write_changed(config_path, (json.dumps(config, ensure_ascii=False, indent=2) + '\n').encode())
     changed = write_changed(plist_path, plistlib.dumps(plist))
     service = f'gui/{os.getuid()}/{label}'
