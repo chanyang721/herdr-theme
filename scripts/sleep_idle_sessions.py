@@ -233,8 +233,10 @@ def user_controlled(space, config):
 
 def trim_keeper(space, snapshot, config):
     """The one pane a trimmed fixed workspace keeps, or None when the space is not trimmed.
-    User rule (2026-11-05): a configured address (Share keeps t1), else a working pane, else the
-    agent pane used most recently. Other computers' spaces are never trimmed."""
+    User rule (2026-11-05): a configured address, else a working agent pane, else the live agent
+    pane used most recently, else an asleep agent pane (woken). Only agent panes keep a space: a
+    shell, even a working one, is protected by its own reasons but never the keeper; a space with
+    no agent pane has no keeper and is not trimmed (5th review). Other computers: never."""
     cfg = config.get('trim_fixed') or {}
     names = {str(n).casefold() for n in cfg.get('names', [])}
     if space.get('machine') is not None or str(space.get('name') or '').casefold() not in names \
@@ -250,9 +252,16 @@ def trim_keeper(space, snapshot, config):
     live = lambda a: status(a).get('app') in agent_sessions.AGENTS and not asleep(a)  # noqa: E731
     # A live agent pane first (it takes instructions now); an asleep one only when none is live,
     # and it is then woken with its own session (user rule 2026-11-05).
-    pool = ([a for a in addresses if status(a).get('state') == 'working'] or [a for a in addresses if live(a)]
-            or [a for a in addresses if asleep(a)] or addresses)
+    pool = ([a for a in addresses if live(a) and status(a).get('state') == 'working'] or [a for a in addresses if live(a)]
+            or [a for a in addresses if asleep(a)])
     return max(pool, key=lambda a: ((terms.get(a) or {}).get('status_ms') or 0, a)) if pool else None
+
+
+def trimmed_without_keeper(space, snapshot, config):
+    cfg = config.get('trim_fixed') or {}
+    names = {str(n).casefold() for n in cfg.get('names', [])}
+    return (space.get('machine') is None and str(space.get('name') or '').casefold() in names
+            and not user_controlled(space, config) and trim_keeper(space, snapshot, config) is None)
 
 
 def bridge_term(terminal, processes):
@@ -321,6 +330,8 @@ def inspect(address, space, snapshot, adapter, config, tab=None):
     keeper = trim_keeper(space, snapshot, config)
     if keeper:
         item['keeper' if keeper == address else 'trim'] = True
+    elif trimmed_without_keeper(space, snapshot, config):
+        item['trim_note'] = 'fixed workspace has no agent pane to keep: not trimmed'
     if item.get('keeper'):
         reasons.append(KEEP_AWAKE)   # never slept, asked or closed; woken when it is asleep
     if not all(spaces.focus(status)) or status.get('errors'):
@@ -449,14 +460,26 @@ def wake_keeper(item, adapter, config, attempts=15):
             or [r for r in latest['reasons'] if r not in (ASLEEP, KEEP_AWAKE, VISIBLE)]:
         item['reasons'].append('recheck before wake: ' + ('; '.join(latest['reasons']) if latest else 'pane moved or closed'))
         return 'asleep'
+    ticket = stub_ticket(snap['terminals'].get(item['address']) or {})
+    if latest.get('no_resume') or not isinstance(ticket, dict) or ticket.get('new_session') \
+            or ticket.get('session_id') != item['session_id']:
+        item['reasons'].append('not woken: the sleep ticket does not resume the same session')
+        return 'asleep'
     adapter.keys(item['address'], 'enter')
+    seen = None
     for _ in range(attempts):
         adapter.wait(1)
-        fg = adapter.terminal(item['address']).get('foreground') or {}
-        name = Path(str((fg.get('argv') or [fg.get('name') or ''])[0])).name
-        if name in agent_sessions.AGENTS:
+        mapping, _why = agent_sessions.session_mapping(adapter.terminal(item['address']), config)
+        seen = (mapping or {}).get('session_id')
+        if seen == item['session_id']:
             return 'woken'
-    item['reasons'].append('wake not confirmed: the agent did not start in time')
+        if seen:
+            break
+    if seen:
+        # 5th review: a new session is not the same one; recorded, never counted as woken.
+        item['reasons'].append(f'wake mismatch: session {seen} started, slept {item["session_id"]}')
+        return 'wake_mismatch'
+    item['reasons'].append('wake not confirmed: the same session was not seen in time')
     return 'wake_unconfirmed'
 
 
@@ -709,6 +732,8 @@ def cycle(adapter, config, state, now, *, apply=False, paths=None):
         if item.get('keeper') and item.get('asleep'):
             item.update(quiet_seconds=0, action='asleep')
             why_not = [r for r in item['reasons'] if r not in (ASLEEP, KEEP_AWAKE, VISIBLE)]
+            if item.get('no_resume'):
+                why_not.append('its sleep ticket starts a new session, not the same one')
             if not item.get('session_id') or why_not:
                 item['reasons'].append('keeper asleep: not woken (' + ('; '.join(why_not) or 'session unknown') + ')')
             elif not apply:

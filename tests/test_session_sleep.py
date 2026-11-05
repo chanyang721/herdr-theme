@@ -1476,12 +1476,68 @@ class KeeperAwakeTests(unittest.TestCase):
                 self.assertNotIn(('keys', 't12', '<enter>'), self.live.calls, name)
                 self.assertEqual(got['t12']['action'], 'asleep', name)
 
+    def woken_as(self, sid):
+        """After Enter the pane runs a session with this id (None: no agent seen)."""
+        real = agent_sessions.session_mapping
+        def mapping(terminal, config=None):
+            if 'status' not in terminal:   # FakeLive.terminal: the pane looked up after Enter
+                return ({'session_id': sid}, '') if sid else (None, 'agent foreground missing')
+            return real(terminal, config)
+        patcher = patch.object(agent_sessions, 'session_mapping', mapping)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
     def test_a_wake_that_does_not_start_the_agent_is_reported(self):
         self.make_asleep('t12')
         self.make_asleep('t3')
-        self.live.exits = True    # the pane's foreground stays a shell
-        got = self.run_cycle(self.seeded())
+        state = self.seeded()
+        self.woken_as(None)
+        got = self.run_cycle(state)
         self.assertEqual(got['t12']['action'], 'wake_unconfirmed')
+
+    def test_a_different_session_after_waking_is_a_mismatch_not_a_wake(self):
+        # 5th review P2 (2): only the same session id counts as woken.
+        self.make_asleep('t12')
+        self.make_asleep('t3')
+        state = self.seeded()
+        self.woken_as('99999999-8888-7777-6666-555555555555')
+        got = self.run_cycle(state)
+        self.assertEqual(got['t12']['action'], 'wake_mismatch')
+        self.assertTrue([r for r in got['t12']['reasons'] if r.startswith('wake mismatch')])
+
+    def test_a_new_session_ticket_is_not_woken(self):
+        # 5th review P2 (2), its fixture: sixfold.sleep.new=1 and a new_session ticket without --resume.
+        self.make_asleep('t12')
+        self.make_asleep('t3')
+        t = self.live.data['terminals']['t12']
+        t['labels']['sixfold.sleep.new'] = '1'
+        ticket = Path(t['foreground']['argv'][-1])
+        value = json.loads(ticket.read_text())
+        value.update(new_session=True, argv=['claude', '--dangerously-skip-permissions'])
+        ticket.write_text(json.dumps(value))
+        self.live.texts['t12'] = stub_screen(value)
+        got = self.run_cycle(self.seeded())
+        self.assertNotIn(('keys', 't12', '<enter>'), self.live.calls)
+        self.assertNotEqual(got['t12']['action'], 'woken')
+
+    def test_a_working_shell_is_kept_but_is_never_the_keeper(self):
+        # 5th review P2 (1), its fixture: the pane used last is a working shell.
+        t = self.live.data['terminals']['t12']
+        t.update(status={'app': None, 'state': 'working'}, foreground={'pid': t['pid'], 'argv': ['-zsh'], 'name': 'zsh'})
+        self.assertEqual(self.keeper(), 't3')
+        self.live.reported = True
+        got = self.run_cycle(self.seeded(quiet=2400))
+        self.assertNotIn(('pane.close', 'p3'), self.live.calls)   # the only live agent stays
+        self.assertNotIn(('pane.close', 'p12'), self.live.calls)  # the working shell is protected
+
+    def test_a_space_with_only_shells_has_no_keeper_and_is_not_trimmed(self):
+        for a in ('t12', 't3'):
+            t = self.live.data['terminals'][a]
+            t.update(status={'app': None, 'state': None}, foreground={'pid': t['pid'], 'argv': ['-zsh'], 'name': 'zsh'})
+        self.assertIsNone(self.keeper())
+        got = self.run_cycle(self.seeded())
+        self.assertEqual(got['t3'].get('trim_note'), 'fixed workspace has no agent pane to keep: not trimmed')
+        self.assertFalse([c for c in self.live.calls if c[0] == 'pane.close'])
 
 
 class ShareUserControlledTests(unittest.TestCase):
