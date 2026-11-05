@@ -83,6 +83,9 @@ def took_selection(before,reply,after):
         mine={reply.get('pane'),after[3].get(reply.get('terminal'))}
         mine.discard(None)
         return after[2] in mine or bool(reply.get('tab') and after[1]==reply.get('tab'))
+    # Known limit (pinned by a test): if the creation failed and its ids are unknown, a new terminal that
+    # another process made at the same moment and the person then chose looks like our half-made one, so
+    # the earlier selection is put back. Not restoring would leave the window moved after a partial failure.
     return after[2] in (set(after[3].values())-set(before[3].values()))
 
 

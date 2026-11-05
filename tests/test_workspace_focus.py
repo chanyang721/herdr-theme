@@ -5,6 +5,7 @@ import contextlib
 import io
 import json
 import os
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -23,6 +24,7 @@ class Window:
         self.new_takes_selection=True
         self.person_picks=None      # a click that lands while the space is being created
         self.hide_new_terminal=False
+        self.fail_new=False         # space.new itself fails, so no reply names any id
         self.concurrent=None        # another job's pane, made and picked by the person during the creation
 
     def select(self,space,tab,pane):
@@ -33,6 +35,7 @@ class Window:
             if self.person_picks:self.select(*self.person_picks)
             if self.concurrent:
                 sp,tb,pn=self.concurrent;self.spaces[sp][tb]=[pn];self.select(*self.concurrent)
+            if self.fail_new:raise subprocess.CalledProcessError(1,['herdr-app','do','space.new'])
             self.spaces['sp-new']={'tb-new':['p-new']}
             if self.new_takes_selection:self.select('sp-new','tb-new','p-new')
             return {'terminal':'term-p-new','pane':'p-new','space':'sp-new','tab':'tb-new'}
@@ -102,6 +105,13 @@ class KeepFocusTests(unittest.TestCase):
     def test_another_jobs_new_pane_chosen_meanwhile_is_not_overridden(self):
         win=Window();win.new_takes_selection=False;win.concurrent=('sp-other','tb-unrelated','p-unrelated');self.create(win)
         self.assertEqual(tuple(win.sel.values()),win.concurrent)
+
+    def test_known_limit_a_failed_creation_cannot_tell_a_concurrent_pane_from_its_own(self):
+        # Pins current behaviour: the creation failed, so its ids are unknown, and another process's new
+        # terminal that the person picked looks like our half-made one; the earlier selection returns.
+        win=Window();win.fail_new=True;win.concurrent=('sp-other','tb-unrelated','p-unrelated')
+        with self.assertRaises(subprocess.CalledProcessError):self.create(win)
+        self.assertEqual(win.sel['space'],'sp-main')
 
 
 if __name__=='__main__':unittest.main()
