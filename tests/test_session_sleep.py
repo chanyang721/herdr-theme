@@ -1509,6 +1509,15 @@ class ReReviewP1Tests(unittest.TestCase):
         self.assertNotIn(('pane.close', 'p3'), self.live.calls)
         self.assertEqual([c[1] for c in self.live.calls if c[0] == 'park' and c[2] == 't3'], ['close_requested', 'close_aborted'])
 
+    def test_real_stub_screens_wrapped_or_indented_are_read(self):
+        sid = '3df81b51-ca62-467d-bcc1-f6ca14e56c4e'
+        wrapped = ('  절전 중 — Medihomes t11 지시\n  Enter: 이어 열기\n  직접 열기: claude "<hc from=\"t3\">긴 지시\n'
+                   '둘째 줄\n제약: 수정 금지</hc>" --resume ' + sid + '\n\n')
+        self.assertIsNone(sleep.stub_typed(wrapped, sid))
+        self.assertEqual(sleep.stub_typed(wrapped + '계속', sid), 'input not empty')
+        indented = '      Enter: 이어 열기\n           직접 열기: codex --no-daemon resume 01a199cd-b208-7132-9fc9-72ecbea2f474\n'
+        self.assertIsNone(sleep.stub_typed(indented, '01a199cd-b208-7132-9fc9-72ecbea2f474'))
+
     def test_an_unreadable_stub_screen_is_not_closed(self):
         self.make_asleep('t3')
         self.live.texts['t3'] = 'something else\n'

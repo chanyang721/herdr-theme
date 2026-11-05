@@ -76,16 +76,21 @@ USER_CONTROLLED = 'user-controlled workspace: no automatic sleep, report request
 # User rule (2026-11-05): Share is run by the person; observers never act there.
 DEFAULT_USER_CONTROLLED = ('Share',)
 PROMPT_END = re.compile(r'[$%#❯>]\s*$')
-STUB_LAST = '  직접 열기:'   # session_sleep_stub.py's last line; what is typed (echoed) comes after it
+STUB_LAST = re.compile(r'^\s*직접 열기:')   # session_sleep_stub.py's last line; typed text is echoed after it
 
 
-def stub_typed(text):
-    """None when the sleep stub waits with nothing typed; else why it may not close (re-review P1)."""
+def stub_typed(text, session_id=None):
+    """None when the sleep stub waits with nothing typed; else why it may not close (re-review P1).
+    The last line holds the resume command, which may wrap over several lines: what is typed comes
+    after the session id that ends it."""
     lines = text.splitlines()
-    marks = [i for i, line in enumerate(lines) if line.startswith(STUB_LAST)]
+    marks = [i for i, line in enumerate(lines) if STUB_LAST.match(line)]
     if not marks:
         return 'asleep screen unverified (stub prompt not found)'
-    if any(line.strip() for line in lines[marks[-1] + 1:]):
+    tail = '\n'.join(lines[marks[-1]:])
+    end = tail.rfind(session_id) if session_id else -1
+    after = tail[end + len(session_id):] if end >= 0 else '\n'.join(lines[marks[-1] + 1:])
+    if after.strip():
         return 'input not empty'
     if VOICE.search(text):
         return 'voice input active'
@@ -331,7 +336,7 @@ def inspect(address, space, snapshot, adapter, config, tab=None):
             item.update({k: slept[k] for k in ('app', 'session_id', 'title', 'cwd', 'turn', 'no_resume') if k in slept})
             # Typed but not sent yet is input too: the screen is checked and part of the evidence.
             text = adapter.screen(address)
-            typed = stub_typed(text)
+            typed = stub_typed(text, item.get('session_id'))
             if typed:
                 reasons.append(typed)
             item['fingerprint'] = hashlib.sha256(json.dumps([address, terminal.get('pid'), terminal.get('created_ms'),
