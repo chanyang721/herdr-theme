@@ -435,7 +435,7 @@ class EvidenceTests(unittest.TestCase):
                          ['claude', '--model', 'opus', '--resume', SID])
 
     def test_pane_session_id_matches_the_harness_and_is_a_uuid(self):
-        # runtime/lifecycle.pane_session_id('t38', 1, 2) in herdr-harness gives the same value.
+        # the harness's runtime/lifecycle.pane_session_id('t38', 1, 2) gives the same value.
         self.assertEqual(agent_sessions.pane_session_id('t38', 1, 2), '901ebaf1-e70d-5c12-aff5-2ab7a207eba4')
         self.assertRegex(agent_sessions.pane_session_id('t1', 5, 6), agent_sessions.UUID)
 
