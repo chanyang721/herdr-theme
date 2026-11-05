@@ -122,6 +122,82 @@ def install(home, source, *, apply=False, user_approved=False, execute=False):
     return install_observer(home, source, CLEANUP, apply=apply, user_approved=user_approved, execute=execute)
 
 
+# CONDITIONAL counts only when every remaining finding is about installing it or seeing it run.
+INSTALL_ONLY = __import__('re').compile(r'설치|실동작|실제 동작|실제 앱|install|live', __import__('re').I)
+
+
+def source_commit(source):
+    """(full sha, None) for a clean checkout of the observer scripts, else (None, why)."""
+    def git(*args):   # Popen, not run: a read-only query, separate from the launchctl calls
+        proc = subprocess.Popen(['git', '-C', str(source), *args], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
+        out, _ = proc.communicate(timeout=30)
+        if proc.returncode:
+            raise OSError(f'git {args[0]} failed')
+        return out.strip()
+    try:
+        sha, dirty = git('rev-parse', 'HEAD'), git('status', '--porcelain', '--', 'scripts', 'config')
+    except (OSError, subprocess.SubprocessError):
+        return None, 'source is not a git checkout'
+    return (None, 'source scripts have uncommitted changes') if dirty else (sha, None)
+
+
+def review_findings(text):
+    """Finding titles of a review file: lines like `- **P2 — title:**`."""
+    import re
+    return [m.group(2).strip() for m in re.finditer(r'^\s*-\s*\*\*(P\d)\s*[—-]\s*([^*]+?)\s*:?\*\*', text, re.M)]
+
+
+def review_approval(home, source, commit=None):
+    """User rule (2026-11-05): a copy is approved by policy when the harness cross-family review of its
+    commit is PASS, or CONDITIONAL with only install/live-check findings left. The commit's short sha
+    must appear in the reviewed report and in the review file; the latest verdict on such a report
+    decides (a later HOLD wins). Returns {'ok', 'why', ...evidence}."""
+    import re
+    home = Path(home)
+    if commit is None:
+        commit, why = source_commit(source)
+        if not commit:
+            return {'ok': False, 'why': why}
+    short = commit[:7]
+    local = home / '.config/herdr-app/data/sixfold/harness-local'
+    try:
+        repo = Path(json.loads((local / 'config.json').read_text(encoding='utf-8')).get('repo_path') or '')
+    except (OSError, ValueError):
+        return {'ok': False, 'why': 'harness not configured', 'commit': commit}
+    reports, verdicts = set(), []
+    for path in (repo / 'records').glob('**/*.json'):
+        try:
+            r = json.loads(path.read_text(encoding='utf-8'))
+        except (OSError, ValueError):
+            continue
+        if r.get('type') == 'report' and short in json.dumps(r.get('summary') or {}, ensure_ascii=False):
+            reports.add(r.get('report_id'))
+        elif r.get('type') == 'verdict':
+            verdicts.append(r)
+    mine = sorted((v for v in verdicts if v.get('target_report_id') in reports), key=lambda v: v['id'])
+    if not mine:
+        return {'ok': False, 'why': f'no harness review verdict for commit {short}', 'commit': commit}
+    v = mine[-1]
+    found = re.search(r'harness-local/reviews/(\S+?\.md)', v.get('note') or '')
+    review = local / 'reviews' / found.group(1) if found else None
+    evidence = {'commit': commit, 'verdict_id': v['id'], 'value': v.get('value'),
+                'review_file': str(review) if review else None, 'report_id': v.get('target_report_id')}
+    try:
+        text = review.read_text(encoding='utf-8')
+    except (OSError, AttributeError):
+        return {**evidence, 'ok': False, 'why': 'review file missing'}
+    if short not in text:
+        return {**evidence, 'ok': False, 'why': f'review file does not name commit {short}'}
+    if v.get('value') == 'PASS':
+        return {**evidence, 'ok': True, 'why': 'PASS'}
+    if v.get('value') == 'CONDITIONAL':
+        findings = review_findings(text)
+        if findings and all(INSTALL_ONLY.search(f) for f in findings):
+            return {**evidence, 'ok': True, 'why': 'CONDITIONAL: only install/live checks remain', 'findings': findings}
+        return {**evidence, 'ok': False, 'why': 'CONDITIONAL with other findings', 'findings': findings}
+    return {**evidence, 'ok': False, 'why': f"verdict {v.get('value')}"}
+
+
 def spec_hash(folder, spec):
     paths = [Path(folder) / name for name in spec['files']]
     return hashlib.sha256(b''.join(p.read_bytes() for p in paths)).hexdigest() if all(p.exists() for p in paths) else None
@@ -131,7 +207,9 @@ def refresh_installed(home, source, specs=None):
     """Bring the observer copies that are already registered with launchd to `source`: no plist,
     no launchctl. Each file is replaced atomically while both observers' run locks are held, so a
     run never imports a mix of versions. The person's apply approval carries over only when it was
-    given for exactly the copy being replaced; otherwise the new code waits for a review as before."""
+    given for exactly the copy being replaced. Otherwise the copy is approved by policy when the
+    harness review of the source commit allows it (review_approval, actor auto-policy, evidence in
+    the config's reviewed_by_policy); any other verdict, or none, leaves it waiting as before."""
     import file_lock
     from close_finished_spaces import OBSERVER_FILES as CLEANUP_FILES
     from sleep_idle_sessions import OBSERVER_FILES as SLEEP_FILES
@@ -166,16 +244,29 @@ def refresh_installed(home, source, specs=None):
                 raise RuntimeError(f"{spec['job']} is still running after 2 minutes; nothing replaced")
         changed = [n for n in names if write_changed(base / n, (source / 'scripts' / n).read_bytes())]
         result = {'refreshed': [s['job'] for s in registered], 'changed': changed, 'observers': {}}
+        approval = None
         for spec in registered:
             after = spec_hash(base, spec)
             config_path = base / spec['config']
             config = json.loads(config_path.read_text(encoding='utf-8')) if config_path.exists() else {}
             carried = bool(config.get('user_approved_apply')) and before[spec['job']] is not None \
                 and config.get('reviewed_observer_sha256') == before[spec['job']] and after != before[spec['job']]
+            policy = None
             if carried:
                 config['reviewed_observer_sha256'] = after
                 write_changed(config_path, (json.dumps(config, ensure_ascii=False, indent=2) + '\n').encode())
+            elif config and config.get('reviewed_observer_sha256') != after:
+                if approval is None:
+                    approval = review_approval(home, source)
+                policy = approval
+                if approval.get('ok'):
+                    config['reviewed_observer_sha256'] = after
+                    config['reviewed_by_policy'] = {
+                        'actor': 'auto-policy', 'at': dt.datetime.now().astimezone().isoformat(),
+                        'observer_sha256': after, **{k: approval.get(k) for k in ('commit', 'verdict_id', 'value', 'review_file', 'report_id')}}
+                    write_changed(config_path, (json.dumps(config, ensure_ascii=False, indent=2) + '\n').encode())
             result['observers'][spec['job']] = {'observer_sha256': after, 'approval_carried': carried,
+                                                'approval_policy': policy,
                                                 'approved_for_this_copy': config.get('reviewed_observer_sha256') == after}
         return result
     finally:

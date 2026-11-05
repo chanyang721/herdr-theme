@@ -163,3 +163,89 @@ class RefreshTests(unittest.TestCase):
             plist.unlink()
         self.assertEqual(self.refresh()['refreshed'], [])
         self.assertEqual((self.base/'agent_sessions.py').read_text(), '# old agent_sessions.py\n')
+
+
+class ReviewPolicyTests(RefreshTests):
+    """User rule (2026-11-05): an installed copy is approved by policy (actor auto-policy) when the
+    harness cross-family review of its commit is PASS, or CONDITIONAL with only install/live checks left."""
+    SHA = '9681baf' + '0' * 33
+    INSTALL_ONLY = 'VERDICT: CONDITIONAL\n\n- **P2 — 설치·실동작 검증 미완료:** 설치 후 확인 필요. 대상 9681baf\n'
+
+    def setUp(self):
+        super().setUp()
+        self.harness = self.home / 'harness'
+        (self.harness / 'records/m/2026-11').mkdir(parents=True)
+        self.local = self.home / '.config/herdr-app/data/sixfold/harness-local'
+        (self.local / 'reviews').mkdir(parents=True)
+        (self.local / 'config.json').write_text(json.dumps({'repo_path': str(self.harness)}))
+        self.n = 0
+        self.record('report', report_id='R1', summary={'done': '관찰기 9681baf 보완'})
+
+    def record(self, kind, **fields):
+        self.n += 1
+        rid = f'01M6N{self.n:021d}'
+        (self.harness / f'records/m/2026-11/{rid}.json').write_text(json.dumps({'id': rid, 'type': kind, **fields}))
+        return rid
+
+    def verdict(self, value, text, report='R1'):
+        name = f'{report}-codex-{self.n}.md'
+        (self.local / 'reviews' / name).write_text(text, encoding='utf-8')
+        return self.record('verdict', target_report_id=report, value=value,
+                           note=f'codex-exec 검수, 전문은 이 PC harness-local/reviews/{name}; cross-family')
+
+    def approval(self):
+        return installer.review_approval(self.home, self.REPO, commit=self.SHA)
+
+    def test_pass_and_install_only_conditional_are_approved(self):
+        self.verdict('PASS', 'VERDICT: PASS\n9681baf 확인\n')
+        self.assertEqual((self.approval()['ok'], self.approval()['why']), (True, 'PASS'))
+        vid = self.verdict('CONDITIONAL', self.INSTALL_ONLY)
+        got = self.approval()
+        self.assertTrue(got['ok'], got)
+        self.assertEqual((got['verdict_id'], got['value'], got['commit']), (vid, 'CONDITIONAL', self.SHA))
+
+    def test_every_other_result_is_not_approved(self):
+        cases = {
+            'no verdict': None,
+            'hold': ('HOLD', 'VERDICT: HOLD\n- **P2 — 기록 유실:** 9681baf\n'),
+            'conditional with a code finding': ('CONDITIONAL', self.INSTALL_ONLY + '- **P2 — 재시도 대기열 유실:** x\n'),
+            'conditional without findings': ('CONDITIONAL', 'VERDICT: CONDITIONAL\n9681baf\n'),
+            'review file without the commit': ('PASS', 'VERDICT: PASS\n다른 커밋\n'),
+        }
+        for name, case in cases.items():
+            with self.subTest(name):
+                self.setUp()
+                if case:
+                    self.verdict(*case)
+                self.assertFalse(self.approval()['ok'], name)
+
+    def test_a_later_hold_on_the_same_commit_wins(self):
+        self.verdict('PASS', 'VERDICT: PASS\n9681baf\n')
+        self.record('report', report_id='R2', summary={'done': '9681baf 다시'})
+        self.verdict('HOLD', 'VERDICT: HOLD\n- **P1 — 결함:** 9681baf\n', report='R2')
+        self.assertEqual(self.approval()['why'], 'verdict HOLD')
+
+    def test_refresh_records_the_policy_approval_for_both_observers(self):
+        self.config('someone-elses-hash')
+        (self.base/'sleep-idle-sessions.json').write_text(json.dumps({'user_approved_apply': True, 'reviewed_observer_sha256': 'old'}))
+        vid = self.verdict('CONDITIONAL', self.INSTALL_ONLY)
+        with patch.object(installer, 'source_commit', lambda source: (self.SHA, None)):
+            result = self.refresh()
+        for job in ('close-finished-spaces', 'sleep-idle-sessions'):
+            config = json.loads((self.base/f'{job}.json').read_text())
+            self.assertTrue(result['observers'][job]['approved_for_this_copy'], job)
+            self.assertEqual(config['reviewed_observer_sha256'], result['observers'][job]['observer_sha256'])
+            self.assertEqual({k: config['reviewed_by_policy'][k] for k in ('actor', 'verdict_id', 'commit')},
+                             {'actor': 'auto-policy', 'verdict_id': vid, 'commit': self.SHA})
+            self.assertTrue(config['reviewed_by_policy']['review_file'].endswith('.md'))
+
+    def test_refresh_without_an_allowing_review_installs_but_does_not_approve(self):
+        self.config('someone-elses-hash')
+        self.verdict('HOLD', 'VERDICT: HOLD\n9681baf\n')
+        for commit in ((self.SHA, None), (None, 'source scripts have uncommitted changes')):
+            with self.subTest(commit[1] or 'hold'), patch.object(installer, 'source_commit', lambda source, c=commit: c):
+                result = self.refresh()
+                self.assertFalse(result['observers']['close-finished-spaces']['approved_for_this_copy'])
+                config = json.loads((self.base/'close-finished-spaces.json').read_text())
+                self.assertEqual(config['reviewed_observer_sha256'], 'someone-elses-hash')
+                self.assertNotIn('reviewed_by_policy', config)
