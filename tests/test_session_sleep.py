@@ -40,6 +40,14 @@ def snapshot():
     }
 
 
+def stub_screen(ticket):
+    """What session_sleep_stub.main prints for this ticket (the real stub's own functions)."""
+    import session_sleep_stub as stub
+    return (f"\n  절전 중 — {ticket.get('space_name') or ''} {ticket['address']} {ticket.get('title') or ''}\n"
+            '  Enter: 이어 열기 · 메시지를 보내면 이어 열고 그대로 전달 · ctrl+c: 셸로 나가기\n'
+            f'  직접 열기: {stub.shown(stub.launch(ticket))}\n\n')
+
+
 STUB_SCREEN = ('\n  절전 중 — Project B t12 PR 검토 마무리\n  Enter: 이어 열기 · 메시지를 보내면 이어 열고 그대로 전달 · ctrl+c: 셸로 나가기\n'
                '  직접 열기: claude --resume 11111111-2222-3333-4444-555555555555\n\n')
 
@@ -1172,10 +1180,15 @@ class SpareCloseTests(unittest.TestCase):
         self.live.data['terminals'][address]['turn'] = 0
 
     def make_asleep(self, address):
+        ticket = self.paths['tickets'] / f'{address}.json'
+        ticket.parent.mkdir(parents=True, exist_ok=True)
+        value = {'address': address, 'app': 'claude-code', 'session_id': SID, 'argv': ['claude', '--resume', SID],
+                 'title': 'PR 검토 마무리', 'space_name': 'Project B'}
+        ticket.write_text(json.dumps(value), encoding='utf-8')
         self.live.data['terminals'][address].update(
             labels={sleep.SLEEP_LABEL: f'claude:{SID}', sleep.TITLE_LABEL: '절전 · PR 검토 마무리'},
-            foreground={'pid': 999, 'argv': ['python3', '/fixture/session_sleep_stub.py', '/fixture/t12.json'], 'name': 'python3'})
-        self.live.texts[address] = STUB_SCREEN
+            foreground={'pid': 999, 'argv': ['python3', '/fixture/session_sleep_stub.py', str(ticket)], 'name': 'python3'})
+        self.live.texts[address] = stub_screen(value)
 
     def test_an_empty_pane_closes_without_a_harness_record_when_its_space_keeps_another(self):
         self.make_empty('t12')
@@ -1396,6 +1409,7 @@ class BridgeTrimTests(unittest.TestCase):
             live.calls.append(('tui', pane, text or '+'.join(keys)))
             if text == '/exit' and self.exit_works:
                 self.agent_alive = False
+                live.texts['t3'] = 'lukuku@mac ~ % \n'   # the TUI shell is left at an empty prompt
         live.tui_agent, live.tui_process_info, live.tui_keys = tui_agent, tui_process_info, tui_keys
 
     def test_closed_after_report_park_and_its_agent_exiting(self):
@@ -1484,14 +1498,14 @@ class ReReviewP1Tests(unittest.TestCase):
     def test_typed_but_unsent_input_in_an_asleep_pane_keeps_it(self):
         self.make_asleep('t3')
         state = self.seeded()
-        self.live.texts['t3'] = STUB_SCREEN + '이거 이어서 해줘'
+        self.live.texts['t3'] += '이거 이어서 해줘'
         got = self.run_cycle(state)
         self.assertNotIn(('pane.close', 'p3'), self.live.calls)
         self.assertNotEqual(got['t3']['action'], 'closed')
 
     def test_input_left_typed_for_the_whole_idle_window_still_keeps_it(self):
         self.make_asleep('t3')
-        self.live.texts['t3'] = STUB_SCREEN + '이거 이어서 해줘'   # typed before the window began
+        self.live.texts['t3'] += '이거 이어서 해줘'   # typed before the window began
         got = self.run_cycle(self.seeded())
         self.assertNotIn(('pane.close', 'p3'), self.live.calls)
         self.assertIn('input not empty', got['t3']['reasons'])
@@ -1502,28 +1516,43 @@ class ReReviewP1Tests(unittest.TestCase):
         real = self.live.park
         def park(config, item, event, reason=None):
             if event == 'close_requested':
-                self.live.texts['t3'] = STUB_SCREEN + 'a'
+                self.live.texts['t3'] += 'a'
             return real(config, item, event, reason)
         self.live.park = park
         self.run_cycle(state)
         self.assertNotIn(('pane.close', 'p3'), self.live.calls)
         self.assertEqual([c[1] for c in self.live.calls if c[0] == 'park' and c[2] == 't3'], ['close_requested', 'close_aborted'])
 
+    def test_typed_text_ending_in_the_session_id_is_input(self):
+        # Re-review P1 (1), its fixture: the person's text itself ends in the session id.
+        self.make_asleep('t3')
+        state = self.seeded()
+        self.live.texts['t3'] += '이 세션을 이어서 검토 ' + SID
+        got = self.run_cycle(state)
+        self.assertNotIn(('pane.close', 'p3'), self.live.calls)
+        self.assertNotEqual(got['t3']['action'], 'closed')
+        self.assertEqual(sleep.stub_typed(self.live.texts['t3'], sleep.stub_ticket(self.live.data['terminals']['t3'])), 'input not empty')
+
     def test_real_stub_screens_wrapped_or_indented_are_read(self):
-        sid = '3df81b51-ca62-467d-bcc1-f6ca14e56c4e'
-        wrapped = ('  절전 중 — Medihomes t11 지시\n  Enter: 이어 열기\n  직접 열기: claude "<hc from=\"t3\">긴 지시\n'
-                   '둘째 줄\n제약: 수정 금지</hc>" --resume ' + sid + '\n\n')
-        self.assertIsNone(sleep.stub_typed(wrapped, sid))
-        self.assertEqual(sleep.stub_typed(wrapped + '계속', sid), 'input not empty')
-        indented = '      Enter: 이어 열기\n           직접 열기: codex --no-daemon resume 01a199cd-b208-7132-9fc9-72ecbea2f474\n'
-        self.assertIsNone(sleep.stub_typed(indented, '01a199cd-b208-7132-9fc9-72ecbea2f474'))
+        old = {'address': 't11', 'session_id': SID, 'app': 'claude-code',
+               'argv': ['claude', '<hc from="t3">긴 지시 둘째 줄 제약: 수정 금지</hc>', '--resume', SID]}
+        wrapped = ('  Enter: 이어 열기\n  직접 열기: claude <hc from="t3">긴 지시\n'
+                   '둘째 줄 제약: 수정 금지</hc> --resume ' + SID + '\n\n')
+        self.assertIsNone(sleep.stub_typed(wrapped, old))                        # an older stub's whole argv
+        self.assertEqual(sleep.stub_typed(wrapped + '계속', old), 'input not empty')
+        new = {'address': 't1w', 'session_id': SID, 'app': 'codex', 'argv': ['codex', '--no-daemon', 'resume', SID]}
+        indented = '      Enter: 이어 열기\n           직접 열기: ' + sleep.stub_shown(new)[-1] + '\n'
+        self.assertIsNone(sleep.stub_typed(indented, new))
+        self.assertTrue(sleep.stub_typed(indented, None).startswith('asleep screen unverified'))   # no ticket: kept
+        cleaned = {**old, 'argv': ['claude', '--resume', SID]}                   # ticket cleaned after it slept
+        self.assertTrue(sleep.stub_typed(wrapped, cleaned).startswith('asleep screen unverified'))
 
     def test_an_unreadable_stub_screen_is_not_closed(self):
         self.make_asleep('t3')
         self.live.texts['t3'] = 'something else\n'
         got = self.run_cycle(self.seeded())
         self.assertNotIn(('pane.close', 'p3'), self.live.calls)
-        self.assertIn('asleep screen unverified (stub prompt not found)', got['t3']['reasons'])
+        self.assertIn('asleep screen unverified (stub prompt or ticket not found)', got['t3']['reasons'])
 
 
 class BridgeAfterExitTests(unittest.TestCase):
@@ -1560,3 +1589,30 @@ class BridgeAfterExitTests(unittest.TestCase):
         self.during_wait(lose)
         self.check_kept(self.run_cycle(self.seeded()))
         self.assertIn('t3', sleep.pane_of(self.live.data))
+
+
+class BridgeAfterExitWorkTests(unittest.TestCase):
+    """Re-review P1 (2), its fixture: during_wait adds unsent input or runs `vim important.txt`."""
+    seeded, run_cycle = SpareCloseTests.seeded, SpareCloseTests.run_cycle
+    setUp, during_wait, check_kept = BridgeAfterExitTests.setUp, BridgeAfterExitTests.during_wait, BridgeAfterExitTests.check_kept
+
+    def test_unsent_input_appearing_during_the_wait_keeps_it(self):
+        self.during_wait(lambda: self.live.texts.__setitem__('t3', 'lukuku@mac ~ % 지금 보내려던 말\n'))
+        self.check_kept(self.run_cycle(self.seeded()))
+
+    def test_a_command_started_in_the_bridge_pane_during_the_wait_keeps_it(self):
+        def vim():
+            self.live.data['terminals']['t3']['foreground'] = {'pid': 310, 'argv': ['vim', 'important.txt'], 'name': 'vim'}
+            self.live.data['processes'][310] = {'pid': 310, 'parent': 300, 'name': 'vim', 'args': 'vim important.txt'}
+        self.during_wait(vim)
+        self.check_kept(self.run_cycle(self.seeded()))
+
+    def test_a_command_left_in_the_tui_pane_keeps_it(self):
+        real = self.live.tui_process_info
+        def info(pane):
+            got = real(pane)
+            if not self.agent_alive:
+                got = {**got, 'foreground_processes': [{'pid': 402, 'name': 'vim', 'argv': ['vim', 'important.txt']}]}
+            return got
+        self.live.tui_process_info = info
+        self.check_kept(self.run_cycle(self.seeded()))

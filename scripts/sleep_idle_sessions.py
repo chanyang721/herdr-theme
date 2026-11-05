@@ -75,25 +75,54 @@ TRIM_KEEP = 'kept: the one pane of this fixed workspace'
 USER_CONTROLLED = 'user-controlled workspace: no automatic sleep, report request, trim or close'
 # User rule (2026-11-05): Share is run by the person; observers never act there.
 DEFAULT_USER_CONTROLLED = ('Share',)
-PROMPT_END = re.compile(r'[$%#❯>]\s*$')
+PROMPT_END = re.compile(r'(?:[$%#❯>]|╰─)\s*$')
 STUB_LAST = re.compile(r'^\s*직접 열기:')   # session_sleep_stub.py's last line; typed text is echoed after it
 
 
-def stub_typed(text, session_id=None):
-    """None when the sleep stub waits with nothing typed; else why it may not close (re-review P1).
-    The last line holds the resume command, which may wrap over several lines: what is typed comes
-    after the session id that ends it."""
+def stub_shown(ticket):
+    """Every text a sleep stub version prints after '직접 열기:' for this ticket (older stubs showed
+    the whole argv, newer ones the short resume command)."""
+    import session_sleep_stub as stub
+    out = []
+    try:
+        out.append(' '.join(ticket['argv']))
+    except (KeyError, TypeError):
+        pass
+    try:
+        out.append(stub.shown(stub.launch(ticket)))
+    except Exception:   # noqa: BLE001 — a candidate less: no match means unverified, never closed
+        pass
+    return out
+
+
+def stub_typed(text, ticket):
+    """None only when the stub's screen ends exactly in its own last line for this ticket: nothing
+    typed after it. Anything else (text after it, a screen that matches no stub version, no ticket)
+    is input or unverified: the pane is not closed (re-review P1, 2026-11-05)."""
     lines = text.splitlines()
     marks = [i for i, line in enumerate(lines) if STUB_LAST.match(line)]
-    if not marks:
-        return 'asleep screen unverified (stub prompt not found)'
-    tail = '\n'.join(lines[marks[-1]:])
-    end = tail.rfind(session_id) if session_id else -1
-    after = tail[end + len(session_id):] if end >= 0 else '\n'.join(lines[marks[-1] + 1:])
-    if after.strip():
-        return 'input not empty'
+    if not marks or not isinstance(ticket, dict):
+        return 'asleep screen unverified (stub prompt or ticket not found)'
+    squeeze = lambda value: re.sub(r'\s+', '', value)  # noqa: E731 — wrapping and padding are not input
+    tail = squeeze('\n'.join(lines[marks[-1]:]))
+    shown = [squeeze('직접 열기:' + c) for c in stub_shown(ticket)]
     if VOICE.search(text):
         return 'voice input active'
+    if tail in shown:
+        return None
+    if any(tail.startswith(c) for c in shown):
+        return 'input not empty'
+    return 'asleep screen unverified (does not match the stub screen)'
+
+
+def stub_ticket(terminal):
+    fg = terminal.get('foreground') or {}
+    for value in fg.get('argv') or []:
+        if str(value).endswith('.json'):
+            try:
+                return json.loads(Path(value).read_text(encoding='utf-8'))
+            except (OSError, ValueError):
+                return None
     return None
 
 
@@ -336,7 +365,7 @@ def inspect(address, space, snapshot, adapter, config, tab=None):
             item.update({k: slept[k] for k in ('app', 'session_id', 'title', 'cwd', 'turn', 'no_resume') if k in slept})
             # Typed but not sent yet is input too: the screen is checked and part of the evidence.
             text = adapter.screen(address)
-            typed = stub_typed(text, item.get('session_id'))
+            typed = stub_typed(text, stub_ticket(terminal))
             if typed:
                 reasons.append(typed)
             item['fingerprint'] = hashlib.sha256(json.dumps([address, terminal.get('pid'), terminal.get('created_ms'),
@@ -497,6 +526,28 @@ def after_exit_blockers(item, adapter, config, closed):
     blocked = close_blocker({**item, 'keeper': trim_keeper(space, snap, config) == item['address']}, snap, tab, closed)
     if blocked:
         why.append(blocked)
+    # Work and input, looked at again (re-review P1): the bridge pane must still run only the
+    # bridge, its TUI pane only a shell, and the screen must end in an empty prompt. Anything
+    # that cannot be judged keeps the pane.
+    terminal = (snap.get('terminals') or {}).get(item['address']) or {}
+    if bridge_term(terminal, snap.get('processes') or {}) != item['bridge']['term']:
+        why.append('bridge pane runs something else now')
+    else:
+        extra = [i['name'] for i in shell_children(terminal, snap['processes'])
+                 if i['name'] not in ('python3', 'Python', 'python', 'herdr') and 'tui_bridge' not in str(i.get('args'))
+                 and 'terminal attach' not in str(i.get('args'))]
+        if extra:
+            why.append('running command in the bridge pane: ' + ', '.join(sorted(set(extra))))
+    try:
+        info = adapter.tui_process_info(item['bridge']['pane'])
+        busy = [p.get('name') for p in info.get('foreground_processes') or [] if p.get('name') not in agent_sessions.SHELLS]
+        if busy:
+            why.append('running command in the TUI pane: ' + ', '.join(sorted(set(map(str, busy)))))
+    except Exception as exc:   # noqa: BLE001
+        why.append(f'TUI pane unverified: {str(exc)[:80]}')
+    lines = [line for line in adapter.screen(item['address']).splitlines() if line.strip()]
+    if not lines or not PROMPT_END.search(lines[-1]):
+        why.append('input not empty or unverified after the agent exited')
     return why
 
 
