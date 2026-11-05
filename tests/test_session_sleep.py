@@ -644,6 +644,21 @@ class AlreadyReportedTests(unittest.TestCase):
         decision, _ = agent_sessions.report_gate({}, self.item(now - 600), adapter, self.CONFIG, now)
         self.assertEqual((decision, adapter.asked), ('requested', ['t38']))
 
+    def test_a_session_that_answered_an_earlier_request_points_to_its_older_report(self):
+        now = 1_793_000_000.0
+        adapter = self.Adapter(report_at=now - 3600)              # reported, then only answered requests
+        item = {**self.item(now - 1800), 'answered_report': True}
+        self.assertEqual((agent_sessions.report_gate({}, item, adapter, self.CONFIG, now)[0], adapter.asked), ('ready', []))
+
+    def test_answering_a_pending_request_with_an_earlier_report_is_ready(self):
+        # It answered with the id of the report it wrote an hour before this request.
+        now = 1_793_000_000.0
+        adapter, entries = self.Adapter(report_at=now - 3600), {}
+        item = self.item(now - 60)
+        entries['t38'] = {'session_id': SID, 'requested_at': now - 300, 'since': agent_sessions.utc_iso(now - 300), 'turn': 3}
+        self.assertEqual(agent_sessions.report_gate(entries, item, adapter, self.CONFIG, now)[0], 'waiting')
+        self.assertEqual(agent_sessions.report_gate(entries, {**item, 'answered_report': True}, adapter, self.CONFIG, now)[0], 'ready')
+
     def test_work_after_the_request_still_asks_again(self):
         now = 1_793_000_000.0
         adapter = self.Adapter(report_at=now + 10)

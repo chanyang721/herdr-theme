@@ -304,13 +304,15 @@ def inspect(space, snapshot, adapter, config):
         if mapping and mapping.get('session_id'):
             sessions.append({'address': address, 'app': agent, 'session_id': mapping['session_id'], 'space_id': space['id'],
                              'space_name': space.get('name'), 'title': terminal.get('title'), 'cwd': terminal.get('cwd'),
-                             'turn': terminal.get('turn'), 'status_ms': terminal.get('status_ms')})
+                             'turn': terminal.get('turn'), 'status_ms': terminal.get('status_ms'),
+                             'answered_report': last_prompt_is_report_request(text)})
         elif child:
             # No session file or transcript (started inside another agent): it still reports and is
             # parked under its pane session id, and reopens as a new session reading the workspace memory.
             sessions.append({'address': address, 'app': agent, 'session_id': child['session_id'], 'space_id': space['id'],
                              'space_name': space.get('name'), 'title': terminal.get('title'), 'cwd': terminal.get('cwd'),
-                             'turn': terminal.get('turn'), 'status_ms': terminal.get('status_ms'), 'no_resume': True})
+                             'turn': terminal.get('turn'), 'status_ms': terminal.get('status_ms'), 'no_resume': True,
+                             'answered_report': last_prompt_is_report_request(text)})
         else:
             reasons.append(f'{address}: session id unverified (harness record impossible)')
         evidence.append([address, terminal.get('pid'), terminal.get('status_ms'), terminal.get('turn'), pids, jobs_fingerprint, hashlib.sha256(text.encode()).hexdigest()])
@@ -450,8 +452,12 @@ def cycle(adapter, config, state, now, *, apply=False, only_space=None, report_d
                 # Immediately recheck every prerequisite and the original user focus.
                 check = adapter.snapshot()
                 target = next((s for s in check['spaces'] if s['id'] == space['id']), None)
-                if target is None or focus(check['status']) != initial_focus:
-                    item['action'] = 'keep'; item['reasons'].append('space/focus changed before close')
+                # The person moving around elsewhere does not stop cleanup; only the space they are
+                # looking at right now is skipped.
+                if target is None:
+                    item['action'] = 'keep'; item['reasons'].append('space changed before close')
+                elif check['status'].get('space') == space['id']:
+                    item['action'] = 'keep'; item['reasons'].append('the person is viewing this space')
                 else:
                     latest = inspect(target, check, adapter, config)
                     if not latest['safe'] or latest.get('fingerprint') != item.get('fingerprint'):
@@ -502,11 +508,15 @@ def cycle(adapter, config, state, now, *, apply=False, only_space=None, report_d
                             result.append(item); continue
                         item['archive'] = detail
                         item['record'] = record_space(item, report_dir, now, agent_sessions.denylist(config))
+                        before = adapter.snapshot()['status']
+                        if before.get('space') == space['id']:
+                            item['action'] = 'keep'; item['reasons'].append('the person is viewing this space')
+                            result.append(item); continue
                         adapter.close(space['id'], {**config, 'space_close_enabled': True} if manual else config)
                         after = adapter.snapshot()
                         if any(s['id'] == space['id'] for s in after['spaces']):
                             raise RuntimeError('space.close not confirmed')
-                        if focus(after['status']) != initial_focus:
+                        if focus(after['status']) != focus(before):   # the close itself moved the person
                             raise RuntimeError('focus changed after close; further cleanup stopped')
                         item['action'] = 'closed'
                         del tracking[space['id']]

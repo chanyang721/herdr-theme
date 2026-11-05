@@ -347,7 +347,11 @@ def update(repo, home, names, cli='herdr-app', verify_timeout=10, allow_unhealth
                             expected = next(payload for item, payload, _ in files if item == relative)
                             if not target.exists() or target.read_bytes() != expected:
                                 raise InstallError(f'File changed during verification: {relative}')
-                        if any(after.get(key) != before.get(key) for key in ('space', 'tab', 'focused_pane')):
+                        # Only files the app loads into the screen (mods, layouts, theme) can move the
+                        # person's focus; helper scripts it runs on demand cannot, so the person using the
+                        # app meanwhile does not roll those back.
+                        screen = bool(swapped) or any(Path(relative).parts[:1] != ('scripts',) for relative in written)
+                        if screen and any(after.get(key) != before.get(key) for key in ('space', 'tab', 'focused_pane')):
                             raise InstallError('Workspace/tab/focus changed during installation; no focus commands were sent')
                         if not after['errors']:
                             # Allow hot reload to run before accepting a clean sample.
