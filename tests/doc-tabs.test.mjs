@@ -390,3 +390,19 @@ test('a selected 열람 tab is shown again after the mod reloads', async t => {
   assert.equal(h.view.selected, 'opened-/elsewhere/x.html');
   assert.ok(h.view.documents.some(d => d.opened && d.path === '/elsewhere/x.html'));
 });
+
+test('kind folders and the 수정일 column list the newest write first, whatever date the name carries', async () => {
+  const row = (id, date, mtime, modified) => ({ ...document(id, `/docs/${id}.md`, false), state: 'latest', kind: 'report', date, mtime, modified });
+  const docs = [row('old-name-new-write', '2026-11-01', 3000, '2026-11-05'), row('new-name-old-write', '2026-11-04', 1000, '2026-11-04'),
+    row('middle', '2026-11-03', 2000, '2026-11-04')];
+  const loc = locations(docs, { kinds: [{ id: 'report', label: '보고서' }] }).find(l => l.key === 'docs');
+  const files = loc.entries.filter(e => !e.dir);
+  // column view sorts newest-first by path, so the path rank must follow mtime.
+  assert.deepEqual(files.map(e => e.id).sort((a, b) => files.find(f => f.id === b).path.localeCompare(files.find(f => f.id === a).path)),
+    ['old-name-new-write', 'middle', 'new-name-old-write']);
+  assert.equal(files.find(e => e.id === 'old-name-new-write').date, '2026-11-05');
+  const finder = await load('finder.js', { div: () => ({}), v_flex: () => ({}), h_flex: () => ({}), entryIcon: () => '' });
+  const tree = listTree(loc, docs).children[0].children;
+  assert.deepEqual(finder.sortNodes(tree, { key: 'date', dir: -1 }).map(n => n.docId), ['old-name-new-write', 'middle', 'new-name-old-write']);
+  assert.deepEqual(finder.sortNodes(tree, { key: 'date', dir: 1 }).map(n => n.docId), ['new-name-old-write', 'middle', 'old-name-new-write']);
+});
