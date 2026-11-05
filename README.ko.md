@@ -237,7 +237,7 @@ Codex·Claude 한도를 브랜드 아이콘·막대·백분율로: 5시간·7일
 
 이 컴퓨터의 `<machine>`은 빈 문자열입니다. 색조: `blocked`, `working`, `done`, `accent`, `dim`. 누르면 `open`을 그 mod의 오버레이로 열거나 `command`를 실행합니다. 글자는 12자까지, 잘못된 항목은 무시하며 공유 상태가 파일보다 우선합니다. 테마 자체는 배지를 올리지 않습니다.
 
-**질문·권한 카드.** 선택 설치하는 로컬 브리지가 있으면(`data/sixfold/harness-local/config.json`의 `repo_path`) 에이전트가 기다리는 프롬프트(권한 요청·질문·계획)가 알림 위에 카드로 나오고, 그 세션 줄에 `?`가 붙습니다. **허용**·**거부**·선택지는 `harness.py asks answer <id> --allow|--deny [--choice "질문=선택"]`을 실행하고, 목록은 `harness.py asks --json`에서 읽습니다. 터미널 프롬프트도 동시에 쓸 수 있습니다. 브리지가 없으면 카드는 나오지 않습니다.
+**질문·권한 카드.** 선택 설치하는 로컬 브리지가 있으면(`data/sixfold/harness-local/config.json`의 `repo_path`) 에이전트가 기다리는 프롬프트(권한 요청·질문·계획)가 알림 위에 카드로 나오고, 그 세션 줄에 `?`가 붙습니다. **허용**·**거부**·선택지는 그 카드의 1회용 토큰(`<token_dir>/<id>.token`, 답할 때만 읽음)으로 `harness.py asks answer <id> --allow|--deny --token T [--choice "질문=선택"]`을 실행하고, 목록과 `token_dir`는 `harness.py asks --json`에서 읽습니다. 터미널 프롬프트도 동시에 쓸 수 있습니다. 브리지가 없으면 카드는 나오지 않습니다.
 
 **채널 알림.** `data/sixfold/project-alerts.json`의 새 채널 메시지는 워크스페이스 제목 아래 줄에 나오고, `sixfold-slack-inbox` mod는 `data/sixfold/slack-mentions.json`의 멘션을 스레드별로 보여 줍니다. Slack에서 모으는 일은 별도 도구가 합니다.
 

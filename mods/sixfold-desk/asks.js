@@ -1,7 +1,7 @@
 import { div } from 'gpui-kit';
 import { h_flex, v_flex } from 'gpui-base';
 import { run, exec, readTextFile, appHome, watchFolder } from 'herdr';
-import { KIND_WORDS, bridgeFrom, parseAsks, questionsOf, choose, complete, answerArgs, detailOf, touchesCards } from './ask-model.js';
+import { KIND_WORDS, bridgeFrom, parseAsks, questionsOf, choose, complete, answerArgs, detailOf, touchesCards, tokenPath } from './ask-model.js';
 
 // Cards for prompts an agent is waiting on (permission, question, plan), from the optional
 // local bridge. Without the bridge (no harness-local config) the section never appears.
@@ -27,6 +27,7 @@ export function watchAsks(view, cx) {
         const parsed = result.code === 0 ? parseAsks(result.stdout) : null;
         if (!parsed) return;                       // keep what is shown; retried on the next change
         view.askDir = parsed.dir;
+        view.askTokenDir = parsed.tokenDir;
         const text = JSON.stringify(parsed.asks);
         if (text === previous) return;
         previous = text;
@@ -56,14 +57,15 @@ export function watchAsks(view, cx) {
 function answer(view, ask, decision, cx) {
   const bridge = view.askBridge;
   if (!bridge || view.askBusy[ask.id]) return;
-  let args;
-  try { args = answerArgs(bridge.script, ask, decision, view.askChoices[ask.id]); }
-  catch (e) { view.askErrors[ask.id] = String(e.message || e); cx.notify(); return; }
   view.askBusy[ask.id] = true;
   delete view.askErrors[ask.id];
   cx.notify();
   cx.spawn(async cx => {
     try {
+      // The one-time token sits beside the cards; this UI reads it only when answering.
+      const path = tokenPath(view.askTokenDir, ask);
+      const token = path ? await readTextFile(path).catch(() => null) : null;
+      const args = answerArgs(bridge.script, ask, decision, view.askChoices[ask.id], token);
       const result = await exec(bridge.python, args);
       if (result.code !== 0) view.askErrors[ask.id] = (result.stderr || result.stdout || `exit ${result.code}`).trim().split(/\r?\n/).pop();
       else view.asks = (view.asks ?? []).filter(a => a.id !== ask.id);

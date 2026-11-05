@@ -1,6 +1,7 @@
 // Question and permission cards from an optional local bridge (herdr-harness `asks`).
-// The bridge's files and CLI are the whole contract: `asks --json` lists pending cards,
-// `asks answer <id> --allow|--deny [--choice "question=label"]...` answers one.
+// The bridge's files and CLI are the whole contract: `asks --json` lists pending cards and names
+// `token_dir`, where each card's one-time token is `<id>.token`;
+// `asks answer <id> --allow|--deny --token T [--choice "question=label"]...` answers one.
 // Pure helpers only, so they run under node:test without the app.
 
 export const KIND_WORDS = {
@@ -9,6 +10,7 @@ export const KIND_WORDS = {
 };
 
 const ID = /^[0-9A-HJKMNP-TV-Z]{26}$/;
+const TOKEN = /^[0-9a-f]{64}$/;
 
 // The bridge script from harness-local/config.json; null hides the cards entirely.
 export function bridgeFrom(configText) {
@@ -27,6 +29,7 @@ export function parseAsks(stdout) {
   if (data?.schema !== 1 || !Array.isArray(data.asks)) return null;
   return {
     dir: typeof data.dir === 'string' ? data.dir : null,
+    tokenDir: typeof data.token_dir === 'string' ? data.token_dir : null,
     asks: data.asks.filter(a => a && a.schema === 1 && ID.test(a.id) && a.status === 'pending'
       && ['permission', 'question', 'plan'].includes(a.kind)),
   };
@@ -65,10 +68,23 @@ export function complete(ask, selected) {
 }
 
 // harness.py arguments for an answer. Multi-select labels join with ", " as Claude expects.
-export function answerArgs(script, ask, decision, selected) {
+// The card's token file, read just before answering.
+export function tokenPath(tokenDir, ask) {
+  if (!tokenDir || !ID.test(ask?.id ?? '')) return null;
+  return `${tokenDir.replace(/[\\/]+$/, '')}/${ask.id}.token`;
+}
+
+export function cleanToken(text) {
+  const token = String(text ?? '').trim();
+  return TOKEN.test(token) ? token : null;
+}
+
+export function answerArgs(script, ask, decision, selected, token) {
   if (!ID.test(ask?.id ?? '')) throw new Error('bad ask id');
   if (decision !== 'allow' && decision !== 'deny') throw new Error('bad decision');
-  const args = [script, 'asks', 'answer', ask.id, decision === 'allow' ? '--allow' : '--deny'];
+  const clean = cleanToken(token);
+  if (!clean) throw new Error('card token missing');
+  const args = [script, 'asks', 'answer', ask.id, decision === 'allow' ? '--allow' : '--deny', '--token', clean];
   if (decision === 'allow' && ask.kind === 'question') {
     for (const q of questionsOf(ask)) {
       const labels = selected?.[q.question] ?? [];

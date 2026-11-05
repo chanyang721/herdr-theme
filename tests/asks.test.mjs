@@ -1,10 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
-import {bridgeFrom, parseAsks, askFor, questionsOf, choose, complete, answerArgs, detailOf, touchesCards} from '../mods/sixfold-desk/ask-model.js';
+import {bridgeFrom, parseAsks, askFor, questionsOf, choose, complete, answerArgs, detailOf, touchesCards, tokenPath, cleanToken} from '../mods/sixfold-desk/ask-model.js';
 
 const ID = '01M6NVK4NK0Y35XVKEPK05MSTJ';
 const ID2 = '01M6NVFFPXYY2GBYE0H98XSVSY';
+const TOK = 'a'.repeat(64);
 const question = {schema: 1, id: ID, status: 'pending', kind: 'question', terminal: 't2j', tool_name: 'AskUserQuestion', reason: '질문: Which color?',
   tool_input: {questions: [{question: 'Which color?', header: 'Color', multiSelect: false, options: [{label: 'Red'}, {label: 'Blue'}]}]}};
 const permission = {schema: 1, id: ID2, status: 'pending', kind: 'permission', terminal: 't2k', tool_name: 'Bash', reason: 'Bash: git push',
@@ -30,15 +31,25 @@ test('only well-formed pending cards are listed', () => {
   assert.equal(askFor(parsed.asks, 'nope'), null);
 });
 
-test('allow, deny and a choice become the bridge CLI arguments', () => {
-  assert.deepEqual(answerArgs('h.py', permission, 'allow'), ['h.py', 'asks', 'answer', ID2, '--allow']);
-  assert.deepEqual(answerArgs('h.py', permission, 'deny'), ['h.py', 'asks', 'answer', ID2, '--deny']);
+test('allow, deny and a choice become the bridge CLI arguments with the card token', () => {
+  assert.deepEqual(answerArgs('h.py', permission, 'allow', {}, TOK), ['h.py', 'asks', 'answer', ID2, '--allow', '--token', TOK]);
+  assert.deepEqual(answerArgs('h.py', permission, 'deny', {}, `${TOK}\n`), ['h.py', 'asks', 'answer', ID2, '--deny', '--token', TOK]);
   const picked = choose({}, questionsOf(question)[0], 'Blue');
-  assert.deepEqual(answerArgs('h.py', question, 'allow', picked), ['h.py', 'asks', 'answer', ID, '--allow', '--choice', 'Which color?=Blue']);
-  assert.deepEqual(answerArgs('h.py', question, 'deny'), ['h.py', 'asks', 'answer', ID, '--deny']);
-  assert.throws(() => answerArgs('h.py', question, 'allow', {}), /unanswered/);
-  assert.throws(() => answerArgs('h.py', {...permission, id: 'x; rm -rf'}, 'allow'), /bad ask id/);
-  assert.throws(() => answerArgs('h.py', permission, 'always'), /bad decision/);
+  assert.deepEqual(answerArgs('h.py', question, 'allow', picked, TOK), ['h.py', 'asks', 'answer', ID, '--allow', '--token', TOK, '--choice', 'Which color?=Blue']);
+  assert.deepEqual(answerArgs('h.py', question, 'deny', {}, TOK), ['h.py', 'asks', 'answer', ID, '--deny', '--token', TOK]);
+  assert.throws(() => answerArgs('h.py', question, 'allow', {}, TOK), /unanswered/);
+  assert.throws(() => answerArgs('h.py', {...permission, id: 'x; rm -rf'}, 'allow', {}, TOK), /bad ask id/);
+  assert.throws(() => answerArgs('h.py', permission, 'always', {}, TOK), /bad decision/);
+  for (const bad of [null, '', 'xyz', 'A'.repeat(64), `${TOK} --allow`]) assert.throws(() => answerArgs('h.py', permission, 'allow', {}, bad), /token/);
+});
+
+test('the token path sits in token_dir and only a clean token is used', () => {
+  assert.equal(tokenPath('C:\\s\\ask-tokens\\', permission), `C:\\s\\ask-tokens/${ID2}.token`);
+  assert.equal(tokenPath(null, permission), null);
+  assert.equal(tokenPath('/s/ask-tokens', {id: '../x'}), null);
+  assert.equal(cleanToken(` ${TOK}\r\n`), TOK);
+  assert.equal(cleanToken('nope'), null);
+  assert.equal(parseAsks(JSON.stringify({schema: 1, dir: '/s/asks', token_dir: '/s/ask-tokens', asks: []})).tokenDir, '/s/ask-tokens');
 });
 
 test('multi-select toggles and joins labels in option order', () => {
@@ -49,7 +60,7 @@ test('multi-select toggles and joins labels in option order', () => {
   assert.deepEqual(s, {});
   const ask = {...question, tool_input: {questions: [{question: 'Pick', multiSelect: true, options: ['A', 'B', 'C']}]}};
   assert.equal(complete(ask, {}), false);
-  assert.deepEqual(answerArgs('h.py', ask, 'allow', {Pick: ['A', 'C']}).slice(-2), ['--choice', 'Pick=A, C']);
+  assert.deepEqual(answerArgs('h.py', ask, 'allow', {Pick: ['A', 'C']}, TOK).slice(-2), ['--choice', 'Pick=A, C']);
 });
 
 test('detail and folder events', () => {
