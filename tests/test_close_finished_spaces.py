@@ -543,11 +543,11 @@ class FinishedClaudeSpaceTests(CleanupPolicyTests.__base__):
     def test_a_session_without_a_transcript_is_reported_parked_archived_and_closed(self):
         self.child()
         self.config['close_report'] = {'enabled': True}
-        self.live.reported = True
         state = self.ready_state()
-        first = self.cycle(state)
+        first = self.cycle(state)               # no report yet: it is asked once
         self.assertEqual(first['results'][0]['action'], 'keep')
         self.assertIn(('ask', 't-test'), self.live.notifications)
+        self.live.reported = True                # it answers
         result = self.cycle(state)
         self.assertEqual(result['results'][0]['action'], 'closed', result['results'][0]['reasons'])
         self.assertEqual([(e, sid) for e, _, sid in self.live.parks],

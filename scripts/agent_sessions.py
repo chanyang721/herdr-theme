@@ -531,14 +531,26 @@ def report_gate(entries, item, adapter, config, now):
     entry = entries.get(address)
     if entry and entry.get('session_id') != sid:
         entry = None
+    worked = False
     if entry and isinstance(turn, int) and isinstance(entry.get('turn'), int) and turn > entry['turn'] + turns:
-        entry = None   # the person worked with it after the request
+        entry, worked = None, True   # the person worked with it after the request: a new report is due
     if entry and entry.get('failed_at'):
         if now - entry['failed_at'] < retry:
             return 'failed', f"no close report (asked {int((now - entry['requested_at']) // 60)} minutes ago): kept, asks again later"
         entry = None
     if entry is None:
         entries.pop(address, None)
+        # Already reported for its last work (another observer asked, or an earlier cycle's state
+        # is gone): a final report written no earlier than shortly before the session went idle
+        # answers it, so the session is not asked again.
+        idle_since = (item.get('status_ms') or 0) / 1000
+        if idle_since and not worked:
+            since = utc_iso(idle_since - cfg.get('report_lookback_seconds', 900))
+            ok, detail = adapter.close_status(config, item, since)
+            if ok:
+                entries[address] = {'session_id': sid, 'requested_at': now, 'since': since, 'turn': turn,
+                                    'report': detail, 'earlier': True}
+                return 'ready', detail
         adapter.request_report(address, close_report_message(config))
         # Only a report written after the request answers it: `since` is the request time rounded
         # up to the record's whole-second clock (Codex review 2026-11-05 P2).

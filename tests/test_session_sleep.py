@@ -621,3 +621,44 @@ class ReportGateTimingTests(unittest.TestCase):
         agent_sessions.report_gate(entries, dict(self.ITEM), adapter, self.CONFIG, now)
         self.assertEqual(agent_sessions.report_gate(entries, dict(self.ITEM), adapter, self.CONFIG, now + 60)[0], 'ready')
         self.assertEqual(agent_sessions.report_gate(entries, dict(self.ITEM), adapter, self.CONFIG, now + 1000)[0], 'ready')
+
+
+class AlreadyReportedTests(unittest.TestCase):
+    """A session that already reported is not asked again, and its 'waiting in the
+    memory window' answer is not a user decision."""
+    Adapter = ReportGateTimingTests.Adapter
+    CONFIG = ReportGateTimingTests.CONFIG
+
+    def item(self, idle_since, turn=3):
+        return {'address': 't38', 'session_id': SID, 'turn': turn, 'status_ms': int(idle_since * 1000)}
+
+    def test_a_report_from_its_last_work_is_ready_without_asking(self):
+        now = 1_793_000_000.0
+        adapter = self.Adapter(report_at=now - 9 * 3600)            # reported at 09:56 for the other observer
+        decision, detail = agent_sessions.report_gate({}, self.item(now - 9 * 3600 + 5), adapter, self.CONFIG, now)
+        self.assertEqual((decision, adapter.asked), ('ready', []))
+
+    def test_an_old_report_before_later_work_does_not_count(self):
+        now = 1_793_000_000.0
+        adapter = self.Adapter(report_at=now - 3 * 3600)
+        decision, _ = agent_sessions.report_gate({}, self.item(now - 600), adapter, self.CONFIG, now)
+        self.assertEqual((decision, adapter.asked), ('requested', ['t38']))
+
+    def test_work_after_the_request_still_asks_again(self):
+        now = 1_793_000_000.0
+        adapter = self.Adapter(report_at=now + 10)
+        entries = {}
+        agent_sessions.report_gate(entries, self.item(now - 60), adapter, self.CONFIG, now)
+        adapter.asked.clear()
+        decision, _ = agent_sessions.report_gate(entries, self.item(now + 15, turn=6), adapter, self.CONFIG, now + 60)
+        self.assertEqual((decision, adapter.asked), ('requested', ['t38']))
+
+    SCREEN = ('❯ [세션 정리 보고 요청] 관찰기가 이 세션을 곧 정리(절전)합니다. 새 작업은 시작하지 말고 아래만 하세요.\n'
+              '  다른 세션에 보고하지 말고, 보고 id만 한 줄로 답하고 끝내세요. 승인은 사람이 기억함에서 합니다.\n'
+              '⏺ 01ARZ3NDEKTSV4RRFFQ69G5FAV (이미 제출함, 기억함에서 승인 대기 중)\n'
+              '✻ Cogitated for 4s · done 오전 10:21\n────────\n❯ \n────────\n  ⏵⏵ auto mode on\n')
+
+    def test_the_memory_window_answer_is_not_a_user_decision(self):
+        self.assertFalse(sleep.spaces.decision_pending(self.SCREEN))
+        self.assertTrue(sleep.spaces.decision_pending(self.SCREEN + '사용자 승인 대기: 배포 범위\n'))
+        self.assertTrue(sleep.spaces.decision_pending('Do you want to proceed?\n❯ 1. Yes\n'))
