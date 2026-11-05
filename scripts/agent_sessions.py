@@ -189,6 +189,40 @@ def session_mapping(terminal, config=None):
     return {**base, 'session_id': sid}, ''
 
 
+def empty_agent(terminal, config=None, held=None):
+    """True for an agent pane that never received input: nothing to keep, so it closes without a
+    harness record (t1 2026-11-05: t4j·t4k·t4n were kept for 'Claude log identity'). Both sources
+    must agree: hc says turn 0, and the agent wrote no conversation file. Claude: no transcript
+    (`transcriptPath` unset and no projects/*/<session>.jsonl). Codex: not started with `resume`
+    and no rollout open (Codex writes its rollout at the first input). Anything unreadable is not empty."""
+    config = config or {}
+    if terminal.get('turn') != 0:
+        return False
+    fg = terminal.get('foreground') or {}
+    app = (terminal.get('status') or {}).get('app')
+    pid, argv = fg.get('pid'), [str(a) for a in (fg.get('argv') or [])]
+    if not isinstance(pid, int) or isinstance(pid, bool) or app not in AGENTS:
+        return False
+    # A resumed conversation has a history even at turn 0 of this pane (Codex `-c` is --config).
+    resumed = ('--resume', '-r', '--continue', '-c') if provider(app) == 'claude' else ('resume',)
+    if any(a in resumed for a in argv[1:]):
+        return False
+    if provider(app) == 'claude':
+        home = Path(config.get('claude_home', Path.home() / '.claude')).expanduser()
+        try:
+            meta = json.loads((home / 'sessions' / f'{pid}.json').read_text(encoding='utf-8'))
+        except (OSError, ValueError):
+            return False
+        sid = meta.get('sessionId') if isinstance(meta, dict) else None
+        if not isinstance(sid, str) or not UUID.match(sid) or meta.get('pid') != pid:
+            return False
+        if meta.get('transcriptPath') or meta.get('logPath'):
+            return False
+        return not list((home / 'projects').glob(f'*/{sid}.jsonl'))
+    held = _held_rollouts(pid) if held is None else held
+    return held == []
+
+
 def pane_session_id(address, created_ms, agent_pid):
     """The stand-in session id of a Claude without a transcript (an inherited child session).
 

@@ -194,6 +194,9 @@ class Live:
     def park(self, config, item, event, reason=None):
         return agent_sessions.harness_park(config, item, event, reason=reason)
 
+    def empty(self, terminal, config):
+        return agent_sessions.empty_agent(terminal, config)
+
     def git(self, folder):
         return agent_sessions.git_brief(folder)
 
@@ -252,8 +255,15 @@ def slept_session(terminal, space):
             **({'no_resume': True} if labels.get('sixfold.sleep.new') else {})}
 
 
+def is_empty(adapter, terminal, config):
+    """agent_sessions.empty_agent through the adapter (tests replace it)."""
+    if hasattr(adapter, 'empty'):
+        return adapter.empty(terminal, config)
+    return agent_sessions.empty_agent(terminal, config)
+
+
 def inspect(space, snapshot, adapter, config):
-    reasons, evidence, screens, sessions = [], [], [], []
+    reasons, evidence, screens, sessions, empty = [], [], [], [], []
     status = snapshot['status']
     if not all(focus(status)) or status.get('errors'):
         reasons.append('app focus/health unverified')
@@ -297,6 +307,13 @@ def inspect(space, snapshot, adapter, config):
         valid, why, pids = process_evidence(terminal, snapshot['processes'])
         if not valid:
             reasons.append(f'{address}: {why}')
+        if valid and not children and is_empty(adapter, terminal, config):
+            # Never received input (turn 0, no conversation file): no session to keep or report.
+            text = adapter.screen(address)
+            if empty_prompt(text, agent) or claude_suggestion(text, agent, adapter, address):
+                empty.append(address)
+                evidence.append([address, terminal.get('pid'), 'empty', terminal.get('created_ms'), hashlib.sha256(text.encode()).hexdigest()])
+                continue
         jobs_ok, jobs_reason, jobs_fingerprint = adapter.backend(terminal, config, valid)
         child = adapter.child(terminal) if 'inherited child session' in (jobs_reason or '') and hasattr(adapter, 'child') else None
         # A Claude opened inside another agent has no transcript to read its jobs from. Its process
@@ -330,7 +347,7 @@ def inspect(space, snapshot, adapter, config):
     fingerprint = hashlib.sha256(json.dumps(evidence, sort_keys=True).encode()).hexdigest()
     answered = bool(screens) and all(last_prompt_is_report_request(t) for t in screens)
     return {'id': space['id'], 'name': space['name'], 'safe': not reasons, 'reasons': reasons, 'fingerprint': fingerprint,
-            'answered_report': answered,
+            'answered_report': answered, 'empty_panes': empty,
             'folders': sorted({t.get('cwd') for a, t in all_terms.items() if a in addresses and t.get('cwd')} | ({space['folder']} if space.get('folder') else set())),
             'summary': '\n'.join('\n'.join(s.splitlines()[-8:]) for s in screens)[:2400], 'sessions': sessions}
 

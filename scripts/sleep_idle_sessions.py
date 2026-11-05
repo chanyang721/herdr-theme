@@ -69,6 +69,7 @@ NOT_SHELL = 'terminal program is not a shell: the pane would not survive /exit'
 FLOAT = 'shown in a float or overlay'
 # Block only the /exit sleep; a finished session's pane may still be closed or asked for its report.
 SLEEP_ONLY = (VISIBLE, NOT_SHELL)
+ASLEEP = 'already asleep'
 
 
 def blockers(item):
@@ -221,7 +222,13 @@ def inspect(address, space, snapshot, adapter, config, tab=None):
     labels = terminal.get('labels') or {}
     if labels.get(SLEEP_LABEL):
         item['asleep'] = True
-        reasons.append('already asleep')
+        reasons.append(ASLEEP)
+        slept = spaces.slept_session(terminal, space)
+        if slept:
+            # The session it holds: a finished (reported) one may have its pane closed (spare_close).
+            item.update({k: slept[k] for k in ('app', 'session_id', 'title', 'cwd', 'turn', 'no_resume') if k in slept})
+            item['fingerprint'] = hashlib.sha256(json.dumps([address, terminal.get('pid'), terminal.get('created_ms'),
+                                                             labels.get(SLEEP_LABEL)]).encode()).hexdigest()
         return item
     app = (terminal.get('status') or {}).get('app')
     state = (terminal.get('status') or {}).get('state')
@@ -245,6 +252,15 @@ def inspect(address, space, snapshot, adapter, config, tab=None):
     valid, why, pids = agent_sessions.process_evidence(terminal, snapshot['processes'])
     if not valid:
         reasons.append(why)
+    elif not blockers(item) and spaces.is_empty(adapter, terminal, config):
+        # Never received input (hc turn 0 and no conversation file): no session to keep, report or
+        # resume. It may only be closed while its space and tab keep another pane (spare_close).
+        text = adapter.screen(address)
+        if spaces.empty_prompt(text, app) or claude_suggestion(text, app, adapter, address):
+            item['empty'] = True
+            item['fingerprint'] = hashlib.sha256(json.dumps([address, terminal.get('pid'), terminal.get('created_ms'), 'empty',
+                                                             hashlib.sha256(text.encode()).hexdigest()]).encode()).hexdigest()
+            return item
     mapping, why = agent_sessions.session_mapping(terminal, config)
     child = adapter.child(terminal) if mapping is None and 'inherited child session' in why and hasattr(adapter, 'child') else None
     if mapping is None and not child:
@@ -283,7 +299,7 @@ def inspect(address, space, snapshot, adapter, config, tab=None):
 
 def note(item, notes_dir, now):
     """Local-only detail (screen tail, folder, git): never synced, kept beside the observer."""
-    path = Path(notes_dir) / f"{dt.datetime.fromtimestamp(now):%Y%m%d}-{item['address']}-{item['session_id'][:8]}.json"
+    path = Path(notes_dir) / f"{dt.datetime.fromtimestamp(now):%Y%m%d}-{item['address']}-{(item.get('session_id') or 'empty')[:8]}.json"
     path.parent.mkdir(parents=True, exist_ok=True)
     keep = {k: item.get(k) for k in ('address', 'space_name', 'space_id', 'app', 'session_id', 'title', 'cwd', 'git', 'screen_tail', 'harness', 'argv', 'close_report')}
     keep['at'] = dt.datetime.fromtimestamp(now).astimezone().isoformat()
@@ -349,7 +365,9 @@ def close_recheck(item, adapter, config, closed):
     if not where:
         return ['pane moved or closed'], snap
     latest = inspect(item['address'], where[0], snap, adapter, config, where[1])
-    why = list(blockers(latest))
+    why = spare_blockers(latest) if spare_kind(item) else list(blockers(latest))
+    if spare_kind(item) and spare_kind(latest) != spare_kind(item):
+        why.append(f"no longer {spare_kind(item)}")
     if latest.get('fingerprint') != item.get('fingerprint'):
         why.append('evidence changed')
     if where[0].get('id') != item['space_id']:
@@ -385,6 +403,32 @@ def settle_pending(entries, adapter, config, snapshot, apply):
     return left
 
 
+def spare_kind(item):
+    """'empty' (never received input) or 'asleep' (a slept session we know), else None: panes that
+    hold no live work, closed while their space and tab keep another pane (user rule 2026-11-05)."""
+    if item.get('empty'):
+        return 'empty'
+    if item.get('asleep') and item.get('session_id'):
+        return 'asleep'
+    return None
+
+
+def spare_blockers(item):
+    return [r for r in blockers(item) if r != ASLEEP]
+
+
+def spare_ready(item, adapter, config):
+    """(ok, why). An asleep pane closes only once its session's own final report is on record;
+    an empty one has nothing to report."""
+    if spare_kind(item) != 'asleep':
+        return True, None
+    ok, detail = adapter.close_status(config, item, '1970-01-01T00:00:00Z')
+    if not ok:
+        return False, f'asleep session without a close report ({detail}): kept asleep'
+    item['close_report'], item['report_task_id'] = detail['report_id'], detail.get('task_id')
+    return True, None
+
+
 def close_one(item, adapter, config, paths, now, snapshot, closed=()):
     """Harness close_requested → local note → fresh recheck → pane.close by id → gone from a fresh
     snapshot → harness closed. Returns (action, the snapshot after the close or None).
@@ -393,7 +437,15 @@ def close_one(item, adapter, config, paths, now, snapshot, closed=()):
     item['_pane'] = pane_entry(snapshot, item['address'])
     pane_id = pane_id_of(item['_pane'])
     item['git'] = adapter.git(item.get('cwd'))
-    ok, detail = adapter.park(config, item, 'close_requested', reason='finished harness session: pane closed')
+    if item.get('empty'):
+        # No input ever reached it: nothing to keep, so no harness record (t1 2026-11-05, E).
+        park = lambda config_, item_, event, reason=None: (True, 'empty pane: no session to record')  # noqa: E731
+    else:
+        park = adapter.park
+    why_close = {'empty': 'empty agent pane (never received input): pane closed',
+                 'asleep': 'finished session asleep while its space keeps another pane: pane closed'}.get(
+                     spare_kind(item), 'finished harness session: pane closed')
+    ok, detail = park(config, item, 'close_requested', reason=why_close)
     item['harness'] = detail
     if not ok:
         item['reasons'].append(f'harness record failed: {detail}')
@@ -402,7 +454,7 @@ def close_one(item, adapter, config, paths, now, snapshot, closed=()):
 
     def aborted(why):
         # Settle the open close_requested so the harness never reads this session as half closed.
-        ok_, detail_ = adapter.park(config, item, 'close_aborted', reason=f'pane close failed: {why}'[:200])
+        ok_, detail_ = park(config, item, 'close_aborted', reason=f'pane close failed: {why}'[:200])
         item['harness_abort'] = detail_ if ok_ else f'close_aborted not recorded: {detail_}'
 
     try:
@@ -436,7 +488,7 @@ def close_one(item, adapter, config, paths, now, snapshot, closed=()):
         raise RuntimeError(f"{item['address']}: pane still present after pane.close"
                            + (f' ({failure})' if failure else '') + '; further actions stopped')
     for _ in range(2):   # the pane is gone: its closed record must land, or be retried later
-        ok, detail = adapter.park(config, item, 'closed', reason='pane closed')
+        ok, detail = park(config, item, 'closed', reason='pane closed')
         if ok:
             return 'closed', after
     item['reasons'].append(f'pane closed but the harness closed record failed: {detail}')
@@ -485,6 +537,60 @@ def cycle(adapter, config, state, now, *, apply=False, paths=None):
         except Exception as exc:   # noqa: BLE001 — this pane only; the cycle goes on
             item = lookup_failed(address, space, exc)
         old = previous.get(address, {})
+        kind = spare_kind(item)
+        if kind:
+            same = fresh and not spare_blockers(item) and old.get('fingerprint') == item.get('fingerprint')
+            since = old.get('since', now) if same else now
+            quiet = now - since
+            item.update(quiet_seconds=round(quiet), action='asleep' if kind == 'asleep' else 'keep')
+            if not spare_blockers(item):
+                tracking[address] = {'since': since, 'fingerprint': item.get('fingerprint')}
+            why_not_close = close_blocker(item, snapshot, tab, closed) if close_on else 'close_finished_panes off'
+            if spare_blockers(item) or why_not_close:
+                if kind == 'empty':
+                    item['reasons'].extend([why_not_close] if why_not_close and not spare_blockers(item) else [])
+            elif quiet < idle:
+                item['reasons'].append(f'{kind} pane unchanged for {int(quiet // 60)} of {idle // 60} minutes')
+            elif not apply:
+                item['action'] = f'would_close_{kind}'
+            elif not ready:
+                item['reasons'].append('apply not approved for this observer code (one recorded dry-run first)')
+            elif acted >= config.get('max_per_cycle', 4):
+                item['reasons'].append('per-cycle limit reached')
+            elif stop_reason:
+                item['reasons'].append(stop_reason)
+            else:
+                may, why = spare_ready(item, adapter, config)
+                if not may:
+                    item['reasons'].append(why)
+                else:
+                    check = adapter.snapshot()
+                    before = spaces.focus(check['status'])
+                    item['action'], after = close_one(item, adapter, config, paths, now, check, closed)
+                    if item['action'] in ('closed', 'closed_unrecorded'):
+                        acted += 1
+                        closed.add(address)
+                        tracking.pop(address, None)
+                        if item['action'] == 'closed_unrecorded':
+                            pending.append({**{k: v for k, v in item.items() if k not in ('_pane', 'screen_tail')}, 'pending': 'unrecorded'})
+                            state['unrecorded_closes'] = pending
+                            stop_reason = 'a close is still owed its harness record; settled next cycle'
+                        after = after or adapter.snapshot()
+                        if spaces.focus(after['status']) != before:
+                            stop_reason = 'focus moved during the previous close; next cycle'
+                            item['focus_moved'] = True
+                    elif item['action'] == 'close_unconfirmed':
+                        if kind == 'asleep':
+                            pending.append({**{k: v for k, v in item.items() if k not in ('_pane', 'screen_tail')}, 'pending': 'unconfirmed'})
+                            state['unrecorded_closes'] = pending
+                        for k in ('argv', '_pane', '_pane_id'):
+                            item.pop(k, None)
+                        results.append(item)
+                        break
+            for k in ('argv', '_pane', '_pane_id'):
+                item.pop(k, None)
+            results.append(item)
+            continue
         safe = not blockers(item)          # nothing blocks closing or asking for the report
         sleepable = not item['reasons']    # nothing blocks the /exit sleep either
         same = fresh and safe and old.get('fingerprint') == item.get('fingerprint')
