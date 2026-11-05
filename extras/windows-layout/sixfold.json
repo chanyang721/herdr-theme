@@ -150,7 +150,7 @@
                   "id": "cli-status",
                   "type": "block",
                   "size": {
-                    "px": 580
+                    "px": 700
                   },
                   "content": {
                     "mod": "cli-status"
