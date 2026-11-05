@@ -45,7 +45,7 @@ def install(repo, app, update=False, extra=()):
              for p in sorted((repo/folder).rglob('*')) if p.is_file() and p.name not in GENERATED]
     helpers = ('workspace.py', 'core_api.py', 'balance_grid.py', 'collect_computers.py', 'route.py', 'collaborate.py', 'update_install.py', 'workspace_mods.py',
                'file_lock.py', 'agent_env.py', 'site_config.py', 'desktop.py', 'install_doc_tabs.py', 'resolve_doc_pins.py',
-               'doc_catalog.py', 'collect_docs.py', 'open_doc_tab.py', 'render_mermaid.py', 'render_html.py')
+               'doc_catalog.py', 'doc_routing.py', 'collect_docs.py', 'open_doc_tab.py', 'render_mermaid.py', 'render_html.py')
     files += [(repo/'scripts'/name, app/'scripts/sixfold'/name) for name in helpers]
     files += [(src, app/rel) for src, rel in extra]
     # Reference palettes belong to Herdr/the user, even in update mode.

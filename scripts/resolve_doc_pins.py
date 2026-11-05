@@ -18,6 +18,7 @@ import unicodedata
 
 from collect_docs import EXTENSIONS, atomic_json, documents, is_archived
 import doc_catalog
+import doc_routing
 
 DEFAULT_KEYWORDS = ['결정', '확인요청', '확인 요청', '회신', '질의', '검토결과', '검토 결과']
 DATE_PREFIX = re.compile(r'^(\d{8}|\d{4}-\d{2}-\d{2})[_\- ]+(.+)$')
@@ -179,9 +180,16 @@ def resolve(config, space_id, today=None):
             'warnings': sorted(set(warnings)), 'watchRoots': sorted(set(roots))}
 
 
-def catalog(config, space_id, today=None, app_home=None):
-    """Everything the 문서 tab lists for one space; reads files, never changes them."""
+def catalog(config, space_id, today=None, app_home=None, routing=None):
+    """Everything the 문서 tab lists for one space; reads files, never changes them.
+
+    ``routing`` (doc_routing settings; read from the local routing file when None) adds
+    documents from shared folders whose words say they belong to this space.
+    """
     today = today or date.today()
+    home = app_home or app_home_default()
+    if routing is None:
+        routing = doc_routing.load(doc_routing.default_path(home))
     base = resolve(config, space_id, today)
     settings = config['spaces'][space_id]
     kinds = doc_catalog.kinds_for(config, settings)
@@ -193,12 +201,15 @@ def catalog(config, space_id, today=None, app_home=None):
         if root.is_absolute() and not root.is_symlink() and not is_archived(root):
             approved.append(entry)
     pins = [d for d in base['documents'] if d.get('pinned')]
-    rows = doc_catalog.build(documents(approved, warnings, include_archived=True), pins, kinds, today, days)
+    scanned = {item['path']: item for item in documents(approved, warnings, include_archived=True)}
+    for item in doc_routing.routed(routing, settings.get('name'), lambda entries, w: documents(entries, w, include_archived=True), warnings):
+        scanned.setdefault(item['path'], item)
+    rows = doc_catalog.build(list(scanned.values()), pins, kinds, today, days)
     by_path = {row['path']: row for row in rows}
     for pin in pins:
         row = by_path.get(pin.get('path'))
         if row:
-            pin.update({key: row[key] for key in ('kind', 'family', 'date', 'recent', 'folder') if key in row})
+            pin.update({key: row[key] for key in ('kind', 'family', 'date', 'modified', 'recent', 'folder') if key in row})
             pin['versions'] = row.get('versions', [])
             for other in rows:
                 if other.get('head') == row['id']:
@@ -216,9 +227,10 @@ def catalog(config, space_id, today=None, app_home=None):
         if row['family'] in pinned_families and row['state'] == 'latest':
             row['state'] = 'previous'
             row['head'] = next(pin['id'] for pin in pins if pin.get('family') == row['family'])
-    rows.sort(key=lambda r: (r['date'], r['mtime'], r['id']), reverse=True)
+    # Newest write first, whatever date the file name carries.
+    rows.sort(key=lambda r: (r['mtime'], r['date'], r['id']), reverse=True)
     override = (settings.get('harness') or {}).get('root')
-    root = doc_catalog.harness_root(space_id, app_home or app_home_default(), override)
+    root = doc_catalog.harness_root(space_id, home, override)
     harness, sections = [], []
     if root:
         known = {d['path']: d['id'] for d in pins + rows if d.get('path')}
@@ -229,7 +241,7 @@ def catalog(config, space_id, today=None, app_home=None):
     labels = {kind['id']: kind['label'] for kind in kinds} | {doc_catalog.OTHER['id']: doc_catalog.OTHER['label']}
     return {'version': 2, 'spaceId': space_id, 'name': base['name'], 'checkedAt': base['checkedAt'],
             'documents': pins + rows + harness, 'warnings': sorted(set(warnings)),
-            'watchRoots': sorted(set(base['watchRoots'] + ([str(root)] if root else []))),
+            'watchRoots': sorted(set(base['watchRoots'] + ([str(root)] if root else []) + doc_routing.roots(routing, settings.get('name')))),
             'kinds': [{'id': kind, 'label': labels[kind]} for kind in order], 'recentDays': days,
             'harness': {'root': str(root), 'sections': sections} if root else None}
 
@@ -279,6 +291,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--config', type=Path, default=default)
     parser.add_argument('--space', required=True)
+    parser.add_argument('--routing', type=Path, help='routing file (default: project-docs-routing.local.json beside --config)')
     actions = parser.add_mutually_exclusive_group()
     actions.add_argument('--pin')
     actions.add_argument('--pin-id')
@@ -294,7 +307,8 @@ def main():
                 atomic_json(args.config, config)
         else:
             config = json.loads(args.config.read_text(encoding='utf-8'))
-        print(json.dumps(catalog(config, args.space), ensure_ascii=False))
+        routing = doc_routing.load(args.routing or args.config.parent / doc_routing.default_path('').name) or {}
+        print(json.dumps(catalog(config, args.space, routing=routing), ensure_ascii=False))
     except (OSError, ValueError, KeyError, TypeError) as error:
         parser.exit(1, str(error) + '\n')
 

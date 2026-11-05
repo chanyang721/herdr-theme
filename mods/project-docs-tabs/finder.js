@@ -28,7 +28,12 @@ const fold = value => String(value ?? '').normalize('NFC').toLocaleLowerCase();
 export function sortNodes(nodes, sort = null) {
   if (!sort) return nodes.slice();
   const { key = 'name', dir = 1 } = sort;
-  const value = node => key === 'date' ? node.date || '' : key === 'size' ? node.size ?? -1 : key === 'kind' ? fold(kindOf(node)) : fold(node.name);
+  // 수정일 orders by the modification time when both rows have one, else by the shown date.
+  if (key === 'date') return nodes.slice().sort((a, b) => (Boolean(b.folder) - Boolean(a.folder)) ||
+    (Number.isFinite(a.mtime) && Number.isFinite(b.mtime) ? (a.mtime - b.mtime) * dir
+      : (a.date || '') < (b.date || '') ? -dir : (a.date || '') > (b.date || '') ? dir : 0) ||
+    (fold(a.name) < fold(b.name) ? -1 : fold(a.name) > fold(b.name) ? 1 : 0));
+  const value = node => key === 'size' ? node.size ?? -1 : key === 'kind' ? fold(kindOf(node)) : fold(node.name);
   return nodes.slice().sort((a, b) => (Boolean(b.folder) - Boolean(a.folder)) ||
     (value(a) < value(b) ? -dir : value(a) > value(b) ? dir : 0) || (fold(a.name) < fold(b.name) ? -1 : fold(a.name) > fold(b.name) ? 1 : 0));
 }

@@ -50,8 +50,11 @@ def documents(folders,warnings=None,include_archived=False):
         try:
             if not root.is_dir():warnings.append('source_unavailable');continue
         except OSError:warnings.append('source_unavailable');continue
+        depth=entry.get('depth')
         for directory,subdirs,files in os.walk(root,followlinks=False,onerror=lambda error:warnings.append('source_unavailable')):
             subdirs[:]=[name for name in subdirs if not name.startswith('.')]
+            # depth 1 = files directly in the folder (Downloads); deeper folders are not walked.
+            if isinstance(depth,int) and depth>0 and len(Path(directory).relative_to(root).parts)>=depth-1:subdirs[:]=[]
             for name in files:
                 path=Path(directory)/name
                 if path.is_symlink() or path.suffix.lower() not in EXTENSIONS or name.lower()=='latest.md':continue

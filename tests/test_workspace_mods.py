@@ -152,7 +152,7 @@ class InstallerTests(unittest.TestCase):
             (theme / path).parent.mkdir(parents=True, exist_ok=True)
             (theme / path).write_text(text, encoding='utf-8')
         for name in ('workspace', 'core_api', 'balance_grid', 'collect_computers', 'route', 'collaborate', 'update_install', 'workspace_mods',
-                     'file_lock', 'agent_env', 'site_config', 'desktop', 'install_doc_tabs', 'resolve_doc_pins', 'doc_catalog',
+                     'file_lock', 'agent_env', 'site_config', 'desktop', 'install_doc_tabs', 'resolve_doc_pins', 'doc_catalog', 'doc_routing',
                      'collect_docs', 'open_doc_tab', 'render_mermaid', 'render_html'):
             (theme / 'scripts').mkdir(exist_ok=True)
             (theme / f'scripts/{name}.py').write_text('# helper\n', encoding='utf-8')

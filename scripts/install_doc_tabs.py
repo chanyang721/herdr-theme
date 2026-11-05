@@ -120,8 +120,9 @@ def ensure_document_tabs(document, app_home):
         if any(node.get('content', {}).get('mod') == MOD for tab in space.get('tabs', []) for node in nodes(tab.get('root', {}))):
             continue
         token = hashlib.sha256(space['id'].encode()).hexdigest()[:24]
-        props = {'spaceId': space['id'], 'resolverScript': str(app_home/'data/sixfold/doc-tabs/resolve_doc_pins.py'),
-                 'installerScript': str(app_home/'data/sixfold/doc-tabs/install_doc_tabs.py')}
+        # copy_feature installs the helpers in scripts/sixfold; point new tabs there.
+        props = {'spaceId': space['id'], 'resolverScript': str(app_home/'scripts/sixfold/resolve_doc_pins.py'),
+                 'installerScript': str(app_home/'scripts/sixfold/install_doc_tabs.py')}
         tab = {'id': 'sf-docs-tab-' + token, 'name': '문서', 'root': {
             'id': 'sf-docs-pane-' + token, 'type': 'block', 'content': {'mod': MOD, 'props': props}}}
         space.setdefault('tabs', []).append(tab)
@@ -155,7 +156,7 @@ def copy_feature(repo, app_home):
             shutil.copy2(source_path, destination)
     scripts = app_home/'scripts/sixfold'
     scripts.mkdir(parents=True, exist_ok=True)
-    for name in ('install_doc_tabs.py', 'resolve_doc_pins.py', 'doc_catalog.py', 'collect_docs.py', 'core_api.py', 'render_mermaid.py', 'render_html.py', 'open_doc_tab.py',
+    for name in ('install_doc_tabs.py', 'resolve_doc_pins.py', 'doc_catalog.py', 'doc_routing.py', 'collect_docs.py', 'core_api.py', 'render_mermaid.py', 'render_html.py', 'open_doc_tab.py',
                  'site_config.py', 'file_lock.py', 'desktop.py'):
         shutil.copy2(repo/'scripts'/name, scripts/name)
     if sys.platform != 'darwin':

@@ -18,7 +18,7 @@ async function load(file, runtime) {
   delete globalThis[key];
   return module;
 }
-async function harness({ documents = [document('a'), document('b')], selection, lineEnding } = {}) {
+async function harness({ documents = [document('a'), document('b')], selection, lineEnding, props: extra = {} } = {}) {
   const handlers = new Map(), calls = [], reads = [], labels = [], timer = new Map(), watchers = new Map();
   const state = { documents, selected: selection, active: false, text: path => `본문 ${path}`, result: null, stage: async text => ({ blocks: [{ text }], files: [], unavailable: false }) };
   const stored = { 'sixfold.docs.selection.v1': selection ? { Demo: selection, Other: 'other' } : { Other: 'other' } };
@@ -38,7 +38,7 @@ async function harness({ documents = [document('a'), document('b')], selection, 
     InputState: { new: () => { const input = { text: '', events: {}, value: () => input.text, set_value: v => { input.text = v; }, on: (name, fn) => { input.events[name] = fn; return true; } }; state.input = input; return input; } },
     Input: { new: () => element() },
     TextView: { markdown: (_id, text) => { labels.push(text); return element(); } },
-    props: () => ({ spaceId: 'Demo' }), appHome: () => '/app',
+    props: () => ({ spaceId: 'Demo', ...extra }), appHome: () => '/app',
     readTextFile: async path => { if (path.endsWith('/project-docs-open.json')) return state.request ? JSON.stringify(state.request) : null; reads.push(path); return state.text(path); },
     exec: async (command, args) => {
       calls.push({ command, args });
@@ -389,4 +389,27 @@ test('a selected 열람 tab is shown again after the mod reloads', async t => {
   const h = await harness({ selection: 'opened-/elsewhere/x.html' }); t.after(() => h.view.close());
   assert.equal(h.view.selected, 'opened-/elsewhere/x.html');
   assert.ok(h.view.documents.some(d => d.opened && d.path === '/elsewhere/x.html'));
+});
+
+test('kind folders and the 수정일 column list the newest write first, whatever date the name carries', async () => {
+  const row = (id, date, mtime, modified) => ({ ...document(id, `/docs/${id}.md`, false), state: 'latest', kind: 'report', date, mtime, modified });
+  const docs = [row('old-name-new-write', '2026-11-01', 3000, '2026-11-05'), row('new-name-old-write', '2026-11-04', 1000, '2026-11-04'),
+    row('middle', '2026-11-03', 2000, '2026-11-04')];
+  const loc = locations(docs, { kinds: [{ id: 'report', label: '보고서' }] }).find(l => l.key === 'docs');
+  const files = loc.entries.filter(e => !e.dir);
+  // column view sorts newest-first by path, so the path rank must follow mtime.
+  assert.deepEqual(files.map(e => e.id).sort((a, b) => files.find(f => f.id === b).path.localeCompare(files.find(f => f.id === a).path)),
+    ['old-name-new-write', 'middle', 'new-name-old-write']);
+  assert.equal(files.find(e => e.id === 'old-name-new-write').date, '2026-11-05');
+  const finder = await load('finder.js', { div: () => ({}), v_flex: () => ({}), h_flex: () => ({}), entryIcon: () => '' });
+  const tree = listTree(loc, docs).children[0].children;
+  assert.deepEqual(finder.sortNodes(tree, { key: 'date', dir: -1 }).map(n => n.docId), ['old-name-new-write', 'middle', 'new-name-old-write']);
+  assert.deepEqual(finder.sortNodes(tree, { key: 'date', dir: 1 }).map(n => n.docId), ['new-name-old-write', 'middle', 'old-name-new-write']);
+});
+
+test('tabs naming the stale data/sixfold/doc-tabs resolver run the installed scripts/sixfold copy instead', async () => {
+  const resolver = h => h.calls.find(c => c.command === 'python3' && c.args[0].endsWith('resolve_doc_pins.py')).args[0];
+  assert.equal(resolver(await harness({ props: { resolverScript: '/app/data/sixfold/doc-tabs/resolve_doc_pins.py' } })), '/app/scripts/sixfold/resolve_doc_pins.py');
+  assert.equal(resolver(await harness({ props: { resolverScript: '/custom/resolve_doc_pins.py' } })), '/custom/resolve_doc_pins.py');
+  assert.equal(resolver(await harness()), '/app/scripts/sixfold/resolve_doc_pins.py');
 });

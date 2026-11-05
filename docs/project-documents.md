@@ -46,6 +46,8 @@ If a configured workspace has no folder rows, inspect `files` and `warning` in i
 - **종류 분류**: 폴더 이름(`adr/` 등)을 먼저 보고, 그다음 파일 이름에 든 낱말로 정한다. 기본 낱말은 `scripts/doc_catalog.py`의 `DEFAULT_KINDS`에 있다. 바꾸려면 규칙 파일 맨 위나 공간마다 `classify.kinds`를 둔다(예시 `config/project-docs-pins.example.json`). 회사·프로젝트 낱말은 저장소가 아니라 로컬 규칙 파일에 둔다.
 - **이름 정리**: 날짜 접두사와 확장자를 빼고, 문서 60% 이상이 같은 첫 낱말(프로젝트 이름 등)로 시작하면 그 낱말도 뺀다. 긴 해시는 `#a1b2c3`처럼 줄인다. 줄 끝에는 날짜(`11-04`)를 표시한다. 잘린 이름은 툴팁으로 원래 파일명·폴더·경로를 보여 준다.
 - **최근 기간**: 공간 규칙 `recent.highlightDays`(기본 7일).
+- **정렬**: 종류 폴더 안과 목록 보기의 **수정일**은 파일을 마지막으로 고친 시각 순이다(최신이 위). 이름에 붙은 날짜와 다를 수 있으며, 수정일 칸도 고친 날을 보여 준다.
+- **자동 배정**(`scripts/doc_routing.py`): 여러 프로젝트 문서가 섞이는 공유 폴더(보고서 폴더, Downloads)는 공간마다 `match`를 손으로 적지 않아도 된다. 규칙 파일 옆 `project-docs-routing.local.json`에 공유 폴더와 공간 이름별 낱말을 두면, 각 문서를 경로·제목·본문 앞부분(약 4KB)에 낱말이 가장 많이 든 공간 한 곳에 넣는다. 가중치는 경로 3, 제목 2, 본문 1이다. 동점이거나 낱말이 없으면 `fallback` 공간(예: Share)으로 간다. `requireMatch`인 폴더(Downloads)는 낱말이 맞는 문서만 넣고 나머지는 어디에도 보이지 않는다. `depth: 1`이면 하위 폴더는 보지 않는다. 문서를 옮기거나 링크를 만들지 않고 탭에서만 보인다. 기존 `folders`·고정 문서는 그대로이며, 같은 파일은 한 번만 나온다. 이름으로 종류가 안 정해지면 제목으로 정한다. 회사·프로젝트 낱말은 이 로컬 파일에만 둔다(예시 `config/project-docs-routing.example.json`). `python3 scripts/doc_routing.py`는 문서마다 배정될 공간을 출력한다.
 - **검색 규칙**: 이름·파일명·폴더·종류에 띄어쓰기로 나눈 낱말이 모두 들어 있는지 본다(NFC). 종류 칩은 한 종류만 남긴다.
 - 예전 규칙의 `recent.limit`·`recent.keywords`·`excluded`는 고정/고정 해제 확인에만 쓰고 트리에는 영향이 없다.
 

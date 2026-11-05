@@ -25,7 +25,7 @@ class InstallTests(unittest.TestCase):
             'themes/sixfold-night.json': '{"color":"original"}',
             'themes/win98.json': '{"reference":1}',
             **{f'scripts/{name}.py': '# helper\n' for name in ('workspace', 'core_api', 'balance_grid', 'collect_computers', 'route', 'collaborate', 'update_install', 'workspace_mods',
-                'file_lock', 'agent_env', 'site_config', 'desktop', 'install_doc_tabs', 'resolve_doc_pins', 'doc_catalog', 'collect_docs', 'open_doc_tab', 'render_mermaid', 'render_html')},
+                'file_lock', 'agent_env', 'site_config', 'desktop', 'install_doc_tabs', 'resolve_doc_pins', 'doc_catalog', 'doc_routing', 'collect_docs', 'open_doc_tab', 'render_mermaid', 'render_html')},
         }.items():
             p = self.repo/path
             p.parent.mkdir(parents=True, exist_ok=True)
