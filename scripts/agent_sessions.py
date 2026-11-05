@@ -438,6 +438,28 @@ def harness_close_status(config, item, since, *, runner=None):
     return False, 'no close report yet'
 
 
+def harness_close_gate(config, item, *, runner=None):
+    """(ok, blockers): `harness.py close-gate` — the session's report accepted and learnt, nothing
+    else open in its workspace. Any failure to ask is a blocker (fail-closed)."""
+    harness = config.get('harness') or {}
+    python, script = harness.get('python'), harness.get('script')
+    if not python or not script:
+        return False, ['harness not configured']
+    argv = [python, script, 'close-gate', item['address'], '--provider', provider(item['app']),
+            '--session-id', item['session_id']]
+    if item.get('space_id'):
+        argv += ['--space-id', item['space_id']]
+    runner = runner or (lambda a: subprocess.run([str(v) for v in a], capture_output=True, text=True, timeout=60, creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0)))
+    try:
+        result = runner(argv)
+        value = json.loads((result.stdout or '').strip().splitlines()[-1])
+    except (OSError, subprocess.TimeoutExpired, ValueError, IndexError) as exc:
+        return False, [f'close-gate unavailable: {exc}'[:200]]
+    if result.returncode != 0 or not isinstance(value, dict):
+        return False, ['close-gate refused']
+    return bool(value.get('ok')), [str(b) for b in value.get('blockers') or []]
+
+
 def self_core_id():
     """This computer's herdr-core id (the machine half of a harness workspace id)."""
     try:

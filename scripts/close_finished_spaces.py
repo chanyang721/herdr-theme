@@ -167,6 +167,9 @@ class Live:
     def close_status(self, config, item, since):
         return agent_sessions.harness_close_status(config, item, since)
 
+    def close_gate(self, config, item):
+        return agent_sessions.harness_close_gate(config, item)
+
     def archive(self, config, data):
         return agent_sessions.harness_archive(config, data)
 
@@ -287,6 +290,24 @@ def inspect(space, snapshot, adapter, config):
     return {'id': space['id'], 'name': space['name'], 'safe': not reasons, 'reasons': reasons, 'fingerprint': fingerprint,
             'folders': sorted({t.get('cwd') for a, t in all_terms.items() if a in addresses and t.get('cwd')} | ({space['folder']} if space.get('folder') else set())),
             'summary': '\n'.join('\n'.join(s.splitlines()[-8:]) for s in screens)[:2400], 'sessions': sessions}
+
+
+def close_gate_blockers(item, adapter, config):
+    """['tX: why', …] from `harness.py close-gate` for every agent session in the space; empty
+    means the space may close. Off only with config close_gate.enabled false; any error keeps it."""
+    if (config.get('close_gate') or {}).get('enabled', True) is False:
+        return []
+    if not hasattr(adapter, 'close_gate'):
+        return ['close gate unavailable']
+    out = []
+    for session in item.get('sessions', []):
+        if not session.get('session_id'):
+            out.append(f"{session['address']}: no session id for the harness gate")
+            continue
+        ok, blockers = adapter.close_gate(config, session)
+        if not ok:
+            out.append(f"{session['address']}: " + ', '.join(blockers or ['refused'])[:300])
+    return out
 
 
 def archive_of(space, item, parked, snapshot, adapter):
@@ -417,6 +438,12 @@ def cycle(adapter, config, state, now, *, apply=False, only_space=None, report_d
                                 waiting.append(f"{session['address']}: {decision}" + (f' ({detail})' if isinstance(detail, str) else ''))
                         if waiting:
                             item['action'] = 'keep'; item['reasons'].append('close report: ' + '; '.join(waiting))
+                            result.append(item); continue
+                        # The harness decides: each session's report must be accepted (and learnt) by a
+                        # trusted actor, with no other open task or escalation in the workspace.
+                        held = close_gate_blockers(item, adapter, config)
+                        if held:
+                            item['action'] = 'keep'; item['reasons'].append('harness close gate: ' + '; '.join(held))
                             result.append(item); continue
                         # Harness first: no record, no close (each agent session in the space).
                         parked, refused = [], None
