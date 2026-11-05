@@ -397,11 +397,11 @@ class CloseReportTests(unittest.TestCase):
 
     def test_close_status_parses_the_harness_answer(self):
         class R:
-            returncode, stdout, stderr = 0, '{"ok": true, "report_id": "R", "task_id": "T"}', ''
+            returncode, stdout, stderr = 0, '{"ok": true, "report_id": "R", "task_id": "T", "at": "2026-11-05T00:56:03Z"}', ''
         item = {'address': 't12', 'app': 'claude-code', 'session_id': SID}
         cfg = {'harness': {'python': 'py', 'script': 'h.py'}}
         self.assertEqual(agent_sessions.harness_close_status(cfg, item, 'S', runner=lambda a: R()),
-                         (True, {'report_id': 'R', 'task_id': 'T'}))
+                         (True, {'report_id': 'R', 'task_id': 'T', 'at': '2026-11-05T00:56:03Z'}))
         R.stdout = '{"ok": false}'
         self.assertEqual(agent_sessions.harness_close_status(cfg, item, 'S', runner=lambda a: R())[0], False)
         self.assertEqual(agent_sessions.harness_close_status({}, item, 'S')[0], False)
@@ -587,7 +587,8 @@ class ReportGateTimingTests(unittest.TestCase):
 
         def close_status(self, config, item, since):
             ok = agent_sessions.utc_iso(self.report_at) >= since   # what harness close-status compares
-            return (True, {'report_id': 'R', 'task_id': 'T'}) if ok else (False, 'no close report yet')
+            return ((True, {'report_id': 'R', 'task_id': 'T', 'at': agent_sessions.utc_iso(self.report_at)}) if ok
+                    else (False, 'no close report yet'))
 
     ITEM = {'address': 't12', 'session_id': SID, 'turn': 3}
     CONFIG = {'close_report': {'timeout_seconds': 900, 'retry_seconds': 3600}}
@@ -608,9 +609,56 @@ class ReportGateTimingTests(unittest.TestCase):
         self.assertEqual(decision, 'failed')
         self.assertIn('fail-closed', detail)
 
+    def test_a_report_written_in_time_counts_even_when_the_observer_looks_late(self):
+        now = 1_793_000_000.0
+        adapter, entries = self.Adapter(report_at=now + 50), {}
+        agent_sessions.report_gate(entries, dict(self.ITEM), adapter, self.CONFIG, now)
+        self.assertEqual(agent_sessions.report_gate(entries, dict(self.ITEM), adapter, self.CONFIG, now + 1200)[0], 'ready')
+
     def test_a_report_accepted_in_time_stays_ready_on_later_cycles(self):
         now = 1_793_000_000.0
         adapter, entries = self.Adapter(report_at=now + 30), {}
         agent_sessions.report_gate(entries, dict(self.ITEM), adapter, self.CONFIG, now)
         self.assertEqual(agent_sessions.report_gate(entries, dict(self.ITEM), adapter, self.CONFIG, now + 60)[0], 'ready')
         self.assertEqual(agent_sessions.report_gate(entries, dict(self.ITEM), adapter, self.CONFIG, now + 1000)[0], 'ready')
+
+
+class AlreadyReportedTests(unittest.TestCase):
+    """A session that already reported is not asked again, and its 'waiting in the
+    memory window' answer is not a user decision."""
+    Adapter = ReportGateTimingTests.Adapter
+    CONFIG = ReportGateTimingTests.CONFIG
+
+    def item(self, idle_since, turn=3):
+        return {'address': 't38', 'session_id': SID, 'turn': turn, 'status_ms': int(idle_since * 1000)}
+
+    def test_a_report_from_its_last_work_is_ready_without_asking(self):
+        now = 1_793_000_000.0
+        adapter = self.Adapter(report_at=now - 9 * 3600)            # reported at 09:56 for the other observer
+        decision, detail = agent_sessions.report_gate({}, self.item(now - 9 * 3600 + 5), adapter, self.CONFIG, now)
+        self.assertEqual((decision, adapter.asked), ('ready', []))
+
+    def test_an_old_report_before_later_work_does_not_count(self):
+        now = 1_793_000_000.0
+        adapter = self.Adapter(report_at=now - 3 * 3600)
+        decision, _ = agent_sessions.report_gate({}, self.item(now - 600), adapter, self.CONFIG, now)
+        self.assertEqual((decision, adapter.asked), ('requested', ['t38']))
+
+    def test_work_after_the_request_still_asks_again(self):
+        now = 1_793_000_000.0
+        adapter = self.Adapter(report_at=now + 10)
+        entries = {}
+        agent_sessions.report_gate(entries, self.item(now - 60), adapter, self.CONFIG, now)
+        adapter.asked.clear()
+        decision, _ = agent_sessions.report_gate(entries, self.item(now + 15, turn=6), adapter, self.CONFIG, now + 60)
+        self.assertEqual((decision, adapter.asked), ('requested', ['t38']))
+
+    SCREEN = ('❯ [세션 정리 보고 요청] 관찰기가 이 세션을 곧 정리(절전)합니다. 새 작업은 시작하지 말고 아래만 하세요.\n'
+              '  다른 세션에 보고하지 말고, 보고 id만 한 줄로 답하고 끝내세요. 승인은 사람이 기억함에서 합니다.\n'
+              '⏺ 01ARZ3NDEKTSV4RRFFQ69G5FAV (이미 제출함, 기억함에서 승인 대기 중)\n'
+              '✻ Cogitated for 4s · done 오전 10:21\n────────\n❯ \n────────\n  ⏵⏵ auto mode on\n')
+
+    def test_the_memory_window_answer_is_not_a_user_decision(self):
+        self.assertFalse(sleep.spaces.decision_pending(self.SCREEN))
+        self.assertTrue(sleep.spaces.decision_pending(self.SCREEN + '사용자 승인 대기: 배포 범위\n'))
+        self.assertTrue(sleep.spaces.decision_pending('Do you want to proceed?\n❯ 1. Yes\n'))

@@ -19,7 +19,7 @@ import agent_sessions  # noqa: E402
 import site_config  # noqa: E402
 
 BASE = site_config.folder('state_dir')
-DECISION = re.compile(r'승인\s*대기|확인\s*필요|결정\s*대기|사용자.{0,12}(?:확인|승인).{0,8}(?:대기|기다)|awaiting\s+(?:approval|confirmation)|waiting\s+for\s+(?:your|user)\s+(?:approval|confirmation)|allow\s+(?:once|always)', re.I)
+DECISION = re.compile(r'승인\s*대기|(?:사용자|직접|당신의?)\s*확인\s*필요|확인이\s*필요합니다|결정\s*대기|사용자.{0,12}(?:확인|승인).{0,8}(?:대기|기다)|awaiting\s+(?:approval|confirmation)|waiting\s+for\s+(?:your|user)\s+(?:approval|confirmation)|allow\s+(?:once|always)', re.I)
 # The agent's own command refused or let through by Claude's auto mode: a log line, not a question.
 AUTO_MODE = re.compile(r'(?:Blocked|Allowed)\s+by\s+auto\s+mode|/permissions\s+to\s+review', re.I)
 # A real question for the person: Claude's permission dialog or a question with numbered choices.
@@ -28,9 +28,37 @@ PROMPTED = re.compile(r'Do you want to (?:proceed|make this edit|create|run|allo
 RUNNING = re.compile(r'\b\d+\s+(?:monitors?|shells?|background\s+(?:tasks?|shells?|jobs?))(?:\s+still\s+running)?\b', re.I)
 
 
+# Harness memory-window approvals (accepting a report, approving a brain proposal) happen later
+# inside the harness; a session saying its report waits there is not waiting for the person.
+MEMORY_WINDOW = re.compile(r'기억함|memory window', re.I)
+
+
+PROMPT_LINE = re.compile(r'^\s*[❯›>]\s+\S')
+
+
+def last_prompt_is_report_request(text):
+    """True when the last thing sent to the agent was the observer's close-report request."""
+    prompts = [l for l in text.splitlines() if PROMPT_LINE.match(l)]
+    return bool(prompts) and agent_sessions.REPORT_MARK in prompts[-1]
+
+
 def decision_pending(text):
-    """A question, approval or input the person must answer; auto-mode log lines are not one."""
-    lines = [l for l in text.splitlines() if not AUTO_MODE.search(l)]
+    """A question, approval or input the person must answer. Not one: auto-mode log lines, the
+    observer's own close-report request (it ends at the next agent line), and memory-window
+    approvals the harness handles later."""
+    lines, in_request = [], False
+    for line in text.splitlines():
+        if agent_sessions.REPORT_MARK in line:
+            in_request = True
+            continue
+        if in_request:
+            if line.lstrip().startswith(('⏺', '•', '─')):
+                in_request = False
+            else:
+                continue
+        if AUTO_MODE.search(line) or MEMORY_WINDOW.search(line):
+            continue
+        lines.append(line)
     rest = '\n'.join(lines)
     return bool(DECISION.search(rest) or PROMPTED.search(rest))
 
@@ -276,18 +304,20 @@ def inspect(space, snapshot, adapter, config):
         if mapping and mapping.get('session_id'):
             sessions.append({'address': address, 'app': agent, 'session_id': mapping['session_id'], 'space_id': space['id'],
                              'space_name': space.get('name'), 'title': terminal.get('title'), 'cwd': terminal.get('cwd'),
-                             'turn': terminal.get('turn')})
+                             'turn': terminal.get('turn'), 'status_ms': terminal.get('status_ms')})
         elif child:
             # No session file or transcript (started inside another agent): it still reports and is
             # parked under its pane session id, and reopens as a new session reading the workspace memory.
             sessions.append({'address': address, 'app': agent, 'session_id': child['session_id'], 'space_id': space['id'],
                              'space_name': space.get('name'), 'title': terminal.get('title'), 'cwd': terminal.get('cwd'),
-                             'turn': terminal.get('turn'), 'no_resume': True})
+                             'turn': terminal.get('turn'), 'status_ms': terminal.get('status_ms'), 'no_resume': True})
         else:
             reasons.append(f'{address}: session id unverified (harness record impossible)')
         evidence.append([address, terminal.get('pid'), terminal.get('status_ms'), terminal.get('turn'), pids, jobs_fingerprint, hashlib.sha256(text.encode()).hexdigest()])
     fingerprint = hashlib.sha256(json.dumps(evidence, sort_keys=True).encode()).hexdigest()
+    answered = bool(screens) and all(last_prompt_is_report_request(t) for t in screens)
     return {'id': space['id'], 'name': space['name'], 'safe': not reasons, 'reasons': reasons, 'fingerprint': fingerprint,
+            'answered_report': answered,
             'folders': sorted({t.get('cwd') for a, t in all_terms.items() if a in addresses and t.get('cwd')} | ({space['folder']} if space.get('folder') else set())),
             'summary': '\n'.join('\n'.join(s.splitlines()[-8:]) for s in screens)[:2400], 'sessions': sessions}
 
@@ -392,6 +422,9 @@ def cycle(adapter, config, state, now, *, apply=False, only_space=None, report_d
         item = inspect(space, snapshot, adapter, config)
         old = previous.get(space['id'], {})
         same = fresh and item['safe'] and old.get('fingerprint') == item.get('fingerprint')
+        # Answering the observer's own close-report request changes the screen but is not new work:
+        # the idle window keeps counting instead of restarting after every request.
+        same = same or bool(fresh and item['safe'] and old.get('since') and old.get('fingerprint') and item.get('answered_report'))
         since = old.get('since', now) if same else now
         quiet = now - since
         item.update(quiet_seconds=quiet, action='keep')

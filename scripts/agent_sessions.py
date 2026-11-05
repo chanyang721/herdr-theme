@@ -434,7 +434,7 @@ def harness_close_status(config, item, since, *, runner=None):
     if result.returncode != 0 or not isinstance(value, dict):
         return False, 'close-status refused'
     if value.get('ok') and value.get('report_id'):
-        return True, {'report_id': value['report_id'], 'task_id': value.get('task_id')}
+        return True, {'report_id': value['report_id'], 'task_id': value.get('task_id'), 'at': value.get('at')}
     return False, 'no close report yet'
 
 
@@ -497,6 +497,15 @@ def harness_archive(config, data, *, runner=None):
         os.unlink(path)
 
 
+def in_time(at, deadline):
+    """True when the ISO UTC record time `at` is not later than the epoch `deadline`."""
+    import datetime as _dt
+    try:
+        return _dt.datetime.fromisoformat(str(at).replace('Z', '+00:00')).timestamp() <= deadline
+    except ValueError:
+        return False
+
+
 def utc_iso(epoch):
     import datetime as _dt
     return _dt.datetime.fromtimestamp(epoch, _dt.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
@@ -522,14 +531,26 @@ def report_gate(entries, item, adapter, config, now):
     entry = entries.get(address)
     if entry and entry.get('session_id') != sid:
         entry = None
+    worked = False
     if entry and isinstance(turn, int) and isinstance(entry.get('turn'), int) and turn > entry['turn'] + turns:
-        entry = None   # the person worked with it after the request
+        entry, worked = None, True   # the person worked with it after the request: a new report is due
     if entry and entry.get('failed_at'):
         if now - entry['failed_at'] < retry:
             return 'failed', f"no close report (asked {int((now - entry['requested_at']) // 60)} minutes ago): kept, asks again later"
         entry = None
     if entry is None:
         entries.pop(address, None)
+        # Already reported for its last work (another observer asked, or an earlier cycle's state
+        # is gone): a final report written no earlier than shortly before the session went idle
+        # answers it, so the session is not asked again.
+        idle_since = (item.get('status_ms') or 0) / 1000
+        if idle_since and not worked:
+            since = utc_iso(idle_since - cfg.get('report_lookback_seconds', 900))
+            ok, detail = adapter.close_status(config, item, since)
+            if ok:
+                entries[address] = {'session_id': sid, 'requested_at': now, 'since': since, 'turn': turn,
+                                    'report': detail, 'earlier': True}
+                return 'ready', detail
         adapter.request_report(address, close_report_message(config))
         # Only a report written after the request answers it: `since` is the request time rounded
         # up to the record's whole-second clock (Codex review 2026-11-05 P2).
@@ -537,12 +558,14 @@ def report_gate(entries, item, adapter, config, now):
         return 'requested', None
     if entry.get('report'):
         return 'ready', entry['report']   # accepted in time on an earlier cycle
-    if now - entry['requested_at'] >= timeout:
-        # The limit comes first: a report that shows up after it does not count (fail-closed).
-        entry['failed_at'] = now
-        return 'failed', f'no close report within {timeout // 60} minutes: kept (fail-closed)'
+    deadline = entry['requested_at'] + timeout
     ok, detail = adapter.close_status(config, item, entry['since'])
-    if ok:
+    # A report counts when it was written before the limit, however late the observer looks;
+    # one written after it (or without a readable time once the limit has passed) does not.
+    if ok and (in_time(detail.get('at'), deadline) or (detail.get('at') is None and now < deadline)):
         entry['report'] = detail
         return 'ready', detail
-    return 'waiting', detail
+    if now >= deadline:
+        entry['failed_at'] = now
+        return 'failed', f'no close report within {timeout // 60} minutes: kept (fail-closed)'
+    return 'waiting', detail if not ok else 'report after the limit'
