@@ -30,9 +30,8 @@ export default class NewWorkspace extends View {
           return;
         }
         const agents=await knownAgents();
-        for (const key of ['claude','codex']) {
-          if (!agents.some(a=>a.key===key && a.installed)) throw new Error(`${key} 실행 파일을 먼저 설치해 주세요.`);
-        }
+        // The workspace opens one Claude session; Codex is only needed later, when dispatch adds a pane.
+        if (!agents.some(a=>a.key==='claude' && a.installed)) throw new Error('claude 실행 파일을 먼저 설치해 주세요.');
         const windows=/^[A-Za-z]:[\\/]/.test(home());
         const result=await exec(windows?'py':'python3',[
           ...(windows?['-3']:[]), '-X','utf8', `${appHome()}/scripts/sixfold/workspace.py`,name,folder,

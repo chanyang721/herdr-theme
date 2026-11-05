@@ -154,3 +154,31 @@ test('remote creation stays on its original machine and uses remote home for a b
     assert.equal(closed,true);assert.equal(view.error,'');
   }finally{delete globalThis.__remoteCreateRuntime;}
 });
+
+test('local creation needs only Claude installed; Codex is not required for the one starting session', async()=>{
+  const run=async(agents)=>{
+    let execCall=null,closed=false,task;
+    globalThis.__localCreateRuntime={
+      props:()=>({overlay:'dialog'}),home:()=>'/Users/me',appHome:()=>'/app',
+      run:()=>{throw Error('local creation must go through workspace.py');},
+      closeOverlay:()=>{closed=true;},exec:async(cmd,args)=>{execCall={cmd,args};return {code:0,stdout:'',stderr:''};},
+      theme:()=>({}),pickFolder:async()=>null,knownAgents:async()=>agents,
+    };
+    let source=await readFile(new URL('../mods/sixfold-new-space/main.js',import.meta.url),'utf8');
+    source=source.replace(/import \{ View, div \} from 'gpui-kit';/,'class View {}')
+      .replace(/import \{[^}]+\} from 'gpui-base';/,'const InputState={new:({value=""})=>({value:()=>value,on(){},focus(){}})};')
+      .replace(/import \{([^}]+)\} from 'herdr';/,'const {$1}=globalThis.__localCreateRuntime;');
+    try{
+      const {default:Dialog}=await import('data:text/javascript;base64,'+Buffer.from(source+'\n//'+Math.random()).toString('base64'));
+      const view=new Dialog();view.init({},{});view.name={value:()=>'Local project'};view.folder={value:()=>'/proj'};
+      const cx={notify(){},spawn(fn){task=()=>fn(cx);}};
+      view.create(cx);await task();
+      return {execCall,closed,error:view.error};
+    }finally{delete globalThis.__localCreateRuntime;}
+  };
+  const claudeOnly=await run([{key:'claude',installed:true},{key:'codex',installed:false}]);
+  assert.equal(claudeOnly.error,'');assert.equal(claudeOnly.closed,true);
+  assert(claudeOnly.execCall.args.some(a=>a.endsWith('workspace.py')));
+  const noClaude=await run([{key:'claude',installed:false},{key:'codex',installed:true}]);
+  assert.match(noClaude.error,/claude/);assert.equal(noClaude.execCall,null);assert.equal(noClaude.closed,false);
+});
