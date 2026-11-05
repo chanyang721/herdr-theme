@@ -434,7 +434,7 @@ def harness_close_status(config, item, since, *, runner=None):
     if result.returncode != 0 or not isinstance(value, dict):
         return False, 'close-status refused'
     if value.get('ok') and value.get('report_id'):
-        return True, {'report_id': value['report_id'], 'task_id': value.get('task_id')}
+        return True, {'report_id': value['report_id'], 'task_id': value.get('task_id'), 'at': value.get('at')}
     return False, 'no close report yet'
 
 
@@ -497,6 +497,15 @@ def harness_archive(config, data, *, runner=None):
         os.unlink(path)
 
 
+def in_time(at, deadline):
+    """True when the ISO UTC record time `at` is not later than the epoch `deadline`."""
+    import datetime as _dt
+    try:
+        return _dt.datetime.fromisoformat(str(at).replace('Z', '+00:00')).timestamp() <= deadline
+    except ValueError:
+        return False
+
+
 def utc_iso(epoch):
     import datetime as _dt
     return _dt.datetime.fromtimestamp(epoch, _dt.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
@@ -537,12 +546,14 @@ def report_gate(entries, item, adapter, config, now):
         return 'requested', None
     if entry.get('report'):
         return 'ready', entry['report']   # accepted in time on an earlier cycle
-    if now - entry['requested_at'] >= timeout:
-        # The limit comes first: a report that shows up after it does not count (fail-closed).
-        entry['failed_at'] = now
-        return 'failed', f'no close report within {timeout // 60} minutes: kept (fail-closed)'
+    deadline = entry['requested_at'] + timeout
     ok, detail = adapter.close_status(config, item, entry['since'])
-    if ok:
+    # A report counts when it was written before the limit, however late the observer looks;
+    # one written after it (or without a readable time once the limit has passed) does not.
+    if ok and (in_time(detail.get('at'), deadline) or (detail.get('at') is None and now < deadline)):
         entry['report'] = detail
         return 'ready', detail
-    return 'waiting', detail
+    if now >= deadline:
+        entry['failed_at'] = now
+        return 'failed', f'no close report within {timeout // 60} minutes: kept (fail-closed)'
+    return 'waiting', detail if not ok else 'report after the limit'

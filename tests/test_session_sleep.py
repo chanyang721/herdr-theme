@@ -397,11 +397,11 @@ class CloseReportTests(unittest.TestCase):
 
     def test_close_status_parses_the_harness_answer(self):
         class R:
-            returncode, stdout, stderr = 0, '{"ok": true, "report_id": "R", "task_id": "T"}', ''
+            returncode, stdout, stderr = 0, '{"ok": true, "report_id": "R", "task_id": "T", "at": "2026-11-05T00:56:03Z"}', ''
         item = {'address': 't12', 'app': 'claude-code', 'session_id': SID}
         cfg = {'harness': {'python': 'py', 'script': 'h.py'}}
         self.assertEqual(agent_sessions.harness_close_status(cfg, item, 'S', runner=lambda a: R()),
-                         (True, {'report_id': 'R', 'task_id': 'T'}))
+                         (True, {'report_id': 'R', 'task_id': 'T', 'at': '2026-11-05T00:56:03Z'}))
         R.stdout = '{"ok": false}'
         self.assertEqual(agent_sessions.harness_close_status(cfg, item, 'S', runner=lambda a: R())[0], False)
         self.assertEqual(agent_sessions.harness_close_status({}, item, 'S')[0], False)
@@ -587,7 +587,8 @@ class ReportGateTimingTests(unittest.TestCase):
 
         def close_status(self, config, item, since):
             ok = agent_sessions.utc_iso(self.report_at) >= since   # what harness close-status compares
-            return (True, {'report_id': 'R', 'task_id': 'T'}) if ok else (False, 'no close report yet')
+            return ((True, {'report_id': 'R', 'task_id': 'T', 'at': agent_sessions.utc_iso(self.report_at)}) if ok
+                    else (False, 'no close report yet'))
 
     ITEM = {'address': 't12', 'session_id': SID, 'turn': 3}
     CONFIG = {'close_report': {'timeout_seconds': 900, 'retry_seconds': 3600}}
@@ -607,6 +608,12 @@ class ReportGateTimingTests(unittest.TestCase):
         decision, detail = agent_sessions.report_gate(entries, dict(self.ITEM), adapter, self.CONFIG, now + 905)
         self.assertEqual(decision, 'failed')
         self.assertIn('fail-closed', detail)
+
+    def test_a_report_written_in_time_counts_even_when_the_observer_looks_late(self):
+        now = 1_793_000_000.0
+        adapter, entries = self.Adapter(report_at=now + 50), {}
+        agent_sessions.report_gate(entries, dict(self.ITEM), adapter, self.CONFIG, now)
+        self.assertEqual(agent_sessions.report_gate(entries, dict(self.ITEM), adapter, self.CONFIG, now + 1200)[0], 'ready')
 
     def test_a_report_accepted_in_time_stays_ready_on_later_cycles(self):
         now = 1_793_000_000.0
