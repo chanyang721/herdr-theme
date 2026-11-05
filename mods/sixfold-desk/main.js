@@ -4,7 +4,7 @@ import * as herdrNative from 'herdr';
 import { agents, panes, spaces, terminals, focused, props, theme, run, shared, setShared, setAgentOrder, nextCommand, exec, window, layout, readTextFile, writeTextFile, appHome, openOverlay, settings } from 'herdr';
 import { WORDS, counts, title, cycle, priority, readThrough, unreadCount } from './model.js';
 
-import { computerKind, computerStatus, computerAlert, tailscaleStatus, workspaceIdentity, workspaceLocal, workspacePinned } from './sidebar-identity.js';
+import { computerActive, computerKind, computerSlots, computerStatus, computerAlert, tailscaleStatus, workspaceIdentity, workspaceLocal, workspacePinned } from './sidebar-identity.js';
 
 import { freshMessages, recentRoutes, simultaneousRoutes, crossMachine, followComputer, terminalMachine, machineHops, machineTraffic, trafficWake } from './flow.js';
 import { pipeline } from './pipeline.js';
@@ -275,6 +275,11 @@ export default class SixfoldDesk extends View {
         } else if (command.startsWith('pane-')) {
           const p = current[Number(command.slice(5)) - 1];
           if (p) run('pane.focus', { pane: p.pane });
+        } else if (/^computer-[1-9]$/.test(command)) {
+          // Same as clicking the sidebar row: only the list changes, never focus or connections.
+          const machines = typeof herdrNative.machines === 'function' ? herdrNative.machines() : [{ name: null, layout: 'ready' }];
+          const key = computerSlots(machines)[Number(command.slice(9)) - 1];
+          if (key) this.selectComputer(key);
         } else if (command === 'next-blocked' || command === 'next-done') {
           const state = command === 'next-blocked' ? 'blocked' : 'done';
           const machine = spaces().find(space => space.id === f?.space)?.machine ?? null;
@@ -589,7 +594,7 @@ export default class SixfoldDesk extends View {
           .when(sent > 0 || (hop && !incoming), el => el.child(`↑${sent || ''}`))
           .when(received > 0 || incoming, el => el.child(`↓${received || ''}`)));
       }
-      return {row, name, active:name===null || ready || machine.layout==='loading'};
+      return {row, name, active:computerActive(machine)};
     });
     if(this.computers?.tailscale){
       for(const peer of this.tailscalePeers??[]){

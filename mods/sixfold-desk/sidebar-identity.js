@@ -64,3 +64,17 @@ export function workspacePinned(space, config) {
     item && typeof item.id === 'string' && item.id.length > 0 &&
     item.id === space.id && (item.machine ?? null) === (space.machine ?? null));
 }
+
+// A computer shown in the sidebar list: this one, a connected or connecting Herdr remote.
+export function computerActive(machine) {
+  return machine.name == null || machine.layout === 'ready' || machine.layout === 'loading';
+}
+
+// Numbered shortcut slots follow the sidebar list: this computer first, then registered
+// Herdr machines, with disconnected ones last. Tailscale discovery never takes a slot.
+export function computerSlots(machines) {
+  const list = Array.isArray(machines) ? machines : [];
+  const key = machine => machine.name == null ? 'local' : `remote:${machine.name}`;
+  const ordered = [...list.filter(m => m.name == null), ...list.filter(m => m.name != null)];
+  return [...ordered.filter(computerActive), ...ordered.filter(m => !computerActive(m))].map(key);
+}
