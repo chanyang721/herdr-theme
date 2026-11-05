@@ -1363,11 +1363,15 @@ class TrimFixedTests(unittest.TestCase):
         self.live.data['processes'] = {p: i for p, i in self.live.data['processes'].items() if i['parent'] != t['pid']}
         self.live.text = text + '\n'
 
-    def test_an_idle_shell_pane_closes_without_a_harness_record(self):
-        self.make_shell('t3')
-        got = self.run_cycle(self.seeded())
-        self.assertEqual(got['t3']['action'], 'closed', got['t3'])
-        self.assertFalse([c for c in self.live.calls if c[0] in ('park', 'ask')])
+    def test_an_agentless_shell_pane_is_kept_because_unsent_input_cannot_be_read(self):
+        # 3rd review: 'echo #' ends like a prompt; what cannot be judged is never closed.
+        for text in ('lukuku@mac ~ % ', 'lukuku@mac ~ % echo #', 'lukuku@mac ~ % echo 중요한말 >'):
+            with self.subTest(text):
+                self.setUp()
+                self.make_shell('t3', text)
+                got = self.run_cycle(self.seeded())
+                self.assertNotIn(('pane.close', 'p3'), self.live.calls)
+                self.assertIn('shell pane: unsent input cannot be verified', got['t3']['reasons'])
 
     def test_a_shell_with_typed_text_or_a_running_command_stays(self):
         self.make_shell('t3', 'lukuku@mac ~ % git push')
@@ -1377,6 +1381,9 @@ class TrimFixedTests(unittest.TestCase):
         self.live.data['processes'][999] = {'pid': 999, 'parent': 300, 'name': 'vim', 'args': 'vim'}
         self.run_cycle(self.seeded())
         self.assertNotIn(('pane.close', 'p3'), self.live.calls)
+
+
+BRIDGE_EXITED = 'lukuku@mac ~ % claude --resume\n  (대화 내용)\nlukuku@mac ~ % \n'
 
 
 class BridgeTrimTests(unittest.TestCase):
@@ -1399,7 +1406,8 @@ class BridgeTrimTests(unittest.TestCase):
         self.agent_alive, self.exit_works = True, True
         live = self.live
         def tui_process_info(pane):
-            return {'shell_pid': 400, 'foreground_processes': [{'pid': 401, 'name': 'claude', 'argv': ['claude', '--resume']}] if self.agent_alive else []}
+            return {'shell_pid': 400, 'foreground_processes': [{'pid': 401, 'name': 'claude', 'argv': ['claude', '--resume']}] if self.agent_alive
+                    else [{'pid': 400, 'name': 'zsh', 'argv': ['-zsh']}]}
         def tui_agent(term):
             if term != 'term_abc':
                 return None
@@ -1409,7 +1417,7 @@ class BridgeTrimTests(unittest.TestCase):
             live.calls.append(('tui', pane, text or '+'.join(keys)))
             if text == '/exit' and self.exit_works:
                 self.agent_alive = False
-                live.texts['t3'] = 'lukuku@mac ~ % \n'   # the TUI shell is left at an empty prompt
+                live.texts['t3'] = BRIDGE_EXITED   # the launch line, then the TUI shell's empty prompt
         live.tui_agent, live.tui_process_info, live.tui_keys = tui_agent, tui_process_info, tui_keys
 
     def test_closed_after_report_park_and_its_agent_exiting(self):
@@ -1597,7 +1605,7 @@ class BridgeAfterExitWorkTests(unittest.TestCase):
     setUp, during_wait, check_kept = BridgeAfterExitTests.setUp, BridgeAfterExitTests.during_wait, BridgeAfterExitTests.check_kept
 
     def test_unsent_input_appearing_during_the_wait_keeps_it(self):
-        self.during_wait(lambda: self.live.texts.__setitem__('t3', 'lukuku@mac ~ % 지금 보내려던 말\n'))
+        self.during_wait(lambda: self.live.texts.__setitem__('t3', BRIDGE_EXITED + '지금 보내려던 말'))
         self.check_kept(self.run_cycle(self.seeded()))
 
     def test_a_command_started_in_the_bridge_pane_during_the_wait_keeps_it(self):
@@ -1616,3 +1624,34 @@ class BridgeAfterExitWorkTests(unittest.TestCase):
             return got
         self.live.tui_process_info = info
         self.check_kept(self.run_cycle(self.seeded()))
+
+
+class ThirdReviewTests(unittest.TestCase):
+    """3rd review HOLD (01M6NAE72HGQP7RJJE751VKNJC), its fixtures in BridgeAfterExitWorkTests."""
+    seeded, run_cycle = SpareCloseTests.seeded, SpareCloseTests.run_cycle
+    setUp, during_wait, check_kept = BridgeAfterExitTests.setUp, BridgeAfterExitTests.during_wait, BridgeAfterExitTests.check_kept
+
+    def test_unsent_text_ending_like_a_prompt_keeps_the_pane(self):
+        for typed in ('echo 중요한말 >', 'echo #'):
+            with self.subTest(typed):
+                self.setUp()
+                self.during_wait(lambda t=typed: self.live.texts.__setitem__('t3', BRIDGE_EXITED.rstrip() + ' ' + t + '\n'))
+                self.check_kept(self.run_cycle(self.seeded()))
+
+    def test_tui_process_info_that_says_nothing_keeps_the_pane(self):
+        for answer in ({}, {'foreground_processes': []}, {'foreground_processes': None}):
+            with self.subTest(answer):
+                self.setUp()
+                real = self.live.tui_process_info
+                self.live.tui_process_info = lambda pane, r=real, a=answer: r(pane) if self.agent_alive else a
+                got = self.run_cycle(self.seeded())
+                self.assertNotIn(('pane.close', 'p3'), self.live.calls)
+                self.assertEqual(got['t3']['action'], 'keep')
+
+    def test_a_screen_without_the_launch_line_keeps_the_pane(self):
+        self.during_wait(lambda: self.live.texts.__setitem__('t3', 'lukuku@mac ~ % \n'))
+        self.check_kept(self.run_cycle(self.seeded()))
+
+    def test_the_normal_exit_still_closes(self):
+        got = self.run_cycle(self.seeded())
+        self.assertEqual(got['t3']['action'], 'closed', got['t3'])

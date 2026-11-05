@@ -385,20 +385,10 @@ def inspect(address, space, snapshot, adapter, config, tab=None):
     if bridge:
         return inspect_bridge(item, terminal, bridge, snapshot, adapter, config)
     if item.get('trim') and app is None and not blockers(item):
-        # An agent-less shell in a trimmed fixed workspace: nothing to keep or report. Only an idle
-        # prompt with no command under it (and the idle window) lets it close (user rule 2026-11-05).
-        fg = terminal.get('foreground') or {}
-        fg_name = Path(str((fg.get('argv') or [fg.get('name') or ''])[0])).name
-        if fg_name in agent_sessions.SHELLS and not shell_children(terminal, snapshot['processes']):
-            text = adapter.screen(address)
-            lines = [line for line in text.splitlines() if line.strip()]
-            if lines and PROMPT_END.search(lines[-1]) and not VOICE.search(text):
-                item.update(empty=True, shell=True)
-                item['fingerprint'] = hashlib.sha256(json.dumps([address, terminal.get('pid'), terminal.get('created_ms'), 'shell',
-                                                                 hashlib.sha256(text.encode()).hexdigest()]).encode()).hexdigest()
-                return item
-            reasons.append('shell pane: prompt not idle (typed text or running output)')
-            return item
+        # An agent-less shell: whether something is typed but not sent cannot be read reliably
+        # ('echo #' ends like a prompt), and what cannot be judged is never closed (3rd review).
+        reasons.append('shell pane: unsent input cannot be verified')
+        return item
     if not terminal.get('reported') or app not in agent_sessions.AGENTS or state not in ('done', 'idle'):
         reasons.append('not a confirmed idle/done agent' if state != 'blocked' else 'user decision pending (blocked agent)')
         return item
@@ -476,7 +466,8 @@ def inspect_bridge(item, terminal, term, snapshot, adapter, config):
     app = (terminal.get('status') or {}).get('app')
     item.update(app=app, title=terminal.get('title'), cwd=tui.get('cwd') or terminal.get('cwd'),
                 status_ms=terminal.get('status_ms'), turn=terminal.get('turn'),
-                bridge={'term': term, 'pane': tui.get('pane_id')})
+                bridge={'term': term, 'pane': tui.get('pane_id'),
+                        'command': ' '.join(str(a) for a in (agent_procs[0].get('argv') or [])) if agent_procs else None})
     if tui.get('agent_status') not in ('done', 'idle') or len(agent_procs) != 1:
         reasons.append('not a confirmed idle/done agent' if tui.get('agent_status') != 'blocked' else 'user decision pending (blocked agent)')
         return item
@@ -539,16 +530,41 @@ def after_exit_blockers(item, adapter, config, closed):
         if extra:
             why.append('running command in the bridge pane: ' + ', '.join(sorted(set(extra))))
     try:
-        info = adapter.tui_process_info(item['bridge']['pane'])
-        busy = [p.get('name') for p in info.get('foreground_processes') or [] if p.get('name') not in agent_sessions.SHELLS]
-        if busy:
-            why.append('running command in the TUI pane: ' + ', '.join(sorted(set(map(str, busy)))))
+        procs = tui_foreground(adapter.tui_process_info(item['bridge']['pane']))
+        if procs is None:
+            why.append('TUI pane processes unverified')
+        else:
+            busy = [p['name'] for p in procs if p['name'] not in agent_sessions.SHELLS]
+            if busy:
+                why.append('running command in the TUI pane: ' + ', '.join(sorted(set(map(str, busy)))))
     except Exception as exc:   # noqa: BLE001
         why.append(f'TUI pane unverified: {str(exc)[:80]}')
-    lines = [line for line in adapter.screen(item['address']).splitlines() if line.strip()]
-    if not lines or not PROMPT_END.search(lines[-1]):
+    text = adapter.screen(item['address'])
+    lines = [line for line in text.splitlines() if line.strip()]
+    prompt = bare_prompt(text, item['bridge'].get('command'))
+    if not lines or prompt is None or lines[-1].rstrip() != prompt:
         why.append('input not empty or unverified after the agent exited')
     return why
+
+
+def tui_foreground(info):
+    """The TUI pane's foreground processes, or None when the answer does not say (unverified)."""
+    procs = info.get('foreground_processes') if isinstance(info, dict) else None
+    if not isinstance(procs, list) or not procs or not all(isinstance(p, dict) and p.get('name') for p in procs):
+        return None
+    return procs
+
+
+def bare_prompt(text, command):
+    """The shell prompt as printed before the agent's own command line (still on the screen after
+    it exits), or None. The screen is input-free only when it ends in exactly that prompt."""
+    if not command:
+        return None
+    for line in reversed(text.splitlines()):
+        at = line.find(command)
+        if at > 0 and line[:at].strip():
+            return line[:at].rstrip()
+    return None
 
 
 def bridge_exit(item, adapter, attempts=20):
@@ -559,8 +575,8 @@ def bridge_exit(item, adapter, attempts=20):
     adapter.tui_keys(pane, keys=['enter'])
     for _ in range(attempts):
         adapter.wait(1)
-        info = adapter.tui_process_info(pane)
-        if not [p for p in (info.get('foreground_processes') or []) if p.get('name') in agent_sessions.AGENTS]:
+        procs = tui_foreground(adapter.tui_process_info(pane))
+        if procs is not None and not [p for p in procs if p.get('name') in agent_sessions.AGENTS]:
             return True, None
     adapter.tui_keys(pane, keys=['esc'])
     return False, 'TUI agent did not exit after /exit (asked something?): kept'
