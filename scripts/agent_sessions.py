@@ -43,9 +43,12 @@ def first_snapshot(adapter):
 
 def trial_of(state, now, fresh):
     """The trial carried into this cycle (error_count and the healthy streak included)."""
-    old = state.get('trial', {}) if fresh else {}
+    kept = state.get('trial', {})
+    old = kept if fresh else {}
+    # A long gap restarts the sample count, never the error record: earlier errors still need
+    # error_reset_after healthy cycles in a row (re-review 2026-11-05).
     return {'started_at': old.get('started_at', now), 'samples': old.get('samples', 0) + 1,
-            'error_count': old.get('error_count', 0), 'healthy': old.get('healthy', 0)}
+            'error_count': kept.get('error_count', 0), 'healthy': kept.get('healthy', 0) if fresh else 0}
 
 
 def settle_trial(state, config, ok):

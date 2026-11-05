@@ -151,8 +151,16 @@ class Live:
         status = json.loads(run([self.app, 'status']))
         spaces = json.loads(run([self.app, 'ls']))['spaces']
         listing = json.loads(run([self.core, 'ls', '--all', '--json']))['terminals']
-        terminals = {item['address']: json.loads(run([self.core, 'get', item['address'], '--json'])) for item in listing if item.get('state') == 'live'}
-        return {'status': status, 'spaces': spaces, 'terminals': terminals, 'processes': process_rows()}
+        terminals, errors = {}, {}
+        for item in listing:
+            if item.get('state') != 'live':
+                continue
+            try:
+                terminals[item['address']] = json.loads(run([self.core, 'get', item['address'], '--json']))
+            except Exception as exc:   # noqa: BLE001 — that terminal only: it is kept, the others are read
+                errors[item['address']] = str(exc)[:160]
+        return {'status': status, 'spaces': spaces, 'terminals': terminals, 'processes': process_rows(),
+                'lookup_errors': errors}
 
     def styled_screen(self, address):
         return agent_sessions.styled_screen(self.core, address, env=self._env())
@@ -263,6 +271,9 @@ def inspect(space, snapshot, adapter, config):
     all_terms = snapshot['terminals']
     for address in addresses:
         terminal = all_terms.get(address)
+        if address in (snapshot.get('lookup_errors') or {}):
+            reasons.append(f"{address}: lookup failed: {snapshot['lookup_errors'][address]}")
+            continue
         if not terminal:
             reasons.append(f'{address}: terminal evidence unavailable')
             continue
@@ -465,7 +476,11 @@ def cycle(adapter, config, state, now, *, apply=False, only_space=None, report_d
                 elif check['status'].get('space') == space['id']:
                     item['action'] = 'keep'; item['reasons'].append('the person is viewing this space')
                 else:
-                    latest = inspect(target, check, adapter, config)
+                    try:
+                        latest = inspect(target, check, adapter, config)
+                    except Exception as exc:   # noqa: BLE001 — nothing was done yet: keep this space only
+                        latest = {'safe': False, 'reasons': [f'recheck lookup failed: {str(exc)[:160]}']}
+                        item['reasons'].append(latest['reasons'][0])
                     if not latest['safe'] or latest.get('fingerprint') != item.get('fingerprint'):
                         item['action'] = 'keep'; item['reasons'].append('evidence changed before close')
                     else:

@@ -771,3 +771,50 @@ class TrialRecoveryTests(unittest.TestCase):
     def test_the_streak_survives_the_next_cycle(self):
         trial = cleanup.agent_sessions.trial_of({'trial': {'started_at': 5, 'samples': 2, 'error_count': 1, 'healthy': 2}}, 9, True)
         self.assertEqual((trial['error_count'], trial['healthy'], trial['samples']), (1, 2, 3))
+
+
+class LiveSnapshotLookupTests(unittest.TestCase):
+    """Re-review P2 (1), its fixture: the real Live.snapshot with run() replaced, `get t-bad` timing out."""
+
+    def test_one_terminal_timing_out_is_marked_and_the_others_are_read(self):
+        import subprocess
+        def run(argv, **kw):
+            argv = [str(a) for a in argv]
+            if argv[1:] == ['status']:
+                return json.dumps({'space': 's1', 'tab': 'tb1', 'focused_pane': 'p1'})
+            if argv[1:] == ['ls']:
+                return json.dumps({'spaces': []})
+            if argv[1:3] == ['ls', '--all']:
+                return json.dumps({'terminals': [{'address': 't-ok', 'state': 'live'}, {'address': 't-bad', 'state': 'live'}]})
+            if argv[1:3] == ['get', 't-bad']:
+                raise subprocess.TimeoutExpired(argv, 12)
+            if argv[1:3] == ['get', 't-ok']:
+                return json.dumps({'address': 't-ok', 'pid': 1})
+            raise AssertionError(argv)
+        with patch.object(cleanup, 'run', run), patch.object(cleanup, 'process_rows', lambda: {}):
+            snap = cleanup.Live('herdr-app', 'herdr-core').snapshot()
+        self.assertEqual(list(snap['terminals']), ['t-ok'])
+        self.assertIn('t-bad', snap['lookup_errors'])
+        space = {'id': 'sp', 'name': 'Temp', 'machine': None, 'tabs': [{'id': 'tb', 'terminals': [{'terminal': 't-bad'}]}]}
+        got = cleanup.inspect(space, {**snap, 'status': {**snap['status'], 'space': 'other'}}, None, {'fixed_names': [], 'fixed_spaces': []})
+        self.assertFalse(got['safe'])
+        self.assertTrue(any(r.startswith('t-bad: lookup failed') for r in got['reasons']), got['reasons'])
+
+
+class RecheckTimeoutTests(CleanupPolicyTests):
+    def test_a_recheck_inspect_timing_out_keeps_only_that_space(self):
+        # Re-review P2 (2), its fixture: the first inspect works, the one right before acting times out.
+        state = self.ready_state()
+        real, calls = cleanup.inspect, {'n': 0}
+        def inspect(space, snapshot, adapter, config):
+            if space['id'] == 'temporary':
+                calls['n'] += 1
+                if calls['n'] == 2:
+                    raise TimeoutError("Command ['herdr-core', 'get', 't2f', '--json'] timed out after 12 seconds")
+            return real(space, snapshot, adapter, config)
+        with patch.object(cleanup, 'inspect', inspect):
+            got = self.cycle(state)['results'][0]
+        self.assertEqual(calls['n'], 2)
+        self.assertEqual(got['action'], 'keep')
+        self.assertTrue(any(r.startswith('recheck lookup failed') for r in got['reasons']), got['reasons'])
+        self.assertEqual(self.live.closed, [])

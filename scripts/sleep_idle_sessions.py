@@ -212,6 +212,9 @@ def inspect(address, space, snapshot, adapter, config, tab=None):
         reasons.append('focused pane')
     if space.get('machine') is not None:
         reasons.append('remote process/input evidence unavailable')
+    if address in (snapshot.get('lookup_errors') or {}):
+        reasons.append(f"lookup failed: {snapshot['lookup_errors'][address]}")
+        return item
     if not terminal:
         reasons.append('terminal evidence unavailable')
         return item

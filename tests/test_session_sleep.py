@@ -978,6 +978,22 @@ class PaneCloseTests(unittest.TestCase):
                 sleep.main()
         self.assertEqual(json.loads(state_path.read_text())['trial']['error_count'], 0)
 
+    def test_a_long_gap_does_not_clear_an_earlier_error(self):
+        # Re-review P2 (3), its fixture: error_count 1, then a 900 s gap (over max_sample_gap_seconds).
+        state = self.state()
+        state['trial'] = {'started_at': NOW - 3000, 'samples': 5, 'error_count': 1, 'healthy': 0}
+        readiness = []
+        for i in range(4):
+            state['last_at'] = NOW - (900 if i == 0 else 300)
+            self.live.calls.clear()
+            out = sleep.cycle(self.live, self.config, state, NOW, apply=True, paths=self.paths)
+            sleep.agent_sessions.settle_trial(state, self.config, ok=True)
+            readiness.append(out['apply_ready'])
+            if i < 3:
+                self.assertFalse([c for c in self.live.calls if c[0] in ('pane.close', 'keys')], i)
+        self.assertEqual(readiness, [False, False, False, True])   # only after three healthy cycles in a row
+        self.assertEqual(state['trial']['error_count'], 0)
+
     def test_a_failing_pane_close_is_settled_with_close_aborted_and_stops(self):
         def boom(pane_id):
             self.live.calls.append(('pane.close', pane_id))
