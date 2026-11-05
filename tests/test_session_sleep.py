@@ -1383,12 +1383,10 @@ class TrimFixedTests(unittest.TestCase):
         self.assertNotIn(('pane.close', 'p3'), self.live.calls)
 
 
-BRIDGE_EXITED = 'lukuku@mac ~ % claude --resume\n  (대화 내용)\nlukuku@mac ~ % \n'
-
-
-class BridgeTrimTests(unittest.TestCase):
-    """t1 decision (2026-11-05, B): a tui_bridge.py pane closes only after its own TUI agent got /exit
-    as keys (never a kill) and no agent process is left; it is never slept."""
+class BridgeKeptTests(unittest.TestCase):
+    """t1 (2026-11-05, 4th review): bridge panes exist only in Share, which is user-controlled; the
+    bridge close path is gone. A tui_bridge.py pane is always kept: never slept, asked or closed,
+    and no keys reach its TUI agent, even in a trimmed workspace with a close report."""
 
     seeded, run_cycle = SpareCloseTests.seeded, SpareCloseTests.run_cycle
 
@@ -1400,59 +1398,90 @@ class BridgeTrimTests(unittest.TestCase):
         t = self.live.data['terminals']['t3']
         t['foreground'] = {'pid': 301, 'argv': ['python3', '/repo/scripts/tui_bridge.py'], 'name': 'python3'}
         self.live.data['processes'].update({301: {'pid': 301, 'parent': 300, 'name': 'python3', 'args': 'python3 tui_bridge.py'},
-                                            302: {'pid': 302, 'parent': 301, 'name': 'herdr', 'args': 'herdr --session default terminal attach term_abc --takeover'},
-                                            400: {'pid': 400, 'parent': 1, 'name': 'zsh', 'args': 'zsh'},
-                                            401: {'pid': 401, 'parent': 400, 'name': 'claude', 'args': 'claude --resume'}})
-        self.agent_alive, self.exit_works = True, True
-        live = self.live
-        def tui_process_info(pane):
-            return {'shell_pid': 400, 'foreground_processes': [{'pid': 401, 'name': 'claude', 'argv': ['claude', '--resume']}] if self.agent_alive
-                    else [{'pid': 400, 'name': 'zsh', 'argv': ['-zsh']}]}
-        def tui_agent(term):
-            if term != 'term_abc':
-                return None
-            return {'pane_id': 'w8:pR', 'terminal_id': term, 'agent': 'claude', 'agent_status': 'done',
-                    'agent_session': {'value': SID}, 'cwd': '/fixture', 'process_info': tui_process_info('w8:pR')}
-        def tui_keys(pane, text=None, keys=()):
-            live.calls.append(('tui', pane, text or '+'.join(keys)))
-            if text == '/exit' and self.exit_works:
-                self.agent_alive = False
-                live.texts['t3'] = BRIDGE_EXITED   # the launch line, then the TUI shell's empty prompt
-        live.tui_agent, live.tui_process_info, live.tui_keys = tui_agent, tui_process_info, tui_keys
+                                            302: {'pid': 302, 'parent': 301, 'name': 'herdr', 'args': 'herdr --session default terminal attach term_abc --takeover'}})
+        self.live.tui_keys = lambda *a, **k: self.live.calls.append(('tui', a, k))
 
-    def test_closed_after_report_park_and_its_agent_exiting(self):
-        self.live.reported = True
+    def test_a_bridge_pane_is_always_kept(self):
+        for reported in (False, True):
+            with self.subTest(reported=reported):
+                self.setUp()
+                self.live.reported = reported
+                got = self.run_cycle(self.seeded())
+                self.assertIn(sleep.BRIDGE, got['t3']['reasons'])
+                self.assertNotIn(got['t3']['action'], ('closed', 'slept'))
+                self.assertFalse([c for c in self.live.calls if c[0] in ('tui', 'pane.close', 'keys', 'type', 'label', 'ask')
+                                  and (c[1] in ('t3', 'p3') or c[0] == 'tui')])
+                self.assertFalse([c for c in self.live.calls if c[0] == 'park' and c[2] == 't3'])
+
+    def test_the_bridge_close_path_is_gone(self):
+        for name in ('bridge_exit', 'after_exit_blockers', 'inspect_bridge', 'tui_foreground', 'bare_prompt'):
+            self.assertFalse(hasattr(sleep, name), name)
+
+
+class KeeperAwakeTests(unittest.TestCase):
+    """User rule (2026-11-05): the one pane a fixed workspace keeps is never slept; it is a live
+    agent pane that takes instructions now, and when it is asleep it is woken with its own session
+    (Enter in the sleep stub). Protections still stop the wake."""
+
+    seeded, run_cycle = SpareCloseTests.seeded, SpareCloseTests.run_cycle
+    make_asleep = SpareCloseTests.make_asleep
+
+    def setUp(self):
+        TrimFixedTests.setUp(self)
+
+    def keeper(self):
+        return sleep.trim_keeper(self.live.data['spaces'][1], self.live.data, self.config)
+
+    def test_a_live_agent_pane_is_chosen_over_an_asleep_one_used_later(self):
+        self.make_asleep('t12')                  # t12 used last, but asleep
+        self.assertEqual(self.keeper(), 't3')    # t3 is live: it takes instructions now
+
+    def test_the_live_keeper_is_never_slept_asked_or_closed(self):
+        state = self.seeded(quiet=2400)
+        got = self.run_cycle(state)
+        self.assertIn(sleep.KEEP_AWAKE, got['t12']['reasons'])
+        self.assertFalse([c for c in self.live.calls if c[1:2] in (('t12',), ('p12',))
+                          and c[0] in ('keys', 'type', 'label', 'ask', 'pane.close')])
+        self.assertNotIn(got['t12']['action'], ('slept', 'closed'))
+
+    def test_an_asleep_keeper_is_woken_with_enter(self):
+        self.make_asleep('t12')
+        self.make_asleep('t3')
+        self.live.exits = False   # after Enter the stub starts the agent
         got = self.run_cycle(self.seeded())
-        self.assertEqual(got['t3']['action'], 'closed', got['t3'])
-        order = [c[:2] if c[0] != 'tui' else ('tui', c[2]) for c in self.live.calls
-                 if c[0] in ('tui', 'pane.close') or c[0] == 'park' and c[2] == 't3']
-        self.assertEqual(order, [('park', 'close_requested'), ('tui', '/exit'), ('tui', 'enter'), ('pane.close', 'p3'), ('park', 'closed')])
-        self.assertFalse([c for c in self.live.calls if c[0] in ('keys', 'type', 'label') and c[1] == 't3'])   # never slept
+        self.assertEqual(got['t12']['action'], 'woken', got['t12'])
+        self.assertIn(('keys', 't12', '<enter>'), self.live.calls)
+        self.assertNotIn(('pane.close', 'p12'), self.live.calls)
 
-    def test_an_agent_that_does_not_exit_keeps_the_pane(self):
-        self.live.reported, self.exit_works = True, False
+    def test_a_dry_run_only_says_it_would_wake(self):
+        self.make_asleep('t12')
+        self.make_asleep('t3')
+        got = self.run_cycle(self.seeded(), apply=False)
+        self.assertEqual(got['t12']['action'], 'would_wake')
+        self.assertNotIn(('keys', 't12', '<enter>'), self.live.calls)
+
+    def test_protections_stop_the_wake(self):
+        for name, change in {
+            'typed': lambda: self.live.texts.__setitem__('t12', self.live.texts['t12'] + '쓰던 말'),
+            'focus': lambda: self.live.data['status'].update(focused_pane='p12'),
+            'unreadable': lambda: self.live.texts.__setitem__('t12', 'something else\n'),
+        }.items():
+            with self.subTest(name):
+                self.setUp()
+                self.make_asleep('t12')
+                self.make_asleep('t3')
+                state = self.seeded()
+                change()
+                got = self.run_cycle(state)
+                self.assertNotIn(('keys', 't12', '<enter>'), self.live.calls, name)
+                self.assertEqual(got['t12']['action'], 'asleep', name)
+
+    def test_a_wake_that_does_not_start_the_agent_is_reported(self):
+        self.make_asleep('t12')
+        self.make_asleep('t3')
+        self.live.exits = True    # the pane's foreground stays a shell
         got = self.run_cycle(self.seeded())
-        self.assertEqual(got['t3']['action'], 'keep')
-        self.assertNotIn(('pane.close', 'p3'), self.live.calls)
-        self.assertIn(('tui', 'w8:pR', 'esc'), self.live.calls)
-        self.assertEqual([c[1] for c in self.live.calls if c[0] == 'park' and c[2] == 't3'], ['close_requested', 'close_aborted'])
-
-    def test_a_bridge_is_never_slept_and_its_keeper_stays(self):
-        self.config['trim_fixed']['keep_addresses'] = ['t3']
-        self.live.reported = True
-        got = self.run_cycle(self.seeded())
-        self.assertNotIn(got['t3']['action'], ('closed', 'slept'))
-        self.assertFalse([c for c in self.live.calls if c[0] == 'tui'])
-
-    def test_a_working_or_unidentified_tui_agent_is_kept(self):
-        real = self.live.tui_agent
-        for change in (lambda a: {**a, 'agent_status': 'working'}, lambda a: {**a, 'agent_session': {}}):
-            self.live.calls.clear()
-            self.live.tui_agent = lambda term, c=change: c(real(term))
-            self.live.reported = True
-            got = self.run_cycle(self.seeded())
-            self.assertNotEqual(got['t3']['action'], 'closed')
-            self.assertFalse([c for c in self.live.calls if c[0] in ('tui', 'pane.close')])
+        self.assertEqual(got['t12']['action'], 'wake_unconfirmed')
 
 
 class ShareUserControlledTests(unittest.TestCase):
@@ -1561,97 +1590,3 @@ class ReReviewP1Tests(unittest.TestCase):
         got = self.run_cycle(self.seeded())
         self.assertNotIn(('pane.close', 'p3'), self.live.calls)
         self.assertIn('asleep screen unverified (stub prompt or ticket not found)', got['t3']['reasons'])
-
-
-class BridgeAfterExitTests(unittest.TestCase):
-    """Re-review HOLD P1 (1), its fixture: while bridge_exit waits, focus moves to the pane or the
-    space loses its other pane. Nothing may close then."""
-    seeded, run_cycle = SpareCloseTests.seeded, SpareCloseTests.run_cycle
-
-    def setUp(self):
-        BridgeTrimTests.setUp(self)
-        self.config['trim_fixed']['keep_addresses'] = ['t12']   # t3 is a trimmed bridge
-        self.live.reported = True
-
-    def during_wait(self, change):
-        done = {'n': 0}
-        def wait(seconds):
-            if not done['n'] and any(c[0] == 'tui' for c in self.live.calls):
-                done['n'] = 1
-                change()
-        self.live.wait = wait
-
-    def check_kept(self, got):
-        self.assertNotIn(('pane.close', 'p3'), self.live.calls)
-        self.assertEqual(got['t3']['action'], 'keep', got['t3'])
-        self.assertEqual([c[1] for c in self.live.calls if c[0] == 'park' and c[2] == 't3'], ['close_requested', 'close_aborted'])
-
-    def test_focus_moving_to_the_pane_during_the_wait_keeps_it(self):
-        self.during_wait(lambda: self.live.data['status'].update(focused_pane='p3'))
-        self.check_kept(self.run_cycle(self.seeded()))
-
-    def test_the_space_losing_its_other_pane_during_the_wait_keeps_it(self):
-        def lose():
-            tab = self.live.data['spaces'][1]['tabs'][0]
-            tab['terminals'] = [t for t in tab['terminals'] if t['terminal'] == 't3']
-        self.during_wait(lose)
-        self.check_kept(self.run_cycle(self.seeded()))
-        self.assertIn('t3', sleep.pane_of(self.live.data))
-
-
-class BridgeAfterExitWorkTests(unittest.TestCase):
-    """Re-review P1 (2), its fixture: during_wait adds unsent input or runs `vim important.txt`."""
-    seeded, run_cycle = SpareCloseTests.seeded, SpareCloseTests.run_cycle
-    setUp, during_wait, check_kept = BridgeAfterExitTests.setUp, BridgeAfterExitTests.during_wait, BridgeAfterExitTests.check_kept
-
-    def test_unsent_input_appearing_during_the_wait_keeps_it(self):
-        self.during_wait(lambda: self.live.texts.__setitem__('t3', BRIDGE_EXITED + '지금 보내려던 말'))
-        self.check_kept(self.run_cycle(self.seeded()))
-
-    def test_a_command_started_in_the_bridge_pane_during_the_wait_keeps_it(self):
-        def vim():
-            self.live.data['terminals']['t3']['foreground'] = {'pid': 310, 'argv': ['vim', 'important.txt'], 'name': 'vim'}
-            self.live.data['processes'][310] = {'pid': 310, 'parent': 300, 'name': 'vim', 'args': 'vim important.txt'}
-        self.during_wait(vim)
-        self.check_kept(self.run_cycle(self.seeded()))
-
-    def test_a_command_left_in_the_tui_pane_keeps_it(self):
-        real = self.live.tui_process_info
-        def info(pane):
-            got = real(pane)
-            if not self.agent_alive:
-                got = {**got, 'foreground_processes': [{'pid': 402, 'name': 'vim', 'argv': ['vim', 'important.txt']}]}
-            return got
-        self.live.tui_process_info = info
-        self.check_kept(self.run_cycle(self.seeded()))
-
-
-class ThirdReviewTests(unittest.TestCase):
-    """3rd review HOLD (01M6NAE72HGQP7RJJE751VKNJC), its fixtures in BridgeAfterExitWorkTests."""
-    seeded, run_cycle = SpareCloseTests.seeded, SpareCloseTests.run_cycle
-    setUp, during_wait, check_kept = BridgeAfterExitTests.setUp, BridgeAfterExitTests.during_wait, BridgeAfterExitTests.check_kept
-
-    def test_unsent_text_ending_like_a_prompt_keeps_the_pane(self):
-        for typed in ('echo 중요한말 >', 'echo #'):
-            with self.subTest(typed):
-                self.setUp()
-                self.during_wait(lambda t=typed: self.live.texts.__setitem__('t3', BRIDGE_EXITED.rstrip() + ' ' + t + '\n'))
-                self.check_kept(self.run_cycle(self.seeded()))
-
-    def test_tui_process_info_that_says_nothing_keeps_the_pane(self):
-        for answer in ({}, {'foreground_processes': []}, {'foreground_processes': None}):
-            with self.subTest(answer):
-                self.setUp()
-                real = self.live.tui_process_info
-                self.live.tui_process_info = lambda pane, r=real, a=answer: r(pane) if self.agent_alive else a
-                got = self.run_cycle(self.seeded())
-                self.assertNotIn(('pane.close', 'p3'), self.live.calls)
-                self.assertEqual(got['t3']['action'], 'keep')
-
-    def test_a_screen_without_the_launch_line_keeps_the_pane(self):
-        self.during_wait(lambda: self.live.texts.__setitem__('t3', 'lukuku@mac ~ % \n'))
-        self.check_kept(self.run_cycle(self.seeded()))
-
-    def test_the_normal_exit_still_closes(self):
-        got = self.run_cycle(self.seeded())
-        self.assertEqual(got['t3']['action'], 'closed', got['t3'])

@@ -68,8 +68,9 @@ VISIBLE = 'shown on screen (visible tab)'
 NOT_SHELL = 'terminal program is not a shell: the pane would not survive /exit'
 FLOAT = 'shown in a float or overlay'
 # Block only the /exit sleep; a finished session's pane may still be closed or asked for its report.
-BRIDGE = 'TUI bridge pane: closed after its agent exits, never slept'
-SLEEP_ONLY = (VISIBLE, NOT_SHELL, BRIDGE)
+BRIDGE = 'TUI bridge pane: always kept (its agent runs in the Herdr TUI)'
+SLEEP_ONLY = (VISIBLE, NOT_SHELL)
+KEEP_AWAKE = 'kept awake: the one pane of this fixed workspace takes instructions'
 ASLEEP = 'already asleep'
 TRIM_KEEP = 'kept: the one pane of this fixed workspace'
 USER_CONTROLLED = 'user-controlled workspace: no automatic sleep, report request, trim or close'
@@ -173,27 +174,6 @@ class Live(spaces.Live):
             raise RuntimeError('pane.close refused: no pane id')
         return spaces.run([self.app, 'do', 'pane.close', json.dumps({'pane': pane_id})], timeout=60)
 
-    # The Herdr TUI (`herdr` CLI, its persistent session) that tui_bridge.py panes attach to.
-    @staticmethod
-    def _herdr():
-        return shutil.which('herdr') or '/opt/homebrew/bin/herdr'
-
-    def tui_agent(self, term):
-        agents = json.loads(agent_sessions.run([self._herdr(), 'agent', 'list']))['result']['agents']
-        agent = next((a for a in agents if a.get('terminal_id') == term), None)
-        if not agent:
-            return None
-        return {**agent, 'process_info': self.tui_process_info(agent['pane_id'])}
-
-    def tui_process_info(self, pane):
-        return json.loads(agent_sessions.run([self._herdr(), 'pane', 'process-info', '--pane', pane]))['result']['process_info']
-
-    def tui_keys(self, pane, text=None, keys=()):
-        if text is not None:
-            agent_sessions.run([self._herdr(), 'pane', 'send-text', pane, text])
-        if keys:
-            agent_sessions.run([self._herdr(), 'pane', 'send-keys', pane, *keys])
-
     @staticmethod
     def _env():
         # Without a caller terminal, hc pastes the text as it is (no <hc> wrapper).
@@ -266,8 +246,12 @@ def trim_keeper(space, snapshot, config):
             return address
     terms = snapshot.get('terminals') or {}
     status = lambda a: (terms.get(a) or {}).get('status') or {}  # noqa: E731
-    agent = lambda a: status(a).get('app') in agent_sessions.AGENTS or bool(((terms.get(a) or {}).get('labels') or {}).get(SLEEP_LABEL))  # noqa: E731
-    pool = [a for a in addresses if status(a).get('state') == 'working'] or [a for a in addresses if agent(a)] or addresses
+    asleep = lambda a: bool(((terms.get(a) or {}).get('labels') or {}).get(SLEEP_LABEL))  # noqa: E731
+    live = lambda a: status(a).get('app') in agent_sessions.AGENTS and not asleep(a)  # noqa: E731
+    # A live agent pane first (it takes instructions now); an asleep one only when none is live,
+    # and it is then woken with its own session (user rule 2026-11-05).
+    pool = ([a for a in addresses if status(a).get('state') == 'working'] or [a for a in addresses if live(a)]
+            or [a for a in addresses if asleep(a)] or addresses)
     return max(pool, key=lambda a: ((terms.get(a) or {}).get('status_ms') or 0, a)) if pool else None
 
 
@@ -337,6 +321,8 @@ def inspect(address, space, snapshot, adapter, config, tab=None):
     keeper = trim_keeper(space, snapshot, config)
     if keeper:
         item['keeper' if keeper == address else 'trim'] = True
+    if item.get('keeper'):
+        reasons.append(KEEP_AWAKE)   # never slept, asked or closed; woken when it is asleep
     if not all(spaces.focus(status)) or status.get('errors'):
         reasons.append('app focus/health unverified')
     if address in set(config.get('exclude_addresses', [])):
@@ -381,9 +367,10 @@ def inspect(address, space, snapshot, adapter, config, tab=None):
         # last pane) with it. Sleep only ever leaves a shell and the stub behind; closing a
         # finished session's pane and asking for its report do not need one.
         reasons.append(NOT_SHELL)
-    bridge = bridge_term(terminal, snapshot['processes'])
-    if bridge:
-        return inspect_bridge(item, terminal, bridge, snapshot, adapter, config)
+    if bridge_term(terminal, snapshot['processes']):
+        # Only in Share (user-controlled) today: never slept, asked or closed (t1 2026-11-05).
+        reasons.append(BRIDGE)
+        return item
     if item.get('trim') and app is None and not blockers(item):
         # An agent-less shell: whether something is typed but not sent cannot be read reliably
         # ('echo #' ends like a prompt), and what cannot be judged is never closed (3rd review).
@@ -452,134 +439,25 @@ def screen_checks(item, address, app, terminal, pids, jobs_fp, adapter):
     return item
 
 
-def inspect_bridge(item, terminal, term, snapshot, adapter, config):
-    """A tui_bridge.py pane: the agent runs in the Herdr TUI terminal it is attached to. It is never
-    slept; it closes (fixed-workspace trim) only after its own agent has exited (t1 2026-11-05, B)."""
-    reasons = item['reasons']
-    reasons.append(BRIDGE)
-    tui = adapter.tui_agent(term) if hasattr(adapter, 'tui_agent') else None
-    if not tui:
-        reasons.append('TUI bridge: its agent pane was not found')
-        return item
-    info = tui.get('process_info') or {}
-    agent_procs = [p for p in info.get('foreground_processes') or [] if p.get('name') in agent_sessions.AGENTS]
-    app = (terminal.get('status') or {}).get('app')
-    item.update(app=app, title=terminal.get('title'), cwd=tui.get('cwd') or terminal.get('cwd'),
-                status_ms=terminal.get('status_ms'), turn=terminal.get('turn'),
-                bridge={'term': term, 'pane': tui.get('pane_id'),
-                        'command': ' '.join(str(a) for a in (agent_procs[0].get('argv') or [])) if agent_procs else None})
-    if tui.get('agent_status') not in ('done', 'idle') or len(agent_procs) != 1:
-        reasons.append('not a confirmed idle/done agent' if tui.get('agent_status') != 'blocked' else 'user decision pending (blocked agent)')
-        return item
-    if blockers(item):
-        return item
-    pid = agent_procs[0]['pid']
-    valid, why, pids = agent_sessions.process_evidence(
-        {'pid': info.get('shell_pid'), 'foreground': {'argv': agent_procs[0].get('argv')}}, snapshot['processes'])
-    if not valid:
-        reasons.append(f'TUI agent: {why}')
-    sid = (tui.get('agent_session') or {}).get('value')
-    if not sid:
-        reasons.append('TUI bridge: agent session id unavailable')
-        return item
-    item['session_id'] = sid
-    created = (snapshot['processes'].get(pid) or {}).get('created_ms') or 1
-    mapping = {'pid': pid, 'created_ms': created, 'session_id': sid, 'agent': app, 'process_pid': pid}
-    jobs_ok, jobs_reason, jobs_fp = adapter.backend({'address': item['address'], 'pid': pid, 'created_ms': created,
-                                                     'status_ms': terminal.get('status_ms'), 'status': terminal.get('status')},
-                                                    {**config, 'sessions': {item['address']: mapping}}, valid)
-    if not jobs_ok:
-        reasons.append(jobs_reason)
-    return screen_checks(item, item['address'], app, terminal, pids, jobs_fp, adapter)
-
-
-def after_exit_blockers(item, adapter, config, closed):
-    """Looked up again once the TUI agent exited (that wait can take 20 s): the pane must still be
-    where it was, unfocused, out of floats, not the keeper, and its space and tab keep another pane."""
+def wake_keeper(item, adapter, config, attempts=15):
+    """The fixed workspace's one pane, asleep: Enter in its sleep stub resumes the same session
+    (the stub records `resumed`). Looked up again first; only an untouched stub screen is woken."""
     snap = adapter.snapshot()
     where = pane_of(snap).get(item['address'])
-    if not where:
-        return ['pane moved or closed']
-    space, tab = where
-    why = []
-    if not all(spaces.focus(snap['status'])) or snap['status'].get('errors'):
-        why.append('app focus/health unverified')
-    if focused_terminal(snap) == item['address']:
-        why.append('focused pane')
-    if in_float(item['address'], snap['status']):
-        why.append(FLOAT)
-    if space.get('id') != item['space_id']:
-        why.append('pane moved to another space')
-    if user_controlled(space, config):
-        why.append(USER_CONTROLLED)
-    if pane_id_of(pane_entry(snap, item['address'])) != pane_id_of(item.get('_pane') or {}):
-        why.append('pane id changed')
-    blocked = close_blocker({**item, 'keeper': trim_keeper(space, snap, config) == item['address']}, snap, tab, closed)
-    if blocked:
-        why.append(blocked)
-    # Work and input, looked at again (re-review P1): the bridge pane must still run only the
-    # bridge, its TUI pane only a shell, and the screen must end in an empty prompt. Anything
-    # that cannot be judged keeps the pane.
-    terminal = (snap.get('terminals') or {}).get(item['address']) or {}
-    if bridge_term(terminal, snap.get('processes') or {}) != item['bridge']['term']:
-        why.append('bridge pane runs something else now')
-    else:
-        extra = [i['name'] for i in shell_children(terminal, snap['processes'])
-                 if i['name'] not in ('python3', 'Python', 'python', 'herdr') and 'tui_bridge' not in str(i.get('args'))
-                 and 'terminal attach' not in str(i.get('args'))]
-        if extra:
-            why.append('running command in the bridge pane: ' + ', '.join(sorted(set(extra))))
-    try:
-        procs = tui_foreground(adapter.tui_process_info(item['bridge']['pane']))
-        if procs is None:
-            why.append('TUI pane processes unverified')
-        else:
-            busy = [p['name'] for p in procs if p['name'] not in agent_sessions.SHELLS]
-            if busy:
-                why.append('running command in the TUI pane: ' + ', '.join(sorted(set(map(str, busy)))))
-    except Exception as exc:   # noqa: BLE001
-        why.append(f'TUI pane unverified: {str(exc)[:80]}')
-    text = adapter.screen(item['address'])
-    lines = [line for line in text.splitlines() if line.strip()]
-    prompt = bare_prompt(text, item['bridge'].get('command'))
-    if not lines or prompt is None or lines[-1].rstrip() != prompt:
-        why.append('input not empty or unverified after the agent exited')
-    return why
-
-
-def tui_foreground(info):
-    """The TUI pane's foreground processes, or None when the answer does not say (unverified)."""
-    procs = info.get('foreground_processes') if isinstance(info, dict) else None
-    if not isinstance(procs, list) or not procs or not all(isinstance(p, dict) and p.get('name') for p in procs):
-        return None
-    return procs
-
-
-def bare_prompt(text, command):
-    """The shell prompt as printed before the agent's own command line (still on the screen after
-    it exits), or None. The screen is input-free only when it ends in exactly that prompt."""
-    if not command:
-        return None
-    for line in reversed(text.splitlines()):
-        at = line.find(command)
-        if at > 0 and line[:at].strip():
-            return line[:at].rstrip()
-    return None
-
-
-def bridge_exit(item, adapter, attempts=20):
-    """/exit typed into the TUI agent itself (keys, never a kill); ok only once no agent process
-    is left in that TUI pane. A question on exit (background work) is dismissed and the pane kept."""
-    pane = item['bridge']['pane']
-    adapter.tui_keys(pane, text='/exit')
-    adapter.tui_keys(pane, keys=['enter'])
+    latest = inspect(item['address'], where[0], snap, adapter, config, where[1]) if where else None
+    if not latest or not latest.get('keeper') or not latest.get('asleep') or latest.get('session_id') != item.get('session_id') \
+            or [r for r in latest['reasons'] if r not in (ASLEEP, KEEP_AWAKE, VISIBLE)]:
+        item['reasons'].append('recheck before wake: ' + ('; '.join(latest['reasons']) if latest else 'pane moved or closed'))
+        return 'asleep'
+    adapter.keys(item['address'], 'enter')
     for _ in range(attempts):
         adapter.wait(1)
-        procs = tui_foreground(adapter.tui_process_info(pane))
-        if procs is not None and not [p for p in procs if p.get('name') in agent_sessions.AGENTS]:
-            return True, None
-    adapter.tui_keys(pane, keys=['esc'])
-    return False, 'TUI agent did not exit after /exit (asked something?): kept'
+        fg = adapter.terminal(item['address']).get('foreground') or {}
+        name = Path(str((fg.get('argv') or [fg.get('name') or ''])[0])).name
+        if name in agent_sessions.AGENTS:
+            return 'woken'
+    item['reasons'].append('wake not confirmed: the agent did not start in time')
+    return 'wake_unconfirmed'
 
 
 def note(item, notes_dir, now):
@@ -756,21 +634,6 @@ def close_one(item, adapter, config, paths, now, snapshot, closed=()):
         aborted('recheck: ' + '; '.join(why))
         item['reasons'].append('recheck before close: ' + '; '.join(why))
         return 'keep', None
-    if item.get('bridge'):
-        ok_, why_ = bridge_exit(item, adapter)
-        if not ok_:
-            aborted(why_)
-            item['reasons'].append(why_)
-            return 'keep', None
-        try:
-            late = after_exit_blockers(item, adapter, config, closed)
-        except Exception as exc:   # noqa: BLE001 — unknown now: keep the pane
-            late = [f'lookup failed: {str(exc)[:120]}']
-        if late:
-            # The agent already exited (its session is parked); only the bridge pane stays.
-            aborted('after the TUI agent exited: ' + '; '.join(late))
-            item['reasons'].append('recheck after the agent exited: ' + '; '.join(late))
-            return 'keep', None
     item['_pane_id'] = pane_id
     try:
         adapter.close_pane(pane_id)
@@ -843,6 +706,21 @@ def cycle(adapter, config, state, now, *, apply=False, paths=None):
         except Exception as exc:   # noqa: BLE001 — this pane only; the cycle goes on
             item = lookup_failed(address, space, exc)
         old = previous.get(address, {})
+        if item.get('keeper') and item.get('asleep'):
+            item.update(quiet_seconds=0, action='asleep')
+            why_not = [r for r in item['reasons'] if r not in (ASLEEP, KEEP_AWAKE, VISIBLE)]
+            if not item.get('session_id') or why_not:
+                item['reasons'].append('keeper asleep: not woken (' + ('; '.join(why_not) or 'session unknown') + ')')
+            elif not apply:
+                item['action'] = 'would_wake'
+            elif not ready:
+                item['reasons'].append('apply not approved for this observer code (one recorded dry-run first)')
+            elif stop_reason:
+                item['reasons'].append(stop_reason)
+            else:
+                item['action'] = wake_keeper(item, adapter, config)
+            results.append(item)
+            continue
         kind = spare_kind(item)
         if kind:
             same = fresh and not spare_blockers(item) and old.get('fingerprint') == item.get('fingerprint')
