@@ -719,7 +719,7 @@ class TicketArgvTests(unittest.TestCase):
 
     def test_ticket_written_by_observer_has_no_prompt(self):
         with tempfile.TemporaryDirectory() as tmp:
-            item = {'address': 't11', 'app': 'claude-code', 'session_id': SID, 'argv': self.OLD, 'space_id': 'sp', 'space_name': 'Medihomes'}
+            item = {'address': 't11', 'app': 'claude-code', 'session_id': SID, 'argv': self.OLD, 'space_id': 'sp', 'space_name': 'Project'}
             data = json.loads(sleep.ticket(item, tmp).read_text(encoding='utf-8'))
         self.assertEqual(data['argv'], ['claude', '--resume', SID])
 
