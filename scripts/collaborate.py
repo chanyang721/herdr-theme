@@ -13,6 +13,7 @@ import subprocess
 import time
 import uuid
 
+import model_tier
 import route
 import site_config
 
@@ -136,20 +137,22 @@ def enqueue(args):
     if any(part.strip().replace('\\', '/').startswith('/') or '..' in part.replace('\\', '/').split('/')
            for part in args.owns.split(',')):
         raise ValueError('--owns는 .. 없는 저장소 상대 경로를 쉼표로 구분해 쓰세요.')
+    tier = model_tier.tier_name(getattr(args, 'tier', None))
     with locked():
         ledger = load()
         existing = ledger['tasks'].get(args.id)
         if existing:
             authorized(existing, who, 'source')
             if any(existing[key] != value for key, value in (
-                    ('text', args.text), ('mode', args.mode), ('owns', args.owns), ('batch', args.batch or args.id))):
+                    ('text', args.text), ('mode', args.mode), ('owns', args.owns), ('batch', args.batch or args.id))) \
+                    or existing.get('tier', 'high') != tier:
                 raise ValueError('기존 ID를 다른 작업에 재사용할 수 없습니다.')
             return existing
         if who + ':' + (args.batch or args.id) in ledger.get('reports', {}):
             raise ValueError('이미 보고한 batch에는 작업을 추가할 수 없습니다.')
         task = {'id': args.id, 'source': who, 'space': space['id'], 'project': space['name'],
                 'text': args.text, 'mode': args.mode, 'owns': args.owns, 'created': time.time(),
-                'batch': args.batch or args.id, 'state': 'pending', 'events': []}
+                'batch': args.batch or args.id, 'tier': tier, 'state': 'pending', 'events': []}
         event(task, 'pending', evidence='explicit source declaration')
         ledger['tasks'][args.id] = task
         save(ledger)
@@ -223,6 +226,18 @@ def receiver(target, space, facts, reserved):
     return not code and route.receiver_available(screen.get('text', ''))
 
 
+def tier_order(peers, tier, facts, models, tiers):
+    """Peers that can take a task of this tier: its own model first, then higher ones, never lower.
+    A session whose model is unknown counts as high (ADR-0008)."""
+    ranked = []
+    for index, address in enumerate(peers):
+        agent = facts.get(address, {}).get('agent')
+        key = model_tier.rank(tier, model_tier.tier_of(agent, models.get(address), tiers))
+        if key is not None:
+            ranked.append((key, index, address))
+    return [address for _, _, address in sorted(ranked)]
+
+
 def drain():
     cfg = config()
     if not cfg['enabled']:
@@ -240,6 +255,7 @@ def drain():
         # Freeze overload evidence for this drain so two queued tasks can go to
         # two helpers; sending the first must not erase the trigger for the second.
         pressure = {t['source']: thresholds(tasks, t['source'], cfg, time.time()) for t in tasks}
+        models, tiers = model_tier.session_models(APP_HOME), model_tier.mapping()
         for task in sorted(tasks, key=lambda t: t['created']):
             if task['state'] != 'pending' or not pressure[task['source']]['overloaded']:
                 continue
@@ -253,7 +269,7 @@ def drain():
                 continue
             peers = [t['terminal'] for tab in space.get('tabs', []) for t in tab.get('terminals', [])
                      if t.get('terminal') != task['source']]
-            for target in peers:
+            for target in tier_order(peers, task.get('tier'), facts, models, tiers):
                 if not receiver(target, space, facts, reserved):
                     continue
                 token = uuid.uuid4().hex
@@ -386,6 +402,8 @@ def main():
     p.add_argument('--owns', default='')
     p.add_argument('--batch')
     p.add_argument('--from', dest='source')
+    p.add_argument('--tier', choices=model_tier.TIERS, default='high',
+                   help='작업 난이도: low|mid|high(기본). 같은 모델 세션 먼저, 없으면 더 높은 모델')
     for name in ('start', 'accept', 'complete'):
         p = sub.add_parser(name)
         p.add_argument('id')
