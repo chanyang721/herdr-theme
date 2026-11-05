@@ -143,19 +143,21 @@ class RefreshTests(unittest.TestCase):
         with patch.object(installer.subprocess, 'run', forbidden):
             return installer.refresh_installed(self.home, self.REPO)
 
-    def test_copies_match_the_source_and_the_approval_for_the_replaced_copy_carries_over(self):
+    def test_copies_match_the_source_and_an_approval_for_the_replaced_copy_does_not_carry_over(self):
+        # User rule (2026-11-05): only the review policy approves a new copy.
         self.config(self.old)
-        result = self.refresh()
+        with patch.object(installer, 'source_commit', lambda source: (None, 'no review in this fixture')):
+            result = self.refresh()
         for name in (*installer.CLEANUP['files'], 'sleep_idle_sessions.py', 'file_lock.py', 'agent_env.py'):
             self.assertEqual((self.base/name).read_bytes(), (self.REPO/'scripts'/name).read_bytes(), name)
-        new = installer.spec_hash(self.REPO/'scripts', installer.CLEANUP)
-        self.assertTrue(result['observers']['close-finished-spaces']['approval_carried'])
-        self.assertEqual(json.loads((self.base/'close-finished-spaces.json').read_text())['reviewed_observer_sha256'], new)
+        self.assertFalse(result['observers']['close-finished-spaces']['approved_for_this_copy'])
+        self.assertEqual(json.loads((self.base/'close-finished-spaces.json').read_text())['reviewed_observer_sha256'], self.old)
 
-    def test_an_approval_for_other_code_does_not_carry_over(self):
+    def test_an_approval_for_other_code_is_not_kept_for_this_copy(self):
         self.config('someone-elses-hash')
-        result = self.refresh()
-        self.assertFalse(result['observers']['close-finished-spaces']['approval_carried'])
+        with patch.object(installer, 'source_commit', lambda source: (None, 'no review in this fixture')):
+            result = self.refresh()
+        self.assertFalse(result['observers']['close-finished-spaces']['approved_for_this_copy'])
         self.assertEqual(json.loads((self.base/'close-finished-spaces.json').read_text())['reviewed_observer_sha256'], 'someone-elses-hash')
 
     def test_nothing_is_written_when_no_observer_is_registered(self):
@@ -249,3 +251,34 @@ class ReviewPolicyTests(RefreshTests):
                 config = json.loads((self.base/'close-finished-spaces.json').read_text())
                 self.assertEqual(config['reviewed_observer_sha256'], 'someone-elses-hash')
                 self.assertNotIn('reviewed_by_policy', config)
+
+
+class CarriedApprovalTests(ReviewPolicyTests):
+    """An approval carried by the old installer (hash = this copy, policy record of an older copy)."""
+
+    def carried(self):
+        self.refresh_plain = installer.spec_hash(self.REPO/'scripts', installer.CLEANUP)
+        with patch.object(installer, 'source_commit', lambda source: (None, 'x')):
+            self.refresh()   # copies the source; nothing approved
+        new = installer.spec_hash(self.base, installer.CLEANUP)
+        (self.base/'close-finished-spaces.json').write_text(json.dumps({'user_approved_apply': True, 'reviewed_observer_sha256': new,
+            'reviewed_by_policy': {'actor': 'auto-policy', 'observer_sha256': 'older-copy', 'commit': 'old'}}))
+        return new
+
+    def test_is_judged_again_and_recorded_when_the_review_allows(self):
+        new = self.carried()
+        vid = self.verdict('CONDITIONAL', self.INSTALL_ONLY)
+        with patch.object(installer, 'source_commit', lambda source: (self.SHA, None)):
+            result = self.refresh()
+        config = json.loads((self.base/'close-finished-spaces.json').read_text())
+        self.assertTrue(result['observers']['close-finished-spaces']['approved_for_this_copy'])
+        self.assertEqual((config['reviewed_observer_sha256'], config['reviewed_by_policy']['observer_sha256'],
+                          config['reviewed_by_policy']['verdict_id']), (new, new, vid))
+
+    def test_is_withdrawn_when_the_review_does_not_allow(self):
+        self.carried()
+        self.verdict('HOLD', 'VERDICT: HOLD\n- **P1 — 결함:** 9681baf\n')
+        with patch.object(installer, 'source_commit', lambda source: (self.SHA, None)):
+            result = self.refresh()
+        self.assertFalse(result['observers']['close-finished-spaces']['approved_for_this_copy'])
+        self.assertEqual(json.loads((self.base/'close-finished-spaces.json').read_text())['reviewed_observer_sha256'], 'older-copy')

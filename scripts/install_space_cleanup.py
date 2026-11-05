@@ -249,13 +249,14 @@ def refresh_installed(home, source, specs=None):
             after = spec_hash(base, spec)
             config_path = base / spec['config']
             config = json.loads(config_path.read_text(encoding='utf-8')) if config_path.exists() else {}
-            carried = bool(config.get('user_approved_apply')) and before[spec['job']] is not None \
-                and config.get('reviewed_observer_sha256') == before[spec['job']] and after != before[spec['job']]
+            # User rule (2026-11-05): a new copy is approved only by the review policy. An approval
+            # for the replaced copy no longer carries over by itself; one carried earlier (approved
+            # hash = this copy, policy record for an older copy) is judged again, and withdrawn if
+            # the review does not allow it.
+            record = config.get('reviewed_by_policy') or {}
+            stale = config.get('reviewed_observer_sha256') == after and record and record.get('observer_sha256') != after
             policy = None
-            if carried:
-                config['reviewed_observer_sha256'] = after
-                write_changed(config_path, (json.dumps(config, ensure_ascii=False, indent=2) + '\n').encode())
-            elif config and config.get('reviewed_observer_sha256') != after:
+            if config and (config.get('reviewed_observer_sha256') != after or stale):
                 if approval is None:
                     approval = review_approval(home, source)
                 policy = approval
@@ -265,8 +266,10 @@ def refresh_installed(home, source, specs=None):
                         'actor': 'auto-policy', 'at': dt.datetime.now().astimezone().isoformat(),
                         'observer_sha256': after, **{k: approval.get(k) for k in ('commit', 'verdict_id', 'value', 'review_file', 'report_id')}}
                     write_changed(config_path, (json.dumps(config, ensure_ascii=False, indent=2) + '\n').encode())
-            result['observers'][spec['job']] = {'observer_sha256': after, 'approval_carried': carried,
-                                                'approval_policy': policy,
+                elif stale:
+                    config['reviewed_observer_sha256'] = record.get('observer_sha256')
+                    write_changed(config_path, (json.dumps(config, ensure_ascii=False, indent=2) + '\n').encode())
+            result['observers'][spec['job']] = {'observer_sha256': after, 'approval_policy': policy,
                                                 'approved_for_this_copy': config.get('reviewed_observer_sha256') == after}
         return result
     finally:
