@@ -812,6 +812,39 @@ class PaneCloseTests(unittest.TestCase):
         # the open close_requested is settled, never left half closed (t1 decision 2026-11-05)
         self.assertEqual([c[1] for c in self.live.calls if c[0] == 'park'], ['close_requested', 'close_aborted'])
 
+    def park_then(self, change, fail_closed=0):
+        """Run `change` while the harness records close_requested; fail the next `closed` records."""
+        real = self.live.park
+        left = {'n': fail_closed}
+        def park(config, item, event, reason=None):
+            got = real(config, item, event, reason)
+            if event == 'close_requested' and change:
+                change()
+            if event == 'closed' and left['n'] > 0:
+                left['n'] -= 1
+                return False, 'storage unavailable'
+            return got
+        self.live.park = park
+
+    def test_work_input_or_focus_that_starts_while_parking_keeps_the_pane(self):
+        # Codex review HOLD P1 (2026-11-05): the safety checks ran before the park, not before pane.close.
+        changes = {
+            'working': lambda: self.live.data['terminals']['t12']['status'].update(state='working'),
+            'input': lambda: setattr(self.live, 'text', EMPTY.replace('❯ ', '❯ 이어서 할 일')),
+            'focus': lambda: self.live.data['status'].update(focused_pane='p12'),
+            'last pane': lambda: self.live.data['spaces'][1]['tabs'][0]['terminals'].pop(),
+        }
+        for name, change in changes.items():
+            with self.subTest(name):
+                self.setUp()
+                self.park_then(change)
+                got = self.run_cycle()['t12']
+                self.assertFalse([c for c in self.live.calls if c[0] == 'pane.close'], got['reasons'])
+                self.assertEqual(got['action'], 'keep')
+                self.assertTrue(any(r.startswith('recheck before close') for r in got['reasons']), got['reasons'])
+                self.assertEqual([c[1] for c in self.live.calls if c[0] == 'park'], ['close_requested', 'close_aborted'])
+                self.assertIn('t12', pane_of_names(self.live))
+
     def test_a_failing_pane_close_is_settled_with_close_aborted_and_stops(self):
         def boom(pane_id):
             self.live.calls.append(('pane.close', pane_id))

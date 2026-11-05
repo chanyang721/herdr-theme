@@ -338,10 +338,33 @@ def sleep_one(item, adapter, config, paths, now):
     return 'slept'
 
 
-def close_one(item, adapter, config, paths, now, snapshot):
-    """Harness close_requested → local note → pane.close by id → gone from a fresh snapshot →
-    harness closed. Returns (action, the snapshot after the close or None)."""
-    pane_id = pane_id_of(pane_entry(snapshot, item['address']))
+def close_recheck(item, adapter, config, closed):
+    """Why the pane may not close now, looked up again right before pane.close (the park and the
+    report gate take time: the session may have resumed work, got input or focus meanwhile)."""
+    snap = adapter.snapshot()
+    where = pane_of(snap).get(item['address'])
+    if not where:
+        return ['pane moved or closed'], snap
+    latest = inspect(item['address'], where[0], snap, adapter, config, where[1])
+    why = list(blockers(latest))
+    if latest.get('fingerprint') != item.get('fingerprint'):
+        why.append('evidence changed')
+    if where[0].get('id') != item['space_id']:
+        why.append('pane moved to another space')
+    blocked = close_blocker(latest, snap, where[1], closed)
+    if blocked:
+        why.append(blocked)
+    if pane_id_of(pane_entry(snap, item['address'])) != pane_id_of(item.get('_pane') or {}):
+        why.append('pane id changed')
+    return why, snap
+
+
+def close_one(item, adapter, config, paths, now, snapshot, closed=()):
+    """Harness close_requested → local note → fresh recheck → pane.close by id → gone from a fresh
+    snapshot → harness closed. Returns (action, the snapshot after the close or None).
+    action: closed | keep (recheck refused; close_aborted recorded)."""
+    item['_pane'] = pane_entry(snapshot, item['address'])
+    pane_id = pane_id_of(item['_pane'])
     item['git'] = adapter.git(item.get('cwd'))
     ok, detail = adapter.park(config, item, 'close_requested', reason='finished harness session: pane closed')
     item['harness'] = detail
@@ -355,6 +378,11 @@ def close_one(item, adapter, config, paths, now, snapshot):
         ok_, detail_ = adapter.park(config, item, 'close_aborted', reason=f'pane close failed: {why}'[:200])
         item['harness_abort'] = detail_ if ok_ else f'close_aborted not recorded: {detail_}'
 
+    why, _snap = close_recheck(item, adapter, config, closed)
+    if why:
+        aborted('recheck: ' + '; '.join(why))
+        item['reasons'].append('recheck before close: ' + '; '.join(why))
+        return 'keep', None
     try:
         adapter.close_pane(pane_id)
         after = adapter.snapshot()
@@ -466,7 +494,7 @@ def cycle(adapter, config, state, now, *, apply=False, paths=None):
                     if decision == 'ready':
                         item['close_report'], item['report_task_id'] = detail['report_id'], detail.get('task_id')
                     if decision == 'ready' and may_close:
-                        item['action'], after = close_one(item, adapter, config, paths, now, check)
+                        item['action'], after = close_one(item, adapter, config, paths, now, check, closed)
                     elif decision in ('ready', 'off') and may_sleep:
                         if decision == 'ready' and close_on and why_not_close:
                             item['reasons'].append(f'{why_not_close}: slept instead of closed')
@@ -486,7 +514,7 @@ def cycle(adapter, config, state, now, *, apply=False, paths=None):
                         acted += 1
                         tracking.pop(address, None)
                         reports.pop(address, None)
-                        if item['action'] == 'closed':
+                        if item['action'] != 'slept':
                             closed.add(address)
                         after = after or adapter.snapshot()
                         if focused_terminal(after) == address:
@@ -495,6 +523,7 @@ def cycle(adapter, config, state, now, *, apply=False, paths=None):
                             stop_reason = 'focus moved during the previous sleep; next cycle'
                             item['focus_moved'] = True
         item.pop('argv', None)
+        item.pop('_pane', None)
         results.append(item)
     state.update(last_at=now, sessions=tracking, trial=trial, reports=reports)
     return {'at': dt.datetime.fromtimestamp(now).astimezone().isoformat(), 'mode': 'apply' if apply else 'dry-run',
