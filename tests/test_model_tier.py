@@ -18,7 +18,7 @@ route = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(route)
 import collaborate  # noqa: E402
 
-LOCAL = {'claude': {'low': 'claude-haiku-5-5', 'mid': 'claude-sonnet-5-5', 'high': 'claude-opus-5-5'}, 'codex': {}}
+LOCAL = model_tier.mapping({})
 
 
 class TierRules(unittest.TestCase):
@@ -29,36 +29,47 @@ class TierRules(unittest.TestCase):
             model_tier.tier_name('medium')
 
     def test_mapping_is_local_and_missing_tiers_move_up(self):
-        site = {'model_tiers': {'codex': {'high': 'gpt-x', 'mid': ''}, 'claude': {'low': None}}}
+        site = {'model_tiers': {'codex': {'high': 'gpt-x', 'mid': None, 'low': None}, 'claude': {'low': None}}}
         table = model_tier.mapping(site)
-        self.assertEqual(model_tier.model_for('codex', 'low', table), ('high', 'gpt-x'))
-        self.assertEqual(model_tier.model_for('claude', 'low', table), ('mid', 'claude-sonnet-5-5'),
+        self.assertEqual(model_tier.model_for('codex', 'low', table), ('high', {'model': 'gpt-x', 'effort': None}))
+        self.assertEqual(model_tier.model_for('claude', 'low', table)[0], 'mid',
                          'null turns a tier off locally: its tasks move one step up')
-        self.assertEqual(model_tier.model_for('codex', 'mid', model_tier.mapping({})), ('high', None),
-                         'no Codex model below high: the CLI default')
+        self.assertEqual(model_tier.model_for('claude', 'high', table), ('high', None), 'Claude high = the CLI default')
+
+    def test_defaults_name_real_models_efforts_and_max_is_only_chosen(self):
+        self.assertEqual(model_tier.model_for('codex', 'low'), ('low', {'model': 'gpt-6-luna', 'effort': 'low'}))
+        self.assertEqual(model_tier.model_for('codex', 'high'), ('high', {'model': 'gpt-6.1-sol', 'effort': 'high'}))
+        self.assertEqual(model_tier.model_for('codex', 'max')[1]['model'], 'gpt-6-astra')
+        self.assertEqual(model_tier.model_for('claude', 'high', {'claude': {'max': {'model': 'm', 'effort': None}}}),
+                         ('high', None), 'falling back never climbs into max')
 
     def test_flags_per_cli(self):
-        self.assertEqual(model_tier.flag('claude-code', 'claude-sonnet-5-5'), ['--model', 'claude-sonnet-5-5'])
-        self.assertEqual(model_tier.flag('codex', 'gpt-x'), ['-m', 'gpt-x'])
-        self.assertEqual(model_tier.flag('claude', None), [])
+        self.assertEqual(model_tier.flags('claude-code', {'model': 'claude-sonnet-5-5', 'effort': 'medium'}),
+                         ['--model', 'claude-sonnet-5-5', '--effort', 'medium'])
+        self.assertEqual(model_tier.flags('codex', {'model': 'gpt-6-luna', 'effort': 'low'}),
+                         ['-m', 'gpt-6-luna', '-c', 'model_reasoning_effort=low'])
+        self.assertEqual(model_tier.flags('claude', None), [])
 
-    def test_unknown_model_is_high_and_lower_models_are_never_chosen(self):
+    def test_session_tier_from_model_and_effort_unknown_is_high_lower_never_chosen(self):
         self.assertEqual(model_tier.tier_of('claude', None, LOCAL), 'high')
-        self.assertEqual(model_tier.tier_of('claude', 'claude-something-new', LOCAL), 'high')
+        self.assertEqual(model_tier.tier_of('claude', {'model': 'claude-opus-5-5', 'effort': 'medium'}, LOCAL), 'high')
         self.assertEqual(model_tier.tier_of('claude', 'claude-haiku-5-5', LOCAL), 'low')
+        self.assertEqual(model_tier.tier_of('codex', {'model': 'gpt-6.1-sol', 'effort': 'medium'}, LOCAL), 'mid')
+        self.assertEqual(model_tier.tier_of('codex', {'model': 'gpt-6.1-sol', 'effort': 'high'}, LOCAL), 'high')
+        self.assertEqual(model_tier.tier_of('codex', {'model': 'gpt-6-astra', 'effort': 'medium'}, LOCAL), 'max')
         self.assertIsNone(model_tier.rank('high', 'mid'))
         self.assertEqual([model_tier.rank('mid', t) for t in ('mid', 'high')], [0, 1])
 
     def test_session_models_read_the_pane_header_share(self):
         with tempfile.TemporaryDirectory() as home:
             Path(home, 'shared.json').write_text(json.dumps({'agent-usage.shares': {'terminals': {
-                't1': {'meta': {'agent': 'claude', 'modelId': 'claude-sonnet-5-5'}}, 't2': {}}}}))
-            self.assertEqual(model_tier.session_models(home), {'t1': 'claude-sonnet-5-5'})
+                't1': {'meta': {'agent': 'claude', 'modelId': 'claude-sonnet-5-5', 'effort': 'medium'}}, 't2': {}}}}))
+            self.assertEqual(model_tier.session_models(home), {'t1': {'model': 'claude-sonnet-5-5', 'effort': 'medium'}})
             self.assertEqual(model_tier.session_models(Path(home) / 'missing'), {})
 
 
 class NewWorkspace(unittest.TestCase):
-    def launches(self, site):
+    def launches(self, site, extra=()):
         launches, cells = [], []
         tab = {'id': 'tab', 'name': 'Development', 'root': {'id': 'root', 'type': 'row', 'children': cells}}
         document = {'spaces': [{'id': 'space', 'name': 'Example', 'tabs': [tab]}]}
@@ -77,7 +88,10 @@ class NewWorkspace(unittest.TestCase):
             return json.dumps({'spaces': [{'id': 'space', 'name': 'Example', 'tabs': [
                 {'id': 'tab', 'terminals': [{'terminal': 't1', 'pane': 'p1'}]}]}]}).encode()
 
-        with patch.object(sys, 'argv', ['workspace.py', 'Example', '/project']), \
+        self.home = tempfile.TemporaryDirectory()
+        self.addCleanup(self.home.cleanup)
+        with patch.object(sys, 'argv', ['workspace.py', 'Example', '/project', *extra]), \
+                patch.dict(workspace.os.environ, {'HERDR_APP_HOME': self.home.name, 'HC_TERMINAL_ID': 't9'}), \
                 patch.object(workspace, 'app', side_effect=app), \
                 patch.object(workspace.subprocess, 'check_output', side_effect=listing), \
                 patch.object(workspace.subprocess, 'run'), \
@@ -97,23 +111,35 @@ class NewWorkspace(unittest.TestCase):
                          + [launch_argv(['claude'])] * 2 + [launch_argv(['codex', '--no-daemon'])])
 
     def test_new_space_tiers_open_lighter_models_in_the_named_panes(self):
-        panes = self.launches({'new_space_tiers': ['high', 'mid', 'high', 'high', 'low', 'mid'],
-                               'model_tiers': {'codex': {'high': 'gpt-x'}}})
-        self.assertEqual(panes[0][-2:], ['--model', 'claude-opus-5-5'])
-        self.assertEqual(panes[1][-2:], ['--model', 'claude-sonnet-5-5'])
+        panes = self.launches({'new_space_tiers': ['high', 'mid', 'high', 'high', 'low', 'mid']})
+        self.assertNotIn('--model', panes[0], 'Claude high = the CLI default: no model flag')
+        self.assertEqual(panes[1][-4:], ['--model', 'claude-sonnet-5-5', '--effort', 'medium'])
         self.assertEqual(panes[4][-2:], ['--model', 'claude-haiku-5-5'])
-        self.assertEqual(panes[5][-2:], ['-m', 'gpt-x'], 'Codex mid has no model here: one step higher')
+        self.assertEqual(panes[5][-4:], ['-m', 'gpt-6.1-sol', '-c', 'model_reasoning_effort=medium'])
         self.assertIn('env', panes[1][0], 'agent markers are still removed')
+
+    def test_tiers_argument_wins_and_the_plan_is_recorded_with_who_decided(self):
+        panes = self.launches({'new_space_tiers': ['high'] * 6}, ['--tiers', 'low,mid,max,high,high,low'])
+        self.assertEqual(panes[2][-2:], ['-m', 'gpt-6-astra'])
+        self.assertEqual(panes[0][-2:], ['--model', 'claude-haiku-5-5'])
+        book = json.loads(Path(self.home.name, 'data/sixfold/space-tiers.json').read_text(encoding='utf-8'))
+        plan = book['space']
+        self.assertEqual(plan['by'], 't9')
+        self.assertEqual([p['tier'] for p in plan['panes']], ['low', 'mid', 'max', 'high', 'high', 'low'])
+        self.assertEqual(plan['panes'][2]['model'], 'gpt-6-astra')
 
     def test_a_malformed_option_is_refused_before_any_pane_opens(self):
         with self.assertRaises(SystemExit):
             workspace.pane_plan({'new_space_tiers': ['high'] * 5})
+        with self.assertRaises(SystemExit):
+            workspace.pane_plan({}, 'low,mid,high,high,low,ultra')
 
 
 class Receivers(unittest.TestCase):
     def test_collaborate_orders_same_model_then_higher_and_skips_lower(self):
         facts = {a: {'agent': 'claude'} for a in ('a', 'b', 'c', 'd')}
-        models = {'a': 'claude-haiku-5-5', 'b': 'claude-opus-5-5', 'c': 'claude-sonnet-5-5'}
+        models = {'a': {'model': 'claude-haiku-5-5'}, 'b': {'model': 'claude-opus-5-5', 'effort': 'medium'},
+                  'c': {'model': 'claude-sonnet-5-5', 'effort': 'medium'}}
         self.assertEqual(collaborate.tier_order(['a', 'b', 'c', 'd'], 'mid', facts, models, LOCAL), ['c', 'b', 'd'])
         self.assertEqual(collaborate.tier_order(['a', 'b', 'c', 'd'], None, facts, models, LOCAL), ['b', 'd'],
                          'no tier = high: unknown (d) counts as high')
@@ -130,7 +156,7 @@ class Receivers(unittest.TestCase):
         site = {**route.site_config.DEFAULTS, 'hub_space_ids': ['common']}
         with patch.object(route.site_config, 'load', return_value=site):
             self.assertEqual(route.candidates(spaces, live, 's2', 'Project B')[2], ['p2', 'p1', 'p0'])
-            models = {'p0': 'claude-sonnet-5-5', 'p2': 'claude-haiku-5-5'}
+            models = {'p0': {'model': 'claude-sonnet-5-5', 'effort': 'medium'}, 'p2': {'model': 'claude-haiku-5-5'}}
             self.assertEqual(route.candidates(spaces, live, 's2', 'Project B', 'mid', models, LOCAL)[2], ['p0', 'p1'])
             self.assertEqual(route.candidates(spaces, live, 's2', 'Project B', 'high', models, LOCAL)[2], ['p1'])
 
