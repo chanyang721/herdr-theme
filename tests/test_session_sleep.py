@@ -1530,6 +1530,17 @@ class KeeperAwakeTests(unittest.TestCase):
         self.assertNotIn(('pane.close', 'p3'), self.live.calls)   # the only live agent stays
         self.assertNotIn(('pane.close', 'p12'), self.live.calls)  # the working shell is protected
 
+    def test_a_configured_shell_is_not_the_keeper(self):
+        # 6th review P2, its fixture: keep_addresses names a working shell.
+        self.config['trim_fixed']['keep_addresses'] = ['t12']
+        t = self.live.data['terminals']['t12']
+        t.update(status={'app': None, 'state': 'working'}, foreground={'pid': t['pid'], 'argv': ['-zsh'], 'name': 'zsh'})
+        self.assertEqual(self.keeper(), 't3')
+        self.live.reported = True
+        self.run_cycle(self.seeded(quiet=2400))
+        self.assertNotIn(('pane.close', 'p3'), self.live.calls)
+        self.assertNotIn(('pane.close', 'p12'), self.live.calls)
+
     def test_a_space_with_only_shells_has_no_keeper_and_is_not_trimmed(self):
         for a in ('t12', 't3'):
             t = self.live.data['terminals'][a]

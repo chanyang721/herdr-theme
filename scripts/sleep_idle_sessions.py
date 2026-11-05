@@ -243,13 +243,13 @@ def trim_keeper(space, snapshot, config):
             or user_controlled(space, config):
         return None
     addresses = [a for a, _ in space_panes(snapshot, space['id'])]
-    for address in cfg.get('keep_addresses', []):
-        if address in addresses:
-            return address
     terms = snapshot.get('terminals') or {}
     status = lambda a: (terms.get(a) or {}).get('status') or {}  # noqa: E731
     asleep = lambda a: bool(((terms.get(a) or {}).get('labels') or {}).get(SLEEP_LABEL))  # noqa: E731
     live = lambda a: status(a).get('app') in agent_sessions.AGENTS and not asleep(a)  # noqa: E731
+    for address in cfg.get('keep_addresses', []):
+        if address in addresses and (live(address) or asleep(address)):   # a configured shell is no keeper (6th review)
+            return address
     # A live agent pane first (it takes instructions now); an asleep one only when none is live,
     # and it is then woken with its own session (user rule 2026-11-05).
     pool = ([a for a in addresses if live(a) and status(a).get('state') == 'working'] or [a for a in addresses if live(a)]
