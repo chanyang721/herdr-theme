@@ -64,3 +64,33 @@ export function workspacePinned(space, config) {
     item && typeof item.id === 'string' && item.id.length > 0 &&
     item.id === space.id && (item.machine ?? null) === (space.machine ?? null));
 }
+
+// A computer shown in the sidebar list: this one, a connected or connecting Herdr remote.
+export function computerActive(machine) {
+  return machine.name == null || machine.layout === 'ready' || machine.layout === 'loading';
+}
+
+// Numbered shortcut slots follow the sidebar list: this computer first, then registered
+// Herdr machines, with disconnected ones last. Tailscale discovery never takes a slot.
+export function computerSlots(machines) {
+  const list = Array.isArray(machines) ? machines : [];
+  const key = machine => machine.name == null ? 'local' : `remote:${machine.name}`;
+  const ordered = [...list.filter(m => m.name == null), ...list.filter(m => m.name != null)];
+  return [...ordered.filter(computerActive), ...ordered.filter(m => !computerActive(m))].map(key);
+}
+
+// The Share (hub) space of one listed computer, or null. Only an explicit id (this
+// computer: site `hub_space_ids`; a remote: its `hub_space_ids` in computers.local.json)
+// or the Share/공통/common role name counts. Several candidates or none: null, never a guess.
+export function computerHub(spaces, key, site = {}, computers = {}) {
+  const machine = key === 'local' ? null : /^remote:(.+)$/.exec(key)?.[1] ?? undefined;
+  if (machine === undefined) return null;
+  const mine = (Array.isArray(spaces) ? spaces : []).filter(space => (space.machine ?? null) === machine);
+  const ids = new Set([
+    ...(Array.isArray(site?.hub_space_ids) ? site.hub_space_ids : []),
+    ...(machine === null ? [] : (Array.isArray(computers?.machines?.[machine]?.hub_space_ids) ? computers.machines[machine].hub_space_ids : [])),
+  ]);
+  const explicit = mine.filter(space => ids.has(space.id));
+  const found = explicit.length ? explicit : mine.filter(space => ['share', '공통', 'common'].includes(String(space.name ?? '').trim().toLowerCase()));
+  return found.length === 1 ? found[0] : null;
+}

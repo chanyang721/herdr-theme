@@ -4,7 +4,7 @@ import * as herdrNative from 'herdr';
 import { agents, panes, spaces, terminals, focused, props, theme, run, shared, setShared, setAgentOrder, nextCommand, exec, window, layout, readTextFile, writeTextFile, appHome, openOverlay, settings } from 'herdr';
 import { WORDS, counts, title, cycle, priority, readThrough, unreadCount } from './model.js';
 
-import { computerKind, computerStatus, computerAlert, tailscaleStatus, workspaceIdentity, workspaceLocal, workspacePinned } from './sidebar-identity.js';
+import { computerActive, computerHub, computerKind, computerSlots, computerStatus, computerAlert, tailscaleStatus, workspaceIdentity, workspaceLocal, workspacePinned } from './sidebar-identity.js';
 
 import { freshMessages, recentRoutes, simultaneousRoutes, crossMachine, followComputer, terminalMachine, machineHops, machineTraffic, trafficWake } from './flow.js';
 import { pipeline } from './pipeline.js';
@@ -275,6 +275,11 @@ export default class SixfoldDesk extends View {
         } else if (command.startsWith('pane-')) {
           const p = current[Number(command.slice(5)) - 1];
           if (p) run('pane.focus', { pane: p.pane });
+        } else if (/^computer-[1-9]$/.test(command)) {
+          // Same as clicking the sidebar card: list plus that computer's Share space and pane.
+          const machines = typeof herdrNative.machines === 'function' ? herdrNative.machines() : [{ name: null, layout: 'ready' }];
+          const key = computerSlots(machines)[Number(command.slice(9)) - 1];
+          if (key) this.selectComputer(key);
         } else if (command === 'next-blocked' || command === 'next-done') {
           const state = command === 'next-blocked' ? 'blocked' : 'done';
           const machine = spaces().find(space => space.id === f?.space)?.machine ?? null;
@@ -311,9 +316,21 @@ export default class SixfoldDesk extends View {
   }
 
   selectComputer(key) {
-    // Listing another computer is independent of terminal focus and connectivity.
     (this.computerFollow ??= {}).follow = false;
     setShared('sixfold.computing.selected', key);
+    this.enterComputerHub(key);
+  }
+
+  // Cards and shortcuts also bring the shown space and focused pane to that computer's Share.
+  // Without one unambiguous Share (or for a Tailscale-only device) only the list changes.
+  enterComputerHub(key) {
+    const hub = computerHub(spaces(), key, this.site, this.computers);
+    if (!hub || focused()?.space === hub.id) return;
+    run('space.select', { id: hub.id });
+    const tab = hub.tabs.find(t => t.active) ?? hub.tabs[0];
+    const list = tab ? panes().filter(p => p.tab === tab.id) : [];
+    const pane = list.find(p => p.focused) ?? list.find(p => p.terminal);
+    if (pane) run('pane.focus', { pane: pane.pane });
   }
 
   newWorkspace(machine) {
@@ -589,7 +606,7 @@ export default class SixfoldDesk extends View {
           .when(sent > 0 || (hop && !incoming), el => el.child(`↑${sent || ''}`))
           .when(received > 0 || incoming, el => el.child(`↓${received || ''}`)));
       }
-      return {row, name, active:name===null || ready || machine.layout==='loading'};
+      return {row, name, active:computerActive(machine)};
     });
     if(this.computers?.tailscale){
       for(const peer of this.tailscalePeers??[]){
@@ -680,7 +697,8 @@ export default class SixfoldDesk extends View {
         : lit ? div().absolute().top(-1).left(-1).right(-1).bottom(-1).rounded(7).border(2).border_color(collab) : null;
       // The name is text on the header, so its colour is chosen for that header's background.
       const tailColor = collabColor(t, s.active ? t.selected : t.surface);
-      const partnerTail = partner ? h_flex().id(`sf-partner-${s.id}`).flex_none().max_w(110).min_w(0).gap(3).items_center().text_size(12).font_normal().text_color(tailColor)
+      // The Share (hub) space is the shared room itself, so its header carries no computer tag.
+      const partnerTail = partner && workspaceIdentity(s,this.site)!=='hub' ? h_flex().id(`sf-partner-${s.id}`).flex_none().max_w(110).min_w(0).gap(3).items_center().text_size(12).font_normal().text_color(tailColor)
         .tooltip(partnerText)
         .child(svg(`mods/sixfold-desk/icons/device-${computerKind(this.computers?.machines?.[partner.partners[0]]?.os)}.svg`).size(14).flex_none().text_color(tailColor))
         .child(div().min_w(0).truncate().child(`${partnerNames[0]}${partnerNames.length > 1 ? ` +${partnerNames.length - 1}` : ''}`)) : null;
