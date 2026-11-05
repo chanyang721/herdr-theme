@@ -114,7 +114,7 @@ Windows·Linux에서는 `keys.json`의 레이아웃 전용 조각을 키보드�
 
 컴퓨터 행에는 작업 중·완료·승인 대기 수(0이 아닌 것만, 툴팁에 전체)와 **최근 10분**간 다른 컴퓨터로 보낸·받은 전송 수 ↑N ↓N이 나옵니다.
 
-이 컴퓨터와 연결됨·연결 중인 컴퓨터만 기본으로 보이고, 끊긴 원격과 등록되지 않은 Tailscale 기기는 **COMPUTERS** 옆 화살표로 펼쳐야 보입니다. **+ Space**와 **Ctrl+Shift+N**은 선택한 컴퓨터에 워크스페이스를 만듭니다. 이 컴퓨터에서는 Claude 4개·Codex 2개의 3×2 분할, 원격에서는 그 컴퓨터 홈(또는 설정한 폴더)의 터미널 하나입니다.
+이 컴퓨터와 연결됨·연결 중인 컴퓨터만 기본으로 보이고, 끊긴 원격과 등록되지 않은 Tailscale 기기는 **COMPUTERS** 옆 화살표로 펼쳐야 보입니다. **+ Space**와 **Ctrl+Shift+N**은 선택한 컴퓨터에 워크스페이스를 만듭니다. 이 컴퓨터에서는 조정용 Claude 세션 1개, 원격에서는 그 컴퓨터 홈(또는 설정한 폴더)의 터미널 하나입니다.
 
 메인에서 `hc ls`의 주소로 `hc send worker/t7 "메시지"`를 보냅니다. 전송 성공이 읽음 확인은 아닙니다. SSH·Tailscale·방화벽·에이전트 인증은 테마가 설정하지 않습니다.
 
@@ -239,7 +239,7 @@ Codex·Claude 한도를 브랜드 아이콘·막대·백분율로: 5시간·7일
 
 **채널 알림.** `data/sixfold/project-alerts.json`의 새 채널 메시지는 워크스페이스 제목 아래 줄에 나오고, `sixfold-slack-inbox` mod는 `data/sixfold/slack-mentions.json`의 멘션을 스레드별로 보여 줍니다. Slack에서 모으는 일은 별도 도구가 합니다.
 
-**분할과 새 워크스페이스.** `scripts/balance_grid.py`는 아무것도 재시작하지 않고 6개 터미널 탭을 같은 크기로 맞추고, `scripts/workspace.py "Example" /path`는 **+ Space**처럼 워크스페이스를 만듭니다(`--shells`는 셸만, `--tiers high,mid,high,high,low,mid`는 칸마다 그 작업 난이도의 모델로 엽니다. `scripts/model_tier.py` 참고).
+**분할과 새 워크스페이스.** `scripts/balance_grid.py`는 아무것도 재시작하지 않고 6개 터미널 탭을 같은 크기로 맞추고, `scripts/workspace.py "Example" /path`는 **+ Space**처럼 워크스페이스를 만듭니다(`--shells`는 셸만, `--tiers high`는 그 한 칸을 해당 난이도의 모델로 엽니다. `scripts/model_tier.py` 참고).
 
 **고정 표시·아이콘·로컬 설정.** `data/sixfold/workspace-pins.local.json`(`{"spaces":[{"id":"…","machine":null}]}`)은 정확히 그 워크스페이스에 핀과 강조 테두리를 붙입니다. `scripts/set_workspace_icon.py 'ID 또는 이름' icon.png`는 프로젝트 아이콘(SVG/PNG/JPEG/WebP)을 지정합니다. 사람마다 다른 이름·색·폴더·Slack 주소는 `data/sixfold/site.local.json`(`config/site.example.json`에서 시작)에 두며, `"pane_header_index": true`는 칸 번호를 다시 보여 줍니다. `*.local.json`은 git이 무시합니다.
 

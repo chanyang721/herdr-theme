@@ -114,7 +114,7 @@ The sidebar lists this computer and persistent `hc machine` connections. Selecti
 
 Each computer row shows its working / done / needs-you counts (only non-zero ones; the tooltip has all of them) and ↑N ↓N, the sends to and from other computers in the **last ten minutes**.
 
-Local and connected/connecting computers are shown by default. Disconnected remotes and unregistered Tailscale peers are hidden until you expand the list with the arrow beside **COMPUTERS**. **+ Space** and **Ctrl+Shift+N** target the selected computer: locally a 3×2 split of four Claude and two Codex sessions, remotely one terminal in that computer's home (or its configured folder).
+Local and connected/connecting computers are shown by default. Disconnected remotes and unregistered Tailscale peers are hidden until you expand the list with the arrow beside **COMPUTERS**. **+ Space** and **Ctrl+Shift+N** target the selected computer: locally one coordinating Claude session (panes are added by `dispatch` and closed when finished), remotely one terminal in that computer's home (or its configured folder).
 
 From the main computer, `hc send worker/t7 "message"` sends to that computer's terminal (use the qualified address from `hc ls`). A successful send is not a read receipt. The theme does not configure SSH, Tailscale, firewall rules or agent credentials.
 

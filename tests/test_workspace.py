@@ -1,6 +1,8 @@
 import contextlib
 import io
 import json
+import os
+import tempfile
 from pathlib import Path
 import sys
 import unittest
@@ -11,56 +13,52 @@ import workspace
 
 
 class WorkspaceCreationTests(unittest.TestCase):
-    def exercise(self, extra=(), existing=False, fail=False):
+    def exercise(self, extra=(), existing=False, site=None):
         launches=[]
-        cells=[]
-        tab={'id':'tab','name':'Development','root':{'id':'root','type':'row','children':cells}}
-        target={'id':'space','name':'Example','tabs':[tab]}
-        neighbor={'id':'other','name':'Other','tabs':[]}
-        document={'spaces':[target,neighbor]}
         def app(command,args):
             if command=='space.rename':return {}
             launches.append((command,args))
-            if fail and command=='pane.split':raise RuntimeError('spawn failed')
-            n=len(launches)
-            cells.append({'id':f'p{n}','type':'block','content':{'terminal':f't{n}'}})
-            return {'terminal':f't{n}','pane':f'p{n}','space':'space','tab':'tab'}
+            return {'terminal':'t1','pane':'p1','space':'space','tab':'tab'}
         def listing(*args,**kwargs):
             if not launches:return json.dumps({'spaces':[{'name':'Example'}] if existing else []}).encode()
             return json.dumps({'spaces':[{'id':'space','name':'Example','tabs':[{'id':'tab','terminals':[{'terminal':'t1','pane':'p1'}]}]}]}).encode()
-        def rpc(method,args):
-            return {'value':document,'version':1} if method=='doc.get' else {'version':2}
-        with patch.object(sys,'argv',['workspace.py','Example','/project',*extra]), patch.object(workspace,'app',side_effect=app), patch.object(workspace.subprocess,'check_output',side_effect=listing), patch.object(workspace.subprocess,'run') as run, patch.object(workspace,'call',side_effect=rpc) as call, contextlib.redirect_stdout(io.StringIO()):
+        err=io.StringIO()
+        with tempfile.TemporaryDirectory() as home, patch.dict(os.environ,{'HERDR_APP_HOME':home}), patch.object(sys,'argv',['workspace.py','Example','/project',*extra]), patch.object(workspace,'app',side_effect=app), patch.object(workspace.subprocess,'check_output',side_effect=listing), patch.object(workspace.subprocess,'run') as run, patch.object(workspace.site_config,'load',return_value=site or {}), contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(err):
             if existing:
                 with self.assertRaises(SystemExit):workspace.main()
                 self.assertEqual(launches,[])
-            elif fail:
-                with self.assertRaisesRegex(RuntimeError,'spawn failed'):workspace.main()
-                self.assertEqual(len(launches),2)
-                call.assert_not_called()
             else:
                 workspace.main()
-                self.assertEqual(len(launches),6)
-                self.assertEqual(len(target['tabs']),1)
-                self.assertEqual([len(row['children']) for row in tab['root']['children']],[3,3])
-                self.assertEqual(neighbor,{'id':'other','name':'Other','tabs':[]})
                 self.assertTrue(all('send' not in c.args[0] for c in run.call_args_list))
-        return [args.get('argv') for _,args in launches]
+        self.last_stderr=err.getvalue()
+        return launches
 
-    def test_default_launches_four_claude_and_two_codex_in_one_grid(self):
-        argv=self.exercise()
+    def test_default_opens_exactly_one_claude_session_and_no_splits(self):
+        launches=self.exercise()
         from agent_env import launch_argv
-        self.assertEqual(argv.count(launch_argv(['claude'])),4)
-        self.assertEqual(argv.count(launch_argv(['codex','--no-daemon'])),2)
-        self.assertIn('CLAUDE_CODE_CHILD_SESSION',argv[0],'a pane opened from an agent must not inherit its child-session marker')
+        self.assertEqual([c for c,_ in launches],['space.new'])
+        self.assertEqual(launches[0][1]['argv'][:len(launch_argv(['claude']))],launch_argv(['claude'])[:len(launch_argv(['claude']))])
+        self.assertIn('CLAUDE_CODE_CHILD_SESSION',launches[0][1]['argv'],'a pane opened from an agent must not inherit its child-session marker')
 
-    def test_shells_are_explicit_opt_out(self):
-        self.assertEqual(self.exercise(['--shells']),[None]*6)
+    def test_shells_open_one_plain_shell(self):
+        launches=self.exercise(['--shells'])
+        self.assertEqual([c for c,_ in launches],['space.new'])
+        self.assertNotIn('argv',launches[0][1])
+
+    def test_pane_count_and_multi_tier_options_are_gone(self):
+        with self.assertRaises(SystemExit):self.exercise(['--panes','6'])
+        with self.assertRaises(SystemExit):self.exercise(['--tiers','high,mid,high,high,low,mid'])
+
+    def test_single_tier_is_accepted_and_invalid_one_refused(self):
+        self.assertEqual(len(self.exercise(['--tiers','low'])),1)
+        with self.assertRaises(SystemExit):self.exercise(['--tiers','huge'])
+
+    def test_old_six_value_site_setting_uses_first_value_with_warning(self):
+        launches=self.exercise(site={'new_space_tiers':['mid','high','high','high','low','mid']})
+        self.assertEqual(len(launches),1)
+        self.assertIn('new_space_tiers',self.last_stderr)
 
     def test_duplicate_name_does_not_create_more_terminals(self):
         self.exercise(existing=True)
-
-    def test_failed_split_is_not_retried_or_written_as_complete(self):
-        self.exercise(fail=True)
 
 if __name__=='__main__':unittest.main()
