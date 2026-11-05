@@ -40,6 +40,10 @@ def snapshot():
     }
 
 
+STUB_SCREEN = ('\n  절전 중 — Project B t12 PR 검토 마무리\n  Enter: 이어 열기 · 메시지를 보내면 이어 열고 그대로 전달 · ctrl+c: 셸로 나가기\n'
+               '  직접 열기: claude --resume 11111111-2222-3333-4444-555555555555\n\n')
+
+
 class FakeLive:
     def __init__(self):
         self.data = snapshot()
@@ -51,6 +55,7 @@ class FakeLive:
         self.raw = ''
         self.reported = False
         self.close_stays = False
+        self.texts = {}   # per-address screens (asleep panes show the stub)
 
     def close_pane(self, pane_id):
         self.calls.append(('pane.close', pane_id))
@@ -67,7 +72,7 @@ class FakeLive:
         return copy.deepcopy(self.data)
 
     def screen(self, address):
-        return self.text
+        return self.texts.get(address, self.text)
 
     def styled_screen(self, address):
         self.calls.append(('styled', address))
@@ -1170,6 +1175,7 @@ class SpareCloseTests(unittest.TestCase):
         self.live.data['terminals'][address].update(
             labels={sleep.SLEEP_LABEL: f'claude:{SID}', sleep.TITLE_LABEL: '절전 · PR 검토 마무리'},
             foreground={'pid': 999, 'argv': ['python3', '/fixture/session_sleep_stub.py', '/fixture/t12.json'], 'name': 'python3'})
+        self.live.texts[address] = STUB_SCREEN
 
     def test_an_empty_pane_closes_without_a_harness_record_when_its_space_keeps_another(self):
         self.make_empty('t12')
@@ -1465,3 +1471,83 @@ class ShareUserControlledTests(unittest.TestCase):
         self.live.data['spaces'][1]['name'] = 'Project B'
         self.run_cycle(self.seeded())
         self.assertTrue([c for c in self.live.calls if c[0] in ('pane.close', 'keys')])
+
+
+class ReReviewP1Tests(unittest.TestCase):
+    """Re-review HOLD (2026-11-05) P1 (2): typed-but-unsent input in an asleep pane, its fixture."""
+    seeded, run_cycle = SpareCloseTests.seeded, SpareCloseTests.run_cycle
+    make_asleep = SpareCloseTests.make_asleep
+
+    def setUp(self):
+        TrimFixedTests.setUp(self)
+
+    def test_typed_but_unsent_input_in_an_asleep_pane_keeps_it(self):
+        self.make_asleep('t3')
+        state = self.seeded()
+        self.live.texts['t3'] = STUB_SCREEN + '이거 이어서 해줘'
+        got = self.run_cycle(state)
+        self.assertNotIn(('pane.close', 'p3'), self.live.calls)
+        self.assertNotEqual(got['t3']['action'], 'closed')
+
+    def test_input_left_typed_for_the_whole_idle_window_still_keeps_it(self):
+        self.make_asleep('t3')
+        self.live.texts['t3'] = STUB_SCREEN + '이거 이어서 해줘'   # typed before the window began
+        got = self.run_cycle(self.seeded())
+        self.assertNotIn(('pane.close', 'p3'), self.live.calls)
+        self.assertIn('input not empty', got['t3']['reasons'])
+
+    def test_input_typed_while_parking_an_asleep_pane_keeps_it(self):
+        self.make_asleep('t3')
+        state = self.seeded()
+        real = self.live.park
+        def park(config, item, event, reason=None):
+            if event == 'close_requested':
+                self.live.texts['t3'] = STUB_SCREEN + 'a'
+            return real(config, item, event, reason)
+        self.live.park = park
+        self.run_cycle(state)
+        self.assertNotIn(('pane.close', 'p3'), self.live.calls)
+        self.assertEqual([c[1] for c in self.live.calls if c[0] == 'park' and c[2] == 't3'], ['close_requested', 'close_aborted'])
+
+    def test_an_unreadable_stub_screen_is_not_closed(self):
+        self.make_asleep('t3')
+        self.live.texts['t3'] = 'something else\n'
+        got = self.run_cycle(self.seeded())
+        self.assertNotIn(('pane.close', 'p3'), self.live.calls)
+        self.assertIn('asleep screen unverified (stub prompt not found)', got['t3']['reasons'])
+
+
+class BridgeAfterExitTests(unittest.TestCase):
+    """Re-review HOLD P1 (1), its fixture: while bridge_exit waits, focus moves to the pane or the
+    space loses its other pane. Nothing may close then."""
+    seeded, run_cycle = SpareCloseTests.seeded, SpareCloseTests.run_cycle
+
+    def setUp(self):
+        BridgeTrimTests.setUp(self)
+        self.config['trim_fixed']['keep_addresses'] = ['t12']   # t3 is a trimmed bridge
+        self.live.reported = True
+
+    def during_wait(self, change):
+        done = {'n': 0}
+        def wait(seconds):
+            if not done['n'] and any(c[0] == 'tui' for c in self.live.calls):
+                done['n'] = 1
+                change()
+        self.live.wait = wait
+
+    def check_kept(self, got):
+        self.assertNotIn(('pane.close', 'p3'), self.live.calls)
+        self.assertEqual(got['t3']['action'], 'keep', got['t3'])
+        self.assertEqual([c[1] for c in self.live.calls if c[0] == 'park' and c[2] == 't3'], ['close_requested', 'close_aborted'])
+
+    def test_focus_moving_to_the_pane_during_the_wait_keeps_it(self):
+        self.during_wait(lambda: self.live.data['status'].update(focused_pane='p3'))
+        self.check_kept(self.run_cycle(self.seeded()))
+
+    def test_the_space_losing_its_other_pane_during_the_wait_keeps_it(self):
+        def lose():
+            tab = self.live.data['spaces'][1]['tabs'][0]
+            tab['terminals'] = [t for t in tab['terminals'] if t['terminal'] == 't3']
+        self.during_wait(lose)
+        self.check_kept(self.run_cycle(self.seeded()))
+        self.assertIn('t3', sleep.pane_of(self.live.data))

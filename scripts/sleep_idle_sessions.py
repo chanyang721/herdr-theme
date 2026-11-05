@@ -76,6 +76,20 @@ USER_CONTROLLED = 'user-controlled workspace: no automatic sleep, report request
 # User rule (2026-11-05): Share is run by the person; observers never act there.
 DEFAULT_USER_CONTROLLED = ('Share',)
 PROMPT_END = re.compile(r'[$%#❯>]\s*$')
+STUB_LAST = '  직접 열기:'   # session_sleep_stub.py's last line; what is typed (echoed) comes after it
+
+
+def stub_typed(text):
+    """None when the sleep stub waits with nothing typed; else why it may not close (re-review P1)."""
+    lines = text.splitlines()
+    marks = [i for i, line in enumerate(lines) if line.startswith(STUB_LAST)]
+    if not marks:
+        return 'asleep screen unverified (stub prompt not found)'
+    if any(line.strip() for line in lines[marks[-1] + 1:]):
+        return 'input not empty'
+    if VOICE.search(text):
+        return 'voice input active'
+    return None
 
 
 def blockers(item):
@@ -315,8 +329,13 @@ def inspect(address, space, snapshot, adapter, config, tab=None):
         if slept:
             # The session it holds: a finished (reported) one may have its pane closed (spare_close).
             item.update({k: slept[k] for k in ('app', 'session_id', 'title', 'cwd', 'turn', 'no_resume') if k in slept})
+            # Typed but not sent yet is input too: the screen is checked and part of the evidence.
+            text = adapter.screen(address)
+            typed = stub_typed(text)
+            if typed:
+                reasons.append(typed)
             item['fingerprint'] = hashlib.sha256(json.dumps([address, terminal.get('pid'), terminal.get('created_ms'),
-                                                             labels.get(SLEEP_LABEL)]).encode()).hexdigest()
+                                                             labels.get(SLEEP_LABEL), hashlib.sha256(text.encode()).hexdigest()]).encode()).hexdigest()
         return item
     app = (terminal.get('status') or {}).get('app')
     state = (terminal.get('status') or {}).get('state')
@@ -447,6 +466,33 @@ def inspect_bridge(item, terminal, term, snapshot, adapter, config):
     if not jobs_ok:
         reasons.append(jobs_reason)
     return screen_checks(item, item['address'], app, terminal, pids, jobs_fp, adapter)
+
+
+def after_exit_blockers(item, adapter, config, closed):
+    """Looked up again once the TUI agent exited (that wait can take 20 s): the pane must still be
+    where it was, unfocused, out of floats, not the keeper, and its space and tab keep another pane."""
+    snap = adapter.snapshot()
+    where = pane_of(snap).get(item['address'])
+    if not where:
+        return ['pane moved or closed']
+    space, tab = where
+    why = []
+    if not all(spaces.focus(snap['status'])) or snap['status'].get('errors'):
+        why.append('app focus/health unverified')
+    if focused_terminal(snap) == item['address']:
+        why.append('focused pane')
+    if in_float(item['address'], snap['status']):
+        why.append(FLOAT)
+    if space.get('id') != item['space_id']:
+        why.append('pane moved to another space')
+    if user_controlled(space, config):
+        why.append(USER_CONTROLLED)
+    if pane_id_of(pane_entry(snap, item['address'])) != pane_id_of(item.get('_pane') or {}):
+        why.append('pane id changed')
+    blocked = close_blocker({**item, 'keeper': trim_keeper(space, snap, config) == item['address']}, snap, tab, closed)
+    if blocked:
+        why.append(blocked)
+    return why
 
 
 def bridge_exit(item, adapter, attempts=20):
@@ -643,6 +689,15 @@ def close_one(item, adapter, config, paths, now, snapshot, closed=()):
         if not ok_:
             aborted(why_)
             item['reasons'].append(why_)
+            return 'keep', None
+        try:
+            late = after_exit_blockers(item, adapter, config, closed)
+        except Exception as exc:   # noqa: BLE001 — unknown now: keep the pane
+            late = [f'lookup failed: {str(exc)[:120]}']
+        if late:
+            # The agent already exited (its session is parked); only the bridge pane stays.
+            aborted('after the TUI agent exited: ' + '; '.join(late))
+            item['reasons'].append('recheck after the agent exited: ' + '; '.join(late))
             return 'keep', None
     item['_pane_id'] = pane_id
     try:
