@@ -20,8 +20,26 @@ and not an excluded address. Then, in order, with a fresh recheck first:
      delivers the message (so `hc send` never reaches a bare shell)
   4. labels mark the pane: sixfold.sleep and the header title '절전 · …'
 
-Dry-run by default. Never closes a pane, a tab or a space: the agent must run under a shell
-that stays after /exit, so every workspace keeps its panes (user rule, 2026-11-04).
+A session that finished through the harness (step 0 found its final report) is closed instead
+of slept when its space keeps another pane (user rule, 2026-11-05; close_finished_panes, default
+true): harness `park --event close_requested` first (no record, no close), the local note, then
+`herdr-app do pane.close {"pane": <its pane id>}` (never "the focused pane"), a fresh snapshot
+must show the pane gone (else every further action stops), and `park --event closed`. Every
+space keeps at least one pane, fixed workspaces included: the last pane of a space sleeps as
+above instead, or is kept when its terminal program is not a shell. A pane alone in the shown tab
+is never closed (the tab would vanish under the person's eyes). Closing does not need a shell
+(pane.close removes the terminal) and a pane in the shown tab may close, but the focused pane,
+a float/overlay, typed input, voice, a pending decision, work, subagents and jobs still block it,
+rechecked on a fresh snapshot right before.
+
+Knowledge capture does not wait for a close or a sleep: a session idle/done for
+close_report.collect_after_seconds (default idle_seconds) is asked for its close report even when
+it will be kept (last pane, not a shell, shown tab), once per session and turn; a request that got
+no answer is not repeated for a session that would be kept anyway.
+
+Dry-run by default and a dry run types nothing: it says would_close (a report is already known),
+would_sleep or would_collect_report, with close_if_finished from the space's pane count. Never
+closes a tab on purpose or a space.
 """
 import argparse
 import datetime as dt
@@ -45,6 +63,16 @@ VOICE = re.compile(r'(?:🎙|🎤|\bListening\b|\brecording\b|녹음\s*중|받�
 OBSERVER_FILES = ('sleep_idle_sessions.py', 'agent_sessions.py', 'space_job_evidence.py', 'close_finished_spaces.py', 'session_sleep_stub.py',
                   'site_config.py')
 SLEEP_LABEL, TITLE_LABEL, NEW_LABEL = 'sixfold.sleep', 'sixfold.title', 'sixfold.sleep.new'
+VISIBLE = 'shown on screen (visible tab)'
+NOT_SHELL = 'terminal program is not a shell: the pane would not survive /exit'
+FLOAT = 'shown in a float or overlay'
+# Block only the /exit sleep; a finished session's pane may still be closed or asked for its report.
+SLEEP_ONLY = (VISIBLE, NOT_SHELL)
+
+
+def blockers(item):
+    """The reasons that block every action (closing and the report request too)."""
+    return [r for r in item['reasons'] if r not in SLEEP_ONLY]
 
 
 def observer_sha256(folder):
@@ -83,6 +111,12 @@ class Live(spaces.Live):
     def park_check(self, config, item):
         return agent_sessions.harness_park(config, item, 'suspended', dry_run=True)
 
+    def close_pane(self, pane_id):
+        """Closes exactly this pane by id (never "the focused pane")."""
+        if not pane_id:
+            raise RuntimeError('pane.close refused: no pane id')
+        return spaces.run([self.app, 'do', 'pane.close', json.dumps({'pane': pane_id})], timeout=60)
+
     @staticmethod
     def _env():
         # Without a caller terminal, hc pastes the text as it is (no <hc> wrapper).
@@ -108,6 +142,29 @@ def pane_entry(snapshot, address):
     return {}
 
 
+def pane_id_of(entry):
+    return entry.get('pane') or entry.get('pane_id') or entry.get('id')
+
+
+def space_panes(snapshot, space_id):
+    """[(address, tab id)] for every terminal pane of one space, across all its tabs."""
+    return [(t.get('terminal'), tab.get('id')) for space in snapshot['spaces'] if space.get('id') == space_id
+            for tab in space.get('tabs', []) for t in tab.get('terminals', [])]
+
+
+def close_blocker(item, snapshot, tab, closed):
+    """Why this pane may not be closed (None = it may), counted on `snapshot` minus `closed`."""
+    panes = [(a, t) for a, t in space_panes(snapshot, item['space_id']) if a not in closed]
+    others = [a for a, t in panes if a != item['address']]
+    if not others:
+        return 'last pane in its space'
+    if VISIBLE in item['reasons'] and not [a for a, t in panes if t == tab and a != item['address']]:
+        return 'last pane of the shown tab'
+    if not pane_id_of(pane_entry(snapshot, item['address'])):
+        return 'pane id unavailable'
+    return None
+
+
 def focused_terminal(snapshot):
     pane = snapshot['status'].get('focused_pane')
     for space in snapshot['spaces']:
@@ -123,6 +180,10 @@ def on_screen(address, space, tab, status):
     Other tabs of the shown space are out of sight (only the focused pane and the shown tab count)."""
     if space.get('id') == status.get('space') and (tab is None or tab == status.get('tab')):
         return True
+    return in_float(address, status)
+
+
+def in_float(address, status):
     shown = json.dumps([status.get('floats') or {}, status.get('overlays') or []], ensure_ascii=False)
     return re.search(r'(?<![\w/])' + re.escape(address) + r'(?![\w])', shown) is not None
 
@@ -141,7 +202,9 @@ def inspect(address, space, snapshot, adapter, config, tab=None):
     if address in set(config.get('exclude_addresses', [])):
         reasons.append('excluded address')
     if on_screen(address, space, tab, status):
-        reasons.append('shown on screen (visible tab)')
+        reasons.append(VISIBLE)
+    if in_float(address, status):
+        reasons.append(FLOAT)   # a float is in front of the person: it blocks closing too
     if focused_terminal(snapshot) == address:
         reasons.append('focused pane')
     if space.get('machine') is not None:
@@ -161,13 +224,13 @@ def inspect(address, space, snapshot, adapter, config, tab=None):
     shell = Path(str((terminal.get('argv') or [''])[0])).name
     if shell not in agent_sessions.SHELLS:
         # /exit would end the terminal program itself and could take the pane (and a space's
-        # last pane) with it. Sleep only ever leaves a shell and the stub behind.
-        reasons.append('terminal program is not a shell: the pane would not survive /exit')
-        return item
+        # last pane) with it. Sleep only ever leaves a shell and the stub behind; closing a
+        # finished session's pane and asking for its report do not need one.
+        reasons.append(NOT_SHELL)
     if not terminal.get('reported') or app not in agent_sessions.AGENTS or state not in ('done', 'idle'):
         reasons.append('not a confirmed idle/done agent' if state != 'blocked' else 'user decision pending (blocked agent)')
         return item
-    if reasons:
+    if blockers(item):
         return item
     if pane_entry(snapshot, address).get('sub_agents'):
         reasons.append('subagents shown in the pane')
@@ -272,6 +335,26 @@ def sleep_one(item, adapter, config, paths, now):
     return 'slept'
 
 
+def close_one(item, adapter, config, paths, now, snapshot):
+    """Harness close_requested → local note → pane.close by id → gone from a fresh snapshot →
+    harness closed. Returns (action, the snapshot after the close or None)."""
+    pane_id = pane_id_of(pane_entry(snapshot, item['address']))
+    item['git'] = adapter.git(item.get('cwd'))
+    ok, detail = adapter.park(config, item, 'close_requested', reason='finished harness session: pane closed')
+    item['harness'] = detail
+    if not ok:
+        item['reasons'].append(f'harness record failed: {detail}')
+        return 'keep', None
+    item['note'] = note(item, paths['notes'], now)
+    adapter.close_pane(pane_id)
+    after = adapter.snapshot()
+    if item['address'] in pane_of(after) or any(pane_id_of(t) == pane_id for s in after['spaces']
+                                                for tab in s.get('tabs', []) for t in tab.get('terminals', [])):
+        raise RuntimeError(f"{item['address']}: pane still present after pane.close; further actions stopped")
+    adapter.park(config, item, 'closed', reason='pane closed')
+    return 'closed', after
+
+
 def shlex_quote(value):
     import shlex
     return shlex.quote(value)
@@ -287,74 +370,116 @@ def cycle(adapter, config, state, now, *, apply=False, paths=None):
     approved = bool(config.get('user_approved_apply')) and config.get('reviewed_observer_sha256') == state.get('observer_sha256')
     ready = approved and trial['samples'] >= 2 and trial['error_count'] == 0
     idle = config.get('idle_seconds', 1200)
+    report_cfg = config.get('close_report') or {}
+    report_on = report_cfg.get('enabled', True) is not False
+    close_on = report_on and config.get('close_finished_panes', True) is not False
+    collect_after = report_cfg.get('collect_after_seconds', idle) if report_on else idle
+    threshold = min(idle, collect_after)
     reports = {a: e for a, e in (state.get('reports') or {}).items() if a in pane_of(snapshot)}
-    settle = (config.get('close_report') or {}).get('settle_seconds', 120)
+    settle = report_cfg.get('settle_seconds', 120)
     initial_focus = spaces.focus(snapshot['status'])
-    results, tracking, slept = [], {}, 0
+    results, tracking, acted, closed = [], {}, 0, set()
     stop_reason = None
     for address, (space, tab) in sorted(pane_of(snapshot).items()):
         item = inspect(address, space, snapshot, adapter, config, tab)
         old = previous.get(address, {})
-        safe = not item['reasons']
+        safe = not blockers(item)          # nothing blocks closing or asking for the report
+        sleepable = not item['reasons']    # nothing blocks the /exit sleep either
         same = fresh and safe and old.get('fingerprint') == item.get('fingerprint')
         since = old.get('since', now) if same else now
         quiet = now - since
         item.update(quiet_seconds=round(quiet), action='asleep' if item.get('asleep') else 'keep')
-        if safe:
+        if safe and not sleepable and not report_on:
+            pass   # only the sleep could act, and it is blocked
+        elif safe:
             tracking[address] = {'since': since, 'fingerprint': item.get('fingerprint')}
             status_age = (now * 1000 - (item.get('status_ms') or now * 1000)) / 1000
             asked = reports.get(address) or {}
             answering = (asked.get('session_id') == item.get('session_id') and not asked.get('failed_at')
                          and quiet >= settle and status_age >= settle)
-            if (quiet < idle or status_age < idle) and not answering:
-                item['reasons'].append(f'unchanged for {int(min(quiet, status_age) // 60)} of {idle // 60} minutes')
-            else:
-                item['action'] = 'would_sleep'
-                if not apply and hasattr(adapter, 'park_check'):
+            # Idle long enough to close or sleep: now, or before the report request it is answering.
+            idle_ok = (quiet >= idle and status_age >= idle) or (answering and asked.get('idle_ok', True))
+            collect = report_on and (answering or (quiet >= collect_after and status_age >= collect_after))
+            item['close_if_finished'] = bool(close_on and close_blocker(item, snapshot, tab, closed) is None)
+            if not idle_ok and not collect:
+                item['reasons'].append(f'unchanged for {int(min(quiet, status_age) // 60)} of {threshold // 60} minutes')
+            elif not apply:
+                known = asked.get('session_id') == item.get('session_id') and asked.get('report')
+                if idle_ok and item['close_if_finished'] and known:
+                    item['action'] = 'would_close'
+                elif idle_ok and sleepable:
+                    item['action'] = 'would_sleep'
+                elif report_on:
+                    item['action'] = 'would_collect_report'
+                if item['action'] in ('would_close', 'would_sleep') and hasattr(adapter, 'park_check'):
                     item['harness_check'] = adapter.park_check(config, {**item, 'git': adapter.git(item.get('cwd'))})
-                if apply and not ready:
-                    item['action'] = 'keep'
-                    item['reasons'].append('apply not approved for this observer code (one recorded dry-run first)')
-                elif apply and slept >= config.get('max_per_cycle', 4):
-                    item['action'] = 'keep'
-                    item['reasons'].append('per-cycle limit reached')
-                elif apply and stop_reason:
-                    item['action'] = 'keep'
-                    item['reasons'].append(stop_reason)
-                elif apply:
-                    # The person moves around while a cycle runs. A fresh recheck of this pane
-                    # (shown tab, focused pane, evidence) is what matters, not where the focus
-                    # was when the cycle began.
-                    check = adapter.snapshot()
-                    where = pane_of(check).get(address)
-                    latest = inspect(address, where[0], check, adapter, config, where[1]) if where else None
-                    if not latest:
-                        item['action'] = 'keep'; item['reasons'].append('pane moved or closed before sleep')
-                    elif latest['reasons']:
-                        item['action'] = 'keep'; item['reasons'].append('recheck: ' + '; '.join(latest['reasons']))
-                    elif latest.get('fingerprint') != item.get('fingerprint'):
-                        item['action'] = 'keep'; item['reasons'].append('evidence changed before sleep')
+            elif not ready:
+                item['reasons'].append('apply not approved for this observer code (one recorded dry-run first)')
+            elif acted >= config.get('max_per_cycle', 4):
+                item['reasons'].append('per-cycle limit reached')
+            elif stop_reason:
+                item['reasons'].append(stop_reason)
+            else:
+                # The person moves around while a cycle runs. A fresh recheck of this pane
+                # (shown tab, focused pane, evidence) is what matters, not where the focus
+                # was when the cycle began.
+                check = adapter.snapshot()
+                where = pane_of(check).get(address)
+                latest = inspect(address, where[0], check, adapter, config, where[1]) if where else None
+                if not latest:
+                    item['reasons'].append('pane moved or closed before sleep')
+                elif blockers(latest):
+                    item['reasons'].append('recheck: ' + '; '.join(blockers(latest)))
+                elif latest.get('fingerprint') != item.get('fingerprint'):
+                    item['reasons'].append('evidence changed before sleep')
+                else:
+                    before = spaces.focus(check['status'])
+                    sleepable = not latest['reasons']
+                    why_not_close = close_blocker(latest, check, where[1], closed) if close_on else 'close_finished_panes off'
+                    may_close = idle_ok and why_not_close is None
+                    may_sleep = idle_ok and sleepable
+                    kept_anyway = not may_close and not may_sleep
+                    if kept_anyway and asked.get('session_id') == item.get('session_id') and asked.get('failed_at') \
+                            and asked.get('turn') == item.get('turn'):
+                        # Nothing would close or sleep it: one unanswered request per session and turn.
+                        decision, detail = 'failed', 'no close report for this turn: kept, not asked again'
                     else:
-                        before = spaces.focus(check['status'])
                         decision, detail = agent_sessions.report_gate(reports, item, adapter, config, now)
-                        if decision == 'ready':
-                            item['close_report'], item['report_task_id'] = detail['report_id'], detail.get('task_id')
-                        if decision in ('ready', 'off'):
-                            item['action'] = sleep_one(item, adapter, config, paths, now)
-                        else:
-                            item['action'] = 'report_requested' if decision == 'requested' else 'keep'
-                            item['reasons'].append({'requested': 'asked the session for its close report',
-                                                    'waiting': 'waiting for the session close report'}.get(decision, detail))
-                        if item['action'] == 'slept':
-                            slept += 1
-                            tracking.pop(address, None)
-                            reports.pop(address, None)
-                            after = adapter.snapshot()
-                            if focused_terminal(after) == address:
-                                raise RuntimeError('focus moved to the slept pane; further sleeps stopped')
-                            if spaces.focus(after['status']) != before:
-                                stop_reason = 'focus moved during the previous sleep; next cycle'
-                                item['focus_moved'] = True
+                    if decision in ('requested', 'ready') and 'idle_ok' not in reports.get(address, {'idle_ok': 0}):
+                        # A report taken before idle_seconds (collect_after_seconds) does not make it closable.
+                        reports[address]['idle_ok'] = quiet >= idle and status_age >= idle
+                    after = None
+                    if decision == 'ready':
+                        item['close_report'], item['report_task_id'] = detail['report_id'], detail.get('task_id')
+                    if decision == 'ready' and may_close:
+                        item['action'], after = close_one(item, adapter, config, paths, now, check)
+                    elif decision in ('ready', 'off') and may_sleep:
+                        if decision == 'ready' and close_on and why_not_close:
+                            item['reasons'].append(f'{why_not_close}: slept instead of closed')
+                        item['action'] = sleep_one(item, adapter, config, paths, now)
+                    elif decision == 'ready':
+                        item['action'] = 'reported'
+                        item['reasons'].append('close report collected; kept: ' + '; '.join(
+                            [r for r in [why_not_close if close_on else None] if r] + latest['reasons']
+                            + ([] if idle_ok else ['not idle long enough to close or sleep'])))
+                    elif decision == 'off':
+                        item['reasons'].extend(latest['reasons'])
+                    else:
+                        item['action'] = 'report_requested' if decision == 'requested' else 'keep'
+                        item['reasons'].append({'requested': 'asked the session for its close report',
+                                                'waiting': 'waiting for the session close report'}.get(decision, detail))
+                    if item['action'] in ('slept', 'closed'):
+                        acted += 1
+                        tracking.pop(address, None)
+                        reports.pop(address, None)
+                        if item['action'] == 'closed':
+                            closed.add(address)
+                        after = after or adapter.snapshot()
+                        if focused_terminal(after) == address:
+                            raise RuntimeError('focus moved to the slept pane; further sleeps stopped')
+                        if spaces.focus(after['status']) != before:
+                            stop_reason = 'focus moved during the previous sleep; next cycle'
+                            item['focus_moved'] = True
         item.pop('argv', None)
         results.append(item)
     state.update(last_at=now, sessions=tracking, trial=trial, reports=reports)

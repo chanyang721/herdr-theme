@@ -50,6 +50,18 @@ class FakeLive:
         self.jobs = (True, '', 'jobs')
         self.raw = ''
         self.reported = False
+        self.close_stays = False
+
+    def close_pane(self, pane_id):
+        self.calls.append(('pane.close', pane_id))
+        if self.close_stays:
+            return
+        for space in self.data['spaces']:
+            for tab in space.get('tabs', []):
+                gone = [t['terminal'] for t in tab['terminals'] if t.get('pane') == pane_id]
+                tab['terminals'] = [t for t in tab['terminals'] if t.get('pane') != pane_id]
+                for address in gone:
+                    self.data['terminals'].pop(address, None)
 
     def snapshot(self):
         return copy.deepcopy(self.data)
@@ -113,7 +125,7 @@ class SleepTests(unittest.TestCase):
         state = {'observer_sha256': 'code', 'last_at': NOW - 300, 'trial': {'started_at': NOW - 600, 'samples': 1, 'error_count': 0},
                  'sessions': {}}
         for r in first['results']:
-            if r.get('fingerprint') and not [x for x in r['reasons'] if not x.startswith('unchanged')]:
+            if r.get('fingerprint') and not [x for x in r['reasons'] if not x.startswith('unchanged') and x not in sleep.SLEEP_ONLY]:
                 state['sessions'][r['address']] = {'since': NOW - quiet, 'fingerprint': r['fingerprint']}
         return state
 
@@ -333,6 +345,7 @@ class CloseReportTests(unittest.TestCase):
         self.assertEqual(state['reports']['t12']['session_id'], SID)
 
     def test_after_the_report_the_session_sleeps_without_another_twenty_minutes(self):
+        self.config['close_finished_panes'] = False   # the close path is in PaneCloseTests
         state = self.state()
         self.run_cycle(state)
         self.live.calls.clear(); self.live.reported = True
@@ -732,3 +745,4 @@ class TicketArgvTests(unittest.TestCase):
 
     def test_new_session_ticket_left_as_written(self):
         self.assertEqual(stub.command({'app': 'claude-code', 'session_id': SID, 'argv': ['claude'], 'new_session': True}, None), ['claude'])
+
