@@ -452,8 +452,12 @@ def cycle(adapter, config, state, now, *, apply=False, only_space=None, report_d
                 # Immediately recheck every prerequisite and the original user focus.
                 check = adapter.snapshot()
                 target = next((s for s in check['spaces'] if s['id'] == space['id']), None)
-                if target is None or focus(check['status']) != initial_focus:
-                    item['action'] = 'keep'; item['reasons'].append('space/focus changed before close')
+                # The person moving around elsewhere does not stop cleanup; only the space they are
+                # looking at right now is skipped.
+                if target is None:
+                    item['action'] = 'keep'; item['reasons'].append('space changed before close')
+                elif check['status'].get('space') == space['id']:
+                    item['action'] = 'keep'; item['reasons'].append('the person is viewing this space')
                 else:
                     latest = inspect(target, check, adapter, config)
                     if not latest['safe'] or latest.get('fingerprint') != item.get('fingerprint'):
@@ -504,11 +508,15 @@ def cycle(adapter, config, state, now, *, apply=False, only_space=None, report_d
                             result.append(item); continue
                         item['archive'] = detail
                         item['record'] = record_space(item, report_dir, now, agent_sessions.denylist(config))
+                        before = adapter.snapshot()['status']
+                        if before.get('space') == space['id']:
+                            item['action'] = 'keep'; item['reasons'].append('the person is viewing this space')
+                            result.append(item); continue
                         adapter.close(space['id'], {**config, 'space_close_enabled': True} if manual else config)
                         after = adapter.snapshot()
                         if any(s['id'] == space['id'] for s in after['spaces']):
                             raise RuntimeError('space.close not confirmed')
-                        if focus(after['status']) != initial_focus:
+                        if focus(after['status']) != focus(before):   # the close itself moved the person
                             raise RuntimeError('focus changed after close; further cleanup stopped')
                         item['action'] = 'closed'
                         del tracking[space['id']]

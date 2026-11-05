@@ -564,6 +564,12 @@ def report_gate(entries, item, adapter, config, now):
         return 'ready', entry['report']   # accepted in time on an earlier cycle
     deadline = entry['requested_at'] + timeout
     ok, detail = adapter.close_status(config, item, entry['since'])
+    if not ok and item.get('answered_report'):
+        # It answered the request with a report it had already written (nothing sent to it since but
+        # report requests): that earlier report is the answer, within the answered lookback.
+        earlier = utc_iso(entry['requested_at'] - cfg.get('answered_lookback_seconds', 6 * 3600))
+        ok, found = adapter.close_status(config, item, earlier)
+        detail = found if ok else detail
     # A report counts when it was written before the limit, however late the observer looks;
     # one written after it (or without a readable time once the limit has passed) does not.
     if ok and (in_time(detail.get('at'), deadline) or (detail.get('at') is None and now < deadline)):

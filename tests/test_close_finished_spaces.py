@@ -303,12 +303,12 @@ class CleanupPolicyTests(unittest.TestCase):
                 self.assertEqual(result['trial']['samples'], 1)
         self.assertFalse(self.live.closed)
 
-    def test_focus_race_immediately_before_close_blocks_operation(self):
+    def test_focus_race_onto_the_space_immediately_before_close_blocks_operation(self):
         def race(live):
             if live.snapshots == 2:
-                live.data['status']['focused_pane'] = 'user-changed-pane'
+                live.data['status']['space'] = 'temporary'
         self.live.before_snapshot = race
-        self.assert_blocked('focus changed')
+        self.assert_blocked('the person is viewing this space')
         self.assertFalse(self.reports.exists())
 
     def test_evidence_race_immediately_before_close_blocks_operation(self):
@@ -336,6 +336,23 @@ class CleanupPolicyTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, 'focus changed after close'):
             cleanup.cycle(self.live, self.config, state, NOW, apply=True, report_dir=self.reports)
         self.assertEqual(self.live.closed, ['temporary'])
+
+    def test_the_person_moving_elsewhere_does_not_stop_cleanup(self):
+        def move(live):
+            if live.snapshots == 2:
+                live.data['status'].update(space='current', tab='tab-elsewhere', focused_pane='pane-elsewhere')
+        self.live.before_snapshot = move
+        result = self.cycle()
+        self.assertEqual((result['results'][0]['action'], self.live.closed), ('closed', ['temporary']), result['results'][0]['reasons'])
+
+    def test_the_space_the_person_is_viewing_is_kept(self):
+        def look(live):
+            if live.snapshots == 2:
+                live.data['status'].update(space='temporary')
+        self.live.before_snapshot = look
+        result = self.cycle()
+        self.assertEqual(self.live.closed, [])
+        self.assertIn('the person is viewing this space', result['results'][0]['reasons'])
 
     def test_close_exception_is_not_reported_as_success(self):
         self.live.close_error = RuntimeError('close failed')
