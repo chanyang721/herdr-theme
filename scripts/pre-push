@@ -18,10 +18,13 @@ if [ "${SKIP_PREPUSH_TESTS:-}" = 1 ]; then
   echo "pre-push: SKIP_PREPUSH_TESTS=1, checks skipped" >&2
   exit 0
 fi
-if command -v py >/dev/null 2>&1 && py -3.12 -c '' >/dev/null 2>&1; then PY='py -3.12'
+if [ -n "${PREPUSH_PY:-}" ]; then PY=$PREPUSH_PY
+elif command -v py >/dev/null 2>&1 && py -3.12 -c '' >/dev/null 2>&1; then PY='py -3.12'
 elif command -v python3 >/dev/null 2>&1 && python3 -c '' >/dev/null 2>&1; then PY=python3
 else PY=python; fi
 export PYTHONUTF8=1
+# Test seams: a fake tool is named by a variable (PATH injection does not reach sh on Windows).
+CYG=${PREPUSH_CYGPATH:-cygpath}
 
 shas=''
 while read -r _ lsha _ _; do
@@ -49,8 +52,8 @@ for sha in $shas; do
   fi
   echo "pre-push: checking $(git log -1 --format='%h %s' "$sha")" >&2
   # Git Bash with MSYS_NO_PATHCONV=1 keeps $dir as /c/...; Windows Python reads that as a wrong folder.
-  if command -v cygpath >/dev/null 2>&1; then
-    PREPUSH_REPO=$(cygpath -w "$dir") && [ -n "$PREPUSH_REPO" ] || { echo "pre-push: cannot convert $dir" >&2; exit 1; }
+  if command -v "${CYG%% *}" >/dev/null 2>&1; then
+    PREPUSH_REPO=$($CYG -w "$dir") && [ -n "$PREPUSH_REPO" ] || { echo "pre-push: cannot convert $dir" >&2; exit 1; }
   else PREPUSH_REPO=$dir; fi
   export PREPUSH_REPO
   (cd "$dir" && checks) </dev/null
