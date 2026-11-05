@@ -746,3 +746,187 @@ class TicketArgvTests(unittest.TestCase):
     def test_new_session_ticket_left_as_written(self):
         self.assertEqual(stub.command({'app': 'claude-code', 'session_id': SID, 'argv': ['claude'], 'new_session': True}, None), ['claude'])
 
+
+def add_pane(live, space, tab, address, pid, pane_id, shell=True):
+    """Another finished Claude pane like t12, in live.data['spaces'][space]['tabs'][tab]."""
+    live.data['spaces'][space]['tabs'][tab]['terminals'].append({'terminal': address, 'pane': pane_id, 'sub_agents': []})
+    t = copy.deepcopy(live.data['terminals']['t12'])
+    t.update(address=address, pid=pid, foreground={'pid': pid + 1, 'argv': ['claude'], 'name': 'claude'})
+    if not shell:
+        t['argv'] = ['claude', '--resume', SID]
+    live.data['terminals'][address] = t
+    live.data['processes'].update({pid: {'pid': pid, 'parent': 1, 'name': 'zsh' if shell else 'claude', 'args': 'x'},
+                                   pid + 1: {'pid': pid + 1, 'parent': pid, 'name': 'claude', 'args': 'claude'}})
+
+
+class PaneCloseTests(unittest.TestCase):
+    """A session that finished through the harness (its final report found) closes its pane;
+    every space keeps at least one pane (user rule, 2026-11-05)."""
+    state, run_cycle = SleepTests.state, SleepTests.run_cycle
+
+    def setUp(self):
+        SleepTests.setUp(self)
+        self.config['close_report'] = {'timeout_seconds': 900, 'retry_seconds': 3600, 'settle_seconds': 120}
+        self.live.reported = True   # the harness finds its final report: 'ready'
+
+    def steps(self, address):
+        return [c for c in self.live.calls if address in c or (c[0] == 'pane.close')]
+
+    def test_a_finished_session_in_a_space_with_another_pane_is_closed(self):
+        got = self.run_cycle()['t12']
+        self.assertEqual(got['action'], 'closed', got['reasons'])
+        self.assertIn(('pane.close', 'p12'), self.live.calls)
+        self.assertEqual([c[1] for c in self.live.calls if c[0] == 'park'], ['close_requested', 'closed'])
+        order = [c[0] for c in self.live.calls if c[0] in ('park', 'pane.close')]
+        self.assertEqual(order, ['park', 'pane.close', 'park'])
+        self.assertFalse([c for c in self.live.calls if c[0] in ('keys', 'type', 'label')])
+        self.assertNotIn('t12', pane_of_names(self.live))
+        self.assertIn('t3', pane_of_names(self.live))
+        self.assertTrue(Path(got['note']).exists())
+
+    def test_the_last_pane_of_its_space_sleeps_instead(self):
+        self.live.data['spaces'][1]['tabs'][0]['terminals'].pop()   # t3 gone: t12 is alone
+        got = self.run_cycle()['t12']
+        self.assertEqual(got['action'], 'slept', got['reasons'])
+        self.assertFalse([c for c in self.live.calls if c[0] == 'pane.close'])
+        self.assertIn('last pane in its space: slept instead of closed', got['reasons'])
+
+    def test_two_finished_sessions_in_a_two_pane_space_keep_one_pane(self):
+        self.config['exclude_addresses'] = []
+        got = self.run_cycle()
+        self.assertEqual((got['t12']['action'], got['t3']['action']), ('closed', 'slept'))
+        self.assertEqual([c for c in self.live.calls if c[0] == 'pane.close'], [('pane.close', 'p12')])
+        self.assertEqual(pane_of_names(self.live) & {'t12', 't3'}, {'t3'})
+
+    def test_no_harness_record_no_close(self):
+        self.live.park_ok = False
+        got = self.run_cycle()['t12']
+        self.assertEqual(got['action'], 'keep')
+        self.assertTrue(any(r.startswith('harness record failed') for r in got['reasons']))
+        self.assertFalse([c for c in self.live.calls if c[0] in ('pane.close', 'keys')])
+
+    def test_a_pane_still_there_after_close_stops_everything(self):
+        self.live.close_stays = True
+        with self.assertRaisesRegex(RuntimeError, 'still present after pane.close'):
+            self.run_cycle()
+        self.assertEqual([c[1] for c in self.live.calls if c[0] == 'park'], ['close_requested'])
+
+    def test_switched_off_it_sleeps(self):
+        self.config['close_finished_panes'] = False
+        got = self.run_cycle()['t12']
+        self.assertEqual(got['action'], 'slept')
+        self.assertFalse([c for c in self.live.calls if c[0] == 'pane.close'])
+
+    def test_close_reports_off_never_close(self):
+        self.config['close_report'] = {'enabled': False}
+        self.assertEqual(self.run_cycle()['t12']['action'], 'slept')
+        self.assertFalse([c for c in self.live.calls if c[0] == 'pane.close'])
+
+    def test_live_close_pane_closes_by_id_only(self):
+        argv = []
+        with patch.object(sleep.spaces, 'run', lambda a, timeout=12: argv.extend(a) or '{}'):
+            sleep.Live('herdr-app', 'hc').close_pane('p12')
+            with self.assertRaises(RuntimeError):
+                sleep.Live('herdr-app', 'hc').close_pane(None)
+        self.assertEqual(argv, ['herdr-app', 'do', 'pane.close', '{"pane": "p12"}'])
+
+    def test_dry_run_types_nothing_and_says_what_it_would_do(self):
+        got = self.run_cycle(apply=False)
+        self.assertEqual(got['t12']['action'], 'would_sleep')   # finished not known without asking
+        self.assertTrue(got['t12']['close_if_finished'])
+        self.assertEqual(self.live.calls, [])
+        state = self.state()
+        state['reports'] = {'t12': {'session_id': SID, 'requested_at': NOW - 600, 'since': 'x', 'turn': 3,
+                                    'report': {'report_id': 'REP1'}}}
+        got = self.run_cycle(state, apply=False)
+        self.assertEqual(got['t12']['action'], 'would_close')
+        self.assertFalse([c for c in self.live.calls if c[0] in ('ask', 'keys', 'type', 'pane.close')])
+
+    # E(1): closing does not need a shell under the agent
+    def test_a_finished_agent_that_is_the_terminal_program_is_closed(self):
+        self.live.data['terminals']['t12']['argv'] = ['claude', '--resume', SID]
+        self.live.data['processes'][200]['name'] = 'claude'
+        got = self.run_cycle()['t12']
+        self.assertEqual(got['action'], 'closed', got['reasons'])
+        self.assertFalse([c for c in self.live.calls if c[0] == 'keys'])
+
+    def test_a_non_shell_last_pane_is_kept_after_its_report(self):
+        self.live.data['spaces'][1]['tabs'][0]['terminals'].pop()
+        self.live.data['terminals']['t12']['argv'] = ['claude', '--resume', SID]
+        self.live.data['processes'][200]['name'] = 'claude'
+        got = self.run_cycle()['t12']
+        self.assertEqual(got['action'], 'reported', got['reasons'])
+        self.assertFalse([c for c in self.live.calls if c[0] in ('keys', 'pane.close', 'label')])
+        self.assertTrue(any('last pane in its space' in r for r in got['reasons']))
+
+    # E(2): the shown tab does not block closing a finished session; the focused pane does
+    def test_a_finished_session_in_the_shown_tab_is_closed_but_never_the_focused_pane(self):
+        add_pane(self.live, 0, 0, 't5', 500, 'p5')    # Share, shown tab, beside the focused t1
+        got = self.run_cycle()
+        self.assertEqual(got['t5']['action'], 'closed', got['t5']['reasons'])
+        self.assertIn(('pane.close', 'p5'), self.live.calls)
+        self.assertIn('focused pane', got['t1']['reasons'])
+        self.assertFalse([c for c in self.live.calls if c[1:2] == ('t1',) or 'p-focus' in c])
+
+    def test_the_shown_tab_still_blocks_sleep_and_its_last_pane_is_not_closed(self):
+        self.live.data['status']['focused_pane'] = 'p-float'   # focus elsewhere, t1 alone in the shown tab
+        self.live.data['spaces'][0]['tabs'].append({'id': 'tab-2', 'terminals': []})
+        add_pane(self.live, 0, 1, 't5', 500, 'p5')
+        got = self.run_cycle()['t1']
+        self.assertEqual(got['action'], 'reported', got['reasons'])
+        self.assertTrue(any('last pane of the shown tab' in r for r in got['reasons']))
+        self.assertFalse([c for c in self.live.calls if c in (('pane.close', 'p-focus'),) or c[:2] == ('keys', 't1')])
+
+    def test_typed_input_or_a_float_blocks_closing_and_asking(self):
+        add_pane(self.live, 0, 0, 't5', 500, 'p5')
+        for name, change in {'input': lambda: setattr(self.live, 'text', EMPTY.replace('❯ ', '❯ 이어서')),
+                             'float': lambda: self.live.data['status'].update(floats={'f': {'terminal': 't5'}})}.items():
+            with self.subTest(name):
+                self.live.calls.clear()
+                self.live.text = EMPTY
+                self.live.data['status'].pop('floats', None)
+                state = self.state()
+                change()
+                got = self.run_cycle(state)['t5']
+                self.assertEqual(got['action'], 'keep')
+                self.assertFalse([c for c in self.live.calls if c[0] in ('ask', 'pane.close') and ('t5' in c or 'p5' in c)])
+
+    # E(3): the report is collected even when the session will be kept, once per session and turn
+    def test_a_kept_session_is_asked_once_for_its_report(self):
+        self.live.reported = False
+        self.live.data['spaces'][1]['tabs'][0]['terminals'].pop()          # last pane, not a shell: kept
+        self.live.data['terminals']['t12']['argv'] = ['claude', '--resume', SID]
+        self.live.data['processes'][200]['name'] = 'claude'
+        state = self.state()
+        got = self.run_cycle(state)['t12']
+        self.assertEqual(got['action'], 'report_requested')
+        self.assertEqual(len([c for c in self.live.calls if c[0] == 'ask']), 1)
+        got = sleep.cycle(self.live, self.config, state, NOW + 60, apply=True, paths=self.paths)   # same turn
+        self.assertEqual(len([c for c in self.live.calls if c[0] == 'ask']), 1)
+        state['reports']['t12'].update(requested_at=NOW - 5000, failed_at=NOW - 4000)              # retry time passed
+        state['last_at'] = NOW + 60
+        sleep.cycle(self.live, self.config, state, NOW + 120, apply=True, paths=self.paths)
+        self.assertEqual(len([c for c in self.live.calls if c[0] == 'ask']), 1)
+        self.assertFalse([c for c in self.live.calls if c[0] in ('keys', 'pane.close')])
+
+    def test_collect_after_seconds_asks_before_idle_seconds_without_closing(self):
+        self.config['close_report']['collect_after_seconds'] = 300
+        self.live.data['terminals']['t12']['status_ms'] = (NOW - 600) * 1000
+        state = self.state(quiet=600)
+        got = self.run_cycle(state)['t12']
+        self.assertEqual(got['action'], 'reported', got['reasons'])    # report found, but only 10 of 20 minutes
+        self.assertTrue(any('not idle long enough' in r for r in got['reasons']))
+        self.assertFalse([c for c in self.live.calls if c[0] in ('pane.close', 'keys', 'park')])
+
+    def test_dry_run_collect_types_nothing(self):
+        self.live.data['spaces'][1]['tabs'][0]['terminals'].pop()
+        self.live.data['terminals']['t12']['argv'] = ['claude', '--resume', SID]
+        self.live.data['processes'][200]['name'] = 'claude'
+        got = self.run_cycle(apply=False)['t12']
+        self.assertEqual(got['action'], 'would_collect_report')
+        self.assertFalse(got['close_if_finished'])
+        self.assertEqual(self.live.calls, [])
+
+
+def pane_of_names(live):
+    return set(sleep.pane_of(live.data))
