@@ -70,8 +70,9 @@ class PrePushSetupTests(unittest.TestCase):
         init_repo(repo, (ROOT / 'scripts' / 'pre-push').read_text(encoding='utf-8'))
         subprocess.run(['git', 'init', '-q', '--bare', str(bare)], check=True)
         subprocess.run(['git', 'remote', 'add', 'origin', bare.as_posix()], cwd=repo, check=True)
-        (repo / '.git' / 'hooks' / 'pre-push').write_text('#!/bin/sh\nexec sh scripts/pre-push "$@"\n',
-                                                         encoding='utf-8', newline='\n')
+        hook = repo / '.git' / 'hooks' / 'pre-push'
+        hook.write_text('#!/bin/sh\nexec sh scripts/pre-push "$@"\n', encoding='utf-8', newline='\n')
+        hook.chmod(0o755)   # git ignores a hook that is not executable (Linux); the test must really run it
         env = dict(clean_env(), PREPUSH_PY='true', PREPUSH_CYGPATH='true')
         done = subprocess.run(['git', 'push', 'origin', 'HEAD:refs/heads/main'], cwd=repo, env=env,
                               capture_output=True, text=True)
