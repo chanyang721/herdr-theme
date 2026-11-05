@@ -49,7 +49,9 @@ for sha in $shas; do
   fi
   echo "pre-push: checking $(git log -1 --format='%h %s' "$sha")" >&2
   # Git Bash with MSYS_NO_PATHCONV=1 keeps $dir as /c/...; Windows Python reads that as a wrong folder.
-  if command -v cygpath >/dev/null 2>&1; then PREPUSH_REPO=$(cygpath -w "$dir") || exit 1; else PREPUSH_REPO=$dir; fi
+  if command -v cygpath >/dev/null 2>&1; then
+    PREPUSH_REPO=$(cygpath -w "$dir") && [ -n "$PREPUSH_REPO" ] || { echo "pre-push: cannot convert $dir" >&2; exit 1; }
+  else PREPUSH_REPO=$dir; fi
   export PREPUSH_REPO
   (cd "$dir" && checks) </dev/null
   rc=$?
