@@ -1133,3 +1133,127 @@ class PaneCloseTests(unittest.TestCase):
 
 def pane_of_names(live):
     return set(sleep.pane_of(live.data))
+
+
+class SpareCloseTests(unittest.TestCase):
+    """Empty agent panes (never received input) and finished asleep panes close while their space
+    and tab keep another pane; no input ever reached an empty one, so it leaves no harness record."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        root = Path(self.tmp.name)
+        self.paths = {'notes': root / 'notes', 'tickets': root / 'tickets', 'stub': root / 'session_sleep_stub.py'}
+        self.live = FakeLive()
+        self.live.empty = lambda terminal, config: terminal.get('turn') == 0
+        self.config = {'idle_seconds': 1200, 'exclude_addresses': ['t3'], 'user_approved_apply': True,
+                       'reviewed_observer_sha256': 'code', 'close_report': {'enabled': True}}
+        self.mapping = patch.object(agent_sessions, 'session_mapping', lambda t, c=None: ({'session_id': SID}, ''))
+        self.mapping.start()
+        self.addCleanup(self.mapping.stop)
+
+    def seeded(self, quiet=1200):
+        first = sleep.cycle(self.live, self.config, {'observer_sha256': 'code'}, NOW - quiet, apply=False, paths=self.paths)
+        sessions = {r['address']: {'since': NOW - quiet, 'fingerprint': r['fingerprint']}
+                    for r in first['results'] if r.get('fingerprint')}
+        return {'observer_sha256': 'code', 'last_at': NOW - 300, 'trial': {'started_at': NOW - 600, 'samples': 1, 'error_count': 0},
+                'sessions': sessions}
+
+    def run_cycle(self, state, apply=True):
+        result = sleep.cycle(self.live, self.config, state, NOW, apply=apply, paths=self.paths)
+        return {r['address']: r for r in result['results']}
+
+    def make_empty(self, address):
+        self.live.data['terminals'][address]['turn'] = 0
+
+    def make_asleep(self, address):
+        self.live.data['terminals'][address].update(
+            labels={sleep.SLEEP_LABEL: f'claude:{SID}', sleep.TITLE_LABEL: '절전 · PR 검토 마무리'},
+            foreground={'pid': 999, 'argv': ['python3', '/fixture/session_sleep_stub.py', '/fixture/t12.json'], 'name': 'python3'})
+
+    def test_an_empty_pane_closes_without_a_harness_record_when_its_space_keeps_another(self):
+        self.make_empty('t12')
+        state = self.seeded()
+        got = self.run_cycle(state)
+        self.assertEqual(got['t12']['action'], 'closed', got['t12'])
+        self.assertIn(('pane.close', 'p12'), self.live.calls)
+        self.assertFalse([c for c in self.live.calls if c[0] in ('park', 'ask', 'status')], self.live.calls)
+
+    def test_an_empty_pane_is_never_asked_for_a_report_and_waits_the_idle_window(self):
+        self.make_empty('t12')
+        got = self.run_cycle(self.seeded(quiet=600))
+        self.assertEqual(got['t12']['action'], 'keep')
+        self.assertTrue(any('empty pane unchanged for 10 of 20 minutes' in r for r in got['t12']['reasons']), got['t12'])
+        self.assertFalse([c for c in self.live.calls if c[0] in ('pane.close', 'park', 'ask')])
+
+    def test_the_last_pane_of_a_space_stays_even_when_empty(self):
+        self.make_empty('t12')
+        self.live.data['spaces'][1]['tabs'][0]['terminals'] = [{'terminal': 't12', 'pane': 'p12', 'sub_agents': []}]
+        got = self.run_cycle(self.seeded())
+        self.assertEqual(got['t12']['action'], 'keep')
+        self.assertIn('last pane in its space', got['t12']['reasons'])
+        self.assertNotIn(('pane.close', 'p12'), self.live.calls)
+
+    def test_an_empty_pane_with_typed_input_is_not_empty(self):
+        self.make_empty('t12')
+        self.live.text = EMPTY.replace('❯ \n', '❯ 지금 하는 일\n')
+        got = self.run_cycle(self.seeded())
+        self.assertNotIn(('pane.close', 'p12'), self.live.calls)
+        self.assertNotEqual(got['t12'].get('action'), 'closed')
+
+    def test_dry_run_says_would_close_empty(self):
+        self.make_empty('t12')
+        got = self.run_cycle(self.seeded(), apply=False)
+        self.assertEqual(got['t12']['action'], 'would_close_empty')
+        self.assertFalse([c for c in self.live.calls if c[0] == 'pane.close'])
+
+    def test_a_finished_asleep_pane_closes_with_its_harness_records(self):
+        self.make_asleep('t12')
+        self.live.reported = True
+        got = self.run_cycle(self.seeded())
+        self.assertEqual(got['t12']['action'], 'closed', got['t12'])
+        parks = [c[1] for c in self.live.calls if c[0] == 'park']
+        self.assertEqual(parks, ['close_requested', 'closed'])
+        self.assertIn(('pane.close', 'p12'), self.live.calls)
+        self.assertEqual(got['t12']['close_report'], 'REP1')
+
+    def test_an_asleep_pane_without_a_close_report_stays_asleep(self):
+        self.make_asleep('t12')
+        got = self.run_cycle(self.seeded())
+        self.assertEqual(got['t12']['action'], 'asleep')
+        self.assertTrue(any('without a close report' in r for r in got['t12']['reasons']), got['t12'])
+        self.assertNotIn(('pane.close', 'p12'), self.live.calls)
+
+
+class EmptyAgentTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.home = Path(self.tmp.name)
+        (self.home / 'sessions').mkdir()
+        (self.home / 'sessions' / '201.json').write_text(json.dumps({'pid': 201, 'sessionId': SID}))
+        self.config = {'claude_home': str(self.home)}
+
+    def terminal(self, turn=0, app='claude-code', argv=('claude', '--dangerously-skip-permissions')):
+        return {'turn': turn, 'status': {'app': app, 'state': 'idle'}, 'foreground': {'pid': 201, 'argv': list(argv)}}
+
+    def test_claude_turn_zero_without_transcript_is_empty(self):
+        self.assertTrue(agent_sessions.empty_agent(self.terminal(), self.config))
+
+    def test_a_transcript_or_a_turn_means_input_was_received(self):
+        self.assertFalse(agent_sessions.empty_agent(self.terminal(turn=1), self.config))
+        (self.home / 'projects' / 'p').mkdir(parents=True)
+        (self.home / 'projects' / 'p' / f'{SID}.jsonl').write_text('{}\n')
+        self.assertFalse(agent_sessions.empty_agent(self.terminal(), self.config))
+
+    def test_unreadable_or_resumed_sessions_are_not_empty(self):
+        self.assertFalse(agent_sessions.empty_agent(self.terminal(argv=('claude', '--resume', SID)), self.config))
+        (self.home / 'sessions' / '201.json').unlink()
+        self.assertFalse(agent_sessions.empty_agent(self.terminal(), self.config))
+        self.assertFalse(agent_sessions.empty_agent({'turn': 0, 'status': {'app': 'claude-code'}}, self.config))
+
+    def test_codex_without_a_rollout_is_empty_and_config_flags_are_not_resume(self):
+        codex = self.terminal(app='codex', argv=('codex', '-c', 'model_reasoning_effort=high'))
+        self.assertTrue(agent_sessions.empty_agent(codex, self.config, held=[]))
+        self.assertFalse(agent_sessions.empty_agent(codex, self.config, held=['/x/rollout-1.jsonl']))
+        self.assertFalse(agent_sessions.empty_agent(self.terminal(app='codex', argv=('codex', 'resume', SID)), self.config, held=[]))

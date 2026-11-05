@@ -280,6 +280,24 @@ class CleanupPolicyTests(unittest.TestCase):
         self.live.data['terminals']['child'] = {'address': 'child', 'parent': 't-test', 'state': 'live'}
         self.assert_blocked('live subagent')
 
+    def test_an_empty_agent_pane_is_not_a_session_and_does_not_hold_the_space(self):
+        # t4j·t4k·t4n (2026-11-05): never received input, kept for 'Claude log identity'.
+        self.live.data['terminals']['t-test']['turn'] = 0
+        self.live.empty = lambda terminal, config: terminal.get('turn') == 0
+        self.live.backend = lambda *a, **k: (False, 'backend jobs unverified: Claude log identity', None)
+        item = self.inspect()
+        self.assertTrue(item['safe'], item['reasons'])
+        self.assertEqual((item['sessions'], item['empty_panes']), ([], ['t-test']))
+
+    def test_an_empty_pane_with_typed_input_still_blocks(self):
+        self.live.data['terminals']['t-test']['turn'] = 0
+        self.live.empty = lambda terminal, config: True
+        self.live.text = 'Completed requested task.\n› 아직 보내지 않은 글\nGPT-6.1 · 80% context left\n'
+        self.live.backend = lambda *a, **k: (False, 'backend jobs unverified: Claude log identity', None)
+        item = self.inspect()
+        self.assertFalse(item['safe'])
+        self.assertEqual(item['empty_panes'], [])
+
     def test_missing_process_or_terminal_evidence_blocks_cleanup(self):
         self.live.data['processes'].clear()
         self.assert_blocked('process evidence unavailable')
