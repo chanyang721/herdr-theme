@@ -836,3 +836,33 @@ class RecheckTimeoutTests(CleanupPolicyTests):
         self.assertEqual(got['action'], 'keep')
         self.assertTrue(any(r.startswith('recheck lookup failed') for r in got['reasons']), got['reasons'])
         self.assertEqual(self.live.closed, [])
+
+
+class SpaceLookupHoldTests(CleanupPolicyTests):
+    """t1 (2026-11-05): the space observer holds its judgment the same way on a failed lookup."""
+
+    def test_a_failed_lookup_keeps_the_space_idle_window(self):
+        state = self.ready_state(quiet=300)
+        since = state['spaces']['temporary']['since']
+        real = cleanup.inspect
+        def failing(space, snapshot, adapter, config):
+            if space['id'] == 'temporary':
+                raise TimeoutError('herdr-core get t2f timed out')
+            return real(space, snapshot, adapter, config)
+        with patch.object(cleanup, 'inspect', failing):
+            got = self.cycle(state)['results'][0]
+        self.assertIn(cleanup.agent_sessions.HOLD, got['reasons'])
+        self.assertEqual(state['spaces']['temporary']['since'], since)
+        self.assertEqual(self.live.closed, [])
+        got = self.cycle(state, now=NOW + 400)['results'][0]               # 700 s unchanged in all
+        self.assertGreaterEqual(got['quiet_seconds'], 600)
+        self.assertEqual(self.live.closed, ['temporary'], got)
+
+    def test_a_pane_lookup_error_in_the_space_is_held(self):
+        state = self.ready_state(quiet=300)
+        since = state['spaces']['temporary']['since']
+        address = next(t['terminal'] for tab in self.target()['tabs'] for t in tab['terminals'])
+        self.live.data['lookup_errors'] = {address: 'timed out'}
+        got = self.cycle(state)['results'][0]
+        self.assertIn(cleanup.agent_sessions.HOLD, got['reasons'])
+        self.assertEqual(state['spaces']['temporary']['since'], since)

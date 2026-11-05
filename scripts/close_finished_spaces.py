@@ -433,7 +433,7 @@ def record_space(item, report_dir, now, terms=()):
 def cycle(adapter, config, state, now, *, apply=False, only_space=None, report_dir=None):
     snapshot = agent_sessions.first_snapshot(adapter)   # unreadable: SkipCycle, not an error
     previous = state.get('spaces', {})
-    gap = now - state.get('last_at', now)
+    gap = agent_sessions.sample_gap(state, now)
     fresh = 0 <= gap <= config.get('max_sample_gap_seconds', 660)
     trial = agent_sessions.trial_of(state, now, fresh)
     # The person may approve apply after one recorded dry-run of this exact code
@@ -453,6 +453,13 @@ def cycle(adapter, config, state, now, *, apply=False, only_space=None, report_d
             item = {'id': space['id'], 'name': space.get('name'), 'safe': False,
                     'reasons': [f'lookup failed: {str(exc)[:160]}']}
         old = previous.get(space['id'], {})
+        if agent_sessions.on_hold(item):
+            item['reasons'].append(agent_sessions.HOLD)
+            item.update(action='keep', safe=False, quiet_seconds=now - old['since'] if old.get('since') else 0)
+            if old:
+                tracking[space['id']] = old   # since and fingerprint as they were
+            result.append(item)
+            continue
         same = fresh and item['safe'] and old.get('fingerprint') == item.get('fingerprint')
         # Answering the observer's own close-report request changes the screen but is not new work:
         # the idle window keeps counting instead of restarting after every request.
@@ -624,6 +631,7 @@ def main():
         observation = cycle(Live(args.app, args.core), config, state, time.time(), apply=args.apply, only_space=args.only_space, report_dir=args.report_dir)
         agent_sessions.settle_trial(state, config, ok=True)
     except agent_sessions.SkipCycle as exc:
+        state['held_at'] = time.time()   # judgment on hold: every idle window is kept as it was
         observation = {'at': dt.datetime.now().astimezone().isoformat(), 'mode': 'apply' if args.apply else 'dry-run',
                        'skipped': str(exc), 'results': []}
     except Exception as exc:

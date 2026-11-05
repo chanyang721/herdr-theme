@@ -41,6 +41,22 @@ def first_snapshot(adapter):
         raise SkipCycle(f'app/core lookup failed: {str(exc)[:200]}') from exc
 
 
+LOOKUP_FAILED = 'lookup failed'
+HOLD = 'judgment on hold: lookup failed, idle window kept (t1 2026-11-05)'
+
+
+def on_hold(item):
+    """A pane or space whose lookup failed this cycle: kept, and its idle window is neither reset
+    nor restarted (t1 2026-11-05): only a real change of screen or state resets it."""
+    return any(LOOKUP_FAILED in str(r) for r in item.get('reasons') or [])
+
+
+def sample_gap(state, now):
+    """Seconds since the last cycle that looked, counting a cycle skipped for an unreadable list
+    (held_at) as looked: core being busy must not restart every idle window."""
+    return now - max(state.get('last_at', now), state.get('held_at', 0))
+
+
 def trial_of(state, now, fresh):
     """The trial carried into this cycle (error_count and the healthy streak included)."""
     kept = state.get('trial', {})

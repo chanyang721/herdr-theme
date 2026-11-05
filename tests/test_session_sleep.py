@@ -1657,3 +1657,55 @@ class ReReviewP1Tests(unittest.TestCase):
         got = self.run_cycle(self.seeded())
         self.assertNotIn(('pane.close', 'p3'), self.live.calls)
         self.assertIn('asleep screen unverified (stub prompt or ticket not found)', got['t3']['reasons'])
+
+
+class LookupHoldTests(unittest.TestCase):
+    """t1 (2026-11-05): a cycle whose lookup fails keeps the pane and holds its judgment: the idle
+    window is neither reset nor restarted; only a real change of screen or state resets it."""
+    seeded = SpareCloseTests.seeded
+    make_asleep = SpareCloseTests.make_asleep
+
+    def setUp(self):
+        TrimFixedTests.setUp(self)
+        self.make_asleep('t3')
+
+    def at(self, state, now):
+        result = sleep.cycle(self.live, self.config, state, now, apply=True, paths=self.paths)
+        return {r['address']: r for r in result['results']}
+
+    def test_a_failed_lookup_keeps_the_idle_window_and_the_pane_closes_later(self):
+        state = self.seeded(quiet=900)
+        since = state['sessions']['t3']['since']
+        self.live.data['lookup_errors'] = {'t3': 'herdr-core get t3 timed out after 12 seconds'}
+        got = self.at(state, NOW)
+        self.assertIn(agent_sessions.HOLD, got['t3']['reasons'])
+        self.assertNotIn(('pane.close', 'p3'), self.live.calls)
+        self.assertEqual(state['sessions']['t3']['since'], since)        # not reset
+        del self.live.data['lookup_errors']
+        got = self.at(state, NOW + 400)                                    # 1300 s unchanged in all
+        self.assertEqual(got['t3']['action'], 'closed', got['t3'])
+
+    def test_an_inspect_that_raises_is_held_too(self):
+        state = self.seeded(quiet=900)
+        since = state['sessions']['t3']['since']
+        real = self.live.screen
+        self.live.screen = lambda address: (_ for _ in ()).throw(TimeoutError('read t3 timed out')) if address == 't3' else real(address)
+        got = self.at(state, NOW)
+        self.assertIn(agent_sessions.HOLD, got['t3']['reasons'])
+        self.assertEqual(state['sessions']['t3']['since'], since)
+
+    def test_a_real_change_after_the_hold_still_resets_it(self):
+        state = self.seeded(quiet=900)
+        self.live.data['lookup_errors'] = {'t3': 'timed out'}
+        self.at(state, NOW)
+        del self.live.data['lookup_errors']
+        self.live.data['terminals']['t3']['pid'] = 4242                    # another process: a real change
+        got = self.at(state, NOW + 400)
+        self.assertNotIn(('pane.close', 'p3'), self.live.calls)
+        self.assertEqual(state['sessions']['t3']['since'], NOW + 400)
+        self.assertNotEqual(got['t3']['action'], 'closed')
+
+    def test_a_skipped_cycle_counts_as_looked_for_the_sample_gap(self):
+        state = {'last_at': NOW - 900, 'held_at': NOW - 300}
+        self.assertEqual(agent_sessions.sample_gap(state, NOW), 300)
+        self.assertEqual(agent_sessions.sample_gap({'last_at': NOW - 900}, NOW), 900)

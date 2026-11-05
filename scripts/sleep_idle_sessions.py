@@ -701,7 +701,7 @@ def lookup_failed(address, space, exc):
 def cycle(adapter, config, state, now, *, apply=False, paths=None):
     snapshot = agent_sessions.first_snapshot(adapter)   # unreadable: SkipCycle, not an error
     previous = state.get('sessions', {})
-    gap = now - state.get('last_at', now)
+    gap = agent_sessions.sample_gap(state, now)
     fresh = 0 <= gap <= config.get('max_sample_gap_seconds', 660)
     trial = agent_sessions.trial_of(state, now, fresh)
     approved = bool(config.get('user_approved_apply')) and config.get('reviewed_observer_sha256') == state.get('observer_sha256')
@@ -729,6 +729,14 @@ def cycle(adapter, config, state, now, *, apply=False, paths=None):
         except Exception as exc:   # noqa: BLE001 — this pane only; the cycle goes on
             item = lookup_failed(address, space, exc)
         old = previous.get(address, {})
+        if agent_sessions.on_hold(item):
+            item['reasons'].append(agent_sessions.HOLD)
+            item.update(action='asleep' if item.get('asleep') else 'keep',
+                        quiet_seconds=round(now - old['since']) if old.get('since') else 0)
+            if old:
+                tracking[address] = old   # since and fingerprint as they were
+            results.append(item)
+            continue
         if item.get('keeper') and item.get('asleep'):
             item.update(quiet_seconds=0, action='asleep')
             why_not = [r for r in item['reasons'] if r not in (ASLEEP, KEEP_AWAKE, VISIBLE)]
@@ -958,6 +966,7 @@ def main():
         observation = cycle(Live(args.app, args.core), config, state, time.time(), apply=args.apply, paths=paths)
         agent_sessions.settle_trial(state, config, ok=True)
     except agent_sessions.SkipCycle as exc:
+        state['held_at'] = time.time()   # judgment on hold: every idle window is kept as it was
         observation = {'at': dt.datetime.now().astimezone().isoformat(), 'mode': 'apply' if args.apply else 'dry-run',
                        'skipped': str(exc), 'results': []}
     except Exception as exc:
