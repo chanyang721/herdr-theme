@@ -14,17 +14,23 @@ checks() {
 set -u
 # Tests make their own repos; git's hook variables must not point them at this one.
 unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_PREFIX GIT_COMMON_DIR GIT_OBJECT_DIRECTORY
+# Tool names are fixed in this file; tests substitute the marked lines in a copy. No PREPUSH_* setting may
+# change what runs, so any such variable refuses the push.
+if env | grep -q '^PREPUSH_'; then echo "pre-push: PREPUSH_* variables are not accepted; push refused" >&2; exit 1; fi
 if [ "${SKIP_PREPUSH_TESTS:-}" = 1 ]; then
   echo "pre-push: SKIP_PREPUSH_TESTS=1, checks skipped" >&2
   exit 0
 fi
-if [ -n "${PREPUSH_PY:-}" ]; then PY=$PREPUSH_PY
-elif command -v py >/dev/null 2>&1 && py -3.12 -c '' >/dev/null 2>&1; then PY='py -3.12'
-elif command -v python3 >/dev/null 2>&1 && python3 -c '' >/dev/null 2>&1; then PY=python3
-else PY=python; fi
+PY=auto  # @tool-py
+if [ "$PY" = auto ]; then
+  if command -v py >/dev/null 2>&1 && py -3.12 -c '' >/dev/null 2>&1; then PY='py -3.12'
+  elif command -v python3 >/dev/null 2>&1 && python3 -c '' >/dev/null 2>&1; then PY=python3
+  else PY=python; fi
+fi
 export PYTHONUTF8=1
-# Test seams: a fake tool is named by a variable (PATH injection does not reach sh on Windows).
-CYG=${PREPUSH_CYGPATH:-cygpath}
+CYG=cygpath  # @tool-cygpath
+MKTEMP=mktemp  # @tool-mktemp
+MKDIR=mkdir  # @tool-mkdir
 
 shas=''
 while read -r _ lsha _ _; do
