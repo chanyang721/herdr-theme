@@ -4,8 +4,17 @@
 # Skip on purpose:         git push --no-verify   (or SKIP_PREPUSH_TESTS=1 git push)
 # Same script in herdr-theme, herdr-harness and dotfiles; only checks() differs.
 
+# Zero tests (or far fewer than expected) must not pass: that is what a test runner that runs nothing looks like.
+run_npm_tests() {
+  out=$($NPM test 2>&1); rc=$?
+  printf '%s\n' "$out" >&2
+  [ "$rc" -eq 0 ] || return "$rc"
+  n=$(printf '%s\n' "$out" | sed -n 's/^.* pass \([0-9][0-9]*\)$/\1/p' | tail -1)
+  if [ -z "$n" ] || [ "$n" -lt 100 ]; then echo "pre-push: ${n:-0} tests passed, at least 100 expected" >&2; return 1; fi
+}
+
 checks() {
-  npm test &&
+  run_npm_tests &&
   node --check mods/sixfold-desk/main.js &&
   node --check mods/sixfold-new-space/main.js
 }
@@ -14,14 +23,35 @@ checks() {
 set -u
 # Tests make their own repos; git's hook variables must not point them at this one.
 unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_PREFIX GIT_COMMON_DIR GIT_OBJECT_DIRECTORY
+# Tool names are fixed in this file; tests substitute the marked lines in a copy. No PREPUSH_* setting may
+# change what runs, so any such variable refuses the push.
+if env | grep -q '^PREPUSH_'; then echo "pre-push: PREPUSH_* variables are not accepted; push refused" >&2; exit 1; fi
+# Python settings from the caller can change what runs (a PYTHONPATH module can shadow unittest): drop them.
+unset PYTHONPATH PYTHONHOME PYTHONSTARTUP PYTHONUSERBASE PYTHONSAFEPATH PYTHONBREAKPOINT PYTHONINSPECT PYTHONEXECUTABLE PYTHONWARNINGS
+: # @tool-env
 if [ "${SKIP_PREPUSH_TESTS:-}" = 1 ]; then
   echo "pre-push: SKIP_PREPUSH_TESTS=1, checks skipped" >&2
   exit 0
 fi
-if command -v py >/dev/null 2>&1 && py -3.12 -c '' >/dev/null 2>&1; then PY='py -3.12'
-elif command -v python3 >/dev/null 2>&1 && python3 -c '' >/dev/null 2>&1; then PY=python3
-else PY=python; fi
+PYBIN=auto; PYARGS=  # @tool-py
+if [ "$PYBIN" = auto ]; then
+  # Resolved once to an absolute path and verified; the checks never search PATH for the interpreter.
+  # PYBIN is quoted at each use (paths may contain spaces); PYARGS holds plain arguments only.
+  p=$(command -v py 2>/dev/null) || p=''
+  case "$p" in /*) ;; *) p='' ;; esac
+  if [ -n "$p" ] && "$p" -3.12 -c '' >/dev/null 2>&1; then PYBIN=$p; PYARGS=-3.12
+  else
+    p=$(command -v python3 2>/dev/null) || p=''
+    case "$p" in /*) ;; *) echo "pre-push: no python 3 found by absolute path" >&2; exit 1 ;; esac
+    "$p" -c '' >/dev/null 2>&1 || { echo "pre-push: $p does not run" >&2; exit 1; }
+    PYBIN=$p; PYARGS=
+  fi
+fi
 export PYTHONUTF8=1
+CYG=cygpath  # @tool-cygpath
+MKTEMP=mktemp  # @tool-mktemp
+MKDIR=mkdir  # @tool-mkdir
+NPM=npm  # @tool-npm
 
 shas=''
 while read -r _ lsha _ _; do
@@ -48,6 +78,11 @@ for sha in $shas; do
     dir=$tmp
   fi
   echo "pre-push: checking $(git log -1 --format='%h %s' "$sha")" >&2
+  # Git Bash with MSYS_NO_PATHCONV=1 keeps $dir as /c/...; Windows Python reads that as a wrong folder.
+  if command -v "${CYG%% *}" >/dev/null 2>&1; then
+    PREPUSH_REPO=$($CYG -w "$dir") && [ -n "$PREPUSH_REPO" ] || { echo "pre-push: cannot convert $dir" >&2; exit 1; }
+  else PREPUSH_REPO=$dir; fi
+  export PREPUSH_REPO
   (cd "$dir" && checks) </dev/null
   rc=$?
   cleanup
