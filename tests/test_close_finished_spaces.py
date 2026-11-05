@@ -540,6 +540,24 @@ class FinishedClaudeSpaceTests(CleanupPolicyTests.__base__):
         self.live.backend = lambda terminal, config, clean=False: (False, why, '')
         self.live.child = lambda terminal: {'session_id': 'aaaaaaaa-bbbb-5ccc-8ddd-eeeeeeeeeeee', 'no_resume': True}
 
+    def test_answering_the_report_request_keeps_the_idle_window(self):
+        # Without this, every report request restarted the window at 0 and nothing ever closed.
+        self.claude('')
+        state = self.ready_state(quiet=300)
+        self.live.text = (f'done\n❯ [세션 정리 보고 요청] 관찰기가 이 세션을 곧 정리합니다.\n⏺ 01REPORT\n'
+                          f'{self.BORDER}\n❯ \n{self.BORDER}\n  ⏵⏵ auto mode on (shift+tab to cycle)\n')
+        self.cycle(state)
+        self.assertEqual(state['spaces']['temporary']['since'], NOW - 300)
+        self.live.text = f'done\n❯ 다른 일\n⏺ ok\n{self.BORDER}\n❯ \n{self.BORDER}\n  ⏵⏵ auto mode on\n'
+        self.cycle(state, now=NOW + 60)
+        self.assertEqual(state['spaces']['temporary']['since'], NOW + 60)   # real new work restarts it
+
+    def test_a_description_mentioning_check_needed_is_not_a_decision(self):
+        text = "- 툴팁 첫 줄에는 '모두 정상' 또는 '확인 필요 n개'가 나옵니다.\n❯ \n"
+        self.assertFalse(cleanup.decision_pending(text))
+        self.assertTrue(cleanup.decision_pending('배포 전에 사용자 확인 필요\n'))
+        self.assertTrue(cleanup.decision_pending('진행하려면 확인이 필요합니다.\n'))
+
     def test_a_session_without_a_transcript_is_reported_parked_archived_and_closed(self):
         self.child()
         self.config['close_report'] = {'enabled': True}
