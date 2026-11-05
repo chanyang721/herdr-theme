@@ -137,7 +137,21 @@ def main(argv=None):
     if ticket.get('cwd') and Path(ticket['cwd']).is_dir():
         os.chdir(ticket['cwd'])
     args = command(ticket, message)
-    os.execvp(args[0], args)
+    os.execvpe(args[0], args, agent_env(os.environ))
+
+
+def agent_env(env):
+    """The agent starts without the markers of whatever agent opened this pane's shell: an
+    inherited CLAUDE_CODE_CHILD_SESSION would turn transcript saving off again."""
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    try:
+        import agent_env as cleaner
+        return cleaner.clean_env(env)
+    except ImportError:
+        drop = ('CLAUDECODE', 'CLAUDE_CODE_CHILD_SESSION', 'CLAUDE_CODE_ENTRYPOINT', 'CLAUDE_CODE_SESSION_ID', 'CLAUDE_PID', 'CODEX_THREAD_ID')
+        return {k: v for k, v in env.items() if k not in drop}
+    finally:
+        sys.path.pop(0)
 
 
 if __name__ == '__main__':
