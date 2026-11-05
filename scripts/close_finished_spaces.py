@@ -86,6 +86,27 @@ def empty_prompt(text, agent):
     return all(not line.strip() or footer.match(line.strip()) for line in lines[i + 1:])
 
 
+def claude_suggestion(text, app, adapter, address):
+    """True when the only thing in Claude's input row is its faint prompt suggestion (SGR 2 in the
+    pane's colour repaint). Text the person typed is drawn plain and is never treated as empty."""
+    if agent_sessions.provider(app) != 'claude' or not hasattr(adapter, 'styled_screen'):
+        return False
+    lines = text.splitlines()
+    rows = [i for i, line in enumerate(lines) if line.lstrip().startswith('❯')]
+    if not rows:
+        return False
+    i = rows[-1]
+    value = lines[i].strip()[1:].strip()
+    blank = '\n'.join(lines[:i] + ['❯'] + lines[i + 1:])
+    if not value or not empty_prompt(blank, app):
+        return False
+    try:
+        raw = adapter.styled_screen(address)
+    except (OSError, RuntimeError, ValueError):
+        return False
+    return agent_sessions.suggestion_only(value, raw)
+
+
 def process_rows():
     return agent_sessions.process_table()
 
@@ -104,6 +125,14 @@ class Live:
         listing = json.loads(run([self.core, 'ls', '--all', '--json']))['terminals']
         terminals = {item['address']: json.loads(run([self.core, 'get', item['address'], '--json'])) for item in listing if item.get('state') == 'live'}
         return {'status': status, 'spaces': spaces, 'terminals': terminals, 'processes': process_rows()}
+
+    def styled_screen(self, address):
+        return agent_sessions.styled_screen(self.core, address, env=self._env())
+
+    @staticmethod
+    def _env():
+        # Without a caller terminal, hc pastes the text as it is (no <hc> wrapper).
+        return {k: v for k, v in os.environ.items() if k not in ('HC_TERMINAL_ID', 'HC_SCOPE')}
 
     def screen(self, address):
         value = json.loads(run([self.core, 'read', address, '--json', '--lines', '0']))
@@ -130,9 +159,7 @@ class Live:
         return agent_sessions.git_brief(folder)
 
     def request_report(self, address, text):
-        # Without a caller terminal, hc pastes the text as it is (no <hc> wrapper).
-        env = {k: v for k, v in os.environ.items() if k not in ('HC_TERMINAL_ID', 'HC_SCOPE')}
-        return agent_sessions.run([self.core, 'send', address, text], env=env, timeout=30)
+        return agent_sessions.run([self.core, 'send', address, text], env=self._env(), timeout=30)
 
     def close_status(self, config, item, since):
         return agent_sessions.harness_close_status(config, item, since)
@@ -231,7 +258,7 @@ def inspect(space, snapshot, adapter, config):
             reasons.append(f'{address}: in progress: a monitor or background shell is still running')
         elif decision_pending(text):
             reasons.append(f'{address}: user decision pending')
-        if not empty_prompt(text, agent):
+        if not empty_prompt(text, agent) and not claude_suggestion(text, agent, adapter, address):
             reasons.append(f'{address}: empty input unverified')
         screens.append(text)
         mapping = adapter.mapping(terminal, config) if hasattr(adapter, 'mapping') else None

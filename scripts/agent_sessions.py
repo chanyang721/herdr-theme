@@ -204,6 +204,46 @@ def suggestion_only(text_value, raw, marker='❯'):
     return bool(visible) and all(visible) and shown == text_value.strip()
 
 
+def styled_screen(core, address, env=None, limit=3.0, quiet=0.4):
+    """The pane's repaint with colours, from a watch-only attach (never types or resizes)."""
+    import select
+    import time
+    proc = subprocess.Popen([core, 'attach', '--observe', address], stdin=subprocess.DEVNULL,
+                            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, env=env, creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
+    data, end, last = b'', time.time() + limit, None
+    try:
+        while time.time() < end:
+            ready, _, _ = select.select([proc.stdout], [], [], 0.1)
+            if ready:
+                chunk = os.read(proc.stdout.fileno(), 65536)
+                if not chunk:
+                    break
+                data, last = data + chunk, time.time()
+            elif last and time.time() - last >= quiet:
+                break
+    finally:
+        proc.terminate()
+        try:
+            proc.wait(timeout=2)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+    if not data:
+        raise RuntimeError('styled screen unavailable')
+    return data.decode('utf-8', 'replace')
+
+
+def new_session_argv(app, argv):
+    """A new session of the same agent for a pane that cannot be resumed: the program alone, never
+    the old first prompt (it would run the old task again)."""
+    argv = list(argv or [])
+    name = Path(argv[0]).name if argv else ''
+    if provider(app) == 'claude':
+        return [argv[0] if name == 'claude' else 'claude']
+    if provider(app) == 'codex':
+        return [argv[0] if name == 'codex' else 'codex']
+    raise ValueError(f'unknown agent {app!r}')
+
+
 def resume_argv(app, argv, session_id):
     """The original agent command with the same flags, resuming `session_id`."""
     argv = list(argv or [])

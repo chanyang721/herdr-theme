@@ -71,30 +71,8 @@ class Live(spaces.Live):
 
     def styled_screen(self, address, limit=3.0, quiet=0.4):
         """The pane's repaint with colours, from a watch-only attach (never types or resizes)."""
-        import select
-        import subprocess
-        proc = subprocess.Popen([self.core, 'attach', '--observe', address], stdin=subprocess.DEVNULL,
-                                stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, env=self._env(), creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
-        data, end, last = b'', time.time() + limit, None
-        try:
-            while time.time() < end:
-                ready, _, _ = select.select([proc.stdout], [], [], 0.1)
-                if ready:
-                    chunk = os.read(proc.stdout.fileno(), 65536)
-                    if not chunk:
-                        break
-                    data, last = data + chunk, time.time()
-                elif last and time.time() - last >= quiet:
-                    break
-        finally:
-            proc.terminate()
-            try:
-                proc.wait(timeout=2)
-            except subprocess.TimeoutExpired:
-                proc.kill()
-        if not data:
-            raise RuntimeError('styled screen unavailable')
-        return data.decode('utf-8', 'replace')
+        return agent_sessions.styled_screen(self.core, address, env=self._env(), limit=limit, quiet=quiet)
+
 
     def request_report(self, address, text):
         return self.type_line(address, text)
@@ -149,24 +127,7 @@ def on_screen(address, space, tab, status):
     return re.search(r'(?<![\w/])' + re.escape(address) + r'(?![\w])', shown) is not None
 
 
-def claude_suggestion(text, app, adapter, address):
-    """True when the only thing in Claude's input row is its faint prompt suggestion."""
-    if agent_sessions.provider(app) != 'claude' or not hasattr(adapter, 'styled_screen'):
-        return False
-    lines = text.splitlines()
-    rows = [i for i, line in enumerate(lines) if line.lstrip().startswith('❯')]
-    if not rows:
-        return False
-    i = rows[-1]
-    value = lines[i].strip()[1:].strip()
-    blank = '\n'.join(lines[:i] + ['❯'] + lines[i + 1:])
-    if not value or not spaces.empty_prompt(blank, app):
-        return False
-    try:
-        raw = adapter.styled_screen(address)
-    except (OSError, RuntimeError, ValueError):
-        return False
-    return agent_sessions.suggestion_only(value, raw)
+claude_suggestion = spaces.claude_suggestion
 
 
 def inspect(address, space, snapshot, adapter, config, tab=None):
