@@ -25,7 +25,7 @@ function fileEntry(folder, doc, rank, kindLabel) {
   const ext = extOf(doc.path || doc.name);
   return { path: `${folder ? `${folder}/` : ''}${rank}_${doc.id}${ext}`, dir: false, id: doc.id, doc,
     name: `${doc.label}${ext}`, title: `${doc.recent && doc.state !== 'previous' ? '● ' : ''}${doc.label}`,
-    date: doc.date, size: doc.size, kindLabel, muted: doc.state === 'previous' || doc.state === 'archived',
+    date: doc.modified || doc.date, mtime: doc.mtime, size: doc.size, kindLabel, muted: doc.state === 'previous' || doc.state === 'archived',
     badge: doc.pinned ? '◆' : doc.versions?.length ? `${doc.versions.length + 1}판` : '' };
 }
 
@@ -47,7 +47,8 @@ export function locations(documents, options = {}) {
       const members = docs.filter(d => (d.kind || OTHER.id) === k.id);
       if (!members.length) continue;
       entries.push({ path: safe(k.label), dir: true, name: k.label, badge: String(members.length) });
-      for (const d of members) entries.push(fileEntry(safe(k.label), d, `${d.date || '0000-00-00'}_${String(d.mtime ?? 0).padStart(14, '0')}`, k.label));
+      // Newest write first: the rank is the modification time, not the date in the name.
+      for (const d of members) entries.push(fileEntry(safe(k.label), d, String(d.mtime ?? 0).padStart(14, '0'), k.label));
     }
     const count = entries.filter(e => !e.dir).length;
     if (count) result.push({ key, label, count, entries, order: order.map(k => safe(k.label)) });
@@ -95,12 +96,12 @@ export function listTree(location, documents) {
     const parent = entry.path.includes('/') ? entry.path.slice(0, entry.path.lastIndexOf('/')) : '';
     const ext = extOf(entry.name).slice(1).toUpperCase();
     const node = { id: entry.path, name: entry.dir ? entry.name : entry.title, fileName: entry.name, folder: entry.dir,
-      date: entry.date, size: entry.size, kind: entry.dir ? '폴더' : [entry.kindLabel, ext].filter(Boolean).join(' · '),
+      date: entry.date, mtime: entry.mtime, size: entry.size, kind: entry.dir ? '폴더' : [entry.kindLabel, ext].filter(Boolean).join(' · '),
       badge: entry.dir ? '' : entry.badge, muted: entry.muted, docId: entry.id, children: entry.dir ? [] : undefined };
     if (!entry.dir) {
       const versions = (entry.doc?.versions || []).map(id => byId.get(id)).filter(Boolean);
       if (versions.length) node.children = versions.map(v => ({ id: `${entry.path}#${v.id}`, name: v.label, fileName: v.name,
-        date: v.date, size: v.size, kind: '이전 버전', muted: true, docId: v.id }));
+        date: v.modified || v.date, mtime: v.mtime, size: v.size, kind: '이전 버전', muted: true, docId: v.id }));
     }
     nodes.set(entry.path, node);
     (nodes.get(parent) || root).children.push(node);
@@ -114,7 +115,7 @@ export function searchTree(documents, query, kinds = [], kind = null) {
   const hits = documents.filter(d => !d.aliasOf && (!kind || d.kind === kind) && matches({ ...d, kindLabel: labels.get(d.kind) }, query));
   return { id: '', name: `검색: ${query}`, folder: true, children: hits.map(d => ({ id: `hit/${d.id}`, docId: d.id,
     name: `${d.pinned ? '◆ ' : ''}${d.label}${d.state === 'previous' ? ' (이전 버전)' : d.state === 'archived' ? ' (보관)' : ''}`,
-    fileName: d.name, date: d.date, size: d.size, muted: d.state === 'previous' || d.state === 'archived',
+    fileName: d.name, date: d.modified || d.date, mtime: d.mtime, size: d.size, muted: d.state === 'previous' || d.state === 'archived',
     kind: d.harness ? '하네스' : labels.get(d.kind) || '문서' })) };
 }
 

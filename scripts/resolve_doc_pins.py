@@ -198,7 +198,7 @@ def catalog(config, space_id, today=None, app_home=None):
     for pin in pins:
         row = by_path.get(pin.get('path'))
         if row:
-            pin.update({key: row[key] for key in ('kind', 'family', 'date', 'recent', 'folder') if key in row})
+            pin.update({key: row[key] for key in ('kind', 'family', 'date', 'modified', 'recent', 'folder') if key in row})
             pin['versions'] = row.get('versions', [])
             for other in rows:
                 if other.get('head') == row['id']:
@@ -216,7 +216,8 @@ def catalog(config, space_id, today=None, app_home=None):
         if row['family'] in pinned_families and row['state'] == 'latest':
             row['state'] = 'previous'
             row['head'] = next(pin['id'] for pin in pins if pin.get('family') == row['family'])
-    rows.sort(key=lambda r: (r['date'], r['mtime'], r['id']), reverse=True)
+    # Newest write first, whatever date the file name carries.
+    rows.sort(key=lambda r: (r['mtime'], r['date'], r['id']), reverse=True)
     override = (settings.get('harness') or {}).get('root')
     root = doc_catalog.harness_root(space_id, app_home or app_home_default(), override)
     harness, sections = [], []

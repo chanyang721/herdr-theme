@@ -174,6 +174,7 @@ def build(items, pins, kinds, today=None, recent_days=RECENT_DAYS):
             'size': item.get('size'),
             'folder': str(relative.parent) if str(relative.parent) != '.' else '', 'pinned': False, 'status': 'ok',
             'state': 'archived' if item.get('archived') else 'latest', 'before': before, 'variant': variant,
+            'modified': datetime.fromtimestamp(item['mtime'] / 1000).date().isoformat(),
         }
         rows.append(row)
         if row['state'] != 'archived':
