@@ -103,6 +103,13 @@ class FakeLive:
     def request_report(self, address, text):
         self.notifications.append(('ask', address))
 
+    gate_blockers = ()
+
+    def close_gate(self, config, item):
+        self.gates = getattr(self, 'gates', []) + [item['address']]
+        assert not self.closed, 'the harness gate is asked before space.close'
+        return (not self.gate_blockers), list(self.gate_blockers)
+
     def close_status(self, config, item, since):
         return (True, {'report_id': 'REP1', 'task_id': 'TASK1'}) if self.reported else (False, 'no close report yet')
 
@@ -609,3 +616,59 @@ class HelperProcessTests(unittest.TestCase):
         self.assertTrue(h({'args': 'caffeinate -i -t 300'}))
         self.assertFalse(h({'args': 'caffeinate -i make build'}))
         self.assertFalse(h({'args': 'caffeinate -dims'}))
+
+
+class HarnessCloseGateTests(CleanupPolicyTests.__base__):
+    """Only a space whose sessions' reports were accepted (and learnt) closes."""
+    setUp = CleanupPolicyTests.setUp
+    target = CleanupPolicyTests.target
+    inspect = CleanupPolicyTests.inspect
+    ready_state = CleanupPolicyTests.ready_state
+    cycle = CleanupPolicyTests.cycle
+
+    def test_not_accepted_keeps_the_space_and_writes_nothing(self):
+        self.live.gate_blockers = ('final report not accepted by a trusted actor',)
+        result = self.cycle()
+        item = result['results'][0]
+        self.assertEqual((item['action'], self.live.closed, self.live.parks, self.live.archives), ('keep', [], [], None))
+        self.assertTrue(any('harness close gate' in r and 'not accepted' in r for r in item['reasons']), item['reasons'])
+        self.assertFalse(self.reports.exists())
+
+    def test_accepted_closes_after_the_gate(self):
+        result = self.cycle()
+        self.assertEqual(result['results'][0]['action'], 'closed')
+        self.assertEqual(self.live.gates, ['t-test'])
+
+    def test_open_task_or_escalation_keeps_it(self):
+        for why in ('open task in this workspace: 모델 분배 (pending)', 'open escalation in this workspace (decision)'):
+            self.live.gate_blockers = (why,)
+            item = self.cycle()['results'][0]
+            self.assertEqual((item['action'], self.live.closed), ('keep', []))
+            self.assertTrue(any(why in r for r in item['reasons']))
+
+    def test_an_adapter_without_the_gate_never_closes(self):
+        del FakeLive.close_gate
+        try:
+            item = self.cycle()['results'][0]
+        finally:
+            FakeLive.close_gate = HarnessCloseGateTests._gate
+        self.assertEqual((item['action'], self.live.closed), ('keep', []))
+        self.assertIn('harness close gate: close gate unavailable', item['reasons'])
+
+
+HarnessCloseGateTests._gate = FakeLive.close_gate
+
+
+class HarnessCloseGateCallTests(unittest.TestCase):
+    def test_the_gate_command_and_fail_closed_answers(self):
+        A = cleanup.agent_sessions
+        config = {'harness': {'python': 'py', 'script': 'harness.py'}}
+        item = {'address': 't3', 'app': 'claude-code', 'session_id': '11111111-2222-3333-4444-555555555555', 'space_id': 'sp1'}
+        seen = []
+        ok = lambda out, code=0: (lambda a: (seen.append(a), subprocess.CompletedProcess(a, code, out, ''))[1])
+        self.assertEqual(A.harness_close_gate(config, item, runner=ok('{"ok": true, "blockers": []}')), (True, []))
+        self.assertEqual(seen[0][2:], ['close-gate', 't3', '--provider', 'claude', '--session-id', item['session_id'], '--space-id', 'sp1'])
+        self.assertEqual(A.harness_close_gate(config, item, runner=ok('{"ok": false, "blockers": ["x"]}')), (False, ['x']))
+        self.assertFalse(A.harness_close_gate(config, item, runner=ok('not json'))[0])
+        self.assertFalse(A.harness_close_gate(config, item, runner=ok('{"ok": true}', 2))[0])
+        self.assertFalse(A.harness_close_gate({}, item)[0])
