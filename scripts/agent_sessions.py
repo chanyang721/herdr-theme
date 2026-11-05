@@ -312,6 +312,30 @@ def _clean(text, limit):
     return text[:limit]
 
 
+MASK = '[가림]'
+
+
+def denylist(config=None):
+    """The harness's local denylist (company, customer and people names); [] when there is none.
+    Read only to mask, never printed or copied anywhere."""
+    harness = (config or {}).get('harness') or {}
+    local = os.environ.get('HERDR_HARNESS_LOCAL') or str(Path(os.environ.get('HERDR_APP_HOME', Path.home() / '.config/herdr-app')) / 'data/sixfold/harness-local')
+    path = Path(harness.get('denylist') or Path(local) / 'denylist.txt').expanduser()
+    try:
+        lines = path.read_text(encoding='utf-8').splitlines()
+    except OSError:
+        return []
+    return [line.strip() for line in lines if line.strip() and not line.startswith('#')]
+
+
+def mask_text(text, terms):
+    """Every denylisted term as [가림] (case-insensitive, longest first), like the harness's spec.mask."""
+    terms = sorted({t for t in terms or () if t}, key=len, reverse=True)
+    if not terms or not text:
+        return text
+    return re.sub('|'.join(re.escape(t) for t in terms), MASK, text, flags=re.I)
+
+
 def summary(item):
     """The harness summary for one session (no transcript, no path)."""
     git = item.get('git') or {}
@@ -386,9 +410,9 @@ def close_report_message(config):
             "1) 레포 밖 임시 파일(예: $TMPDIR/experience-close.json)에 experience JSON을 씁니다: "
             '{"judgments": [{"situation": "무엇을 판단했나", "expected": "예상", "actual": "실제", "error": "MATCHED|PARTIAL|WRONG"}]} '
             "(판단 1~5개, 선택: cause·surprise·pattern_candidates). "
-            f"2) {python} {script} close-report --done \"이 세션이 한 일\" --remaining \"남은 일\" --experience <그 파일> 를 실행합니다. "
+            f"2) {python} {script} close-report --mask --done \"이 세션이 한 일\" --remaining \"남은 일\" --experience <그 파일> 를 실행합니다. "
             "확정한 결정은 --decision \"…\"(여러 번), 만들거나 고친 문서는 --doc <파일>(여러 번, 원본은 그대로)을 붙입니다. "
-            "3) 고객·회사·제품 이름 대신 워크스페이스 id를 씁니다. 거부되면 문장을 고쳐 다시 실행합니다. "
+            "3) 고객·회사·제품 이름 대신 워크스페이스 id를 씁니다(--mask가 남은 이름을 [가림]으로 바꿉니다). 다른 이유로 거부되면 문장을 고쳐 다시 실행합니다. "
             "다른 세션에 보고하지 말고, 보고 id만 한 줄로 답하고 끝내세요. 승인은 사람이 기억함에서 합니다.")
 
 
@@ -436,7 +460,8 @@ def harness_archive(config, data, *, runner=None):
             json.dump(data, stream, ensure_ascii=False)
         runner = runner or (lambda a: subprocess.run([str(v) for v in a], capture_output=True, text=True, timeout=60, creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0)))
         try:
-            result = runner([python, script, 'archive', '--file', path])
+            # Space names and pane titles may name a customer: [가림] in the archive (WORKSPACE-TREE).
+            result = runner([python, script, 'archive', '--file', path, '--mask'])
         except (OSError, subprocess.TimeoutExpired) as exc:
             return False, f'harness call failed: {exc}'
         if result.returncode != 0:

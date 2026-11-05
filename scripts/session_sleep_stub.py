@@ -101,7 +101,7 @@ def record_resumed(ticket):
             provider = 'claude' if ticket['app'] in ('claude', 'claude-code') else 'codex'
             subprocess.run([harness['python'], harness['script'], 'park', ticket['address'], '--provider', provider,
                             '--session-id', ticket['session_id'], '--space-id', ticket['space_id'], '--event', 'resumed',
-                            '--done', f"{ticket.get('space_name') or '?'} {ticket['address']}: resumed from sleep"],
+                            '--done', f"{ticket.get('space_name') or '?'} {ticket['address']}: resumed from sleep", '--mask'],
                            capture_output=True, timeout=30, creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
     except (OSError, ValueError, KeyError, subprocess.SubprocessError):
         pass

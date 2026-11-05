@@ -325,21 +325,27 @@ def git_info(folder):
     return info
 
 
-def record_space(item, report_dir, now):
+def record_space(item, report_dir, now, terms=()):
+    """The workspace record (~/…/워크스페이스-기록/<YYYYMMDD>_<이름>.md). Denylisted names become
+    [가림] in its name and text, like every other record the cleanup writes."""
     stamp = dt.datetime.fromtimestamp(now).astimezone()
-    name = re.sub(r'[\\/:*?"<>|\x00-\x1f]', '-', unicodedata.normalize('NFC', item['name'])).replace(' ', '-')[:90] or 'workspace'
+    mask = lambda text: agent_sessions.mask_text(text, terms)  # noqa: E731
+    name = re.sub(r'[\\/:*?"<>|\x00-\x1f]', '-', mask(unicodedata.normalize('NFC', item['name']))).replace(' ', '-')[:90] or 'workspace'
     path = Path(report_dir) / f'{stamp:%Y%m%d}_{name}.md'
     path.parent.mkdir(parents=True, exist_ok=True)
     line = f'\n- 자동 정리 시각: {stamp.isoformat()} · space {item["id"]}\n'
     if path.exists():
-        with path.open('a') as file:
+        with path.open('a', encoding='utf-8') as file:
             file.write(line)
     else:
         details = [git_info(folder) for folder in item.get('folders', [])]
-        with path.open('x') as file:
-            file.write(f'# {item["name"]} 자동 정리 기록\n\n- 공간: {item["id"]}\n')
-            file.write('\n마지막 화면 일부(관측 자료):\n\n' + '\n'.join('> ' + v for v in item.get('summary', '').splitlines()) + '\n')
-            file.write('\n폴더·브랜치·최근 커밋·남은 미커밋·worktree 목록(삭제하지 않음):\n\n```json\n' + json.dumps(details, ensure_ascii=False, indent=2) + '\n```\n' + line)
+        body = (f'# {item["name"]} 자동 정리 기록\n\n- 공간: {item["id"]}\n'
+                + (f'- 하네스 보관: {item["archive"]}\n' if item.get('archive') else '')
+                + '\n마지막 화면 일부(관측 자료):\n\n' + '\n'.join('> ' + v for v in item.get('summary', '').splitlines()) + '\n'
+                + '\n폴더·브랜치·최근 커밋·남은 미커밋·worktree 목록(삭제하지 않음):\n\n```json\n'
+                + json.dumps(details, ensure_ascii=False, indent=2) + '\n```\n' + line)
+        with path.open('x', encoding='utf-8') as file:
+            file.write(mask(body))
     return str(path)
 
 
@@ -435,7 +441,7 @@ def cycle(adapter, config, state, now, *, apply=False, only_space=None, report_d
                             item['action'] = 'keep'; item['reasons'].append(f'harness archive failed: {detail}')
                             result.append(item); continue
                         item['archive'] = detail
-                        item['record'] = record_space(item, report_dir, now)
+                        item['record'] = record_space(item, report_dir, now, agent_sessions.denylist(config))
                         adapter.close(space['id'], {**config, 'space_close_enabled': True} if manual else config)
                         after = adapter.snapshot()
                         if any(s['id'] == space['id'] for s in after['spaces']):
