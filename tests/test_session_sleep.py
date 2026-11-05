@@ -809,7 +809,18 @@ class PaneCloseTests(unittest.TestCase):
         self.live.close_stays = True
         with self.assertRaisesRegex(RuntimeError, 'still present after pane.close'):
             self.run_cycle()
-        self.assertEqual([c[1] for c in self.live.calls if c[0] == 'park'], ['close_requested'])
+        # the open close_requested is settled, never left half closed (t1 decision 2026-11-05)
+        self.assertEqual([c[1] for c in self.live.calls if c[0] == 'park'], ['close_requested', 'close_aborted'])
+
+    def test_a_failing_pane_close_is_settled_with_close_aborted_and_stops(self):
+        def boom(pane_id):
+            self.live.calls.append(('pane.close', pane_id))
+            raise RuntimeError('herdr-app do pane.close: exit 1')
+        self.live.close_pane = boom
+        with self.assertRaisesRegex(RuntimeError, 'pane.close failed'):
+            self.run_cycle()
+        self.assertEqual([c[1] for c in self.live.calls if c[0] == 'park'], ['close_requested', 'close_aborted'])
+        self.assertIn('t12', pane_of_names(self.live))
 
     def test_the_last_pane_of_a_hidden_tab_is_not_closed_even_if_the_space_keeps_others(self):
         # t1 decision 2026-11-05: a space keeps one pane and every tab keeps one (harness close gate).

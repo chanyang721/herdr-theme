@@ -24,7 +24,8 @@ A session that finished through the harness (step 0 found its final report) is c
 of slept when its space keeps another pane (user rule, 2026-11-05; close_finished_panes, default
 true): harness `park --event close_requested` first (no record, no close), the local note, then
 `herdr-app do pane.close {"pane": <its pane id>}` (never "the focused pane"), a fresh snapshot
-must show the pane gone (else every further action stops), and `park --event closed`. Every space
+must show the pane gone, and `park --event closed`. If pane.close fails or the pane stays,
+`park --event close_aborted` settles the request and every further action stops. Every space
 keeps at least one pane and every tab keeps one (pane.close on a tab's last pane closes the tab;
 same as the harness close gate, t1 decision 2026-11-05), fixed workspaces included: such a pane
 sleeps as above instead, or is kept when its terminal program is not a shell. Closing does not need a shell
@@ -349,10 +350,20 @@ def close_one(item, adapter, config, paths, now, snapshot):
         return 'keep', None
     item['note'] = note(item, paths['notes'], now)
 
-    adapter.close_pane(pane_id)
-    after = adapter.snapshot()
+    def aborted(why):
+        # Settle the open close_requested so the harness never reads this session as half closed.
+        ok_, detail_ = adapter.park(config, item, 'close_aborted', reason=f'pane close failed: {why}'[:200])
+        item['harness_abort'] = detail_ if ok_ else f'close_aborted not recorded: {detail_}'
+
+    try:
+        adapter.close_pane(pane_id)
+        after = adapter.snapshot()
+    except Exception as exc:   # noqa: BLE001 — any failure is recorded, then stops this cycle
+        aborted(str(exc)[:120])
+        raise RuntimeError(f"{item['address']}: pane.close failed ({exc}); further actions stopped") from exc
     if item['address'] in pane_of(after) or any(pane_id_of(t) == pane_id for s in after['spaces']
                                                 for tab in s.get('tabs', []) for t in tab.get('terminals', [])):
+        aborted('pane still present after pane.close')
         raise RuntimeError(f"{item['address']}: pane still present after pane.close; further actions stopped")
     adapter.park(config, item, 'closed', reason='pane closed')
     return 'closed', after
