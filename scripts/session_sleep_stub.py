@@ -107,16 +107,36 @@ def record_resumed(ticket):
         pass
 
 
-def command(ticket, message):
+def launch(ticket):
+    """The ticket's command, cleaned again: a ticket written before prompts were dropped must not run
+    its old first instructions when the pane wakes."""
     argv = list(ticket['argv'])
+    if ticket.get('new_session') or not ticket.get('session_id') or not argv or Path(argv[0]).name not in ('claude', 'codex'):
+        return argv
+    try:
+        import agent_sessions
+        return agent_sessions.resume_argv(ticket.get('app') or Path(argv[0]).name, argv, ticket['session_id'])
+    except Exception:   # noqa: BLE001 - an unknown agent keeps the ticket as written
+        return argv
+
+
+def command(ticket, message):
+    argv = launch(ticket)
     return argv + [message] if message else argv
+
+
+def shown(argv, limit=72):
+    """Short form for the sleep screen: program name and flags, never a long command line."""
+    text = ' '.join([Path(argv[0]).name, *argv[1:]]) if argv else ''
+    text = ' '.join(text.split())
+    return text if len(text) <= limit else text[:limit - 1] + '…'
 
 
 def main(argv=None):
     argv = sys.argv[1:] if argv is None else argv
     ticket = json.loads(Path(argv[0]).read_text(encoding='utf-8'))
     title = ticket.get('title') or ''
-    resume = ' '.join(ticket['argv'])
+    resume = shown(launch(ticket))
     fd = sys.stdin.fileno()
     saved = tty_input(fd)   # before the note, so nothing typed meanwhile is read the old way
     print(f"\n  절전 중 — {ticket.get('space_name') or ''} {ticket['address']} {title}".rstrip())

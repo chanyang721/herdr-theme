@@ -268,27 +268,76 @@ def new_session_argv(app, argv):
     raise ValueError(f'unknown agent {app!r}')
 
 
+# Launch flags kept across sleep; anything else positional is a prompt and is dropped, so waking
+# never sends an old instruction again. Values: flags that take one value / a list of values.
+CLAUDE_VALUE = {'--model', '--permission-mode', '--append-system-prompt', '--system-prompt', '--settings',
+                '--setting-sources', '--agents', '--agent', '--fallback-model', '--permission-prompt-tool',
+                '--append-system-prompt-file', '--system-prompt-file', '--debug-file', '--name', '-n'}
+CLAUDE_LIST = {'--add-dir', '--allowedTools', '--allowed-tools', '--disallowedTools', '--disallowed-tools',
+               '--mcp-config', '--tools', '--betas', '--plugin-dir'}
+# One-shot or session-picking flags: never carried into the resumed session.
+CLAUDE_DROP = {'-p', '--print', '-c', '--continue', '--fork-session', '--replay-user-messages',
+               '--include-partial-messages', '--no-session-persistence'}
+CLAUDE_DROP_VALUE = {'--resume', '-r', '--session-id', '--output-format', '--input-format', '--max-turns',
+                     '--max-budget-usd', '--json-schema', '--from-pr'}
+CODEX_VALUE = {'-m', '--model', '-c', '--config', '-p', '--profile', '-s', '--sandbox', '-a', '--ask-for-approval',
+               '-C', '--cd', '--add-dir', '--enable', '--disable', '--local-provider'}
+CODEX_LIST = {'-i', '--image'}
+
+
+def _looks_like_value(arg):
+    """A list flag's item (path, tool name), never a sentence-like prompt."""
+    return bool(arg) and not arg.startswith('-') and not re.search(r'\s|<', arg)
+
+
+def launch_flags(argv, *, value, many=(), drop=(), drop_value=(), stop=()):
+    """Flags (with their values) of an agent command; positional prompts and dropped flags removed."""
+    out, i = [], 0
+    while i < len(argv):
+        arg = argv[i]
+        head = arg.split('=', 1)[0]
+        if arg in stop:
+            break
+        if not arg.startswith('-') or arg == '-':
+            i += 1; continue                    # a prompt (or anything positional)
+        if '=' in arg and arg.startswith('--'):
+            if head not in drop and head not in drop_value:
+                out.append(arg)
+            i += 1; continue
+        if arg in drop:
+            i += 1; continue
+        if arg in drop_value:
+            i += 2; continue
+        if arg in value:
+            if i + 1 < len(argv):
+                out += [arg, argv[i + 1]]
+            i += 2; continue
+        if arg in many:
+            j = i + 1
+            while j < len(argv) and _looks_like_value(argv[j]):
+                j += 1
+            out += argv[i:j]
+            i = j; continue
+        out.append(arg)                         # unknown flags are taken as on/off switches
+        i += 1
+    return out
+
+
 def resume_argv(app, argv, session_id):
-    """The original agent command with the same flags, resuming `session_id`."""
+    """`claude [flags] --resume <id>` / `codex [flags] resume <id>`: the original launch flags only.
+    Prompts given on the original command line are dropped (they would run the old task again)."""
     argv = list(argv or [])
     name = Path(argv[0]).name if argv else ''
     if provider(app) == 'claude':
-        out, skip = [argv[0] if name == 'claude' else 'claude'], False
-        for i, arg in enumerate(argv[1:], 1):
-            if skip:
-                skip = False; continue
-            if arg in ('--resume', '-r', '--session-id'):
-                skip = True; continue
-            if arg in ('--continue', '-c') or arg.startswith('--resume='):
-                continue
-            out.append(arg)
-        return out + ['--resume', session_id]
+        head = [argv[0] if name == 'claude' else 'claude']
+        flags = launch_flags(argv[1:], value=CLAUDE_VALUE, many=CLAUDE_LIST, drop=CLAUDE_DROP, drop_value=CLAUDE_DROP_VALUE)
+        return head + flags + ['--resume', session_id]
     if provider(app) == 'codex':
         head = [argv[0] if name == 'codex' else 'codex']
         rest = argv[1:]
-        if 'resume' in rest:
-            rest = rest[:rest.index('resume')]
-        return head + rest + ['resume', session_id]
+        # `codex exec …` is a one-shot run; its flags before the subcommand still apply.
+        flags = launch_flags(rest, value=CODEX_VALUE, many=CODEX_LIST, stop={'resume', 'exec', 'e', 'fork'})
+        return head + flags + ['resume', session_id]
     raise ValueError(f'unknown agent {app!r}')
 
 

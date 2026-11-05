@@ -700,3 +700,35 @@ class ProcessTableDecodeTests(unittest.TestCase):
         self.assertEqual(rows[10]['name'], 'claude')
         self.assertTrue(rows[10]['args'].startswith('claude 세션 절'))
 
+
+
+class TicketArgvTests(unittest.TestCase):
+    """Waking a pane must not send the original command-line prompts again (2026-11-05, ticket t11)."""
+    OLD = ['claude', '<hc from="t3">11/4 요청 …', '<hc from="t3">번역 확인 …', '--resume', 'old-id']
+
+    def test_claude_prompts_and_one_shot_flags_are_dropped(self):
+        argv = ['/x/claude', '--dangerously-skip-permissions', '--model', 'opus', '--add-dir', '/a', '/b',
+                '첫 지시 문장', '-p', '--output-format', 'json', '--continue', '--session-id', 'z']
+        self.assertEqual(agent_sessions.resume_argv('claude-code', argv, SID),
+                         ['/x/claude', '--dangerously-skip-permissions', '--model', 'opus', '--add-dir', '/a', '/b', '--resume', SID])
+        self.assertEqual(agent_sessions.resume_argv('claude-code', self.OLD, SID), ['claude', '--resume', SID])
+
+    def test_codex_prompt_dropped_flags_kept(self):
+        self.assertEqual(agent_sessions.resume_argv('codex', ['codex', '--no-daemon', '-m', 'gpt-5', '고쳐 줘', 'resume', 'old'], SID),
+                         ['codex', '--no-daemon', '-m', 'gpt-5', 'resume', SID])
+
+    def test_ticket_written_by_observer_has_no_prompt(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            item = {'address': 't11', 'app': 'claude-code', 'session_id': SID, 'argv': self.OLD, 'space_id': 'sp', 'space_name': 'Medihomes'}
+            data = json.loads(sleep.ticket(item, tmp).read_text(encoding='utf-8'))
+        self.assertEqual(data['argv'], ['claude', '--resume', SID])
+
+    def test_old_ticket_is_cleaned_when_woken_and_screen_is_short(self):
+        ticket = {'app': 'claude-code', 'session_id': SID, 'argv': self.OLD + [SID]}
+        self.assertEqual(stub.command(ticket, None), ['claude', '--resume', SID])
+        self.assertEqual(stub.command(ticket, '새 메시지'), ['claude', '--resume', SID, '새 메시지'])
+        self.assertEqual(stub.shown(stub.launch(ticket)), f'claude --resume {SID}')
+        self.assertLessEqual(len(stub.shown(['claude', *['--add-dir', '/very/long/path'] * 20])), 72)
+
+    def test_new_session_ticket_left_as_written(self):
+        self.assertEqual(stub.command({'app': 'claude-code', 'session_id': SID, 'argv': ['claude'], 'new_session': True}, None), ['claude'])
