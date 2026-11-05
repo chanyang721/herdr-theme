@@ -875,12 +875,65 @@ class PaneCloseTests(unittest.TestCase):
         self.assertTrue(any('without a harness record' in r for r in got['t12']['reasons']))
         self.assertEqual(len(state['unrecorded_closes']), 1)
 
+    def test_an_unrecorded_close_survives_an_exception_later_in_the_cycle(self):
+        # Codex re-review P2 (1): the retry list was put into the state only at the cycle's end.
+        self.config['exclude_addresses'] = []
+        self.park_then(None, fail_closed=2)
+        real_screen = self.live.screen
+        def screen(address):
+            if ('pane.close', 'p12') in self.live.calls:
+                raise RuntimeError('screen read failed')
+            return real_screen(address)
+        state = self.state()
+        self.live.screen = screen
+        with self.assertRaisesRegex(RuntimeError, 'screen read failed'):
+            sleep.cycle(self.live, self.config, state, NOW, apply=True, paths=self.paths)
+        self.assertNotIn('t12', pane_of_names(self.live))
+        self.assertEqual([(e['address'], e['pending']) for e in state['unrecorded_closes']], [('t12', 'unrecorded')])
+        self.live.screen, self.live.calls[:] = real_screen, []
+        state['last_at'] = NOW - 300
+        sleep.cycle(self.live, self.config, state, NOW, apply=True, paths=self.paths)
+        self.assertIn(('park', 'closed', 't12'), self.live.calls)
+        self.assertEqual(state['unrecorded_closes'], [])
+
+    def test_a_layout_unreadable_right_after_pane_close_is_not_recorded_as_aborted(self):
+        # Codex re-review P2 (2): pane.close worked, only the snapshot failed -> it said close_aborted.
+        real_close, real_snapshot = self.live.close_pane, self.live.snapshot
+        broken = {'on': False}
+        def close_pane(pane_id):
+            real_close(pane_id)
+            broken['on'] = True
+        def snapshot():
+            if broken['on']:
+                raise RuntimeError('herdr-app status failed')
+            return real_snapshot()
+        self.live.close_pane, self.live.snapshot, self.live.wait = close_pane, snapshot, lambda s: None
+        state = self.state()
+        got = {r['address']: r for r in sleep.cycle(self.live, self.config, state, NOW, apply=True, paths=self.paths)['results']}
+        self.assertEqual(got['t12']['action'], 'close_unconfirmed')
+        self.assertEqual([c[1] for c in self.live.calls if c[0] == 'park'], ['close_requested'])   # no close_aborted
+        self.assertEqual([(e['address'], e['pending']) for e in state['unrecorded_closes']], [('t12', 'unconfirmed')])
+        # next cycle: the layout says it is gone -> closed
+        broken['on'], self.live.calls[:] = False, []
+        state['last_at'] = NOW - 300
+        sleep.cycle(self.live, self.config, state, NOW, apply=True, paths=self.paths)
+        self.assertEqual([c for c in self.live.calls if c[0] == 'park'][0], ('park', 'closed', 't12'))
+        self.assertEqual(state['unrecorded_closes'], [])
+
+    def test_an_unconfirmed_close_whose_pane_is_still_there_is_settled_as_aborted(self):
+        state = self.state()
+        state['unrecorded_closes'] = [{'address': 't12', 'app': 'claude-code', 'session_id': SID, 'space_id': 'fixed',
+                                       '_pane_id': 'p12', 'pending': 'unconfirmed'}]
+        sleep.cycle(self.live, self.config, state, NOW, apply=True, paths=self.paths)
+        self.assertEqual([c for c in self.live.calls if c[0] == 'park'][0], ('park', 'close_aborted', 't12'))
+        self.assertEqual(state['unrecorded_closes'], [])
+
     def test_a_failing_pane_close_is_settled_with_close_aborted_and_stops(self):
         def boom(pane_id):
             self.live.calls.append(('pane.close', pane_id))
             raise RuntimeError('herdr-app do pane.close: exit 1')
         self.live.close_pane = boom
-        with self.assertRaisesRegex(RuntimeError, 'pane.close failed'):
+        with self.assertRaisesRegex(RuntimeError, 'still present after pane.close .herdr-app do pane.close: exit 1'):
             self.run_cycle()
         self.assertEqual([c[1] for c in self.live.calls if c[0] == 'park'], ['close_requested', 'close_aborted'])
         self.assertIn('t12', pane_of_names(self.live))

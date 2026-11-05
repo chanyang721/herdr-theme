@@ -359,6 +359,29 @@ def close_recheck(item, adapter, config, closed):
     return why, snap
 
 
+def pane_present(snapshot, address, pane_id):
+    return address in pane_of(snapshot) or any(pane_id_of(t) == pane_id for s in snapshot['spaces']
+                                               for tab in s.get('tabs', []) for t in tab.get('terminals', []))
+
+
+def settle_pending(entries, adapter, config, snapshot, apply):
+    """Earlier closes still owed a harness record. 'unrecorded': the pane is gone, write `closed`.
+    'unconfirmed': pane.close's outcome was unknown; the layout now says closed or aborted.
+    Returns the entries still owed (kept in the observer state)."""
+    left = []
+    for entry in entries:
+        if not apply:
+            left.append(entry)
+            continue
+        if entry.get('pending') == 'unconfirmed' and pane_present(snapshot, entry['address'], entry.get('_pane_id')):
+            ok, _ = adapter.park(config, entry, 'close_aborted', reason='pane.close did not close the pane')
+        else:
+            ok, _ = adapter.park(config, entry, 'closed', reason='pane closed (record retried)')
+        if not ok:
+            left.append(entry)
+    return left
+
+
 def close_one(item, adapter, config, paths, now, snapshot, closed=()):
     """Harness close_requested → local note → fresh recheck → pane.close by id → gone from a fresh
     snapshot → harness closed. Returns (action, the snapshot after the close or None).
@@ -384,16 +407,28 @@ def close_one(item, adapter, config, paths, now, snapshot, closed=()):
         aborted('recheck: ' + '; '.join(why))
         item['reasons'].append('recheck before close: ' + '; '.join(why))
         return 'keep', None
+    item['_pane_id'] = pane_id
     try:
         adapter.close_pane(pane_id)
-        after = adapter.snapshot()
-    except Exception as exc:   # noqa: BLE001 — any failure is recorded, then stops this cycle
-        aborted(str(exc)[:120])
-        raise RuntimeError(f"{item['address']}: pane.close failed ({exc}); further actions stopped") from exc
-    if item['address'] in pane_of(after) or any(pane_id_of(t) == pane_id for s in after['spaces']
-                                                for tab in s.get('tabs', []) for t in tab.get('terminals', [])):
-        aborted('pane still present after pane.close')
-        raise RuntimeError(f"{item['address']}: pane still present after pane.close; further actions stopped")
+        failure = None
+    except Exception as exc:   # noqa: BLE001 — the pane may be gone anyway: the layout decides
+        failure = str(exc)[:120]
+    after = None
+    for _ in range(3):
+        try:
+            after = adapter.snapshot()
+            break
+        except Exception:   # noqa: BLE001
+            adapter.wait(1)
+    if after is None:
+        # Closed or not is unknown: never recorded as aborted; the next cycle looks at the layout.
+        item['reasons'].append('pane.close outcome unknown (layout unreadable); settled next cycle'
+                               + (f' (pane.close: {failure})' if failure else ''))
+        return 'close_unconfirmed', None
+    if pane_present(after, item['address'], pane_id):
+        aborted(f'pane.close: {failure}' if failure else 'pane still present after pane.close')
+        raise RuntimeError(f"{item['address']}: pane still present after pane.close"
+                           + (f' ({failure})' if failure else '') + '; further actions stopped')
     for _ in range(2):   # the pane is gone: its closed record must land, or be retried later
         ok, detail = adapter.park(config, item, 'closed', reason='pane closed')
         if ok:
@@ -429,11 +464,8 @@ def cycle(adapter, config, state, now, *, apply=False, paths=None):
     stop_reason = None
     # A pane closed earlier whose `park closed` failed: retry that record first; while one is
     # still missing, nothing else is closed or slept (fail-closed).
-    pending = []
-    for entry in state.get('unrecorded_closes') or []:
-        ok, _detail = adapter.park(config, entry, 'closed', reason='pane closed (record retried)') if apply else (False, None)
-        if not ok:
-            pending.append(entry)
+    pending = settle_pending(state.get('unrecorded_closes') or [], adapter, config, snapshot, apply)
+    state['unrecorded_closes'] = pending   # saved even when this cycle raises (main saves state)
     if pending:
         stop_reason = f"{len(pending)} closed pane(s) still without a harness record; retried next cycle"
     for address, (space, tab) in sorted(pane_of(snapshot).items()):
@@ -524,9 +556,16 @@ def cycle(adapter, config, state, now, *, apply=False, paths=None):
                         item['action'] = 'report_requested' if decision == 'requested' else 'keep'
                         item['reasons'].append({'requested': 'asked the session for its close report',
                                                 'waiting': 'waiting for the session close report'}.get(decision, detail))
-                    if item['action'] == 'closed_unrecorded':
-                        pending.append({k: v for k, v in item.items() if k not in ('_pane', 'screen_tail')})
-                        stop_reason = 'a closed pane has no harness record yet; retried next cycle'
+                    if item['action'] in ('closed_unrecorded', 'close_unconfirmed'):
+                        pending.append({**{k: v for k, v in item.items() if k not in ('_pane', 'screen_tail')},
+                                        'pending': 'unrecorded' if item['action'] == 'closed_unrecorded' else 'unconfirmed'})
+                        state['unrecorded_closes'] = pending   # in the state now, not only at the cycle's end
+                        stop_reason = 'a close is still owed its harness record; settled next cycle'
+                    if item['action'] == 'close_unconfirmed':
+                        item.pop('_pane', None)
+                        item.pop('_pane_id', None)
+                        results.append(item)
+                        break   # the layout cannot be read: nothing else acts this cycle
                     if item['action'] in ('slept', 'closed', 'closed_unrecorded'):
                         acted += 1
                         tracking.pop(address, None)
@@ -541,6 +580,7 @@ def cycle(adapter, config, state, now, *, apply=False, paths=None):
                             item['focus_moved'] = True
         item.pop('argv', None)
         item.pop('_pane', None)
+        item.pop('_pane_id', None)
         results.append(item)
     state.update(last_at=now, sessions=tracking, trial=trial, reports=reports, unrecorded_closes=pending)
     return {'at': dt.datetime.fromtimestamp(now).astimezone().isoformat(), 'mode': 'apply' if apply else 'dry-run',
