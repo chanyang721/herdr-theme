@@ -59,6 +59,28 @@ def app(command, args):
     return json.loads(subprocess.check_output(['herdr-app','do',command,json.dumps(args)],text=True,encoding='utf-8'))
 
 
+def view():
+    """(space, tab, focused pane) the window shows now, or None when it cannot be read."""
+    try:
+        status=json.loads(subprocess.check_output(['herdr-app','status'],text=True,encoding='utf-8'))
+    except (OSError,ValueError,subprocess.SubprocessError):
+        return None
+    if not isinstance(status,dict):return None
+    return (status.get('space'),status.get('tab'),status.get('focused_pane'))
+
+
+def restore_view(before):
+    """Creating a space must not change what the person is looking at. herdr-app's space.new has
+    no option for that, so the selection is compared afterwards and the parts that moved are put
+    back (space, then tab, then pane). Best effort: a failure here never undoes the new space."""
+    after=view()
+    if not before or not after or after==before:return
+    for index,(command,key) in enumerate((('space.select','id'),('tab.select','id'),('pane.focus','pane'))):
+        if before[index] and after[index]!=before[index]:
+            try:app(command,{key:before[index]})
+            except (OSError,ValueError,subprocess.SubprocessError):pass
+
+
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('name');parser.add_argument('folder')
@@ -82,21 +104,25 @@ def main():
         launched.append({'kind':'claude','tier':tier,'tier_used':used,'model':(entry or {}).get('model'),
                          'effort':(entry or {}).get('effort')})
         spec={'argv':launch_argv(['claude']+model_tier.flags('claude',entry))}
-    new=app('space.new',{'name':args.name,'folder':args.folder,'tab':'개발',**spec})
-    # The core adoption can arrive after the creation acknowledgment. Identify
-    # the observed terminal rather than guessing an ID or duplicating the space.
-    first=None
-    for _ in range(40):
-        observed=json.loads(subprocess.check_output(['herdr-app','ls']))['spaces']
-        for space in observed:
-            for tab in space['tabs']:
-                match=next((t for t in tab['terminals'] if t['terminal']==new['terminal']),None)
-                if match:
-                    first=match;new.update(space=space['id'],tab=tab['id'])
-        if first:break
-        time.sleep(0.05)
-    if first is None:raise SystemExit('Terminal created but not yet visible; inspect herdr-app ls before retrying.')
-    app('space.rename',{'id':new['space'],'name':args.name})
+    before=view()
+    try:
+        new=app('space.new',{'name':args.name,'folder':args.folder,'tab':'개발',**spec})
+        # The core adoption can arrive after the creation acknowledgment. Identify
+        # the observed terminal rather than guessing an ID or duplicating the space.
+        first=None
+        for _ in range(40):
+            observed=json.loads(subprocess.check_output(['herdr-app','ls']))['spaces']
+            for space in observed:
+                for tab in space['tabs']:
+                    match=next((t for t in tab['terminals'] if t['terminal']==new['terminal']),None)
+                    if match:
+                        first=match;new.update(space=space['id'],tab=tab['id'])
+            if first:break
+            time.sleep(0.05)
+        if first is None:raise SystemExit('Terminal created but not yet visible; inspect herdr-app ls before retrying.')
+        app('space.rename',{'id':new['space'],'name':args.name})
+    finally:
+        restore_view(before)
     if args.agents:
         subprocess.run(['hc','label',first['terminal'],'sixfold.native-agent=claude'],check=True,capture_output=True, creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
         launched[0]['terminal']=first['terminal']
