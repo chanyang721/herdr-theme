@@ -239,7 +239,7 @@ Codex·Claude 한도를 브랜드 아이콘·막대·백분율로: 5시간·7일
 
 **채널 알림.** `data/sixfold/project-alerts.json`의 새 채널 메시지는 워크스페이스 제목 아래 줄에 나오고, `sixfold-slack-inbox` mod는 `data/sixfold/slack-mentions.json`의 멘션을 스레드별로 보여 줍니다. Slack에서 모으는 일은 별도 도구가 합니다.
 
-**분할과 새 워크스페이스.** `scripts/balance_grid.py`는 아무것도 재시작하지 않고 6개 터미널 탭을 같은 크기로 맞추고, `scripts/workspace.py "Example" /path`는 **+ Space**처럼 워크스페이스를 만듭니다(`--shells`는 셸만).
+**분할과 새 워크스페이스.** `scripts/balance_grid.py`는 아무것도 재시작하지 않고 6개 터미널 탭을 같은 크기로 맞추고, `scripts/workspace.py "Example" /path`는 **+ Space**처럼 워크스페이스를 만듭니다(`--shells`는 셸만, `--tiers high,mid,high,high,low,mid`는 칸마다 그 작업 난이도의 모델로 엽니다. `scripts/model_tier.py` 참고).
 
 **고정 표시·아이콘·로컬 설정.** `data/sixfold/workspace-pins.local.json`(`{"spaces":[{"id":"…","machine":null}]}`)은 정확히 그 워크스페이스에 핀과 강조 테두리를 붙입니다. `scripts/set_workspace_icon.py 'ID 또는 이름' icon.png`는 프로젝트 아이콘(SVG/PNG/JPEG/WebP)을 지정합니다. 사람마다 다른 이름·색·폴더·Slack 주소는 `data/sixfold/site.local.json`(`config/site.example.json`에서 시작)에 두며, `"pane_header_index": true`는 칸 번호를 다시 보여 줍니다. `*.local.json`은 git이 무시합니다.
 

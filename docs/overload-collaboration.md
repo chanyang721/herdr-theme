@@ -16,7 +16,7 @@ python3 ~/.config/herdr-app/scripts/sixfold/collaborate.py enqueue \
   --mode read-only --text 'README.md 줄 수를 읽기 전용으로 확인'
 ```
 
-`enqueue --tier low|mid|high`(기본 high)를 주면 drain은 그 tier 모델의 쉬는 세션을 먼저, 없으면 더 높은 모델 세션을 고른다. 낮은 모델 세션에는 보내지 않는다. 같은 ID를 다른 tier로 다시 등록하면 거절한다. 모델을 모르는 세션은 high다(ADR-0008).
+`enqueue --tier low|mid|high|max`(기본 high)를 주면 drain은 그 tier 모델의 쉬는 세션을 먼저, 없으면 더 높은 모델 세션을 고른다. 낮은 모델 세션에는 보내지 않는다. 같은 ID를 다른 tier로 다시 등록하면 거절한다. 모델을 모르는 세션은 high다(ADR-0008).
 
 등록 후 원 세션에서 직접 할 일은 실행 전에 `start ID`로 선점한다. 임대가 먼저 생기면 `start`가 실패하므로 그 작업을 직접 수행하지 않는다. 수신 세션은 지시문에 포함된 `accept ID --lease TOKEN`이 성공한 뒤에만 실행한다. 다른 세션의 작업 폴더에 쓰지 않으며, 쓰기 작업은 별도 worktree를 쓴다. `--owns`는 저장소 상대 경로를 쉼표로 나눈다. `..`와 절대 경로는 거부한다. 진행 중인 쓰기 작업과 소유 범위가 겹치면 분배를 보류한다. glob이 애매하면 상위 디렉터리를 통째로 예약한다. 이는 이 원장에 참여한 작업 사이의 보호이며, 다른 도구의 파일 쓰기를 OS에서 막지는 않는다.
 

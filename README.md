@@ -239,7 +239,7 @@ A project file tree and a preview panel for Markdown (and on macOS images, PDFs 
 
 **Channel alerts.** New channel messages listed in `data/sixfold/project-alerts.json` appear on a line under the workspace title; the `sixfold-slack-inbox` mod shows mentions from `data/sixfold/slack-mentions.json` grouped by thread. Collecting from Slack is a separate tool.
 
-**Grids and new workspaces.** `scripts/balance_grid.py` equalises six-terminal tabs without restarting anything; `scripts/workspace.py "Example" /path` creates a workspace like **+ Space** (`--shells` for plain shells).
+**Grids and new workspaces.** `scripts/balance_grid.py` equalises six-terminal tabs without restarting anything; `scripts/workspace.py "Example" /path` creates a workspace like **+ Space** (`--shells` for plain shells; `--tiers high,mid,high,high,low,mid` opens each pane on the model for that task tier, see `scripts/model_tier.py`).
 
 **Pins, icons and local settings.** `data/sixfold/workspace-pins.local.json` (`{"spaces":[{"id":"…","machine":null}]}`) marks exact workspaces with a pin and accent border. `scripts/set_workspace_icon.py 'ID or name' icon.png` sets a project icon (SVG/PNG/JPEG/WebP). Per-person names, colours, folders and the Slack address live in `data/sixfold/site.local.json` (start from `config/site.example.json`); `"pane_header_index": true` brings back pane numbers. `*.local.json` is git-ignored.
 
