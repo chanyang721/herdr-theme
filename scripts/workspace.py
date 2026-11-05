@@ -60,30 +60,35 @@ def app(command, args):
 
 
 def view():
-    """(space, tab, focused pane, ids that exist) the window shows now, or None when unreadable."""
+    """(space, tab, focused pane, {terminal: pane}) the window shows now, or None when unreadable.
+    `herdr-app ls` lists only terminals, so a mod pane or tab (a document, a sidebar) is never in the map."""
     try:
         status=json.loads(subprocess.check_output(['herdr-app','status'],text=True,encoding='utf-8'))
         spaces=json.loads(subprocess.check_output(['herdr-app','ls']))['spaces']
-        ids=set()
-        for space in spaces:
-            ids.add(space.get('id'))
-            for tab in space.get('tabs',[]):
-                ids.add(tab.get('id'))
-                ids.update(t.get('pane') for t in tab.get('terminals',[]))
+        panes={t.get('terminal'):t.get('pane') for space in spaces for tab in space.get('tabs',[]) for t in tab.get('terminals',[])}
     except (OSError,ValueError,KeyError,TypeError,subprocess.SubprocessError):
         return None
     if not isinstance(status,dict):return None
-    return (status.get('space'),status.get('tab'),status.get('focused_pane'),ids)
+    return (status.get('space'),status.get('tab'),status.get('focused_pane'),panes)
 
 
-def restore_view(before):
+def took_selection(before,reply,after):
+    """True only when the selection sits on a tab or pane this creation made: the ids in its own
+    reply, or (when it failed after creating) a terminal pane that was not listed before. An old
+    terminal or a mod pane the person chose is neither, so it is never ours."""
+    reply=reply if isinstance(reply,dict) else {}
+    mine={reply.get('pane'),after[3].get(reply.get('terminal'))}|(set(after[3].values())-set(before[3].values()))
+    mine.discard(None)
+    return after[2] in mine or bool(reply.get('tab') and after[1]==reply.get('tab'))
+
+
+def restore_view(before,reply):
     """Creating a space must not change what the person is looking at. herdr-app's space.new has
-    no option for that, so the selection is compared afterwards. If it now sits on a tab or pane
-    that did not exist before, the new space took it and the earlier selection (space, tab, pane)
-    is put back. A selection on things that already existed was chosen by the person meanwhile
-    and is left alone. Best effort: a failure here never undoes the new space."""
+    no option for that, so the selection is compared afterwards. If what the creation made took
+    it, the earlier selection (space, tab, pane) is put back; a selection the person made on
+    anything else is left alone. Best effort: a failure here never undoes the new space."""
     after=view()
-    if not before or not after or (after[1] in before[3] and after[2] in before[3]):return
+    if not before or not after or not took_selection(before,reply,after):return
     for index,(command,key) in enumerate((('space.select','id'),('tab.select','id'),('pane.focus','pane'))):
         if before[index] and after[index]!=before[index]:
             try:app(command,{key:before[index]})
@@ -114,6 +119,7 @@ def main():
                          'effort':(entry or {}).get('effort')})
         spec={'argv':launch_argv(['claude']+model_tier.flags('claude',entry))}
     before=view()
+    new=None
     try:
         new=app('space.new',{'name':args.name,'folder':args.folder,'tab':'개발',**spec})
         # The core adoption can arrive after the creation acknowledgment. Identify
@@ -131,7 +137,7 @@ def main():
         if first is None:raise SystemExit('Terminal created but not yet visible; inspect herdr-app ls before retrying.')
         app('space.rename',{'id':new['space'],'name':args.name})
     finally:
-        restore_view(before)
+        restore_view(before,new)
     if args.agents:
         subprocess.run(['hc','label',first['terminal'],'sixfold.native-agent=claude'],check=True,capture_output=True, creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
         launched[0]['terminal']=first['terminal']

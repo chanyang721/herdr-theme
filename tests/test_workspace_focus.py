@@ -17,7 +17,8 @@ import workspace
 
 class Window:
     def __init__(self):
-        self.spaces={'sp-main':{'tb-main':['p-main']},'sp-other':{'tb-other':['p-other']}}
+        self.spaces={'sp-main':{'tb-main':['p-main']},'sp-other':{'tb-other':['p-other']},
+                     'sp-mod':{'tb-mod':[]}}    # a document tab: a mod pane that `ls` never lists
         self.sel={'space':'sp-main','tab':'tb-main','pane':'p-main'}
         self.new_takes_selection=True
         self.person_picks=None      # a click that lands while the space is being created
@@ -33,9 +34,9 @@ class Window:
             if self.new_takes_selection:self.select('sp-new','tb-new','p-new')
             return {'terminal':'term-p-new','pane':'p-new','space':'sp-new','tab':'tb-new'}
         if command=='space.select':
-            tab=next(iter(self.spaces[args['id']]));self.select(args['id'],tab,self.spaces[args['id']][tab][0])
+            tab=next(iter(self.spaces[args['id']]));self.select(args['id'],tab,(self.spaces[args['id']][tab] or ['p-mod'])[0])
         elif command=='tab.select':
-            self.select(self.sel['space'],args['id'],self.spaces[self.sel['space']][args['id']][0])
+            self.select(self.sel['space'],args['id'],(self.spaces[self.sel['space']][args['id']] or ['p-mod'])[0])
         elif command=='pane.focus':
             self.sel['pane']=args['pane']
         return {}
@@ -79,6 +80,21 @@ class KeepFocusTests(unittest.TestCase):
         win=Window();win.hide_new_terminal=True;win.new_takes_selection=False;win.person_picks=('sp-other','tb-other','p-other')
         with self.assertRaises(SystemExit):self.create(win)
         self.assertEqual(win.sel['space'],'sp-other')
+
+    MOD=('sp-mod','tb-mod','p-mod')
+
+    def test_a_person_choosing_a_mod_pane_meanwhile_is_not_overridden(self):
+        win=Window();win.new_takes_selection=False;win.person_picks=self.MOD;self.create(win)
+        self.assertEqual(tuple(win.sel.values()),self.MOD)
+
+    def test_a_failure_leaves_a_persons_mod_pane_choice_alone(self):
+        win=Window();win.hide_new_terminal=True;win.new_takes_selection=False;win.person_picks=self.MOD
+        with self.assertRaises(SystemExit):self.create(win)
+        self.assertEqual(tuple(win.sel.values()),self.MOD)
+
+    def test_the_new_space_taking_over_from_a_mod_pane_is_undone(self):
+        win=Window();win.select(*self.MOD);self.create(win)
+        self.assertEqual(tuple(win.sel.values()),self.MOD)
 
 
 if __name__=='__main__':unittest.main()
