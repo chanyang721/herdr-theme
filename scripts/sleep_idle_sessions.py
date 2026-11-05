@@ -44,7 +44,7 @@ BASE = site_config.folder('state_dir')
 VOICE = re.compile(r'(?:🎙|🎤|\bListening\b|\brecording\b|녹음\s*중|받아쓰는\s*중|음성\s*입력\s*중)', re.I)
 OBSERVER_FILES = ('sleep_idle_sessions.py', 'agent_sessions.py', 'space_job_evidence.py', 'close_finished_spaces.py', 'session_sleep_stub.py',
                   'site_config.py')
-SLEEP_LABEL, TITLE_LABEL = 'sixfold.sleep', 'sixfold.title'
+SLEEP_LABEL, TITLE_LABEL, NEW_LABEL = 'sixfold.sleep', 'sixfold.title', 'sixfold.sleep.new'
 
 
 def observer_sha256(folder):
@@ -177,12 +177,20 @@ def inspect(address, space, snapshot, adapter, config, tab=None):
     if not valid:
         reasons.append(why)
     mapping, why = agent_sessions.session_mapping(terminal, config)
-    if mapping is None:
+    child = adapter.child(terminal) if mapping is None and 'inherited child session' in why and hasattr(adapter, 'child') else None
+    if mapping is None and not child:
         reasons.append(why)
         return item
-    item['session_id'] = mapping['session_id']
+    item['session_id'] = (mapping or child)['session_id']
     item['argv'] = (terminal.get('foreground') or {}).get('argv') or []
-    jobs_ok, jobs_reason, jobs_fp = adapter.backend(terminal, config, valid)
+    if child:
+        # Opened inside another agent: no transcript to read jobs from, and nothing to resume. Its
+        # clean process tree is the job evidence; it sleeps after its report and wakes as a new
+        # session that reads the workspace memory.
+        item['no_resume'] = True
+        jobs_ok, jobs_reason, jobs_fp = valid, why, 'no-transcript'
+    else:
+        jobs_ok, jobs_reason, jobs_fp = adapter.backend(terminal, config, valid)
     if not jobs_ok:
         reasons.append(jobs_reason)
     text = adapter.screen(address)
@@ -199,7 +207,7 @@ def inspect(address, space, snapshot, adapter, config, tab=None):
             reasons.append('input not empty')
     item['screen_tail'] = '\n'.join(text.splitlines()[-12:])[:2000]
     item['fingerprint'] = hashlib.sha256(json.dumps([address, terminal.get('pid'), terminal.get('status_ms'), terminal.get('turn'),
-                                                     pids, jobs_fp, mapping['session_id'], hashlib.sha256(text.encode()).hexdigest()],
+                                                     pids, jobs_fp, item['session_id'], hashlib.sha256(text.encode()).hexdigest()],
                                                     sort_keys=True).encode()).hexdigest()
     return item
 
@@ -219,8 +227,10 @@ def ticket(item, tickets_dir):
     """What the stub needs to resume: the original command, folder and session."""
     path = Path(tickets_dir) / f"{item['address']}.json"
     path.parent.mkdir(parents=True, exist_ok=True)
+    argv = (agent_sessions.new_session_argv(item['app'], item.get('argv')) if item.get('no_resume')
+            else agent_sessions.resume_argv(item['app'], item.get('argv'), item['session_id']))
     value = {'address': item['address'], 'app': item['app'], 'session_id': item['session_id'], 'cwd': item.get('cwd'),
-             'argv': agent_sessions.resume_argv(item['app'], item.get('argv'), item['session_id']),
+             'argv': argv, 'new_session': bool(item.get('no_resume')),
              'title': item.get('title') or '', 'space_id': item['space_id'], 'space_name': item.get('space_name')}
     path.write_text(json.dumps(value, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
     path.chmod(0o600)
@@ -254,8 +264,11 @@ def sleep_one(item, adapter, config, paths, now):
     stub = paths['stub']
     adapter.type_line(item['address'], f'{shlex_quote(sys.executable)} {shlex_quote(str(stub))} {shlex_quote(str(path))}')
     title = (item.get('title') or '')[:60]
-    adapter.label(item['address'], **{SLEEP_LABEL: f"{agent_sessions.provider(item['app'])}:{item['session_id']}",
-                                      TITLE_LABEL: f'절전 · {title}' if title else '절전'})
+    labels = {SLEEP_LABEL: f"{agent_sessions.provider(item['app'])}:{item['session_id']}",
+              TITLE_LABEL: f'절전 · {title}' if title else '절전'}
+    if item.get('no_resume'):
+        labels[NEW_LABEL] = '1'   # wakes as a new session: the space archive must not try to resume it
+    adapter.label(item['address'], **labels)
     return 'slept'
 
 

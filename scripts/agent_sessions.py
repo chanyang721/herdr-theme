@@ -148,6 +148,28 @@ def session_mapping(terminal, config=None):
     return {**base, 'session_id': sid}, ''
 
 
+def pane_session_id(address, created_ms, agent_pid):
+    """The stand-in session id of a Claude without a transcript (an inherited child session).
+
+    The harness derives the same value (runtime/lifecycle.pane_session_id) when that session runs
+    `harness.py close-report`, so park, close-status and the session's own report all match. It
+    never resumes anything: the pane comes back as a new session reading the workspace memory."""
+    import uuid
+    return str(uuid.uuid5(uuid.NAMESPACE_URL, f'herdr-pane-session:{address}:{created_ms}:{agent_pid}'))
+
+
+def child_session(terminal, reader=None):
+    """{session_id, no_resume} for a Claude that runs as an inherited child session, else None."""
+    fg = terminal.get('foreground') or {}
+    app = (terminal.get('status') or {}).get('app')
+    pid, created = fg.get('pid') if isinstance(fg, dict) else None, terminal.get('created_ms')
+    if provider(app) != 'claude' or not isinstance(pid, int) or not created or not terminal.get('address'):
+        return None
+    if not inherited_child_session(pid, reader):
+        return None
+    return {'session_id': pane_session_id(terminal['address'], created, pid), 'no_resume': True}
+
+
 def inherited_child_session(pid, reader=None):
     """True when the process environment carries CLAUDE_CODE_CHILD_SESSION=1 (read with ps, never printed)."""
     reader = reader or (lambda p: run(['ps', 'eww', '-p', str(p), '-o', 'command=']))
@@ -295,8 +317,11 @@ def summary(item):
     git = item.get('git') or {}
     sid, app = item['session_id'], item['app']
     done = _clean(f"{item.get('space_name') or '?'} {item['address']}: {item.get('title') or '제목 없음'}", 280)
-    command = f'claude --resume {sid}' if provider(app) == 'claude' else f'codex resume {sid}'
-    remaining = f'다시 열기: 그 칸에서 Enter, 또는 {command}'
+    if item.get('no_resume'):
+        remaining = '다시 열기: 전사 없는 세션이라 이어 열 수 없음. 그 칸에서 Enter 또는 harness.py reopen 으로 새 세션이 워크스페이스 기억을 읽고 시작'
+    else:
+        command = f'claude --resume {sid}' if provider(app) == 'claude' else f'codex resume {sid}'
+        remaining = f'다시 열기: 그 칸에서 Enter, 또는 {command}'
     if git.get('branch') is None:
         risks = 'git 상태 미확인 또는 git 폴더 아님'
     else:

@@ -152,6 +152,9 @@ class Live:
         configured = (config.get('sessions') or {}).get(terminal.get('address'))
         return configured or agent_sessions.session_mapping(terminal, config)[0]
 
+    def child(self, terminal):
+        return agent_sessions.child_session(terminal)
+
     def park(self, config, item, event, reason=None):
         return agent_sessions.harness_park(config, item, event, reason=reason)
 
@@ -202,9 +205,12 @@ def slept_session(terminal, space):
     provider, sid = label.split(':', 1)
     if provider not in ('claude', 'codex') or not re.fullmatch(r'[0-9a-f-]{36}', sid):
         return None
+    labels = terminal.get('labels') or {}
     return {'address': terminal.get('address'), 'app': 'claude-code' if provider == 'claude' else 'codex', 'session_id': sid,
-            'space_id': space['id'], 'space_name': space.get('name'), 'title': (terminal.get('labels') or {}).get('sixfold.title'),
-            'cwd': terminal.get('cwd'), 'turn': terminal.get('turn'), 'slept': True}
+            'space_id': space['id'], 'space_name': space.get('name'), 'title': labels.get('sixfold.title'),
+            'cwd': terminal.get('cwd'), 'turn': terminal.get('turn'), 'slept': True,
+            # slept without a transcript: it wakes as a new session, so nothing is resumed on reopen
+            **({'no_resume': True} if labels.get('sixfold.sleep.new') else {})}
 
 
 def inspect(space, snapshot, adapter, config):
@@ -250,8 +256,10 @@ def inspect(space, snapshot, adapter, config):
         if not valid:
             reasons.append(f'{address}: {why}')
         jobs_ok, jobs_reason, jobs_fingerprint = adapter.backend(terminal, config, valid)
-        child = 'inherited child session' in (jobs_reason or '')
-        if not jobs_ok and not (child and valid and config.get('_manual')):
+        child = adapter.child(terminal) if 'inherited child session' in (jobs_reason or '') and hasattr(adapter, 'child') else None
+        # A Claude opened inside another agent has no transcript to read its jobs from. Its process
+        # tree (no shell, build or other child) and the footer below are the evidence instead.
+        if not jobs_ok and not (child and valid):
             reasons.append(f'{address}: {jobs_reason}')
         text = adapter.screen(address)
         if background_running(text):
@@ -266,10 +274,10 @@ def inspect(space, snapshot, adapter, config):
             sessions.append({'address': address, 'app': agent, 'session_id': mapping['session_id'], 'space_id': space['id'],
                              'space_name': space.get('name'), 'title': terminal.get('title'), 'cwd': terminal.get('cwd'),
                              'turn': terminal.get('turn')})
-        elif child and config.get('_manual'):
-            # No session file or transcript (started inside another Claude): it is archived as a
-            # pane that reopens as a new session with the workspace memory injected.
-            sessions.append({'address': address, 'app': agent, 'session_id': None, 'space_id': space['id'],
+        elif child:
+            # No session file or transcript (started inside another agent): it still reports and is
+            # parked under its pane session id, and reopens as a new session reading the workspace memory.
+            sessions.append({'address': address, 'app': agent, 'session_id': child['session_id'], 'space_id': space['id'],
                              'space_name': space.get('name'), 'title': terminal.get('title'), 'cwd': terminal.get('cwd'),
                              'turn': terminal.get('turn'), 'no_resume': True})
         else:
@@ -295,7 +303,9 @@ def archive_of(space, item, parked, snapshot, adapter):
             pane = {'address': address, 'agent': s.get('app') or t.get('app'), 'cwd': s.get('cwd') or term.get('cwd'),
                     'last_state': 'slept' if s.get('slept') else t.get('status'),
                     'git': s.get('git') or (adapter.git(term.get('cwd')) if hasattr(adapter, 'git') else None)}
-            if s.get('session_id'):
+            if s.get('no_resume'):
+                pane['no_transcript'] = True   # reopen starts a new session; the pane id is not resumable
+            elif s.get('session_id'):
                 pane['session_id'] = s['session_id']
             if s.get('title'):
                 pane['title'] = str(s['title'])[:120]
@@ -393,11 +403,7 @@ def cycle(adapter, config, state, now, *, apply=False, only_space=None, report_d
                         for session in item.get('sessions', []):
                             if session.get('slept'):
                                 continue   # it reported (or was parked) when it was put to sleep
-                            if session.get('no_resume'):
-                                # it cannot be resumed, but it can still answer: ask it like any other
-                                session = {**session, 'session_id': session.get('session_id') or ''}
-                                if not session['session_id']:
-                                    continue
+                            # a session without a transcript cannot be resumed, but it answers like any other
                             decision, detail = agent_sessions.report_gate(reports, session, adapter, config, now)
                             if decision == 'ready':
                                 session['report_task_id'] = detail.get('task_id')

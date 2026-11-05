@@ -17,7 +17,7 @@ import select
 import subprocess
 import sys
 
-LABELS = ('sixfold.sleep', 'sixfold.title')
+LABELS = ('sixfold.sleep', 'sixfold.title', 'sixfold.sleep.new')
 
 
 PASTE = ('\x1b[200~', '\x1b[201~')   # bracketed-paste markers around a pasted message
