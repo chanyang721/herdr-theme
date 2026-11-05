@@ -272,6 +272,22 @@ class ClaudeJobEvidenceTests(unittest.TestCase):
     def test_verified_completed_log_can_be_accepted(self):
         self.assertTrue(self.check()[0], self.check())
 
+    def test_metadata_lines_rewritten_without_work_keep_the_fingerprint(self):
+        # 2026-11-05: Claude Code rewrites mode/permission-mode/session-owner/... lines with no new
+        # turn, which restarted the sleep observer's idle window on every cycle.
+        talk = [{'sessionId': 'claude-main', 'timestamp': '2026-11-05T04:58:48Z',
+                 'message': {'role': 'assistant', 'stop_reason': 'end_turn', 'content': []}}]
+        self.write(talk)
+        before = self.check()
+        meta = [{'type': t, 'sessionId': 'claude-main'} for t in ('mode', 'permission-mode', 'session-owner', 'atis-latch', 'last-prompt')]
+        self.write(talk + meta)
+        after = self.check()
+        self.assertTrue(after[0], after)
+        self.assertEqual(before[2], after[2])
+        self.write(talk + meta + [{'sessionId': 'claude-main', 'timestamp': '2026-11-05T05:10:00Z', 'type': 'user',
+                                    'message': {'role': 'user', 'content': '다음 일'}}] + talk)
+        self.assertNotEqual(before[2], self.check()[2])   # a new conversation line is new evidence
+
     def test_missing_process_meta_or_unknown_completion_is_unverified(self):
         (self.home/'sessions/100.json').unlink()
         self.assertFalse(self.check()[0])

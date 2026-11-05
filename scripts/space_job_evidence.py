@@ -312,7 +312,12 @@ def _claude_records(path, observations):
         raise Unverified('backend jobs unverified: Claude history incomplete')
     lines = [line for line in data.decode('utf-8').split('\n') if line.strip()]
     records = [json.loads(line) for line in lines]
-    observations.append({'claude_log': str(path), 'sha256': hashlib.sha256(data).hexdigest(), 'mtime_ns': after.st_mtime_ns})
+    # Only timestamped conversation lines count: Claude Code rewrites metadata lines (mode,
+    # permission-mode, session-owner, atis-latch, last-prompt, ai-title...) without any new work,
+    # which kept restarting the idle window (2026-11-05, t4q: last turn 13:58, file touched 14:58).
+    talk = [line for line, record in zip(lines, records) if isinstance(record, dict) and record.get('timestamp')]
+    observations.append({'claude_log': str(path), 'sha256': hashlib.sha256('\n'.join(talk).encode('utf-8')).hexdigest(),
+                         'lines': len(talk)})
     return records, after.st_mtime*1000
 
 
