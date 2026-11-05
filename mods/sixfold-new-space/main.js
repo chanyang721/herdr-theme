@@ -8,6 +8,9 @@ export default class NewWorkspace extends View {
     this.machineName = props()?.machineLabel || this.machine || '이 컴퓨터';
     this.name = InputState.new({placeholder:'워크스페이스 이름'});
     this.folder = InputState.new({value:props()?.folder || (this.machine === null ? home() : ''), placeholder:this.machine === null ? '프로젝트 폴더' : '원격 폴더 (비워두면 해당 컴퓨터의 홈)'});
+    // Pane tiers in pane order (ADR-0008): whoever decides to make the space picks them for the
+    // planned work; empty keeps every pane on the CLI default (or site.local.json new_space_tiers).
+    this.tiers = InputState.new({value:props()?.tiers || '', placeholder:'칸별 tier 6개 (예: high,mid,high,high,low,mid · 비우면 기본)'});
     this.busy = false;
     this.error = '';
     this.name.on('submit', (_e,cx)=>this.create(cx));
@@ -16,7 +19,7 @@ export default class NewWorkspace extends View {
 
   create(cx) {
     if (this.busy) return;
-    const name=this.name.value().trim(), folder=this.folder.value().trim();
+    const name=this.name.value().trim(), folder=this.folder.value().trim(), tiers=this.tiers.value().replace(/\s+/g,'');
     if (!name || (this.machine === null && !folder)) { this.error='이름과 프로젝트 폴더를 입력하세요.'; cx.notify(); return; }
     this.busy=true; this.error=''; cx.notify();
     cx.spawn(async cx=>{
@@ -34,6 +37,7 @@ export default class NewWorkspace extends View {
         const windows=/^[A-Za-z]:[\\/]/.test(home());
         const result=await exec(windows?'py':'python3',[
           ...(windows?['-3']:[]), '-X','utf8', `${appHome()}/scripts/sixfold/workspace.py`,name,folder,
+          ...(tiers?['--tiers',tiers]:[]),
         ]);
         if (result.code!==0) throw new Error(result.stderr || result.stdout || '워크스페이스 생성 실패');
         closeOverlay(props().overlay);
@@ -55,7 +59,8 @@ export default class NewWorkspace extends View {
         if(this.busy)return;
         cx.spawn(async cx=>{const path=await pickFolder();if(path)this.folder.set_value(path);cx.notify();});
       })))
-      .child(div().text_size(12).text_color(t.muted).child(this.machine === null ? '한 탭 · 6분할 · Claude 4개 + Codex 2개' : '이 컴퓨터의 폴더 경로를 입력하세요. 터미널 탭으로 시작합니다.'))
+      .when(this.machine === null, e=>e.child(Input.new(this.tiers).h(36).px(8).bg(t.background).rounded(5)))
+      .child(div().text_size(12).text_color(t.muted).child(this.machine === null ? '한 탭 · 6분할 · Claude 4개 + Codex 2개 · tier: low|mid|high|max' : '이 컴퓨터의 폴더 경로를 입력하세요. 터미널 탭으로 시작합니다.'))
       .when(Boolean(this.error),e=>e.child(div().text_size(11).text_color(t.blocked).child(this.error)))
       .child(h_flex().gap(8).justify_end()
         .child(button('sf-new-cancel','닫기',()=>{if(!this.busy)closeOverlay(props().overlay);}))

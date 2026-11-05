@@ -6,6 +6,8 @@
   "hub_space_ids": ["sp-your-share-workspace-id"],
   "pane_header_index": false,
   "fixed_space_names": ["Share", "Project A", "Project B"],
+  "model_tiers": {"claude": {"low": "claude-haiku-5-5", "high": null}, "codex": {"high": {"model": "your-codex-model", "effort": "high"}}},
+  "new_space_tiers": ["high", "high", "high", "mid", "low", "high"],
   "project_aliases": {"pa": "project a", "에이": "project a"},
   "workspaces": {
     "project a": {"icon": "flower", "color": "ansi5", "alert_color": "ansi6"},

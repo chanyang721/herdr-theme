@@ -12,6 +12,7 @@ import time
 import uuid
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import model_tier  # noqa: E402
 import site_config  # noqa: E402
 
 APP_HOME = Path(os.environ.get('HERDR_APP_HOME', Path.home() / '.config/herdr-app'))
@@ -45,7 +46,7 @@ def locate(spaces, address):
     raise ValueError(f'발신 에이전트를 찾지 못했습니다: {address}')
 
 
-def candidates(spaces, live, source, project):
+def candidates(spaces, live, source, project, tier=None, models=None, tiers=None):
     origin, _, slot = locate(spaces, source)
     site = site_config.load()
     if not site_config.is_hub(origin, site):
@@ -73,7 +74,11 @@ def candidates(spaces, live, source, project):
             status = status.get('state')
         if fact.get('state') != 'live' or status not in READY or not fact.get('agent'):
             continue
-        rank = (address != preferred, family(fact.get('agent')) != source_kind, abs(index-slot), index)
+        # Same model as the task's tier first, then higher; never a lower model (ADR-0008).
+        step = model_tier.rank(tier, model_tier.tier_of(fact.get('agent'), (models or {}).get(address), tiers))
+        if step is None:
+            continue
+        rank = (step, address != preferred, family(fact.get('agent')) != source_kind, abs(index-slot), index)
         ranked.append((rank, address))
     return target['name'], preferred, [address for _, address in sorted(ranked)]
 
@@ -114,7 +119,8 @@ def receiver_available(text):
 
 
 def dispatch(request, spaces, live):
-    project, preferred, ranked = candidates(spaces, live, request['source'], request['project'])
+    project, preferred, ranked = candidates(spaces, live, request['source'], request['project'],
+                                            request.get('tier'), model_tier.session_models(), model_tier.mapping())
     for target in ranked:
         # Recheck immediately before sending. Serialize routing clients with the
         # queue lock, and use hc's atomic idle guard wherever it is supported.
@@ -136,7 +142,7 @@ def dispatch(request, spaces, live):
         argv.append(text)
         code, result = call(argv, env={**os.environ, 'HC_TERMINAL_ID': source})
         if not code:
-            return {'state': 'sent', 'id': request['id'], 'source': source,
+            return {'state': 'sent', 'id': request['id'], 'source': source, 'tier': model_tier.tier_name(request.get('tier')),
                     'project': project, 'preferred': preferred, 'target': target,
                     'fallback': target != preferred, 'result': result}
         kind = result.get('error', {}).get('kind')
@@ -195,6 +201,8 @@ def main():
     parser.add_argument('--from', dest='source')
     parser.add_argument('--drain', action='store_true')
     parser.add_argument('--reply', action='store_true', help='request one explicit result reply')
+    parser.add_argument('--tier', choices=model_tier.TIERS, default='high',
+                        help='작업 난이도 low|mid|high(기본): 같은 모델 세션 먼저, 없으면 더 높은 모델, 낮은 모델엔 보내지 않음')
     parser.add_argument('--enable', action='store_true', help='enable the sidebar queue drain for this checkout')
     args = parser.parse_args()
     if args.enable:
@@ -230,7 +238,8 @@ def main():
                     spaces, live = snapshot()
         else:
             request = {'id': uuid.uuid4().hex[:10], 'source': source_address(args.source),
-                       'project': args.project, 'text': args.text, 'reply': args.reply, 'at': int(time.time()*1000)}
+                       'project': args.project, 'text': args.text, 'reply': args.reply, 'tier': args.tier,
+                       'at': int(time.time()*1000)}
             if len(pending) >= 64:
                 raise ValueError('대기 요청 64건이 차 있어 새 요청을 넣지 않았습니다.')
             pending.append(request)
