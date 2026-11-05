@@ -46,7 +46,7 @@ for (const native of [false,true]) test(`background messages refresh through ${n
     'const watchAlerts=()=>{};');
   source = source.replace(/import \{ panePet \} from '.\/pets.js';/,'const panePet=()=>null;')
   source = source.replace(/import \{ paneUsage \} from '.\/session-usage.js';/,'const paneUsage=()=>null;').replace(/import \{ paneMeta, paneMetaChip, showPaneIndex, showTitle \} from '.\/pane-meta.js';/,'const paneMeta=()=>null,paneMetaChip=()=>null,showPaneIndex=()=>false,showTitle=()=>true;');
-  source = source.replace(/import \{ watchBadges, workspaceBadges \} from '.\/badges.js';/,'const watchBadges=()=>{},workspaceBadges=()=>null;');
+  source = source.replace(/import \{ watchBadges, workspaceBadges \} from '.\/badges.js';/,'const watchBadges=()=>{},workspaceBadges=()=>null;').replace(/import \{ watchAsks[^}]*\} from '.\/asks.js';/,'const watchAsks=()=>{},askSection=()=>null,hasAsks=()=>false;').replace(/import \{ askFor \} from '.\/ask-model.js';/,'const askFor=()=>null;');
   const {default: Sidebar} = await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64')+`#native=${native}`);
   const view = new Sidebar();
   view.init({},cx);

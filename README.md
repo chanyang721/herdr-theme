@@ -237,6 +237,8 @@ A project file tree and a preview panel for Markdown (and on macOS images, PDFs 
 
 `<machine>` is empty for this computer. Tones: `blocked`, `working`, `done`, `accent`, `dim`. A click opens `open` as that mod's overlay or runs `command`. Twelve characters each; malformed entries are ignored; shared state wins over the file. The theme publishes none itself.
 
+**Question and permission cards.** When an optional local bridge is installed (`data/sixfold/harness-local/config.json` names its `repo_path`), prompts an agent is waiting on (a permission request, a question, a plan) appear as cards above the alerts, and a `?` marks that session's row. **Allow**, **Deny** or an option runs `harness.py asks answer <id> --allow|--deny [--choice "question=label"]`; the list comes from `harness.py asks --json`. The terminal prompt stays usable at the same time. Without the bridge the cards never appear.
+
 **Channel alerts.** New channel messages listed in `data/sixfold/project-alerts.json` appear on a line under the workspace title; the `sixfold-slack-inbox` mod shows mentions from `data/sixfold/slack-mentions.json` grouped by thread. Collecting from Slack is a separate tool.
 
 **Grids and new workspaces.** `scripts/balance_grid.py` equalises six-terminal tabs without restarting anything; `scripts/workspace.py "Example" /path` creates a workspace like **+ Space** with one coordinating session (`--shells` for a plain shell; `--tiers high` opens that one session on the model for the given task tier, default `high`, see `scripts/model_tier.py`). More panes come from the harness `dispatch`.
