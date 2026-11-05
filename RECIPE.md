@@ -31,7 +31,7 @@ Working is a solid dot, blocked an exclamation mark, done a check, idle an empty
 Only reported states count; an unreported shell is never invented as a successful task.
 Click a row to focus it. Status changes never automatically jump keyboard focus.
 Agent rows carry their own status; there is no duplicate attention area or per-agent Ping control.
-All controls use the app's live IDs. Keyboard shortcuts are layout-scoped; the current six-pane tab is
+All controls use the app's live IDs. Keyboard shortcuts are layout-scoped; the current tab layout is
 preserved across theme switches. Korean is the initial label language; the language toggle persists English/Korean.
 Terminal navigation never needs a network request. A 250 ms reconciliation reads an optional local message log without changing focus.
 Messages begin immediately on independent native, color-coded routes. Each route carries one moving packet per message, including simultaneous sends and replies.
