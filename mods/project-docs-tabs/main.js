@@ -56,7 +56,10 @@ export default class ProjectDocuments extends View {
   init(_props, cx) {
     const p = props() || {};
     this.spaceId = p.spaceId;
-    this.script = p.resolverScript || `${appHome()}/scripts/sixfold/resolve_doc_pins.py`;
+    // Tabs made by older installers name a copy under data/sixfold/doc-tabs that updates never
+    // refresh; the installed helper in scripts/sixfold is the current one.
+    const legacy = /[\\/]data[\\/]sixfold[\\/]doc-tabs[\\/]resolve_doc_pins\.py$/;
+    this.script = p.resolverScript && !legacy.test(p.resolverScript) ? p.resolverScript : `${appHome()}/scripts/sixfold/resolve_doc_pins.py`;
     this.config = p.pinsConfig || `${appHome()}/data/sixfold/project-docs-pins.json`;
     this.mermaidScript = p.mermaidScript || `${appHome()}/scripts/sixfold/render_mermaid.py`;
     this.htmlScript = p.htmlScript || `${appHome()}/scripts/sixfold/render_html.py`;

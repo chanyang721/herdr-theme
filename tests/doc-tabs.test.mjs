@@ -18,7 +18,7 @@ async function load(file, runtime) {
   delete globalThis[key];
   return module;
 }
-async function harness({ documents = [document('a'), document('b')], selection, lineEnding } = {}) {
+async function harness({ documents = [document('a'), document('b')], selection, lineEnding, props: extra = {} } = {}) {
   const handlers = new Map(), calls = [], reads = [], labels = [], timer = new Map(), watchers = new Map();
   const state = { documents, selected: selection, active: false, text: path => `본문 ${path}`, result: null, stage: async text => ({ blocks: [{ text }], files: [], unavailable: false }) };
   const stored = { 'sixfold.docs.selection.v1': selection ? { Demo: selection, Other: 'other' } : { Other: 'other' } };
@@ -38,7 +38,7 @@ async function harness({ documents = [document('a'), document('b')], selection, 
     InputState: { new: () => { const input = { text: '', events: {}, value: () => input.text, set_value: v => { input.text = v; }, on: (name, fn) => { input.events[name] = fn; return true; } }; state.input = input; return input; } },
     Input: { new: () => element() },
     TextView: { markdown: (_id, text) => { labels.push(text); return element(); } },
-    props: () => ({ spaceId: 'Demo' }), appHome: () => '/app',
+    props: () => ({ spaceId: 'Demo', ...extra }), appHome: () => '/app',
     readTextFile: async path => { if (path.endsWith('/project-docs-open.json')) return state.request ? JSON.stringify(state.request) : null; reads.push(path); return state.text(path); },
     exec: async (command, args) => {
       calls.push({ command, args });
@@ -405,4 +405,11 @@ test('kind folders and the 수정일 column list the newest write first, whateve
   const tree = listTree(loc, docs).children[0].children;
   assert.deepEqual(finder.sortNodes(tree, { key: 'date', dir: -1 }).map(n => n.docId), ['old-name-new-write', 'middle', 'new-name-old-write']);
   assert.deepEqual(finder.sortNodes(tree, { key: 'date', dir: 1 }).map(n => n.docId), ['new-name-old-write', 'middle', 'old-name-new-write']);
+});
+
+test('tabs naming the stale data/sixfold/doc-tabs resolver run the installed scripts/sixfold copy instead', async () => {
+  const resolver = h => h.calls.find(c => c.command === 'python3' && c.args[0].endsWith('resolve_doc_pins.py')).args[0];
+  assert.equal(resolver(await harness({ props: { resolverScript: '/app/data/sixfold/doc-tabs/resolve_doc_pins.py' } })), '/app/scripts/sixfold/resolve_doc_pins.py');
+  assert.equal(resolver(await harness({ props: { resolverScript: '/custom/resolve_doc_pins.py' } })), '/custom/resolve_doc_pins.py');
+  assert.equal(resolver(await harness()), '/app/scripts/sixfold/resolve_doc_pins.py');
 });

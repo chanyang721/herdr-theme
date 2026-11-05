@@ -120,8 +120,9 @@ def ensure_document_tabs(document, app_home):
         if any(node.get('content', {}).get('mod') == MOD for tab in space.get('tabs', []) for node in nodes(tab.get('root', {}))):
             continue
         token = hashlib.sha256(space['id'].encode()).hexdigest()[:24]
-        props = {'spaceId': space['id'], 'resolverScript': str(app_home/'data/sixfold/doc-tabs/resolve_doc_pins.py'),
-                 'installerScript': str(app_home/'data/sixfold/doc-tabs/install_doc_tabs.py')}
+        # copy_feature installs the helpers in scripts/sixfold; point new tabs there.
+        props = {'spaceId': space['id'], 'resolverScript': str(app_home/'scripts/sixfold/resolve_doc_pins.py'),
+                 'installerScript': str(app_home/'scripts/sixfold/install_doc_tabs.py')}
         tab = {'id': 'sf-docs-tab-' + token, 'name': '문서', 'root': {
             'id': 'sf-docs-pane-' + token, 'type': 'block', 'content': {'mod': MOD, 'props': props}}}
         space.setdefault('tabs', []).append(tab)
