@@ -845,6 +845,36 @@ class PaneCloseTests(unittest.TestCase):
                 self.assertEqual([c[1] for c in self.live.calls if c[0] == 'park'], ['close_requested', 'close_aborted'])
                 self.assertIn('t12', pane_of_names(self.live))
 
+    def test_a_failed_closed_record_is_not_reported_as_closed_and_is_retried(self):
+        # Codex review HOLD P2: park closed failing was taken as success and nothing retried it.
+        self.config['exclude_addresses'] = []
+        self.live.data['spaces'][1]['tabs'][0]['terminals'].append({'terminal': 't7', 'pane': 'p7', 'sub_agents': []})
+        self.live.data['terminals']['t7'] = copy.deepcopy(self.live.data['terminals']['t3'])
+        self.live.data['terminals']['t7']['address'] = 't7'
+        self.park_then(None, fail_closed=2)
+        state = self.state()
+        got = {r['address']: r for r in sleep.cycle(self.live, self.config, state, NOW, apply=True, paths=self.paths)['results']}
+        self.assertEqual(got['t12']['action'], 'closed_unrecorded')
+        self.assertNotIn('t12', pane_of_names(self.live))
+        self.assertTrue(any('closed record failed' in r for r in got['t12']['reasons']))
+        self.assertEqual([c for c in self.live.calls if c[0] == 'pane.close'], [('pane.close', 'p12')])  # nothing more
+        self.assertEqual([e['address'] for e in state['unrecorded_closes']], ['t12'])
+        # next cycle: the record is retried first; it lands and the list empties
+        self.live.calls.clear()
+        state['last_at'] = NOW - 300
+        sleep.cycle(self.live, self.config, state, NOW, apply=True, paths=self.paths)
+        self.assertEqual([c for c in self.live.calls if c[0] == 'park'][0], ('park', 'closed', 't12'))
+        self.assertEqual(state['unrecorded_closes'], [])
+
+    def test_while_a_closed_record_is_missing_nothing_else_acts(self):
+        state = self.state()
+        state['unrecorded_closes'] = [{'address': 't99', 'app': 'claude-code', 'session_id': SID, 'space_id': 'fixed'}]
+        self.live.park_ok = False
+        got = {r['address']: r for r in sleep.cycle(self.live, self.config, state, NOW, apply=True, paths=self.paths)['results']}
+        self.assertFalse([c for c in self.live.calls if c[0] in ('pane.close', 'keys', 'ask')])
+        self.assertTrue(any('without a harness record' in r for r in got['t12']['reasons']))
+        self.assertEqual(len(state['unrecorded_closes']), 1)
+
     def test_a_failing_pane_close_is_settled_with_close_aborted_and_stops(self):
         def boom(pane_id):
             self.live.calls.append(('pane.close', pane_id))

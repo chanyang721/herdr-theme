@@ -362,7 +362,8 @@ def close_recheck(item, adapter, config, closed):
 def close_one(item, adapter, config, paths, now, snapshot, closed=()):
     """Harness close_requested → local note → fresh recheck → pane.close by id → gone from a fresh
     snapshot → harness closed. Returns (action, the snapshot after the close or None).
-    action: closed | keep (recheck refused; close_aborted recorded)."""
+    action: closed | keep (recheck refused; close_aborted recorded) | closed_unrecorded (the pane is
+    gone but `park closed` failed; the caller keeps it to retry and stops further actions)."""
     item['_pane'] = pane_entry(snapshot, item['address'])
     pane_id = pane_id_of(item['_pane'])
     item['git'] = adapter.git(item.get('cwd'))
@@ -393,8 +394,12 @@ def close_one(item, adapter, config, paths, now, snapshot, closed=()):
                                                 for tab in s.get('tabs', []) for t in tab.get('terminals', [])):
         aborted('pane still present after pane.close')
         raise RuntimeError(f"{item['address']}: pane still present after pane.close; further actions stopped")
-    adapter.park(config, item, 'closed', reason='pane closed')
-    return 'closed', after
+    for _ in range(2):   # the pane is gone: its closed record must land, or be retried later
+        ok, detail = adapter.park(config, item, 'closed', reason='pane closed')
+        if ok:
+            return 'closed', after
+    item['reasons'].append(f'pane closed but the harness closed record failed: {detail}')
+    return 'closed_unrecorded', after
 
 
 def shlex_quote(value):
@@ -422,6 +427,15 @@ def cycle(adapter, config, state, now, *, apply=False, paths=None):
     initial_focus = spaces.focus(snapshot['status'])
     results, tracking, acted, closed = [], {}, 0, set()
     stop_reason = None
+    # A pane closed earlier whose `park closed` failed: retry that record first; while one is
+    # still missing, nothing else is closed or slept (fail-closed).
+    pending = []
+    for entry in state.get('unrecorded_closes') or []:
+        ok, _detail = adapter.park(config, entry, 'closed', reason='pane closed (record retried)') if apply else (False, None)
+        if not ok:
+            pending.append(entry)
+    if pending:
+        stop_reason = f"{len(pending)} closed pane(s) still without a harness record; retried next cycle"
     for address, (space, tab) in sorted(pane_of(snapshot).items()):
         item = inspect(address, space, snapshot, adapter, config, tab)
         old = previous.get(address, {})
@@ -510,7 +524,10 @@ def cycle(adapter, config, state, now, *, apply=False, paths=None):
                         item['action'] = 'report_requested' if decision == 'requested' else 'keep'
                         item['reasons'].append({'requested': 'asked the session for its close report',
                                                 'waiting': 'waiting for the session close report'}.get(decision, detail))
-                    if item['action'] in ('slept', 'closed'):
+                    if item['action'] == 'closed_unrecorded':
+                        pending.append({k: v for k, v in item.items() if k not in ('_pane', 'screen_tail')})
+                        stop_reason = 'a closed pane has no harness record yet; retried next cycle'
+                    if item['action'] in ('slept', 'closed', 'closed_unrecorded'):
                         acted += 1
                         tracking.pop(address, None)
                         reports.pop(address, None)
@@ -525,7 +542,7 @@ def cycle(adapter, config, state, now, *, apply=False, paths=None):
         item.pop('argv', None)
         item.pop('_pane', None)
         results.append(item)
-    state.update(last_at=now, sessions=tracking, trial=trial, reports=reports)
+    state.update(last_at=now, sessions=tracking, trial=trial, reports=reports, unrecorded_closes=pending)
     return {'at': dt.datetime.fromtimestamp(now).astimezone().isoformat(), 'mode': 'apply' if apply else 'dry-run',
             'trial': trial, 'apply_ready': ready, 'focus': initial_focus, 'results': results}
 
