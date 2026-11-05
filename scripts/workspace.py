@@ -60,21 +60,30 @@ def app(command, args):
 
 
 def view():
-    """(space, tab, focused pane) the window shows now, or None when it cannot be read."""
+    """(space, tab, focused pane, ids that exist) the window shows now, or None when unreadable."""
     try:
         status=json.loads(subprocess.check_output(['herdr-app','status'],text=True,encoding='utf-8'))
-    except (OSError,ValueError,subprocess.SubprocessError):
+        spaces=json.loads(subprocess.check_output(['herdr-app','ls']))['spaces']
+        ids=set()
+        for space in spaces:
+            ids.add(space.get('id'))
+            for tab in space.get('tabs',[]):
+                ids.add(tab.get('id'))
+                ids.update(t.get('pane') for t in tab.get('terminals',[]))
+    except (OSError,ValueError,KeyError,TypeError,subprocess.SubprocessError):
         return None
     if not isinstance(status,dict):return None
-    return (status.get('space'),status.get('tab'),status.get('focused_pane'))
+    return (status.get('space'),status.get('tab'),status.get('focused_pane'),ids)
 
 
 def restore_view(before):
     """Creating a space must not change what the person is looking at. herdr-app's space.new has
-    no option for that, so the selection is compared afterwards and the parts that moved are put
-    back (space, then tab, then pane). Best effort: a failure here never undoes the new space."""
+    no option for that, so the selection is compared afterwards. If it now sits on a tab or pane
+    that did not exist before, the new space took it and the earlier selection (space, tab, pane)
+    is put back. A selection on things that already existed was chosen by the person meanwhile
+    and is left alone. Best effort: a failure here never undoes the new space."""
     after=view()
-    if not before or not after or after==before:return
+    if not before or not after or (after[1] in before[3] and after[2] in before[3]):return
     for index,(command,key) in enumerate((('space.select','id'),('tab.select','id'),('pane.focus','pane'))):
         if before[index] and after[index]!=before[index]:
             try:app(command,{key:before[index]})
