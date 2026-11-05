@@ -697,7 +697,8 @@ export default class SixfoldDesk extends View {
         : lit ? div().absolute().top(-1).left(-1).right(-1).bottom(-1).rounded(7).border(2).border_color(collab) : null;
       // The name is text on the header, so its colour is chosen for that header's background.
       const tailColor = collabColor(t, s.active ? t.selected : t.surface);
-      const partnerTail = partner ? h_flex().id(`sf-partner-${s.id}`).flex_none().max_w(110).min_w(0).gap(3).items_center().text_size(12).font_normal().text_color(tailColor)
+      // The Share (hub) space is the shared room itself, so its header carries no computer tag.
+      const partnerTail = partner && workspaceIdentity(s,this.site)!=='hub' ? h_flex().id(`sf-partner-${s.id}`).flex_none().max_w(110).min_w(0).gap(3).items_center().text_size(12).font_normal().text_color(tailColor)
         .tooltip(partnerText)
         .child(svg(`mods/sixfold-desk/icons/device-${computerKind(this.computers?.machines?.[partner.partners[0]]?.os)}.svg`).size(14).flex_none().text_color(tailColor))
         .child(div().min_w(0).truncate().child(`${partnerNames[0]}${partnerNames.length > 1 ? ` +${partnerNames.length - 1}` : ''}`)) : null;
