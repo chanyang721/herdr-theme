@@ -21,7 +21,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - run: cargo test --manifest-path rust/Cargo.toml --locked --jobs 1 voice:: -- --test-threads=1
+      - run: 'cargo test --manifest-path rust/Cargo.toml --locked --jobs 1 voice:: -- --test-threads=1'
         env:
           CARGO_BUILD_JOBS: '1'
       - run: cargo build --manifest-path rust/Cargo.toml --locked --bin herdr-theme --jobs 1
