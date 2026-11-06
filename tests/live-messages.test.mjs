@@ -12,6 +12,7 @@ for (const native of [false,true]) test(`background messages refresh through ${n
   let pinText='{}';
   let malformedAuxiliary=false;
   let appLocation='/app';
+  let visible=true;
   const tasks = [];
   const timers = [];
   const wakeTimers=[],commandQueue=[],commands=[],ownershipViolations=[];let waitingCommand=null,ownership='init';
@@ -33,6 +34,7 @@ for (const native of [false,true]) test(`background messages refresh through ${n
   const runtime = {
     ...(native?{messageEvents:()=>JSON.parse(log).events}:{}),
     props:()=>({role:'sidebar'}), appHome:()=>appLocation,
+    window:()=>({active:false,visible}),
     terminals:()=>[{address:'source'},{address:'target'}],
     readTextFile:async()=>{rawReads++;throw Error('Legacy inputs must use typed subscriptions');},
     subscribeJsonFile:(context,path,callback)=>{let live=true;subscriptions.set(path,value=>runtime.fileDelivery(context).enqueue(value=>{if(live)callback(value);},value));return()=>{live=false;subscriptions.delete(path);};},
@@ -126,6 +128,24 @@ for (const native of [false,true]) test(`background messages refresh through ${n
   assert.equal(rawReads,0,'no raw message/config read polling remains');
   assert.ok(commands.length>0,'native command wakes deliver queued data');
   assert.deepEqual(ownershipViolations,[],'notifications only run after the receiver command resumes');
+  const visibilityEvent=async value=>{
+    visible=value;
+    if(waitingCommand){const resolve=waitingCommand;waitingCommand=null;resolve('window.visibility');}
+    else commandQueue.push('window.visibility');
+    await settle();
+  };
+  const activeTimers=[...view.flowTimers];assert(activeTimers.length>0);
+  await visibilityEvent(false);
+  assert.equal(view.sidebarVisible,false);assert.equal(view.activeFlows.length,0);
+  assert(activeTimers.every(timer=>timer.cancelled),'hidden event cancels all pending packet transitions without a render');
+  if(native)assert.equal(sampler.cancelled,true,'hidden event cancels the memory sampler');
+  log=JSON.stringify({events:[...burst,{id:'while-hidden',source:'source',target:'target',at:Date.now()}]});
+  if(!native){publishFiles();await settle();}
+  assert.equal(view.activeFlows.length,0,'hidden delivery cannot start motion');
+  await visibilityEvent(true);
+  assert.equal(view.sidebarVisible,true);
+  assert.equal(view.activeFlows.length,0,'showing consumes current messages without a backlog of motion');
+  if(native)assert.equal(timers.filter(item=>item.ms===500&&item.options?.owner===null).at(-1).cancelled,false,'shown event resumes one native sampler');
   view.stopLiveMessages?.();for(const stop of view.fileSubscriptions)stop();assert.equal(subscriptions.size,0);
   delete globalThis.__sixfoldTest;
 });

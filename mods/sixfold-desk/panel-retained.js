@@ -107,7 +107,7 @@ export function createRetainedPanel(cx,{macTitlebar=false,onClassic=null,onDispo
   cx.timer.after(0,prune);
   const serial=globalThis.__sixfoldPanelControllerSerial=(globalThis.__sixfoldPanelControllerSerial||0)+1;
   const key=`panel-${serial}-${Date.now()}`;
-  const c={key,protocol:'2',macTitlebar,onClassic,panelWidth:224,visible:true,enabled:true,feed:null,input:null,projection:null,
+  const c={key,protocol:'2',macTitlebar,onClassic,panelWidth:224,visible:typeof window!=='function'||window()?.visible!==false,enabled:true,feed:null,input:null,projection:null,
     rows:new Map(),cards:new Map(),rowKeys:new Map(),cardKeys:new Map(),spaceMap:new Map(),agentSpaces:new Map(),
     names:new Map(),events:null,status:'missing',wake:null,wakeAt:null,stats:{updates:0,notifications:0,renders:{},projections:[]},
     color:()=>theme().accent,motion:false,disposed:false,onDispose,
@@ -120,11 +120,18 @@ export function createRetainedPanel(cx,{macTitlebar=false,onClassic=null,onDispo
     if(c.disposed||!input)return;
     c.stats.updates++;
     const oldFeed=c.feed,oldLayoutKey=c.layoutKey,oldMotion=c.motion;
-    const nextTheme=signature(theme()),themeChanged=nextTheme!==c.themeKey;
-    if(themeChanged){c.themeKey=nextTheme;c.themeRevision=(c.themeRevision||0)+1;}
+    const nextTheme=signature(theme());
     c.hostVisible=typeof window!=='function'||window()?.visible!==false;
     c.preferenceKey=signature([shared('sixfold.motion'),c.enabled,c.visible,c.hostVisible,c.panelWidth,nextTheme]);
     c.input=input;c.status=status;
+    if(!c.visible||!c.hostVisible||!c.enabled){
+      c.motion=false;c.events=panelEventStates(input,Date.now(),{motion:false});
+      c.wake?.cancel();c.wake=null;c.wakeAt=null;
+      c.stats.hiddenSnapshots=(c.stats.hiddenSnapshots||0)+1;
+      return;
+    }
+    const themeChanged=nextTheme!==c.themeKey;
+    if(themeChanged){c.themeKey=nextTheme;c.themeRevision=(c.themeRevision||0)+1;}
     c.motion=c.visible&&c.hostVisible&&c.enabled&&shared('sixfold.motion')!==false&&input.reduced_motion!==true;
     c.events=panelEventStates(input,Date.now(),{previous:c.events,motion:c.motion});
     c.projection=projectPanelFeed(input,c.projection,{includeClosedIds:new Set(c.events.tags.keys())});
@@ -183,8 +190,17 @@ export function createRetainedPanel(cx,{macTitlebar=false,onClassic=null,onDispo
     const next=signature([shared('sixfold.motion'),c.enabled,c.visible,typeof window!=='function'||window()?.visible!==false,c.panelWidth,signature(theme())]);
     if(c.input&&next!==c.preferenceKey)c.apply(c.input);
   };
+  c.navigation=()=>{if(c.input&&c.visible&&c.enabled)c.apply(c.input);};
   c.resize=(width,_cx)=>{if(Math.abs(width-c.panelWidth)>1){c.panelWidth=width;c.preferences();}};
-  c.setVisible=visible=>{if(c.visible!==visible){c.visible=visible;c.preferences();}};
+  c.setVisible=visible=>{
+    if(c.visible!==visible){
+      c.visible=visible;
+      // A hidden window consumes the latest state as a watermark. Reopening
+      // shows current work without replaying a backlog of message animations.
+      if(visible&&c.input)c.events=panelEventStates(c.input,Date.now(),{motion:false});
+      c.preferences();
+    }
+  };
   c.setEnabled=enabled=>{if(c.enabled!==enabled){c.enabled=enabled;c.preferences();}};
   c.dispose=()=>{
     if(c.disposed)return;c.disposed=true;

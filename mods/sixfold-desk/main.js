@@ -101,8 +101,10 @@ export default class SixfoldDesk extends View {
     if (props()?.role === 'pane') return;
     if (props()?.role !== 'sidebar') return;
     const fileReceiver=fileDelivery(cx);
+    this.sidebarVisible=typeof window!=='function'||window()?.visible!==false;
     this.invalidateSidebar=()=>fileReceiver.enqueue(()=>cx.notify());
     this.refreshPanelPreferences=()=>fileReceiver.enqueue(()=>this.panelRetained?.preferences());
+    this.refreshPanelNavigation=()=>fileReceiver.enqueue(()=>this.panelRetained?.navigation());
     this.classicCards=createRetainedCards(cx);
     this.panelState={feed:null,status:'missing'};
     this.panelEvents=null;
@@ -189,8 +191,9 @@ export default class SixfoldDesk extends View {
     this.refreshLegacy=refresh;
     watchSidebarFiles(this,cx,`${appHome()}/data/sixfold`,refresh,{nativeMessages:typeof herdrNative.messageEvents==='function'});
     this.startLiveMessages=()=>{
-      if(this.stopLiveMessages||typeof herdrNative.messageEvents!=='function'||this.panelTrackingActive)return;
-      this.stopLiveMessages=subscribeLiveEvents({key:`${appHome()}:messages`,cx,read:()=>herdrNative.messageEvents(),onChange:events=>fileReceiver.enqueue(events=>{this.nativeMessages=events;refresh(cx);},events),intervalMs:500});
+      if(this.stopLiveMessages||typeof herdrNative.messageEvents!=='function'||this.panelTrackingActive||!this.sidebarVisible)return;
+      this.deliverLiveMessages??=events=>{this.nativeMessages=events;refresh(cx);};
+      this.stopLiveMessages=subscribeLiveEvents({key:`${appHome()}:messages`,cx,read:()=>herdrNative.messageEvents(),onChange:events=>fileReceiver.enqueue(this.deliverLiveMessages,events),intervalMs:500});
     };
     this.startLiveMessages();refresh(cx);
     // The slow dot on a computer link turns at the ends of its pipe. A native loop
@@ -328,6 +331,22 @@ export default class SixfoldDesk extends View {
     cx.spawn(async (cx) => {
       for (;;) {
         const command = await nextCommand();
+        if(command==='window.visibility'){
+          const visible=window()?.visible!==false;
+          if(!visible){
+            this.sidebarVisible=false;this.panelRetained?.setVisible(false);
+            this.stopLegacyMotion();this.stopLiveMessages?.();this.stopLiveMessages=null;
+            fileReceiver.flush();
+          }else{
+            // Drain the latest queued data while the retained panel is still
+            // suspended, then resume from that watermark in this copy's scope.
+            fileReceiver.flush();this.sidebarVisible=true;
+            this.panelRetained?.setVisible(true);this.panelRetained?.preferences();
+            if(!this.panelTrackingActive){this.startLiveMessages?.();this.refreshLegacy?.(cx);this.refreshAlerts?.(cx);this.refreshAsks?.(cx);}
+            cx.notify();
+          }
+          continue;
+        }
         if(command===FILE_CHANGED_COMMAND){fileReceiver.flush();continue;}
         const f = focused();
         const current = panes().filter(p => p.tab === f?.tab);
@@ -440,6 +459,7 @@ export default class SixfoldDesk extends View {
   }
 
   startFlows(cx) {
+    if(this.sidebarVisible===false||this.panelTrackingActive){this.pendingFlows=[];return;}
     this.flowTimers??=new Set();
     const after=(ms,callback)=>{
       let timer;timer=cx.timer.after(ms,cx=>{this.flowTimers.delete(timer);callback(cx);});
@@ -502,6 +522,8 @@ export default class SixfoldDesk extends View {
     if(role==='sidebar'){
       const environment=JSON.stringify([t,shared('sixfold.motion'),window()?.visible??null]);
       if(environment!==this.panelEnvironment){this.panelEnvironment=environment;this.refreshPanelPreferences?.();}
+      const navigation=JSON.stringify(spaces().map(space=>[space.id,space.machine??null,space.active]));
+      if(navigation!==this.panelNavigation){this.panelNavigation=navigation;this.refreshPanelNavigation?.();}
     }
     const f = focused();
     const facts = terminals();

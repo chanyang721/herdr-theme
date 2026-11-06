@@ -13,13 +13,13 @@ function element(){let value;value=new Proxy({nodes:[],calls:[]},{get(target,key
 }});return value;}
 let loads=0;
 async function runtime(motion=false){
-  const objects=[],timers=[],store=new Map([['sixfold.motion',motion]]);let rendering=false;globalThis.__retainedThemePatch={};globalThis.__retainedHostVisible=true;
+  const objects=[],timers=[],store=new Map([['sixfold.motion',motion]]);let rendering=false;globalThis.__retainedThemePatch={};globalThis.__retainedHostVisible=true;globalThis.__retainedNativeSpaces=[];
   const cx={notify(entity){assert(!rendering,'notify during render');entity.dirty=true;},timer:{after(ms,fn){assert(!rendering);const timer={ms,fn,cancelled:false,cancel(){this.cancelled=true;}};timers.push(timer);return timer;}},
     new(Class,props){assert(!rendering,'new view during render');const view=new Class();view.init?.(props,cx);const entity={view,dirty:true,released:false,release(){this.released=true;return true;}};objects.push(entity);return entity;}};
   const path=()=>new Proxy({},{get:(_t,key)=>key==='build'?()=>[]:()=>path()});
   globalThis.__retainedRuntime={View:class{},div:element,svg:element,h_flex:element,v_flex:element,PathBuilder:{stroke:path},
     theme:()=>({background:'#101318',chrome:'#14191f',surface:'#1b232d',border:'#39434f',selected:'#253249',foreground:'#e5edf5',muted:'#a6b0bf',dim:'#788594',accent:'#a9b8ff',ansi6:'#68c9bc',blocked:'#edac67',hover:'#253249',...globalThis.__retainedThemePatch}),
-    window:()=>({active:false,visible:globalThis.__retainedHostVisible}),spaces:()=>[],panes:()=>[],shared:key=>store.get(key),setShared:(key,value)=>store.set(key,value),run(){},settings:()=>({zoom:1})};
+    window:()=>({active:false,visible:globalThis.__retainedHostVisible}),spaces:()=>globalThis.__retainedNativeSpaces,panes:()=>[],shared:key=>store.get(key),setShared:(key,value)=>store.set(key,value),run(){},settings:()=>({zoom:1})};
   globalThis.window={paint_path:element};
   const transform=source=>source.replace(/import \{([^}]+)\} from '(?:gpui-kit|gpui-base|herdr)';/g,'const {$1}=globalThis.__retainedRuntime;');
   let view=transform(await readFile(new URL('../mods/sixfold-desk/panel-view.js',import.meta.url),'utf8'));
@@ -96,6 +96,38 @@ test('native visibility is independent of focus and cancels finite motion when h
   const wake=r.controller.wake;assert(wake);
   globalThis.__retainedHostVisible=false;r.controller.preferences();
   assert(wake.cancelled);assert.equal(r.controller.hostVisible,false);assert.equal(r.controller.motion,false);assert.equal(r.controller.wake,null);
-  globalThis.__retainedHostVisible=true;r.controller.preferences();assert.equal(r.controller.motion,true);
+  globalThis.__retainedHostVisible=true;globalThis.__retainedNativeSpaces=[];r.controller.preferences();assert.equal(r.controller.motion,true);
+  r.controller.dispose();
+});
+
+test('hidden snapshots cache only the latest input, then resume without replay or hidden projections',async()=>{
+  const r=await runtime(false),feed=cleanPanelFeed(makePanelLoadFixture({now:Date.now()}));
+  r.controller.apply(feed,'ready');r.flush();r.controller.setVisible(false);
+  const notifications=r.controller.stats.notifications,projections=r.controller.stats.projections.length;
+  for(let i=0;i<100;i++){
+    const value=makePanelLoadFixture({now:Date.now(),changedRow:0,marker:`Hidden ${i}`});
+    value.events=[{id:'e-hidden-memory',at:new Date().toISOString(),kind:'memory',from:value.spaces[0].agents[0].id,to:value.spaces[0].id,label:'Memory'}];
+    r.controller.apply(cleanPanelFeed(value),'ready');
+  }
+  assert.equal(r.controller.stats.notifications,notifications);
+  assert.equal(r.controller.stats.projections.length,projections);assert.equal(r.controller.wake,null);
+  r.controller.setVisible(true);r.flush();
+  assert.equal(r.controller.feed.spaces[0].agents[0].title,'Hidden 99');
+  assert.equal(r.controller.stats.notifications-notifications,1);
+  assert.equal(r.controller.events.tags.size,0);assert.equal(r.controller.events.packets.length,0);
+  r.controller.dispose();
+});
+
+test('native selection changes refresh its retained card without a feed-file edit',async()=>{
+  const r=await runtime(false),value=makePanelLoadFixture({now:Date.now()});
+  value.spaces[0].nav={space_id:'sp-native-demo',machine:null};
+  globalThis.__retainedNativeSpaces=[{id:'sp-native-demo',machine:null,active:false,tabs:[]}];
+  const feed=cleanPanelFeed(value);r.controller.apply(feed,'ready');r.flush();
+  const before={...r.controller.stats.renders},notifications=r.controller.stats.notifications;
+  globalThis.__retainedNativeSpaces=[{id:'sp-native-demo',machine:null,active:true,tabs:[]}];
+  r.controller.navigation();r.flush();
+  assert.equal(r.controller.spaceMap.get(feed.spaces[0].id).native.active,true);
+  assert.equal(r.controller.stats.notifications-notifications,1);
+  assert.deepEqual(Object.keys(r.controller.stats.renders).filter(key=>before[key]!==r.controller.stats.renders[key]),[`space:${feed.spaces[0].id}`]);
   r.controller.dispose();
 });

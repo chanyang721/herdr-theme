@@ -1,6 +1,5 @@
 // Display data only. The producer owns task interpretation and lifecycle policy.
 export const PANEL_FEED_FILE = 'data/sixfold/harness-local/views/panel-feed.json';
-export const PANEL_POLL_MS = 2000;
 export const PANEL_TIMING = Object.freeze({ tagMs: 1700, startMs: 40, packetMs: 1640, pingMs: 460, coolMs: 900 });
 const MAX = Object.freeze({ computers: 64, spaces: 128, agents: 256, issues: 128, links: 512, events: 256, bytes: 2 * 1024 * 1024 });
 const STATUSES = new Set(['working', 'idle', 'blocked', 'done']);

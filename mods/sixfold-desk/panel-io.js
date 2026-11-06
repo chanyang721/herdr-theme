@@ -13,14 +13,29 @@ export const FILE_CHANGED_COMMAND='file-feed-changed';
 // existing native command channel resumes each shown receiver in its own scope.
 export function fileDelivery(cx){
   let state=deliveries.get(cx);
-  if(!state){state={queue:[],wake:null};deliveries.set(cx,state);}
+  if(!state){state={queue:[],wake:null,signaled:false};deliveries.set(cx,state);}
+  else if(typeof state.signaled!=='boolean')state.signaled=Boolean(state.queue.length||state.wake);
   return {
     enqueue(callback,value){
-      state.queue.push([callback,value]);
-      if(!state.wake)state.wake=cx.timer.after(0,()=>{state.wake=null;native.run(`sixfold-desk.${FILE_CHANGED_COMMAND}`);},{owner:null});
+      const pending=state.queue.findIndex(([deliver])=>deliver===callback);
+      if(pending<0)state.queue.push([callback,value]);else state.queue[pending][1]=value;
+      // A hidden receiver may not consume a native command until it resumes.
+      // Keep one signal outstanding and only the latest value per subscriber.
+      if(!state.signaled){state.signaled=true;state.wake=cx.timer.after(0,()=>{state.wake=null;native.run(`sixfold-desk.${FILE_CHANGED_COMMAND}`);},{owner:null});}
+    },
+    remove(callback){
+      const pending=state.queue.findIndex(([deliver])=>deliver===callback);
+      if(pending>=0)state.queue.splice(pending,1);
+      if(!state.queue.length){
+        try{state.wake?.cancel?.();}catch{/* The source generation may already be gone. */}
+        state.wake=null;state.signaled=false;
+      }
     },
     flush(){
+      try{state.wake?.cancel?.();}catch{/* An already retired generation may have released its timer. */}
+      state.wake=null;
       const queued=state.queue.splice(0);
+      state.signaled=false;
       for(const [callback,value] of queued)try{callback(value);}catch(error){metrics.errors++;metrics.lastError=String(error?.stack||error);}
     },
   };
@@ -34,6 +49,7 @@ async function readJson(path,{hash}={}){
     const result=await native.readJsonFile(path,{hash,maxBytes:2*1024*1024});
     const status=typeof result?.status==='string'?result.status:'unknown';
     const statuses=metrics.nativeStatuses??={};statuses[status]=(statuses[status]??0)+1;
+    if(status==='read_error'&&result.errorKind==='not_found')return {status:'missing',hash:null,changed:true,nativeStatus:status};
     if(status!=='ok'||typeof result.hash!=='string'||!result.hash)return {status:'invalid',hash:null,changed:true,nativeStatus:status};
     // A native hash hit omits its typed payload as null. Do not replace the
     // shared cache with that sentinel; a changed JSON null is still real data.
@@ -88,12 +104,30 @@ function hubFor(root=native.appHome()){
 }
 
 export const readJsonSnapshot=readJson;
-function ownedSubscription(cx,subscribe,callback){
+function ownedSubscription(cx,subscribe,callback,prefix=null){
   const receiver=fileDelivery(cx);let live=true;
-  const release=subscribe(value=>receiver.enqueue(value=>{if(live)callback(value);},value));
-  return ()=>{live=false;release();};
+  const paths=new Map();let invalidated=false;
+  const prefixKey=prefix===null?null:filePathKey(prefix);
+  const deliver=value=>{
+    if(!live)return;
+    if(prefix===null){callback(value);return;}
+    const batch=invalidated?[prefix]:[...paths.values()];paths.clear();invalidated=false;
+    callback(batch);
+  };
+  const release=subscribe(value=>{
+    if(prefix===null){receiver.enqueue(deliver,value);return;}
+    if(!invalidated)for(const path of Array.isArray(value)?value:[]){
+      if(typeof path!=='string'||!path)continue;
+      const key=filePathKey(path);
+      if(key===prefixKey||prefixKey.startsWith(key+'/')){invalidated=true;paths.clear();break;}
+      paths.set(key,path);
+      if(paths.size>512){invalidated=true;paths.clear();break;}
+    }
+    receiver.enqueue(deliver,null);
+  });
+  return ()=>{live=false;paths.clear();receiver.remove(deliver);release();};
 }
 export function subscribeJsonFile(cx,path,callback){const root=rootFor(path);return ownedSubscription(cx,send=>hubFor(root).subscribe(path,send,cx),callback);}
-export function subscribeFileChanges(cx,prefix,callback){const root=rootFor(prefix,true);return ownedSubscription(cx,send=>hubFor(root).subscribeChanges(prefix,send,cx),callback);}
+export function subscribeFileChanges(cx,prefix,callback){const root=rootFor(prefix,true);return ownedSubscription(cx,send=>hubFor(root).subscribeChanges(prefix,send,cx),callback,prefix);}
 
 export function panelIoDiagnostics(){return {...metrics,backgroundJson:typedFileReadsAvailable()};}

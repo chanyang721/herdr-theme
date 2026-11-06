@@ -42,6 +42,11 @@ before the row disappears; a supplied blocking reason keeps the row visible.
 `sixfold.motion = false` or a supplied `reduced_motion: true` removes loops
 and packet movement while labels, counts and state still update. On systems
 where the producer cannot read the preference, it supplies `null`.
+On hosts with `window().visible`, the existing command receiver handles
+`window.visibility` immediately, including hidden copies. It cancels motion
+timers and memory sampling, retains the latest snapshot, and resumes without
+replaying hidden messages. Windows reports visible/non-minimized state; full
+coverage by another window is not detected. Focus is independent of visibility.
 
 The file adapter shares a native watch per root across copies and windows. The
 SDK batches changes for 150 ms. Hash-identical data retains parsed values and
@@ -55,8 +60,14 @@ and JSON parsing in a native worker. On older hosts a compatibility reader uses
 `readTextFile` and parses changed text in JavaScript; its diagnostics explicitly
 report `backgroundJson: false`. This fallback does not satisfy an off-UI parsing
 guarantee. There is no recurring file-read poll.
+Missing optional files use `read_error` with `errorKind: "not_found"`; other read
+errors preserve the last valid state. Configured external card directories share
+one additional watch per distinct root. Pending snapshots coalesce by subscriber;
+directory changes retain a bounded union of paths. Unsubscribing releases queued
+values immediately.
 
 `tests/panel-fixtures.mjs` supplies the same 18 sharing/tool/Slack combinations
 to model, renderer and isolated native screenshot checks. It also supplies
 dispatch, spawn, message, review, verdict, acceptance, closing and memory
 transitions. All example identities and task names are synthetic.
+See the [native gallery and validation measurements](panel-validation.md).
