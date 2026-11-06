@@ -9,6 +9,9 @@ fn number(v: &Value, key: &str, default: f64) -> f64 {
 pub fn evaluate(op: &str, a: &Value) -> Result<Value> {
     let cfg = settings::defaults();
     Ok(match op {
+        "iso-timestamp" => {
+            json!({"timestamp_bits":format!("{:016x}",super::iso::timestamp(a["text"].as_str().ok_or("missing ISO text")?)?.to_bits())})
+        }
         "decode-audio" => json!(super::audio::decode(&std::fs::read(
             a["audio"].as_str().ok_or("audio probe path missing")?
         )?)?),
@@ -102,7 +105,13 @@ pub fn evaluate(op: &str, a: &Value) -> Result<Value> {
 pub fn run(args: &[String]) -> Result<()> {
     if args.first().map(String::as_str) == Some("settings-scene") {
         let scene = args.get(1).ok_or("missing scene number")?.parse()?;
-        println!("{}", settings_scene(scene)?);
+        let kind = args.get(2).map(|s| s.parse()).transpose()?.unwrap_or(0);
+        let recording = if args.get(3).map(String::as_str) == Some("current-input") {
+            settings_scene_current(scene, kind)?
+        } else {
+            settings_scene_with(scene, kind, true)?
+        };
+        crate::legacy_text::print_line(&recording.to_string())?;
         return Ok(());
     }
     let mut text = String::new();
@@ -113,9 +122,9 @@ pub fn run(args: &[String]) -> Result<()> {
             .iter()
             .map(|c| evaluate(c["op"].as_str().unwrap_or(""), &c["args"]))
             .collect::<Result<Vec<_>>>()?;
-        println!("{}", json!(results));
+        voice_println!("{}", json!(results));
     } else {
-        println!(
+        voice_println!(
             "{}",
             evaluate(request["op"].as_str().unwrap_or(""), &request["args"])?
         );
@@ -123,82 +132,168 @@ pub fn run(args: &[String]) -> Result<()> {
     Ok(())
 }
 pub fn settings_scene(scene: usize) -> Result<bool> {
-    if scene > 8 {
-        return Err("settings scene must be 0..8".into());
+    return settings_scene_with(scene, 0, true);
+}
+pub fn settings_scene_with(scene: usize, kind: usize, eligible: bool) -> Result<bool> {
+    settings_scene_policy(scene, kind, Some(eligible))
+}
+pub fn settings_scene_current(scene: usize, kind: usize) -> Result<bool> {
+    settings_scene_policy(scene, kind, None)
+}
+fn settings_scene_policy(scene: usize, kind: usize, eligible: Option<bool>) -> Result<bool> {
+    if scene > 8 || kind > 2 {
+        return Err("invalid settings scene or pane kind".into());
     }
-    let mut failure = json!(null);
-    let mut recording = false;
-    let mut busy = 0;
-    let mut mode = "tap";
-    let mut stamp = 100.;
-    let mut notice = false;
-    fn focus(
-        failure: &mut Value,
-        recording: &mut bool,
-        busy: &mut usize,
-        mode: &str,
+    struct Pane {
+        mode: &'static str,
+        recording: bool,
+        busy: usize,
+        text: String,
+        session: String,
         stamp: f64,
-        notice: bool,
-    ) {
-        if *recording {
-            *failure = Value::Null;
-            return;
+        eligible: Option<bool>,
+    }
+    impl queue::VoiceOnBackend for Pane {
+        fn listening(&mut self, _: &str) -> bool {
+            false
         }
-        if queue::voice_key_locked(failure, stamp) && !notice {
-            return;
+        fn screen(&mut self, _: &str) -> Result<String> {
+            Ok(self.text.clone())
         }
-        if *busy > 0 {
-            *busy -= 1;
-        } else if mode == "tap" {
-            *recording = !*recording;
+        fn recording_footer(&mut self, _: &str) -> bool {
+            self.recording
         }
-        if *recording {
-            *failure = Value::Null;
-        } else {
-            let misses = if failure.is_array() {
-                failure[0].as_u64().unwrap_or(0)
-            } else {
-                failure.as_u64().unwrap_or(0)
-            };
-            *failure = json!([misses + 1, stamp]);
+        fn session(&mut self, _: &Value) -> Result<String> {
+            Ok(self.session.clone())
         }
+        fn ready(&mut self, _: &str) -> Result<bool> {
+            Ok(true)
+        }
+        fn eligible(&mut self) -> Result<bool> {
+            Ok(self
+                .eligible
+                .unwrap_or_else(|| policy::headset(&policy::default_input(), &settings::load())))
+        }
+        fn start(&mut self, _: &str) -> Result<()> {
+            Ok(())
+        }
+        fn press_on(&mut self, _: &str) -> Result<bool> {
+            if self.busy > 0 {
+                self.busy -= 1;
+            } else if self.mode == "tap" {
+                self.recording = !self.recording;
+            }
+            Ok(self.recording)
+        }
+        fn clock(&self) -> f64 {
+            self.stamp
+        }
+        fn report(&mut self, _: &str) {}
+    }
+    let base = std::collections::BTreeMap::from([(
+        "w8:p12".into(),
+        json!({"pane_id":"w8:p12","agent":"claude","agent_status":"idle","focused":kind==0}),
+    )]);
+    let (current, target) = match kind {
+        0 => (base, "w8:p12"),
+        1 => (
+            queue::project(
+                base,
+                Some(&json!({"active":true,"terminal":"bridge","source":"w8:p12","panes":[]})),
+            ),
+            "w8:p12",
+        ),
+        _ => (
+            queue::project(
+                base,
+                Some(
+                    &json!({"active":true,"terminal":"native","panes":[{"pane_id":"app:native","agent":"claude","agent_status":"idle"}]}),
+                ),
+            ),
+            "app:native",
+        ),
+    };
+    let pane = &current[target];
+    if pane["focused"] != true {
+        return Err("settings diagnostic projection lost focus".into());
+    }
+    let mut fake = Pane {
+        mode: "tap",
+        recording: false,
+        busy: 0,
+        text: String::new(),
+        session: "s1".into(),
+        stamp: 100.,
+        eligible,
+    };
+    let mut state = json!({});
+    fn focus(pane: &Value, state: &mut Value, fake: &mut Pane) -> Result<bool> {
+        queue::set_voice_on(pane, state, fake)?;
+        Ok(fake.recording)
     }
     if (1..=6).contains(&scene) || scene == 8 {
-        mode = if [1, 2, 3, 8].contains(&scene) {
-            "off"
+        if [1, 2, 3, 8].contains(&scene) {
+            fake.mode = "off";
         } else {
-            "tap"
-        };
-        if [4, 5, 6].contains(&scene) {
-            busy = 2;
+            fake.busy = 2;
         }
-        focus(&mut failure, &mut recording, &mut busy, mode, stamp, false);
-        focus(&mut failure, &mut recording, &mut busy, mode, stamp, false);
+        focus(pane, &mut state, &mut fake)?;
+        focus(pane, &mut state, &mut fake)?;
     }
     match scene {
         1 => {
-            mode = "tap";
-            notice = true;
+            fake.mode = "tap";
+            fake.text =
+                "Voice mode enabled (tap). Tap f8 (with input empty) to start, tap again to send."
+                    .into();
         }
-        2 | 3 => mode = "tap",
+        2 | 3 => fake.mode = "tap",
         5 => {
-            recording = true;
-            focus(&mut failure, &mut recording, &mut busy, mode, stamp, false);
-            recording = false;
+            fake.recording = true;
+            focus(pane, &mut state, &mut fake)?;
+            fake.recording = false;
         }
-        6 => failure = Value::Null,
-        7 | 8 => mode = "hold",
+        6 => fake.session = "s2".into(),
+        7 | 8 => fake.mode = "hold",
         _ => {}
     }
     if [3, 4, 8].contains(&scene) {
-        stamp += 61.;
+        if let Some(failures) = state["voice_key_failures"].as_object_mut() {
+            for entry in failures.values_mut() {
+                if entry.is_array() {
+                    entry[1] = json!(entry[1].as_f64().unwrap_or(0.) - 61.);
+                }
+            }
+        }
     }
-    focus(&mut failure, &mut recording, &mut busy, mode, stamp, notice);
-    Ok(recording)
+    focus(pane, &mut state, &mut fake)
 }
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn settings_scenes_use_all_real_projections_and_default_opt_out() {
+        let corpus: Value = serde_json::from_str(include_str!("parity-fixtures.json")).unwrap();
+        for case in corpus["cases"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|c| c["op"] == "settings-scene")
+        {
+            let scene = case["args"]["scene"].as_u64().unwrap() as usize;
+            for kind in 0..3 {
+                assert_eq!(
+                    settings_scene_with(scene, kind, true).unwrap(),
+                    case["expected"].as_bool().unwrap(),
+                    "scene{scene} kind{kind}"
+                );
+                assert!(
+                    !settings_scene_with(scene, kind, false).unwrap(),
+                    "scene{scene} kind{kind}"
+                );
+            }
+        }
+    }
     fn close(a: &Value, b: &Value) -> bool {
         match (a, b) {
             (Value::Number(a), Value::Number(b)) => {

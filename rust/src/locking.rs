@@ -73,6 +73,46 @@ pub fn lock(file: &std::fs::File, nonblocking: bool) -> std::io::Result<()> {
         }
     }
 }
+pub fn unlock(file: &std::fs::File) -> std::io::Result<()> {
+    #[cfg(not(windows))]
+    {
+        fs2::FileExt::unlock(file)
+    }
+    #[cfg(windows)]
+    {
+        use std::{ffi::c_void, os::windows::io::AsRawHandle};
+        #[repr(C)]
+        struct Overlapped {
+            internal: usize,
+            internal_high: usize,
+            offset: u32,
+            offset_high: u32,
+            event: *mut c_void,
+        }
+        #[link(name = "kernel32")]
+        unsafe extern "system" {
+            fn UnlockFileEx(
+                handle: *mut c_void,
+                reserved: u32,
+                low: u32,
+                high: u32,
+                overlap: *mut Overlapped,
+            ) -> i32;
+        }
+        let mut overlap = Overlapped {
+            internal: 0,
+            internal_high: 0,
+            offset: 1 << 30,
+            offset_high: 0,
+            event: std::ptr::null_mut(),
+        };
+        if unsafe { UnlockFileEx(file.as_raw_handle(), 0, 1, 0, &mut overlap) } != 0 {
+            Ok(())
+        } else {
+            Err(std::io::Error::last_os_error())
+        }
+    }
+}
 #[cfg(test)]
 mod tests {
     use super::*;

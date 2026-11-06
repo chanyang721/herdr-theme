@@ -149,9 +149,16 @@ fn mixed_native_and_legacy_observers_refresh_only_the_native_registration() {
     assert_eq!(result["refreshed"], json!(["close-finished-spaces"]));
     assert_eq!(result["reinstallRequired"][0]["job"], "sleep-idle-sessions");
     assert!(result["observers"].get("sleep-idle-sessions").is_none());
+    assert!(result["observers"]["close-finished-spaces"]
+        .get("approval_carried")
+        .is_none());
     assert_eq!(
-        result["observers"]["close-finished-spaces"]["approval_carried"],
-        true
+        result["observers"]["close-finished-spaces"]["approved_for_this_copy"], false,
+        "a legacy whole-executable approval cannot authorize a source-scoped observer fingerprint"
+    );
+    assert_eq!(
+        result["observers"]["close-finished-spaces"]["observer_sha256"],
+        env!("HERDR_CLEANUP_SOURCE_SHA256")
     );
     assert_eq!(
         hash(fs::read(&binary).unwrap()),
@@ -164,6 +171,54 @@ fn mixed_native_and_legacy_observers_refresh_only_the_native_registration() {
         original_legacy_config
     );
     assert_eq!(fs::read(legacy).unwrap(), original_legacy_script);
+}
+#[test]
+fn unchanged_source_approval_survives_a_different_native_binary_image() {
+    let home = tempfile::tempdir().unwrap();
+    let base = home.path().join("state");
+    let binary = base.join(install::native_name());
+    atomic_json(
+        home.path()
+            .join(".config/herdr-app/data/sixfold/site.local.json"),
+        &json!({"state_dir":base}),
+    )
+    .unwrap();
+    fs::create_dir_all(binary.parent().unwrap()).unwrap();
+    fs::copy(env!("CARGO_BIN_EXE_herdr-theme"), &binary).unwrap();
+    chmod(&binary, 0o755).unwrap();
+    let before_bytes = hash(fs::read(&binary).unwrap());
+    let config = base.join("close-finished-spaces.json");
+    atomic_json(&config,&json!({"user_approved_apply":true,"reviewed_observer_sha256":env!("HERDR_CLEANUP_SOURCE_SHA256")})).unwrap();
+    let config_before = fs::read(&config).unwrap();
+    write_plist(
+        &home
+            .path()
+            .join("Library/LaunchAgents/local.herdr-sixfold.close-finished-spaces.plist"),
+        &[
+            binary.to_string_lossy().into_owned(),
+            "close_finished_spaces".into(),
+            "--dry-run".into(),
+        ],
+        &base,
+    );
+    let result = observers::refresh(home.path(), Path::new("no-policy-probe-needed")).unwrap();
+    assert_ne!(
+        before_bytes,
+        hash(fs::read(&binary).unwrap()),
+        "test uses the CLI and integration-test images, with identical observer sources"
+    );
+    assert_eq!(
+        result["observers"]["close-finished-spaces"]["observer_sha256"],
+        env!("HERDR_CLEANUP_SOURCE_SHA256")
+    );
+    assert_eq!(
+        result["observers"]["close-finished-spaces"]["approved_for_this_copy"],
+        true
+    );
+    assert!(result["observers"]["close-finished-spaces"]
+        .get("approval_carried")
+        .is_none());
+    assert_eq!(fs::read(config).unwrap(), config_before);
 }
 #[test]
 fn legacy_or_wrong_command_plists_require_reinstall_without_any_write() {

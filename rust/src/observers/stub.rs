@@ -6,13 +6,12 @@ extern "C" fn interrupt(_: libc::c_int) {
     INTERRUPTED.store(true, Ordering::Relaxed);
 }
 pub fn message_of(data: &[u8]) -> String {
-    String::from_utf8_lossy(data)
+    let text = String::from_utf8_lossy(data)
         .replace("\r\n", "\n")
         .replace('\r', "\n")
         .replace("\x1b[200~", "")
-        .replace("\x1b[201~", "")
-        .trim()
-        .to_owned()
+        .replace("\x1b[201~", "");
+    crate::python_unicode::trim(&text).to_owned()
 }
 pub fn launch(ticket: &Value) -> Vec<String> {
     let argv = arr(&ticket["argv"])
@@ -59,7 +58,7 @@ pub fn shown(argv: &[String], limit: usize) -> String {
             .to_string_lossy()
             .into_owned()
     }
-    let t = a.join(" ").split_whitespace().collect::<Vec<_>>().join(" ");
+    let t = crate::python_unicode::split_whitespace(&a.join(" ")).join(" ");
     if t.chars().count() <= limit {
         t
     } else {
@@ -173,10 +172,6 @@ mod win {
     use super::*;
     #[link(name = "kernel32")]
     unsafe extern "system" {
-        fn GetStdHandle(n: u32) -> *mut std::ffi::c_void;
-        fn GetConsoleMode(h: *mut std::ffi::c_void, mode: *mut u32) -> i32;
-        fn SetConsoleMode(h: *mut std::ffi::c_void, mode: u32) -> i32;
-        fn WaitForSingleObject(h: *mut std::ffi::c_void, millis: u32) -> u32;
         fn SetConsoleCtrlHandler(
             handler: Option<unsafe extern "system" fn(u32) -> i32>,
             add: i32,
@@ -190,44 +185,27 @@ mod win {
             0
         }
     }
-    pub struct Tty {
-        handle: *mut std::ffi::c_void,
-        mode: Option<u32>,
-    }
+    pub struct Tty;
     impl Tty {
         pub fn new() -> Self {
-            let handle = unsafe { GetStdHandle((-10i32) as u32) };
-            let mut mode = 0;
-            let mode = if unsafe { GetConsoleMode(handle, &mut mode) } != 0 {
-                let old = mode;
-                unsafe { SetConsoleMode(handle, (mode | 0x1 | 0x4) & !0x2) };
-                Some(old)
-            } else {
-                None
-            };
+            // Original tty_input imports termios and returns None on Windows:
+            // preserve its console mode while retaining KeyboardInterrupt.
             unsafe { SetConsoleCtrlHandler(Some(handler), 1) };
-            Self { handle, mode }
+            Self
         }
     }
     impl Drop for Tty {
         fn drop(&mut self) {
-            if let Some(mode) = self.mode {
-                unsafe { SetConsoleMode(self.handle, mode) };
-            }
             unsafe { SetConsoleCtrlHandler(Some(handler), 0) };
         }
-    }
-    pub fn ready() -> bool {
-        use std::io::IsTerminal;
-        if !std::io::stdin().is_terminal() {
-            return true;
-        }
-        unsafe { WaitForSingleObject(GetStdHandle((-10i32) as u32), 100) == 0 }
     }
 }
 pub fn read_message(settle: f64, limit: usize) -> Result<Vec<u8>> {
     let mut data = vec![];
+    #[cfg(unix)]
     let mut last = Instant::now();
+    #[cfg(windows)]
+    let _ = settle;
     while data.len() < limit {
         if INTERRUPTED.load(Ordering::Relaxed) {
             return err("interrupted");
@@ -257,13 +235,11 @@ pub fn read_message(settle: f64, limit: usize) -> Result<Vec<u8>> {
             }
         }
         #[cfg(windows)]
-        if !win::ready() {
-            if data.last().is_some_and(|b| *b == b'\r' || *b == b'\n')
-                && last.elapsed().as_secs_f64() >= settle
-            {
-                break;
-            }
-            continue;
+        if data.last().is_some_and(|b| *b == b'\r' || *b == b'\n') {
+            // Baseline CPython select.select([stdin_fd], ..., settle) is not a
+            // Windows pipe/console operation. It raises before label changes,
+            // a resumed record or agent exec; migration must not resume here.
+            return Err(std::io::Error::from_raw_os_error(10093).into());
         }
         let mut bytes = [0u8; 4096];
         let n = std::io::stdin().read(&mut bytes)?;
@@ -277,7 +253,10 @@ pub fn read_message(settle: f64, limit: usize) -> Result<Vec<u8>> {
                 data.push(*byte);
             }
         }
-        last = Instant::now();
+        #[cfg(unix)]
+        {
+            last = Instant::now();
+        }
     }
     Ok(data)
 }
@@ -302,7 +281,7 @@ pub fn main(args: &[String]) -> Result<()> {
             s(&ticket["address"]),
             s(&ticket["title"])
         )
-        .trim_end(),
+        .trim_end_matches(crate::python_unicode::is_space),
     )?;
     crate::common::print_line(
         "  Enter: 이어 열기 · 메시지를 보내면 이어 열고 그대로 전달 · ctrl+c: 셸로 나가기",

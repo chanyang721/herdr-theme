@@ -35,7 +35,7 @@ The baseline contained 97 tracked Python files: 48 runtime files and 49 tests/to
 
 The [file-by-file inventory](native-migration-inventory.json) maps all 97 paths, the extensionless wrapper and the pinned external helpers to implementation and verification areas. It distinguishes fixture coverage from an original test executed end to end.
 
-Workspace creation also incorporates the subsequent upstream focus changes through `fb3c2343843254ae7aee81fb6de3b014b7597d60`. Their additional Python test is tracked separately in the inventory. All ten original scenarios and 71 helper calls have frozen outputs, with native subprocess checks for successful creation, partial failure and concurrent selection. The upstream ambiguity for an ID-less failed creation and a concurrently selected new terminal remains documented and tested.
+Workspace creation also incorporates the subsequent upstream focus changes through `fb3c2343843254ae7aee81fb6de3b014b7597d60`. Their additional Python test is tracked separately in the inventory. All ten original focus scenarios and 71 helper calls have frozen outputs, with native subprocess checks for successful creation, partial failure and concurrent selection. The upstream ambiguity for an ID-less failed creation and a concurrently selected new terminal remains documented and tested.
 
 | Baseline runtime files | Replacement |
 | --- | --- |
@@ -52,15 +52,64 @@ Native numerical dependencies retain their licenses and immutable provenance: [O
 
 ## Compatibility and external commands
 
+Implementation responsibilities follow the four domains above. Shared command
+construction, byte serialization, lock primitives and error/exit handling live
+in common modules. Dictation, updater transactions and workflow identification
+each have one production body with injected device/process/clock boundaries for
+the original tests; the tests do not maintain a second implementation.
+
+Similar-looking operations retain separate policies when their contracts differ:
+checked versus unchecked SDK calls, locale versus explicit UTF-8 text, JSON
+spacing, explicit versus unbounded deadlines, and atomic replacement versus
+in-place writes through a symlink. Combining those policies would change behavior.
+
+Remaining structural debt includes the large lifecycle and installer modules
+and several domain-specific IO facades. These are explicit future refactoring
+areas, with the original-case correspondence table as their regression baseline;
+they are not additional release gates.
+
 The default installed theme helpers use the native executable. User-owned resolver/renderer commands and an optional external prompt-card/lifecycle bridge remain configurable. A legacy custom Python script outside this repository still needs its owner's interpreter; it is an optional external adapter, not a bundled theme implementation. Native command arrays can be configured instead.
 
 The native updater preserves staging, complete mod backups, status/focus verification, rollback and concurrent-writer protection. Moving to Git or Rust does not authorize an installation or restart. No running user application was updated during migration validation.
 
 ## Validation status
 
-The frozen differential corpora and sandbox tests are in [`rust/tests/`](../rust/tests/) and module test sections. Their provenance is described in [`rust/tests/fixtures/README.md`](../rust/tests/fixtures/README.md). Expected values come from the original helpers at theme commit `8c5b71d2f1074bb5d1d831fa395617bf4ae2abc8` and Workspace Mods commit `9aa50108fc3cc3c3af0fb376f0bb1760c90af3a6`. Personal paths in inputs were replaced with synthetic fixtures before recomputing original outputs.
+Acceptance is the original Python repository's behavior test cases translated
+to Rust, followed by successful hosted CI. Current upstream observer changes
+through `e383c3ce2935334c14b1f1f6e7e67426282b4e9b` are included in the migration
+scope. Supplemental ISO, TLS, locale, replay and reinstall-roundtrip comparisons
+are not additional acceptance gates. Excluding such a comparison is not a pass.
 
-Run the checks serially:
+The function correspondence table and JSON inventory identify each original
+test, its native test or corpus evidence, and platform/transport conditions.
+An aggregate corpus is distinguished from a named end-to-end test. Platform
+skips and opt-in tests do not count as successful execution.
+
+Final local Windows validation completed successfully:
+
+| Check | Passed | Failed | Ignored/skipped |
+| --- | ---: | ---: | ---: |
+| Full native Rust suite | 690 | 0 | 11 |
+| JavaScript suite | 173 | 0 | 6 |
+
+The Rust run used one Cargo job and one test thread. It includes all 190
+observer scenarios (141 retained plus 49 from the latest Python main), all
+twenty original updater methods, workspace/model-tier cases, and actual
+Windows parent/child console and running-executable replacement checks.
+The eleven ignored Rust tests are optional external-original comparisons or
+manual diagnostics; they are not passes. The six JavaScript skips require macOS.
+Hosted Linux, Windows and both macOS architecture results remain separate
+and pending until the published commit's workflow succeeds.
+
+The [function correspondence table](native-original-tests.md) and
+[machine-readable companion](native-original-tests.json) cover 580 original
+test declarations and six dynamically attached aliases at upstream commit
+`e383c3ce2935334c14b1f1f6e7e67426282b4e9b`. Source inspection also checked
+128 inherited reruns: they introduce no distinct fixture/assertion scenario
+missing from the declared-function mapping. These are source coverage counts,
+not native execution counts.
+
+Run checks serially:
 
 ```sh
 npm test
@@ -69,14 +118,19 @@ CARGO_BUILD_JOBS=1 cargo test --manifest-path rust/Cargo.toml --locked --jobs 1 
 node scripts/check-native.mjs
 ```
 
-At this working checkpoint, Windows ran 178 native tests successfully, including five opt-in comparisons against unchanged original automation, RPC, icon/seed, embedded image and upstream workspace CLIs. They matched the relevant stdout, stderr, exit status, durable receipts, cache/file bytes and document mutations. The RPC comparison exposed an extra `children: null` field in native leaf nodes; the corrected implementation preserves absent keys and passes the original comparison. JavaScript ran 172 tests successfully with four macOS installer tests skipped. Removing the unused former decoder dependency was followed by another successful 125-test library run and executable build.
+The native tests run without Python. Their frozen original-output provenance
+is documented in [the fixture inventory](../rust/tests/fixtures/README.md).
+The original Windows Python suite's environment/fixture failures are recorded
+separately in [the baseline report](native-baseline-windows.md); those failures
+are not treated as native passes.
 
-The real Windows speaker/VAD model comparison matched every VAD waveform float32 bit, embedding, and all 24 duration/threshold decisions in two configurations. Matrix, mean and voiceprint-build probes also matched with zero numeric drift and identical threshold masks. The native runtime uses the same hash-pinned OpenBLAS backend as the original NumPy implementation, including its exact threshold comparisons. After correcting convolution precision and PocketFFT selection, the full evaluation comparison matched all 28 model metrics with zero drift, VAD JSON/stdout, gate stdout for 384 synthetic scenes, and output-file bytes. Independent time and memory measurements are retained separately. Native libsndfile comparisons matched every float32 sample bit for 22 formats (including MP3), six rejected inputs, and nine Parquet identifier types. Native child processes had an empty PATH throughout these comparisons. See [offline model validation](../voice/docs/offline-model-validation.md) for immutable inputs and the test runners.
+The two original live WebKit cases execute on macOS with the unchanged Swift
+renderer. The six original macOS voice-installation cases use a scratch home
+and a fake plugin service. No production installation, microphone, clipboard,
+app/core restart or provider account is used by these checks. Physical
+microphone/default-device, Accessibility/CoreGraphics, focus-race and dictation
+hardware acceptance remains unverified and is planned separately after merge.
 
-Linux and both macOS architectures still require CI execution. macOS CI explicitly exercises scratch-only installation and the actual Swift/WebKit renderers; ignoring those tests is not a pass. Physical microphone capture, Accessibility permissions, native credential stores and external-provider acceptance remain unverified. No running application, service or user installation was changed by these checks.
-
-The [physical Mac checklist](../voice/docs/manual-macos-acceptance.md) binds later device evidence to the reviewed commit, executable and asset hashes. CI packages each tested executable in a tar archive with its commit/tree receipt, native dependency manifests and notices; the tar preserves executable permissions. CI results and physical-device results must be recorded separately.
-
-The untouched original Windows suite ran 473 tests. With UTF-8 enabled it still had four failures, 44 errors and seven skips. The earlier default-encoding run had four failures, 59 errors and seven skips. Those baseline failures do not count as native equivalence passes. The per-case classification is recorded in [`native-baseline-windows.md`](native-baseline-windows.md); unresolved baseline approval-fixture behavior is kept separate from clear platform limitations.
-
-The release gate also requires a successful native source inventory, all required platform CI, and independent review of the final commit. A scaffold, type-check pass or partial fixture corpus is not completion of the migration.
+CI packages each tested executable with its commit/tree receipt, dependency
+manifests and native notices. An archive preserves executable permissions.
+CI success and physical-device evidence must be recorded separately.

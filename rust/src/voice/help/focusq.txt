@@ -9,9 +9,10 @@ focusq - install and toggle the herdr focus-queue plugin.
 ./focusq check      check that herdr, the submit hook, the app and Codex all run this copy
 ./focusq uninstall  unlink the plugin and remove the F8 voice binding
 
-./focusq voice-setup   install the voice gate (install runs this when uv exists)
+./focusq voice-setup   install native voice libraries and models (no interpreter)
 ./focusq voice-enroll  enroll your voice for the current microphone (needed for auto-send)
 ./focusq voice-test    show live scores for each spoken segment
 ./focusq voice-off     forget the voiceprint (no auto-send until you enroll again)
 ./focusq voice-hook    add only the submit hook to Claude Code's settings (install does this too)
+./focusq voice-restart restart the installed native gate
 ./focusq voice-crosscheck  check that your voice fails on other people's devices

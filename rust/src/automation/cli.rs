@@ -1,12 +1,35 @@
 //! Argument validation happens before any app, queue or filesystem mutation.
 use crate::common::*;
-fn parse(args: &[String], values: &[&str], flags: &[&str]) -> Result<(Vec<String>, Vec<String>)> {
-    let (mut normalized, mut positional) = (vec![], vec![]);
+const ACTIONS: &[&str] = &[
+    "enable", "drain", "status", "enqueue", "start", "accept", "complete", "report",
+];
+fn negative_number(text: &str) -> bool {
+    crate::python_unicode::regex(r"^-\d+$|^-\d*\.\d+$").is_match(text)
+}
+fn parse(
+    args: &[String],
+    values: &[&str],
+    flags: &[&str],
+    command: &str,
+) -> Result<(Vec<String>, Vec<String>, Vec<String>)> {
+    let (mut normalized, mut positional, mut unknown) = (vec![], vec![], vec![]);
+    let flags = flags
+        .iter()
+        .copied()
+        .chain(["--help", "-h"])
+        .collect::<Vec<_>>();
     let mut i = 0;
     let mut literal = false;
     while i < args.len() {
         let a = &args[i];
         if literal {
+            if command == "demo_agent" && positional.len() == 1 {
+                choices(
+                    Some(a.clone()),
+                    "state",
+                    &["working", "blocked", "done", "idle"],
+                )?;
+            }
             normalized.push(a.clone());
             positional.push(a.clone());
             i += 1;
@@ -18,21 +41,23 @@ fn parse(args: &[String], values: &[&str], flags: &[&str]) -> Result<(Vec<String
             i += 1;
             continue;
         }
-        if a.starts_with('-') && a != "-" {
+        if a.starts_with('-') && a != "-" && !negative_number(a) {
             let (key, inline) = a
                 .split_once('=')
                 .map(|(a, b)| (a, Some(b)))
                 .unwrap_or((a.as_str(), None));
-            let key = long_option(key, values, flags)?;
+            let key = long_option(key, values, &flags)?;
+            if matches!(key, "--help" | "-h") && inline.is_none() {
+                normalized.push("--help".into());
+                return Ok((normalized, positional, vec![]));
+            }
             if values.contains(&key) {
                 let value = if let Some(v) = inline {
                     v.to_string()
                 } else {
                     i += 1;
                     args.get(i)
-                        .filter(|v| {
-                            !v.starts_with('-') || v.as_str() == "-" || v.parse::<f64>().is_ok()
-                        })
+                        .filter(|v| !v.starts_with('-') || v.as_str() == "-" || negative_number(v))
                         .cloned()
                         .ok_or_else(|| -> Box<dyn std::error::Error> {
                             Box::new(CliError {
@@ -41,19 +66,43 @@ fn parse(args: &[String], values: &[&str], flags: &[&str]) -> Result<(Vec<String
                             })
                         })?
                 };
+                if key == "--tier" {
+                    choices(Some(value.clone()), key, &super::tiers::TIERS)?;
+                }
+                if key == "--mode" {
+                    choices(Some(value.clone()), key, &["read-only", "worktree"])?;
+                }
                 normalized.extend([key.into(), value]);
             } else if flags.contains(&key) && inline.is_none() {
+                let other = match key {
+                    "--agents" => Some("--shells"),
+                    "--shells" => Some("--agents"),
+                    _ => None,
+                };
+                if let Some(other) = other.filter(|other| normalized.iter().any(|v| v == other)) {
+                    return usage(format!("argument {key}: not allowed with argument {other}"));
+                }
                 normalized.push(key.into());
             } else {
-                return usage(format!("unrecognized arguments: {a}"));
+                unknown.push(a.clone());
             }
         } else {
+            if command == "collaborate" && positional.is_empty() {
+                choices(Some(a.clone()), "action", ACTIONS)?;
+            }
+            if command == "demo_agent" && positional.len() == 1 {
+                choices(
+                    Some(a.clone()),
+                    "state",
+                    &["working", "blocked", "done", "idle"],
+                )?;
+            }
             normalized.push(a.clone());
             positional.push(a.clone());
         }
         i += 1;
     }
-    Ok((normalized, positional))
+    Ok((normalized, positional, unknown))
 }
 fn count(pos: &[String], min: usize, max: usize) -> Result<()> {
     if pos.len() < min {
@@ -65,18 +114,26 @@ fn count(pos: &[String], min: usize, max: usize) -> Result<()> {
     Ok(())
 }
 fn required(args: &[String], keys: &[&str]) -> Result<()> {
-    for key in keys {
-        if option(args, key).is_none() {
-            return usage(format!("the following argument is required: {key}"));
-        }
+    let missing = keys
+        .iter()
+        .filter(|key| option(args, key).is_none())
+        .copied()
+        .collect::<Vec<_>>();
+    if missing.is_empty() {
+        Ok(())
+    } else {
+        usage(format!(
+            "the following arguments are required: {}",
+            missing.join(", ")
+        ))
     }
-    Ok(())
 }
 fn choices(value: Option<String>, key: &str, choices: &[&str]) -> Result<()> {
     if let Some(v) = value {
         if !choices.contains(&v.as_str()) {
             return usage(format!(
-                "argument {key}: invalid choice: {v} (choose from {})",
+                "argument {key}: invalid choice: {} (choose from {})",
+                super::format::repr(&serde_json::json!(v)),
                 choices.join(", ")
             ));
         }
@@ -97,12 +154,6 @@ pub fn prepare(command: &str, args: &[String]) -> Result<Option<Vec<String>>> {
     {
         return Ok(Some(args.to_vec()));
     }
-    if flag(args, "--help") || flag(args, "-h") {
-        if !crate::help::show(command, args)? {
-            println!("usage: herdr-theme {command} [options]");
-        }
-        return Ok(None);
-    }
     let (values, flags): (&[&str], &[&str]) = match command {
         "workspace" => (&["--tiers", "--by"], &["--agents", "--shells"]),
         "route" => (&["--from", "--tier"], &["--drain", "--reply", "--enable"]),
@@ -119,7 +170,13 @@ pub fn prepare(command: &str, args: &[String]) -> Result<Option<Vec<String>>> {
         ),
         _ => unreachable!(),
     };
-    let (normalized, pos) = parse(args, values, flags)?;
+    let (normalized, pos, mut unknown) = parse(args, values, flags, command)?;
+    if normalized.iter().any(|v| v == "--help") {
+        if !crate::help::show(command, args)? {
+            println!("usage: herdr-theme {command} [options]");
+        }
+        return Ok(None);
+    }
     if command == "collaborate" {
         let action = pos.first().map(String::as_str).unwrap_or("");
         let allowed: &[&str] = match action {
@@ -131,25 +188,34 @@ pub fn prepare(command: &str, args: &[String]) -> Result<Option<Vec<String>>> {
             "report" => &["--batch", "--from"],
             _ => &[],
         };
-        parse(args, allowed, &["--drain"])?;
+        unknown = parse(args, allowed, &["--drain"], command)?.2;
+        if let Some(index) = args.iter().position(|a| a == action) {
+            if args[index + 1..].iter().any(|a| a == "--drain") {
+                return usage("unrecognized arguments: --drain");
+            }
+        }
     }
     match command {
         "workspace" => {
+            if pos.len() < 2 {
+                return usage(format!(
+                    "the following arguments are required: {}",
+                    ["name", "folder"][pos.len()..].join(", ")
+                ));
+            }
             count(&pos, 2, 2)?;
             if flag(&normalized, "--agents") && flag(&normalized, "--shells") {
                 return usage("argument --shells: not allowed with argument --agents");
             }
         }
         "route" => {
-            count(
-                &pos,
-                if flag(&normalized, "--enable") || flag(&normalized, "--drain") {
-                    0
-                } else {
-                    2
-                },
-                2,
-            )?;
+            count(&pos, 0, 2)?;
+            if !unknown.is_empty() {
+                return usage(format!("unrecognized arguments: {}", unknown.join(" ")));
+            }
+            if pos.len() < 2 && !flag(&normalized, "--enable") && !flag(&normalized, "--drain") {
+                return usage("project 와 작업 메시지가 필요합니다.");
+            }
             choices(
                 option(&normalized, "--tier"),
                 "--tier",
@@ -157,6 +223,12 @@ pub fn prepare(command: &str, args: &[String]) -> Result<Option<Vec<String>>> {
             )?;
         }
         "demo_agent" => {
+            if pos.len() < 2 {
+                return usage(format!(
+                    "the following arguments are required: {}",
+                    ["name", "state"][pos.len()..].join(", ")
+                ));
+            }
             count(&pos, 2, 2)?;
             choices(
                 Some(pos[1].clone()),
@@ -190,8 +262,16 @@ pub fn prepare(command: &str, args: &[String]) -> Result<Option<Vec<String>>> {
                         &super::tiers::TIERS,
                     )?;
                 }
-                "start" | "accept" => count(&pos, 2, 2)?,
+                "start" | "accept" => {
+                    if pos.len() < 2 {
+                        return usage("the following arguments are required: id");
+                    }
+                    count(&pos, 2, 2)?;
+                }
                 "complete" => {
+                    if pos.len() < 2 {
+                        return usage("the following arguments are required: id, --result");
+                    }
                     count(&pos, 2, 2)?;
                     required(&normalized, &["--result"])?;
                 }
@@ -199,10 +279,13 @@ pub fn prepare(command: &str, args: &[String]) -> Result<Option<Vec<String>>> {
                     count(&pos, 1, 1)?;
                     required(&normalized, &["--batch"])?;
                 }
-                _ => return usage("a collaboration command is required"),
+                _ => return usage("명령을 지정하세요."),
             }
         }
         _ => {}
+    }
+    if !unknown.is_empty() {
+        return usage(format!("unrecognized arguments: {}", unknown.join(" ")));
     }
     Ok(Some(normalized))
 }

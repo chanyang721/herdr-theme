@@ -32,6 +32,13 @@ pub const SLEEP: Spec = Spec {
     command: "sleep_idle_sessions",
     pins: false,
 };
+pub fn source_hash(spec: Spec) -> &'static str {
+    if spec.job == CLEANUP.job {
+        env!("HERDR_CLEANUP_SOURCE_SHA256")
+    } else {
+        env!("HERDR_SLEEP_SOURCE_SHA256")
+    }
+}
 pub fn write_changed(path: &Path, content: &[u8]) -> Result<bool> {
     if fs::read(path).ok().as_deref() == Some(content) {
         return Ok(false);
@@ -230,13 +237,26 @@ pub fn install_observer(
     user_approved: bool,
     execute: bool,
 ) -> Result<Value> {
+    install_observer_with_clock(home, source, spec, apply, user_approved, execute, &now)
+}
+/// The original behavior tests replace time.time; production uses the same
+/// clock calls through this boundary without an environment or CLI override.
+pub fn install_observer_with_clock(
+    home: &Path,
+    source: &Path,
+    spec: Spec,
+    apply: bool,
+    user_approved: bool,
+    execute: bool,
+    clock: &dyn Fn() -> f64,
+) -> Result<Value> {
     let site = site_config(Some(home), None);
     let base = base(home, &site);
     let label = label(&site, spec);
     let config_path = base.join(spec.config);
     let binary = std::env::current_exe()?;
     let bytes = fs::read(&binary)?;
-    let code_hash = hash(&bytes);
+    let code_hash = source_hash(spec);
     let mut config = if config_path.exists() {
         read_json(&config_path)?
     } else {
@@ -258,7 +278,7 @@ pub fn install_observer(
         let trial = &state["trial"];
         let current = state["observer_sha256"] == code_hash
             && trial["error_count"].as_i64().unwrap_or(0) == 0
-            && now() - state["last_at"].as_f64().unwrap_or(0.) <= 660.;
+            && clock() - state["last_at"].as_f64().unwrap_or(0.) <= 660.;
         if user_approved {
             if !current || trial["samples"].as_i64().unwrap_or(0) < 1 {
                 return Err(
@@ -268,13 +288,13 @@ pub fn install_observer(
             config["user_approved_apply"] = json!(true)
         } else if !current
             || trial["samples"].as_i64().unwrap_or(0) < 7
-            || now() - trial["started_at"].as_f64().unwrap_or_else(now) < 1800.
+            || clock() - trial["started_at"].as_f64().unwrap_or_else(clock) < 1800.
         {
             return Err(
                 "30-minute live dry-run with current code and 7 healthy samples is required".into(),
             );
         }
-        config["reviewed_dry_run_at"] = json!(now());
+        config["reviewed_dry_run_at"] = json!(clock());
         config["reviewed_observer_sha256"] = json!(code_hash)
     }
     let destination = base.join(install::native_name());
@@ -325,6 +345,17 @@ pub fn install_observer(
     Ok(result)
 }
 pub fn refresh(home: &Path, source: &Path) -> Result<Value> {
+    refresh_with_review(home, source, &|home, source| {
+        review_approval(home, source, None)
+    })
+}
+/// Mirrors the original tests' source-review lookup replacement. File copying,
+/// registration detection, locking and configuration writes remain shared.
+pub fn refresh_with_review(
+    home: &Path,
+    source: &Path,
+    review: &dyn Fn(&Path, &Path) -> Value,
+) -> Result<Value> {
     let site = site_config(Some(home), None);
     let base = base(home, &site);
     let binary = base.join(install::native_name());
@@ -396,9 +427,7 @@ pub fn refresh(home: &Path, source: &Path) -> Result<Value> {
             )
         })?)
     }
-    let before = fs::read(&binary).ok().map(hash);
     let bytes = fs::read(std::env::current_exe()?)?;
-    let after = hash(&bytes);
     let changed = write_changed(&binary, &bytes)?;
     chmod(&binary, 0o755)?;
     let mut result = json!({"refreshed":registered.iter().map(|s|s.job).collect::<Vec<_>>(),"changed":if changed{vec![install::native_name()]}else{vec![]},"observers":{}});
@@ -407,20 +436,20 @@ pub fn refresh(home: &Path, source: &Path) -> Result<Value> {
     }
     let mut approval = None;
     for spec in registered {
+        let after = source_hash(spec);
         let config_path = base.join(spec.config);
         let mut config = json_or(&config_path, json!({}));
-        let carried = config["user_approved_apply"] == true
-            && before.is_some()
-            && config["reviewed_observer_sha256"].as_str() == before.as_deref()
-            && before.as_deref() != Some(&after);
+        // Latest Python installer policy: replacing a copy never transfers
+        // approval. Re-evaluate a previously carried approval as well.
+        let record = config["reviewed_by_policy"].clone();
+        let stale = config["reviewed_observer_sha256"] == after
+            && crate::observers::truth(&record)
+            && record["observer_sha256"] != after;
         let mut policy = Value::Null;
-        if carried {
-            config["reviewed_observer_sha256"] = json!(after);
-            atomic_json(&config_path, &config)?;
-        } else if config.as_object().is_some_and(|c| !c.is_empty())
-            && config["reviewed_observer_sha256"] != after
+        if config.as_object().is_some_and(|c| !c.is_empty())
+            && (config["reviewed_observer_sha256"] != after || stale)
         {
-            let approval = approval.get_or_insert_with(|| review_approval(home, source, None));
+            let approval = approval.get_or_insert_with(|| review(home, source));
             policy = approval.clone();
             if approval["ok"] == true {
                 config["reviewed_observer_sha256"] = json!(after);
@@ -430,9 +459,12 @@ pub fn refresh(home: &Path, source: &Path) -> Result<Value> {
                 }
                 config["reviewed_by_policy"] = reviewed;
                 atomic_json(&config_path, &config)?;
+            } else if stale {
+                config["reviewed_observer_sha256"] = record["observer_sha256"].clone();
+                atomic_json(&config_path, &config)?;
             }
         }
-        result["observers"][spec.job] = json!({"observer_sha256":after,"approval_carried":carried,"approval_policy":policy,"approved_for_this_copy":config["reviewed_observer_sha256"]==after})
+        result["observers"][spec.job] = json!({"observer_sha256":after,"approval_policy":policy,"approved_for_this_copy":config["reviewed_observer_sha256"]==after})
     }
     drop(locks);
     Ok(result)
@@ -457,7 +489,7 @@ pub fn cli(args: &[String], sleep: bool) -> Result<()> {
             has(args, "--install"),
         )?
     };
-    println!("{result}");
+    crate::common::print(&result)?;
     Ok(())
 }
 #[cfg(test)]

@@ -2,7 +2,6 @@ use crate::documents::common::*;
 use regex::Regex;
 use serde_json::{json, Value};
 use std::{
-    io::Read,
     path::{Path, PathBuf},
     time::Duration,
 };
@@ -329,15 +328,19 @@ pub fn session_reports(root: &Path, at: f64, hours: f64) -> Option<Value> {
     }
     Some(reports)
 }
-fn http(
+pub fn http(
     url: &str,
     headers: &[(String, String)],
     body: Option<&Value>,
     resets: bool,
 ) -> ApiResult<Value> {
-    let client = reqwest::blocking::Client::builder()
-        .timeout(Duration::from_secs(if resets { 15 } else { 12 }))
-        .build()
+    let client = crate::tls::async_builder()
+        .and_then(|builder| {
+            Ok(builder
+                .connect_timeout(Duration::from_secs(if resets { 15 } else { 12 }))
+                .read_timeout(Duration::from_secs(if resets { 15 } else { 12 }))
+                .build()?)
+        })
         .map_err(|_| {
             unavailable(
                 if resets {
@@ -353,59 +356,33 @@ fn http(
     } else {
         client.get(url)
     };
+    if !headers
+        .iter()
+        .any(|(key, _)| key.eq_ignore_ascii_case("User-Agent"))
+    {
+        request = request.header(
+            "User-Agent",
+            if resets {
+                "HerdrCodexResets/1.0"
+            } else {
+                "HerdrPlanUsage/1.0"
+            },
+        );
+    }
     for (key, value) in headers {
         request = request.header(key, value)
     }
     if let Some(body) = body {
         request = request
             .header("Content-Type", "application/json")
-            .body(body.to_string())
+            .body(crate::common::json_text(body, true))
     }
-    let mut response = request.send().map_err(|_| {
-        unavailable(
-            if resets {
-                "Codex 서버에 연결할 수 없습니다."
-            } else {
-                "서버에 연결할 수 없습니다."
-            },
-            "offline",
-        )
-    })?;
-    let status = response.status().as_u16();
-    if status >= 400 {
-        return Err(match status {
-            401 => unavailable(
-                if resets {
-                    "Codex 로그인이 만료됐습니다. codex 를 열어 다시 로그인하세요."
-                } else {
-                    "로그인이 만료됐습니다. CLI를 열어 다시 로그인하세요."
-                },
-                "expired",
-            ),
-            429 => unavailable(
-                if resets {
-                    "요청이 많습니다. 잠시 뒤 다시 시도하세요."
-                } else {
-                    "요청이 많습니다. 잠시 뒤 갱신됩니다."
-                },
-                "rate_limited",
-            ),
-            _ => unavailable(
-                if resets {
-                    format!("Codex 서버가 HTTP {status} 로 응답했습니다.")
-                } else {
-                    format!("HTTP {status} 응답")
-                },
-                "http_error",
-            ),
-        });
-    }
-    let mut bytes = vec![];
-    response
-        .by_ref()
-        .take(1024 * 1024)
-        .read_to_end(&mut bytes)
-        .map_err(|_| {
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .map_err(|_| unavailable("HTTP runtime unavailable", "offline"))?;
+    runtime.block_on(async {
+        let mut response = request.send().await.map_err(|_| {
             unavailable(
                 if resets {
                     "Codex 서버에 연결할 수 없습니다."
@@ -415,15 +392,61 @@ fn http(
                 "offline",
             )
         })?;
-    if resets && bytes.iter().all(|b| b.is_ascii_whitespace()) {
-        return Ok(json!({}));
-    }
-    let data: Value = serde_json::from_slice(&bytes)
-        .map_err(|_| unavailable("예상하지 못한 응답입니다.", "bad_response"))?;
-    if !data.is_object() {
-        return Err(unavailable("예상하지 못한 응답입니다.", "bad_response"));
-    }
-    Ok(data)
+        let status = response.status().as_u16();
+        if status >= 400 {
+            return Err(match status {
+                401 => unavailable(
+                    if resets {
+                        "Codex 로그인이 만료됐습니다. codex 를 열어 다시 로그인하세요."
+                    } else {
+                        "로그인이 만료됐습니다. CLI를 열어 다시 로그인하세요."
+                    },
+                    "expired",
+                ),
+                429 => unavailable(
+                    if resets {
+                        "요청이 많습니다. 잠시 뒤 다시 시도하세요."
+                    } else {
+                        "요청이 많습니다. 잠시 뒤 갱신됩니다."
+                    },
+                    "rate_limited",
+                ),
+                _ => unavailable(
+                    if resets {
+                        format!("Codex 서버가 HTTP {status} 로 응답했습니다.")
+                    } else {
+                        format!("HTTP {status} 응답")
+                    },
+                    "http_error",
+                ),
+            });
+        }
+        let mut bytes = vec![];
+        while bytes.len() < 1024 * 1024 {
+            let chunk = response.chunk().await.map_err(|_| {
+                unavailable(
+                    if resets {
+                        "Codex 서버에 연결할 수 없습니다."
+                    } else {
+                        "서버에 연결할 수 없습니다."
+                    },
+                    "offline",
+                )
+            })?;
+            let Some(chunk) = chunk else { break };
+            let keep = chunk.len().min(1024 * 1024 - bytes.len());
+            bytes.extend_from_slice(&chunk[..keep]);
+        }
+        if resets && bytes.iter().all(|b| b.is_ascii_whitespace()) {
+            return Ok(json!({}));
+        }
+        let data: Value = crate::json_bytes::loads(&bytes)
+            .map_err(|_| unavailable("예상하지 못한 응답입니다.", "bad_response"))?;
+        if !data.is_object() {
+            return Err(unavailable("예상하지 못한 응답입니다.", "bad_response"));
+        }
+        Ok(data)
+    })
 }
 fn codex_headers(resets: bool) -> ApiResult<Vec<(String, String)>> {
     let file = codex_home().join("auth.json");

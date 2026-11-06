@@ -99,7 +99,9 @@
       "name": "Temporary work",
       "safe": true,
       "reasons": [],
+      "fingerprint": "a10fae37f31358b8a7f6fe671c12d318125e849713fea8e262a85b064036d54a",
       "answered_report": false,
+      "empty_panes": [],
       "folders": [
         "/fixture/worktree"
       ],
@@ -222,7 +224,9 @@
       "reasons": [
         "t-test: not a confirmed idle/done agent"
       ],
+      "fingerprint": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
       "answered_report": false,
+      "empty_panes": [],
       "folders": [
         "/fixture/worktree"
       ],
@@ -332,7 +336,9 @@
       "reasons": [
         "t-test: not a confirmed idle/done agent"
       ],
+      "fingerprint": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
       "answered_report": false,
+      "empty_panes": [],
       "folders": [
         "/fixture/worktree"
       ],
@@ -442,7 +448,9 @@
       "reasons": [
         "t-test: empty input unverified"
       ],
+      "fingerprint": "434a65e082a8565c3f9ceff97db4c6cfe370dbff558115c336acf2559b67c496",
       "answered_report": false,
+      "empty_panes": [],
       "folders": [
         "/fixture/worktree"
       ],
@@ -565,7 +573,9 @@
       "reasons": [
         "t-test: empty input unverified"
       ],
+      "fingerprint": "b05565b1853c218391e41613f4f44fa1a8ce6f4dcd62dc46162032a2e1524648",
       "answered_report": false,
+      "empty_panes": [],
       "folders": [
         "/fixture/worktree"
       ],
@@ -688,7 +698,9 @@
       "reasons": [
         "t-test: user decision pending"
       ],
+      "fingerprint": "c035b123f2a8344152d09a8f08241db1e5e17e0c471a30a0fa9cc152b152c952",
       "answered_report": false,
+      "empty_panes": [],
       "folders": [
         "/fixture/worktree"
       ],
@@ -811,7 +823,9 @@
       "reasons": [
         "t-test: in progress: a monitor or background shell is still running"
       ],
+      "fingerprint": "e8f2936db5ce17f6507319d025035d666b3d67cfebaa00648e20fb6b9fbafce2",
       "answered_report": false,
+      "empty_panes": [],
       "folders": [
         "/fixture/worktree"
       ],
@@ -932,7 +946,9 @@
       "name": "Temporary work",
       "safe": true,
       "reasons": [],
+      "fingerprint": "5d828a079f3269ec28368edc04a1180a8c0788b92b08a335fc556406735e8f25",
       "answered_report": false,
+      "empty_panes": [],
       "folders": [
         "/fixture/worktree"
       ],
@@ -1161,7 +1177,9 @@
       "name": "Temporary work",
       "safe": true,
       "reasons": [],
+      "fingerprint": "a10fae37f31358b8a7f6fe671c12d318125e849713fea8e262a85b064036d54a",
       "answered_report": false,
+      "empty_panes": [],
       "folders": [
         "/fixture/worktree"
       ],
@@ -1373,7 +1391,9 @@
       "reasons": [
         "t-test: terminal evidence unavailable"
       ],
+      "fingerprint": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
       "answered_report": false,
+      "empty_panes": [],
       "folders": [
         "/fixture/worktree"
       ],
@@ -1486,7 +1506,9 @@
       "reasons": [
         "t-test: lookup failed: timeout"
       ],
+      "fingerprint": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
       "answered_report": false,
+      "empty_panes": [],
       "folders": [
         "/fixture/worktree"
       ],
@@ -1600,7 +1622,9 @@
       "reasons": [
         "t-test: live subagent terminals"
       ],
+      "fingerprint": "a10fae37f31358b8a7f6fe671c12d318125e849713fea8e262a85b064036d54a",
       "answered_report": false,
+      "empty_panes": [],
       "folders": [
         "/fixture/worktree"
       ],
@@ -1729,7 +1753,9 @@
       "reasons": [
         "t-test: running/unknown child processes: bash"
       ],
+      "fingerprint": "4dcaa47db3e1d1f86cfd3f1ed5693ba1785eb5e25ac963c24d5e95aceaf6c26a",
       "answered_report": false,
+      "empty_panes": [],
       "folders": [
         "/fixture/worktree"
       ],
@@ -1852,7 +1878,9 @@
       "reasons": [
         "t-test: backend jobs unverified: fixture"
       ],
+      "fingerprint": "256c71fc52ef80836d00d6415c9821c62de0c862b494393d077b7218d60e557f",
       "answered_report": false,
+      "empty_panes": [],
       "folders": [
         "/fixture/worktree"
       ],
@@ -1979,7 +2007,9 @@
       "name": "Temporary work",
       "safe": true,
       "reasons": [],
+      "fingerprint": "4dcaa47db3e1d1f86cfd3f1ed5693ba1785eb5e25ac963c24d5e95aceaf6c26a",
       "answered_report": false,
+      "empty_panes": [],
       "folders": [
         "/fixture/worktree"
       ],
@@ -2114,7 +2144,9 @@
       "reasons": [
         "t-test: running/unknown child processes: bash"
       ],
+      "fingerprint": "02dddec3a05a14fb0ccd2bc032b6d5745180e91b3e9b886c262e369c63c88211",
       "answered_report": false,
+      "empty_panes": [],
       "folders": [
         "/fixture/worktree"
       ],
@@ -2238,7 +2270,9 @@
       "name": "Temporary work",
       "safe": true,
       "reasons": [],
+      "fingerprint": "a10fae37f31358b8a7f6fe671c12d318125e849713fea8e262a85b064036d54a",
       "answered_report": false,
+      "empty_panes": [],
       "folders": [
         "/fixture/worktree"
       ],
@@ -2490,7 +2524,8 @@
         "claude",
         "--dangerously-skip-permissions"
       ],
-      "screen_tail": "Done.\n──────────────────────────────\n❯ \n──────────────────────────────\n  ⏵⏵ auto mode on (shift+tab to cycle)"
+      "screen_tail": "Done.\n──────────────────────────────\n❯ \n──────────────────────────────\n  ⏵⏵ auto mode on (shift+tab to cycle)",
+      "fingerprint": "4d9ed951980a63fecf35a3dfa3760275ea9897a97c6cbd332be117d09935ddf2"
     }
   },
   {
@@ -3186,7 +3221,8 @@
         "claude",
         "--dangerously-skip-permissions"
       ],
-      "screen_tail": "done\n? typed input"
+      "screen_tail": "done\n? typed input",
+      "fingerprint": "8d448697c91d0f07332bf0a0c0f6cb6e6fda9301e970cd7901de5f0e60d6cdef"
     }
   },
   {
@@ -3422,7 +3458,8 @@
         "claude",
         "--dangerously-skip-permissions"
       ],
-      "screen_tail": "done\n?\nwrapped input"
+      "screen_tail": "done\n?\nwrapped input",
+      "fingerprint": "4d0bd5d246af3c85cea834609b0b37507712986b5b54ba097c9c73d4faa413a2"
     }
   },
   {
@@ -3658,7 +3695,8 @@
         "claude",
         "--dangerously-skip-permissions"
       ],
-      "screen_tail": "Do you want to proceed?\nDone.\n──────────────────────────────\n❯ \n──────────────────────────────\n  ⏵⏵ auto mode on (shift+tab to cycle)"
+      "screen_tail": "Do you want to proceed?\nDone.\n──────────────────────────────\n❯ \n──────────────────────────────\n  ⏵⏵ auto mode on (shift+tab to cycle)",
+      "fingerprint": "49d14ef6d9c3221d1b274a97d08a8166542c4281b3f206a09b7c0eb7ecf1eecc"
     }
   },
   {
@@ -3894,7 +3932,8 @@
         "claude",
         "--dangerously-skip-permissions"
       ],
-      "screen_tail": "Done.\n──────────────────────────────\n❯ \n──────────────────────────────\n  ⏵⏵ auto mode on (shift+tab to cycle)\n\n? 1 monitor still running"
+      "screen_tail": "Done.\n──────────────────────────────\n❯ \n──────────────────────────────\n  ⏵⏵ auto mode on (shift+tab to cycle)\n\n? 1 monitor still running",
+      "fingerprint": "64f0bf4efb3d1732a8a2c21b095c40ba5e4e828b4aa4ddece249442378b7e211"
     }
   },
   {
@@ -4130,7 +4169,8 @@
         "claude",
         "--dangerously-skip-permissions"
       ],
-      "screen_tail": "Done.\n──────────────────────────────\n❯ \n──────────────────────────────\n  ⏵⏵ auto mode on (shift+tab to cycle)\n\nvoice ? Listening"
+      "screen_tail": "Done.\n──────────────────────────────\n❯ \n──────────────────────────────\n  ⏵⏵ auto mode on (shift+tab to cycle)\n\nvoice ? Listening",
+      "fingerprint": "796cb519e0a32f87b4d929c570d3abecc8a5bceef059b67ea2a648cac2ae1e76"
     }
   },
   {
@@ -4366,7 +4406,8 @@
         "claude",
         "--dangerously-skip-permissions"
       ],
-      "screen_tail": "Done.\n──────────────────────────────\n❯ \n──────────────────────────────\n  ⏵⏵ auto mode on (shift+tab to cycle)"
+      "screen_tail": "Done.\n──────────────────────────────\n❯ \n──────────────────────────────\n  ⏵⏵ auto mode on (shift+tab to cycle)",
+      "fingerprint": "4d9ed951980a63fecf35a3dfa3760275ea9897a97c6cbd332be117d09935ddf2"
     }
   },
   {
@@ -5495,7 +5536,8 @@
         "claude",
         "--dangerously-skip-permissions"
       ],
-      "screen_tail": "Done.\n──────────────────────────────\n❯ \n──────────────────────────────\n  ⏵⏵ auto mode on (shift+tab to cycle)"
+      "screen_tail": "Done.\n──────────────────────────────\n❯ \n──────────────────────────────\n  ⏵⏵ auto mode on (shift+tab to cycle)",
+      "fingerprint": "4d9ed951980a63fecf35a3dfa3760275ea9897a97c6cbd332be117d09935ddf2"
     }
   },
   {
@@ -5737,7 +5779,8 @@
         "claude",
         "--dangerously-skip-permissions"
       ],
-      "screen_tail": "Done.\n──────────────────────────────\n❯ \n──────────────────────────────\n  ⏵⏵ auto mode on (shift+tab to cycle)"
+      "screen_tail": "Done.\n──────────────────────────────\n❯ \n──────────────────────────────\n  ⏵⏵ auto mode on (shift+tab to cycle)",
+      "fingerprint": "f1c492fff9e047bef8d9def69cf01558c199a0a522df24a4c76570bef58957da"
     }
   },
   {
@@ -5973,7 +6016,8 @@
         "claude",
         "--dangerously-skip-permissions"
       ],
-      "screen_tail": "Done.\n──────────────────────────────\n❯ \n──────────────────────────────\n  ⏵⏵ auto mode on (shift+tab to cycle)"
+      "screen_tail": "Done.\n──────────────────────────────\n❯ \n──────────────────────────────\n  ⏵⏵ auto mode on (shift+tab to cycle)",
+      "fingerprint": "bd4f3ccf2fe7a09072c7740d52d3d2ef3c9c902deca79895a7bcec572732173a"
     }
   },
   {
@@ -6213,7 +6257,8 @@
         "claude",
         "--dangerously-skip-permissions"
       ],
-      "screen_tail": "Done.\n──────────────────────────────\n❯ \n──────────────────────────────\n  ⏵⏵ auto mode on (shift+tab to cycle)"
+      "screen_tail": "Done.\n──────────────────────────────\n❯ \n──────────────────────────────\n  ⏵⏵ auto mode on (shift+tab to cycle)",
+      "fingerprint": "f1c492fff9e047bef8d9def69cf01558c199a0a522df24a4c76570bef58957da"
     }
   },
   {
@@ -6461,7 +6506,8 @@
         "claude",
         "--dangerously-skip-permissions"
       ],
-      "screen_tail": "Done.\n──────────────────────────────\n❯ \n──────────────────────────────\n  ⏵⏵ auto mode on (shift+tab to cycle)"
+      "screen_tail": "Done.\n──────────────────────────────\n❯ \n──────────────────────────────\n  ⏵⏵ auto mode on (shift+tab to cycle)",
+      "fingerprint": "a3ff5b71b738c926175d5f85184ea7309268e5b04a5738120e575d48a8c56c4b"
     }
   },
   {
@@ -6696,7 +6742,8 @@
         "claude",
         "--dangerously-skip-permissions"
       ],
-      "screen_tail": "Done.\n──────────────────────────────\n❯ \n──────────────────────────────\n  ⏵⏵ auto mode on (shift+tab to cycle)"
+      "screen_tail": "Done.\n──────────────────────────────\n❯ \n──────────────────────────────\n  ⏵⏵ auto mode on (shift+tab to cycle)",
+      "fingerprint": "4d9ed951980a63fecf35a3dfa3760275ea9897a97c6cbd332be117d09935ddf2"
     }
   }
 ]

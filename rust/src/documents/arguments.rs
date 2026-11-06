@@ -1,6 +1,22 @@
 //! CLI validation happens before a helper can read credentials, launch tools or write files.
 use super::common::*;
 pub fn normalize(command: &str, args: &[String]) -> Result<Vec<String>> {
+    let parsed = parse_only(command, args)?;
+    if has(&parsed, "--help") {
+        return Ok(parsed);
+    }
+    validate_native(command, &parsed).map_err(|error| super::argparse::with_usage(command, error))
+}
+pub fn parse_only(command: &str, args: &[String]) -> Result<Vec<String>> {
+    if let Some(parsed) = super::argparse::parse(command, args) {
+        return parsed.map_err(|error| super::argparse::with_usage(command, error));
+    }
+    if has(args, "--help") || has(args, "-h") {
+        return Ok(vec!["--help".into()]);
+    }
+    validate_native(command, args)
+}
+fn validate_native(command: &str, args: &[String]) -> Result<Vec<String>> {
     let (options, flags, minimum, maximum): (&[&str], &[&str], usize, usize) = match command {
         "collect_docs" => (&["--config", "--output", "--pins"], &[], 0, 0),
         "doc_routing" => (&["--routing"], &[], 0, 0),

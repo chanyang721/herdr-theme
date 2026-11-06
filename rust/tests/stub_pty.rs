@@ -97,7 +97,7 @@ fn run(keys: &[u8], icrnl: bool) -> (Value, String, Vec<Value>) {
             if libc::setsid() < 0 {
                 return Err(std::io::Error::last_os_error());
             }
-            if libc::ioctl(0, libc::TIOCSCTTY, 0) < 0 {
+            if libc::ioctl(0, libc::TIOCSCTTY as _, 0) < 0 {
                 return Err(std::io::Error::last_os_error());
             }
             let mut attrs = std::mem::MaybeUninit::<libc::termios>::uninit();
@@ -119,14 +119,30 @@ fn run(keys: &[u8], icrnl: bool) -> (Value, String, Vec<Value>) {
     let mut child = command.spawn().unwrap();
     drop(command);
     drop(tty.slave);
+    // Drain the PTY while supplying input: its echoed output can fill on macOS
+    // before the child finishes printing its banner and begins reading input.
+    let flags = unsafe { libc::fcntl(tty.master.as_raw_fd(), libc::F_GETFL) };
+    assert!(flags >= 0);
+    assert_eq!(
+        unsafe {
+            libc::fcntl(
+                tty.master.as_raw_fd(),
+                libc::F_SETFL,
+                flags | libc::O_NONBLOCK,
+            )
+        },
+        0
+    );
     let deadline = Instant::now() + Duration::from_secs(15);
     let mut output = vec![];
+    let mut sending = false;
+    let mut written = 0;
     let mut sent = false;
     let mut receipt = None;
     while Instant::now() < deadline {
         let mut poll = libc::pollfd {
             fd: tty.master.as_raw_fd(),
-            events: libc::POLLIN,
+            events: libc::POLLIN | if sending && !sent { libc::POLLOUT } else { 0 },
             revents: 0,
         };
         let ready = unsafe { libc::poll(&mut poll, 1, 100) };
@@ -136,14 +152,24 @@ fn run(keys: &[u8], icrnl: bool) -> (Value, String, Vec<Value>) {
             match tty.master.read(&mut buf) {
                 Ok(0) => break,
                 Ok(n) => output.extend_from_slice(&buf[..n]),
+                Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {}
                 Err(e) if e.raw_os_error() == Some(libc::EIO) => break,
                 Err(e) => panic!("PTY read failed: {e}"),
             }
         }
         let text = String::from_utf8_lossy(&output);
-        if !sent && text.contains("ctrl+c") {
-            tty.master.write_all(keys).unwrap();
-            sent = true;
+        if text.contains("ctrl+c") {
+            sending = true;
+        }
+        if sending && !sent {
+            match tty.master.write(&keys[written..]) {
+                Ok(n) => {
+                    written += n;
+                    sent = written == keys.len();
+                }
+                Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {}
+                Err(e) => panic!("PTY write failed: {e}"),
+            }
         }
         if let Some((_, rest)) = text.split_once("FIXTURE_AGENT ") {
             if let Some(line) = rest.lines().next() {

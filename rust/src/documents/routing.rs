@@ -191,7 +191,7 @@ pub fn cli(args: &[String]) -> Result<()> {
             entry["depth"] = source["depth"].clone()
         }
         for doc in documents(&[entry], &mut vec![], true) {
-            println!(
+            crate::legacy_text::print_line(&format!(
                 "{}\t{}",
                 target(
                     &doc,
@@ -200,7 +200,7 @@ pub fn cli(args: &[String]) -> Result<()> {
                 )
                 .unwrap_or_else(|| "-".into()),
                 s(&doc["path"])
-            )
+            ))?;
         }
     }
     Ok(())

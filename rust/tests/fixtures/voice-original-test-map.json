@@ -1,0 +1,1096 @@
+{
+  "original_source_commit": "8c5b71d2f1074bb5d1d831fa395617bf4ae2abc8",
+  "scope": "existing voice/tests/test*.py methods only",
+  "execution_claim": "Source correspondence only. Actual executed, skipped and platform results are documented separately in docs/native-rust-migration.md.",
+  "methods": [
+    {
+      "original_file": "voice/tests/test_app_backend.py",
+      "original_class": "AppFocusTests",
+      "original_method": "test_bridged_focus_overrides_stale_tui_focus",
+      "original_line": 15,
+      "native_function": "queue::project",
+      "disposition": "aggregate_assertions",
+      "evidence": "rust/src/voice/probe.rs::original_python_contract_corpus op=project"
+    },
+    {
+      "original_file": "voice/tests/test_app_backend.py",
+      "original_class": "AppFocusTests",
+      "original_method": "test_native_focus_never_leaves_a_tui_microphone_selected",
+      "original_line": 20,
+      "native_function": "queue::project",
+      "disposition": "aggregate_assertions",
+      "evidence": "rust/src/voice/probe.rs::original_python_contract_corpus op=project"
+    },
+    {
+      "original_file": "voice/tests/test_app_backend.py",
+      "original_class": "AppFocusTests",
+      "original_method": "test_background_app_does_not_override_tui_focus",
+      "original_line": 24,
+      "native_function": "queue::project",
+      "disposition": "aggregate_assertions",
+      "evidence": "rust/src/voice/probe.rs::original_python_contract_corpus op=project"
+    },
+    {
+      "original_file": "voice/tests/test_app_backend.py",
+      "original_class": "NativeVoiceSafetyTests",
+      "original_method": "test_existing_codex_connection_is_never_toggled",
+      "original_line": 29,
+      "native_function": "queue::prepare_app_codex_with / key_command",
+      "disposition": "named_native_case",
+      "evidence": "rust/tests/voice_original_dictation.rs::test_existing_codex_connection_is_never_toggled"
+    },
+    {
+      "original_file": "voice/tests/test_app_backend.py",
+      "original_class": "NativeVoiceSafetyTests",
+      "original_method": "test_native_microphone_key_goes_only_to_its_target",
+      "original_line": 35,
+      "native_function": "queue::prepare_app_codex_with / key_command",
+      "disposition": "named_native_case",
+      "evidence": "rust/tests/voice_original_dictation.rs::test_native_microphone_key_goes_only_to_its_target"
+    },
+    {
+      "original_file": "voice/tests/test_app_backend.py",
+      "original_class": "StaleHeartbeatTests",
+      "original_method": "test_stale_heartbeat_asks_the_window_instead_of_trusting_tui_focus",
+      "original_line": 56,
+      "native_function": "queue::app_focus / prepare_app_codex_with",
+      "disposition": "named_native_case",
+      "evidence": "rust/tests/voice_original_additional.rs::test_stale_heartbeat_asks_the_window_instead_of_trusting_tui_focus"
+    },
+    {
+      "original_file": "voice/tests/test_app_backend.py",
+      "original_class": "StaleHeartbeatTests",
+      "original_method": "test_stale_heartbeat_follows_a_bridged_focus_to_its_tui_pane",
+      "original_line": 62,
+      "native_function": "queue::app_focus / prepare_app_codex_with",
+      "disposition": "named_native_case",
+      "evidence": "rust/tests/voice_original_additional.rs::test_stale_heartbeat_follows_a_bridged_focus_to_its_tui_pane"
+    },
+    {
+      "original_file": "voice/tests/test_app_backend.py",
+      "original_class": "StaleHeartbeatTests",
+      "original_method": "test_unknown_window_focus_leaves_no_tui_microphone_live",
+      "original_line": 65,
+      "native_function": "queue::app_focus / prepare_app_codex_with",
+      "disposition": "named_native_case",
+      "evidence": "rust/tests/voice_original_additional.rs::test_unknown_window_focus_leaves_no_tui_microphone_live"
+    },
+    {
+      "original_file": "voice/tests/test_app_backend.py",
+      "original_class": "StaleHeartbeatTests",
+      "original_method": "test_docs_tab_focus_does_not_fall_back_to_the_last_agent",
+      "original_line": 68,
+      "native_function": "queue::app_focus / prepare_app_codex_with",
+      "disposition": "named_native_case",
+      "evidence": "rust/tests/voice_original_additional.rs::test_docs_tab_focus_does_not_fall_back_to_the_last_agent"
+    },
+    {
+      "original_file": "voice/tests/test_app_backend.py",
+      "original_class": "StaleHeartbeatTests",
+      "original_method": "test_app_in_background_keeps_tui_focus",
+      "original_line": 73,
+      "native_function": "queue::app_focus / prepare_app_codex_with",
+      "disposition": "named_native_case",
+      "evidence": "rust/tests/voice_original_additional.rs::test_app_in_background_keeps_tui_focus"
+    },
+    {
+      "original_file": "voice/tests/test_app_backend.py",
+      "original_class": "StaleHeartbeatTests",
+      "original_method": "test_asked_focus_never_starts_a_voice_connection",
+      "original_line": 75,
+      "native_function": "queue::app_focus / prepare_app_codex_with",
+      "disposition": "named_native_case",
+      "evidence": "rust/tests/voice_original_dictation.rs::test_asked_focus_never_starts_a_voice_connection"
+    },
+    {
+      "original_file": "voice/tests/test_app_dictation.py",
+      "original_class": "NativeDictationTests",
+      "original_method": "test_finished_native_dictation_targets_its_core_terminal",
+      "original_line": 16,
+      "native_function": "queue::dictation::listen_with / finish_dictation / key_command",
+      "disposition": "named_native_case",
+      "evidence": "rust/tests/voice_original_dictation.rs::test_finished_native_dictation_targets_its_core_terminal"
+    },
+    {
+      "original_file": "voice/tests/test_app_dictation.py",
+      "original_class": "NativeDictationTests",
+      "original_method": "test_finishing_after_focus_left_keeps_the_original_core_target",
+      "original_line": 21,
+      "native_function": "queue::dictation::listen_with / finish_dictation / key_command",
+      "disposition": "named_native_case",
+      "evidence": "rust/tests/voice_original_dictation.rs::test_finishing_after_focus_left_keeps_the_original_core_target"
+    },
+    {
+      "original_file": "voice/tests/test_codex_focus_guard.py",
+      "original_class": "RoutingTests",
+      "original_method": "test_other_microphone_is_muted_before_owned_focus_resumes",
+      "original_line": 26,
+      "native_function": "queue::reconcile",
+      "disposition": "named_native_case",
+      "evidence": "rust/tests/voice_original_lifecycle.rs::test_other_microphone_is_muted_before_owned_focus_resumes"
+    },
+    {
+      "original_file": "voice/tests/test_codex_focus_guard.py",
+      "original_class": "RoutingTests",
+      "original_method": "test_initial_manual_mute_is_preserved",
+      "original_line": 31,
+      "native_function": "queue::reconcile",
+      "disposition": "named_native_case",
+      "evidence": "rust/tests/voice_original_lifecycle.rs::test_initial_manual_mute_is_preserved"
+    },
+    {
+      "original_file": "voice/tests/test_codex_focus_guard.py",
+      "original_class": "RoutingTests",
+      "original_method": "test_unknown_focus_mutes_every_live_microphone",
+      "original_line": 34,
+      "native_function": "queue::reconcile",
+      "disposition": "named_native_case",
+      "evidence": "rust/tests/voice_original_lifecycle.rs::test_unknown_focus_mutes_every_live_microphone"
+    },
+    {
+      "original_file": "voice/tests/test_codex_focus_guard.py",
+      "original_class": "RoutingTests",
+      "original_method": "test_failed_background_mute_prevents_unmute",
+      "original_line": 38,
+      "native_function": "queue::reconcile",
+      "disposition": "named_native_case",
+      "evidence": "rust/tests/voice_original_lifecycle.rs::test_failed_background_mute_prevents_unmute"
+    },
+    {
+      "original_file": "voice/tests/test_codex_focus_guard.py",
+      "original_class": "RoutingTests",
+      "original_method": "test_unknown_process_identity_can_mute_but_never_resume",
+      "original_line": 44,
+      "native_function": "queue::reconcile",
+      "disposition": "named_native_case",
+      "evidence": "rust/tests/voice_original_lifecycle.rs::test_unknown_process_identity_can_mute_but_never_resume"
+    },
+    {
+      "original_file": "voice/tests/test_codex_focus_guard.py",
+      "original_class": "RoutingTests",
+      "original_method": "test_new_process_never_inherits_unmute_permission",
+      "original_line": 51,
+      "native_function": "queue::reconcile",
+      "disposition": "named_native_case",
+      "evidence": "rust/tests/voice_original_lifecycle.rs::test_new_process_never_inherits_unmute_permission"
+    },
+    {
+      "original_file": "voice/tests/test_codex_focus_guard.py",
+      "original_class": "RoutingTests",
+      "original_method": "test_missing_connection_drops_resume_permission_without_keys",
+      "original_line": 56,
+      "native_function": "queue::reconcile",
+      "disposition": "named_native_case",
+      "evidence": "rust/tests/voice_original_lifecycle.rs::test_missing_connection_drops_resume_permission_without_keys"
+    },
+    {
+      "original_file": "voice/tests/test_codex_focus_guard.py",
+      "original_class": "RoutingTests",
+      "original_method": "test_ambiguous_footer_blocks_unmute_and_receives_no_keys",
+      "original_line": 60,
+      "native_function": "queue::reconcile",
+      "disposition": "named_native_case",
+      "evidence": "rust/tests/voice_original_lifecycle.rs::test_ambiguous_footer_blocks_unmute_and_receives_no_keys"
+    },
+    {
+      "original_file": "voice/tests/test_codex_focus_guard.py",
+      "original_class": "RoutingTests",
+      "original_method": "test_focus_change_during_unmute_is_immediately_remuted",
+      "original_line": 64,
+      "native_function": "queue::reconcile",
+      "disposition": "named_native_case",
+      "evidence": "rust/tests/voice_original_lifecycle.rs::test_focus_change_during_unmute_is_immediately_remuted"
+    },
+    {
+      "original_file": "voice/tests/test_codex_focus_guard.py",
+      "original_class": "RoutingTests",
+      "original_method": "test_focus_change_before_unmute_never_receives_key",
+      "original_line": 70,
+      "native_function": "queue::reconcile",
+      "disposition": "named_native_case",
+      "evidence": "rust/tests/voice_original_lifecycle.rs::test_focus_change_before_unmute_never_receives_key"
+    },
+    {
+      "original_file": "voice/tests/test_codex_focus_guard.py",
+      "original_class": "MappingTests",
+      "original_method": "test_window_focus_is_mapped_to_source_pane_without_sidebar",
+      "original_line": 76,
+      "native_function": "queue::selected / targets",
+      "disposition": "named_native_case",
+      "evidence": "rust/tests/voice_original_additional.rs::test_window_focus_is_mapped_to_source_pane_without_sidebar"
+    },
+    {
+      "original_file": "voice/tests/test_codex_focus_guard.py",
+      "original_class": "MappingTests",
+      "original_method": "test_unknown_front_app_is_never_permission_to_listen",
+      "original_line": 85,
+      "native_function": "queue::selected / targets",
+      "disposition": "named_native_case",
+      "evidence": "rust/tests/voice_original_additional.rs::test_unknown_front_app_is_never_permission_to_listen"
+    },
+    {
+      "original_file": "voice/tests/test_codex_focus_guard.py",
+      "original_class": "MappingTests",
+      "original_method": "test_iterm_front_does_not_identify_which_window_is_focused",
+      "original_line": 89,
+      "native_function": "queue::selected / targets",
+      "disposition": "named_native_case",
+      "evidence": "rust/tests/voice_original_additional.rs::test_iterm_front_does_not_identify_which_window_is_focused"
+    },
+    {
+      "original_file": "voice/tests/test_codex_focus_guard.py",
+      "original_class": "MappingTests",
+      "original_method": "test_bridge_is_not_a_second_microphone",
+      "original_line": 93,
+      "native_function": "queue::selected / targets",
+      "disposition": "named_native_case",
+      "evidence": "rust/tests/voice_original_additional.rs::test_bridge_is_not_a_second_microphone"
+    },
+    {
+      "original_file": "voice/tests/test_codex_focus_guard.py",
+      "original_class": "InstallerTests",
+      "original_method": "test_installer_writes_only_its_agent_and_state_in_isolated_home",
+      "original_line": 103,
+      "native_function": "install::write_codex_agent",
+      "disposition": "aggregate_assertions",
+      "evidence": "rust/src/voice/install.rs::codex_agent_install_is_sandboxed_and_native"
+    },
+    {
+      "original_file": "voice/tests/test_codex_voice_focus.py",
+      "original_class": "CodexFocusTests",
+      "original_method": "test_legacy_event_delegates_to_the_serialized_controller",
+      "original_line": 12,
+      "native_function": "queue::set_voice_with_codex / settle_voice_with",
+      "disposition": "named_native_case",
+      "evidence": "rust/tests/voice_original_lifecycle.rs::test_legacy_event_delegates_to_the_serialized_controller"
+    },
+    {
+      "original_file": "voice/tests/test_codex_voice_focus.py",
+      "original_class": "SettleTests",
+      "original_method": "test_a_focus_blink_never_moves_the_microphone",
+      "original_line": 19,
+      "native_function": "queue::set_voice_with_codex / settle_voice_with",
+      "disposition": "named_native_case",
+      "evidence": "rust/tests/voice_original_dictation.rs::test_a_focus_blink_never_moves_the_microphone"
+    },
+    {
+      "original_file": "voice/tests/test_dictation.py",
+      "original_class": "DiscardTests",
+      "original_method": "test_dictation_the_gate_did_not_pass_is_gone_before_claude_submits_it",
+      "original_line": 18,
+      "native_function": "queue::dictation::listen_with / finish_dictation",
+      "disposition": "named_native_case",
+      "evidence": "rust/tests/voice_original_dictation.rs::test_dictation_the_gate_did_not_pass_is_gone_before_claude_submits_it"
+    },
+    {
+      "original_file": "voice/tests/test_dictation.py",
+      "original_class": "StoppedRecordingTests",
+      "original_method": "test_own_text_is_sent_so_the_next_recording_can_start",
+      "original_line": 38,
+      "native_function": "queue::dictation::listen_with / finish_dictation",
+      "disposition": "named_native_case",
+      "evidence": "rust/tests/voice_original_dictation.rs::test_own_text_is_sent_so_the_next_recording_can_start"
+    },
+    {
+      "original_file": "voice/tests/test_dictation.py",
+      "original_class": "StoppedRecordingTests",
+      "original_method": "test_other_voice_is_erased_not_sent",
+      "original_line": 41,
+      "native_function": "queue::dictation::listen_with / finish_dictation",
+      "disposition": "named_native_case",
+      "evidence": "rust/tests/voice_original_dictation.rs::test_other_voice_is_erased_not_sent"
+    },
+    {
+      "original_file": "voice/tests/test_dictation.py",
+      "original_class": "StopKeyTests",
+      "original_method": "test_own_dictation_is_finished_not_discarded",
+      "original_line": 52,
+      "native_function": "queue::dictation::stop_key / queue::voice_state_from",
+      "disposition": "named_native_case",
+      "evidence": "rust/tests/voice_original_dictation.rs::test_own_dictation_is_finished_not_discarded"
+    },
+    {
+      "original_file": "voice/tests/test_dictation.py",
+      "original_class": "StopKeyTests",
+      "original_method": "test_dictation_on_an_unlearned_microphone_is_discarded",
+      "original_line": 55,
+      "native_function": "queue::dictation::stop_key / queue::voice_state_from",
+      "disposition": "named_native_case",
+      "evidence": "rust/tests/voice_original_dictation.rs::test_dictation_on_an_unlearned_microphone_is_discarded"
+    },
+    {
+      "original_file": "voice/tests/test_dictation.py",
+      "original_class": "StopKeyTests",
+      "original_method": "test_own_voice_on_a_laptop_microphone_is_not_sent",
+      "original_line": 58,
+      "native_function": "queue::dictation::stop_key / queue::voice_state_from",
+      "disposition": "named_native_case",
+      "evidence": "rust/tests/voice_original_dictation.rs::test_own_voice_on_a_laptop_microphone_is_not_sent"
+    },
+    {
+      "original_file": "voice/tests/test_dictation.py",
+      "original_class": "StopKeyTests",
+      "original_method": "test_other_voice_is_discarded",
+      "original_line": 62,
+      "native_function": "queue::dictation::stop_key / queue::voice_state_from",
+      "disposition": "named_native_case",
+      "evidence": "rust/tests/voice_original_dictation.rs::test_other_voice_is_discarded"
+    },
+    {
+      "original_file": "voice/tests/test_dictation.py",
+      "original_class": "StopKeyTests",
+      "original_method": "test_speech_from_before_this_recording_does_not_finish_it",
+      "original_line": 66,
+      "native_function": "queue::dictation::stop_key / queue::voice_state_from",
+      "disposition": "named_native_case",
+      "evidence": "rust/tests/voice_original_dictation.rs::test_speech_from_before_this_recording_does_not_finish_it"
+    },
+    {
+      "original_file": "voice/tests/test_dictation.py",
+      "original_class": "StopKeyTests",
+      "original_method": "test_empty_recording_only_takes_esc_when_idle",
+      "original_line": 74,
+      "native_function": "queue::dictation::stop_key / queue::voice_state_from",
+      "disposition": "named_native_case",
+      "evidence": "rust/tests/voice_original_dictation.rs::test_empty_recording_only_takes_esc_when_idle"
+    },
+    {
+      "original_file": "voice/tests/test_dictation.py",
+      "original_class": "VoiceKeyTests",
+      "original_method": "test_two_misses_hold_the_key_back_for_a_while",
+      "original_line": 95,
+      "native_function": "queue::set_voice_on",
+      "disposition": "named_native_case",
+      "evidence": "rust/tests/voice_original_dictation.rs::test_two_misses_hold_the_key_back_for_a_while"
+    },
+    {
+      "original_file": "voice/tests/test_dictation.py",
+      "original_class": "VoiceKeyTests",
+      "original_method": "test_misses_do_not_lock_a_session_out_for_good",
+      "original_line": 99,
+      "native_function": "queue::set_voice_on",
+      "disposition": "named_native_case",
+      "evidence": "rust/tests/voice_original_dictation.rs::test_misses_do_not_lock_a_session_out_for_good"
+    },
+    {
+      "original_file": "voice/tests/test_dictation.py",
+      "original_class": "VoiceKeyTests",
+      "original_method": "test_a_count_saved_before_the_retry_is_tried_again",
+      "original_line": 103,
+      "native_function": "queue::set_voice_on",
+      "disposition": "named_native_case",
+      "evidence": "rust/tests/voice_original_dictation.rs::test_a_count_saved_before_the_retry_is_tried_again"
+    },
+    {
+      "original_file": "voice/tests/test_dictation.py",
+      "original_class": "VoiceKeyTests",
+      "original_method": "test_turning_voice_back_on_lifts_the_hold_at_once",
+      "original_line": 107,
+      "native_function": "queue::set_voice_on",
+      "disposition": "named_native_case",
+      "evidence": "rust/tests/voice_original_dictation.rs::test_turning_voice_back_on_lifts_the_hold_at_once"
+    },
+    {
+      "original_file": "voice/tests/test_dictation.py",
+      "original_class": "VoiceKeyTests",
+      "original_method": "test_a_recording_clears_the_misses",
+      "original_line": 111,
+      "native_function": "queue::set_voice_on",
+      "disposition": "named_native_case",
+      "evidence": "rust/tests/voice_original_dictation.rs::test_a_recording_clears_the_misses"
+    },
+    {
+      "original_file": "voice/tests/test_dictation.py",
+      "original_class": "RefusedDictationTests",
+      "original_method": "test_refused_text_is_erased_when_it_comes_back",
+      "original_line": 123,
+      "native_function": "queue::dictation::clear_blocked",
+      "disposition": "named_native_case",
+      "evidence": "rust/tests/voice_original_dictation.rs::test_refused_text_is_erased_when_it_comes_back"
+    },
+    {
+      "original_file": "voice/tests/test_dictation.py",
+      "original_class": "RefusedDictationTests",
+      "original_method": "test_waits_for_the_text_to_come_back",
+      "original_line": 129,
+      "native_function": "queue::dictation::clear_blocked",
+      "disposition": "named_native_case",
+      "evidence": "rust/tests/voice_original_dictation.rs::test_waits_for_the_text_to_come_back"
+    },
+    {
+      "original_file": "voice/tests/test_dictation.py",
+      "original_class": "RefusedDictationTests",
+      "original_method": "test_a_late_draft_is_left_alone",
+      "original_line": 132,
+      "native_function": "queue::dictation::clear_blocked",
+      "disposition": "named_native_case",
+      "evidence": "rust/tests/voice_original_dictation.rs::test_a_late_draft_is_left_alone"
+    },
+    {
+      "original_file": "voice/tests/test_dictation.py",
+      "original_class": "HandTypedTests",
+      "original_method": "test_typing_while_recording_is_neither_erased_nor_sent",
+      "original_line": 200,
+      "native_function": "queue::dictation::listen_with / finish_dictation",
+      "disposition": "named_native_case",
+      "evidence": "rust/tests/voice_original_dictation.rs::test_typing_while_recording_is_neither_erased_nor_sent"
+    },
+    {
+      "original_file": "voice/tests/test_dictation.py",
+      "original_class": "HandTypedTests",
+      "original_method": "test_typed_text_left_after_the_recording_ends_stays",
+      "original_line": 208,
+      "native_function": "queue::dictation::listen_with / finish_dictation",
+      "disposition": "named_native_case",
+      "evidence": "rust/tests/voice_original_dictation.rs::test_typed_text_left_after_the_recording_ends_stays"
+    },
+    {
+      "original_file": "voice/tests/test_dictation.py",
+      "original_class": "HandTypedTests",
+      "original_method": "test_a_dictation_corrected_by_hand_is_not_sent",
+      "original_line": 215,
+      "native_function": "queue::dictation::listen_with / finish_dictation",
+      "disposition": "named_native_case",
+      "evidence": "rust/tests/voice_original_dictation.rs::test_a_dictation_corrected_by_hand_is_not_sent"
+    },
+    {
+      "original_file": "voice/tests/test_dictation.py",
+      "original_class": "HandTypedTests",
+      "original_method": "test_own_speech_after_a_correction_is_sent",
+      "original_line": 239,
+      "native_function": "queue::dictation::listen_with / finish_dictation",
+      "disposition": "named_native_case",
+      "evidence": "rust/tests/voice_original_dictation.rs::test_own_speech_after_a_correction_is_sent"
+    },
+    {
+      "original_file": "voice/tests/test_dictation.py",
+      "original_class": "HandTypedTests",
+      "original_method": "test_other_voice_after_a_correction_takes_only_its_own_words",
+      "original_line": 248,
+      "native_function": "queue::dictation::listen_with / finish_dictation",
+      "disposition": "named_native_case",
+      "evidence": "rust/tests/voice_original_dictation.rs::test_other_voice_after_a_correction_takes_only_its_own_words"
+    },
+    {
+      "original_file": "voice/tests/test_dictation.py",
+      "original_class": "HandTypedTests",
+      "original_method": "test_a_corrected_dictation_gets_the_next_recording",
+      "original_line": 255,
+      "native_function": "queue::dictation::listen_with / finish_dictation",
+      "disposition": "named_native_case",
+      "evidence": "rust/tests/voice_original_dictation.rs::test_a_corrected_dictation_gets_the_next_recording"
+    },
+    {
+      "original_file": "voice/tests/test_dictation.py",
+      "original_class": "HandTypedTests",
+      "original_method": "test_a_typed_draft_does_not_start_a_recording",
+      "original_line": 268,
+      "native_function": "queue::dictation::listen_with / finish_dictation",
+      "disposition": "named_native_case",
+      "evidence": "rust/tests/voice_original_dictation.rs::test_a_typed_draft_does_not_start_a_recording"
+    },
+    {
+      "original_file": "voice/tests/test_dictation.py",
+      "original_class": "LeavingPaneTests",
+      "original_method": "test_speech_judged_a_moment_later_is_finished_not_discarded",
+      "original_line": 301,
+      "native_function": "queue::dictation::voice_off",
+      "disposition": "named_native_case",
+      "evidence": "rust/tests/voice_original_dictation.rs::test_speech_judged_a_moment_later_is_finished_not_discarded"
+    },
+    {
+      "original_file": "voice/tests/test_dictation.py",
+      "original_class": "LeavingPaneTests",
+      "original_method": "test_unjudged_speech_is_put_back_after_esc",
+      "original_line": 305,
+      "native_function": "queue::dictation::voice_off",
+      "disposition": "named_native_case",
+      "evidence": "rust/tests/voice_original_dictation.rs::test_unjudged_speech_is_put_back_after_esc"
+    },
+    {
+      "original_file": "voice/tests/test_dictation.py",
+      "original_class": "LeavingPaneTests",
+      "original_method": "test_other_voice_is_still_discarded",
+      "original_line": 309,
+      "native_function": "queue::dictation::voice_off",
+      "disposition": "named_native_case",
+      "evidence": "rust/tests/voice_original_dictation.rs::test_other_voice_is_still_discarded"
+    },
+    {
+      "original_file": "voice/tests/test_dictation.py",
+      "original_class": "RestoreBoxTests",
+      "original_method": "test_unjudged_speech_is_typed_back_and_kept",
+      "original_line": 327,
+      "native_function": "queue::dictation::restore_box",
+      "disposition": "named_native_case",
+      "evidence": "rust/tests/voice_original_dictation.rs::test_unjudged_speech_is_typed_back_and_kept"
+    },
+    {
+      "original_file": "voice/tests/test_dictation.py",
+      "original_class": "RestoreBoxTests",
+      "original_method": "test_other_voice_leaves_only_what_the_user_kept",
+      "original_line": 330,
+      "native_function": "queue::dictation::restore_box",
+      "disposition": "named_native_case",
+      "evidence": "rust/tests/voice_original_dictation.rs::test_other_voice_leaves_only_what_the_user_kept"
+    },
+    {
+      "original_file": "voice/tests/test_dictation.py",
+      "original_class": "RestoreBoxTests",
+      "original_method": "test_app_panes_cannot_be_typed_into",
+      "original_line": 334,
+      "native_function": "queue::dictation::restore_box",
+      "disposition": "named_native_case",
+      "evidence": "rust/tests/voice_original_dictation.rs::test_app_panes_cannot_be_typed_into"
+    },
+    {
+      "original_file": "voice/tests/test_dictation.py",
+      "original_class": "LaptopMicrophoneTests",
+      "original_method": "test_recording_is_stopped_and_not_restarted",
+      "original_line": 339,
+      "native_function": "queue::dictation::listen_with / finish_dictation",
+      "disposition": "named_native_case",
+      "evidence": "rust/tests/voice_original_dictation.rs::test_recording_is_stopped_and_not_restarted"
+    },
+    {
+      "original_file": "voice/tests/test_dictation.py",
+      "original_class": "LaptopMicrophoneTests",
+      "original_method": "test_nothing_dictated_is_sent",
+      "original_line": 347,
+      "native_function": "queue::dictation::listen_with / finish_dictation",
+      "disposition": "named_native_case",
+      "evidence": "rust/tests/voice_original_dictation.rs::test_nothing_dictated_is_sent"
+    },
+    {
+      "original_file": "voice/tests/test_dictation.py",
+      "original_class": "DictationTests",
+      "original_method": "test_room_noise_does_not_hold_back_a_finished_sentence",
+      "original_line": 354,
+      "native_function": "queue::dictation::listen_with / finish_dictation",
+      "disposition": "named_native_case",
+      "evidence": "rust/tests/voice_original_dictation.rs::test_room_noise_does_not_hold_back_a_finished_sentence"
+    },
+    {
+      "original_file": "voice/tests/test_dictation.py",
+      "original_class": "DictationTests",
+      "original_method": "test_unfinished_sentence_is_not_sent",
+      "original_line": 357,
+      "native_function": "queue::dictation::listen_with / finish_dictation",
+      "disposition": "named_native_case",
+      "evidence": "rust/tests/voice_original_dictation.rs::test_unfinished_sentence_is_not_sent"
+    },
+    {
+      "original_file": "voice/tests/test_dictation.py",
+      "original_class": "DictationTests",
+      "original_method": "test_finished_sentence_is_sent_after_focus_left",
+      "original_line": 360,
+      "native_function": "queue::dictation::listen_with / finish_dictation",
+      "disposition": "named_native_case",
+      "evidence": "rust/tests/voice_original_dictation.rs::test_finished_sentence_is_sent_after_focus_left"
+    },
+    {
+      "original_file": "voice/tests/test_dictation.py",
+      "original_class": "DictationTests",
+      "original_method": "test_unfinished_sentence_stays_after_focus_left",
+      "original_line": 363,
+      "native_function": "queue::dictation::listen_with / finish_dictation",
+      "disposition": "named_native_case",
+      "evidence": "rust/tests/voice_original_dictation.rs::test_unfinished_sentence_stays_after_focus_left"
+    },
+    {
+      "original_file": "voice/tests/test_install.py",
+      "original_class": "InstallTests",
+      "original_method": "test_everything_moves_to_the_installed_copy",
+      "original_line": 67,
+      "native_function": "install::run / install_at / place / check",
+      "disposition": "macos_native_case",
+      "evidence": "voice/tests/native-install.test.mjs::test_everything_moves_to_the_installed_copy (original macOS classification retained; native entrypoint adaptation)"
+    },
+    {
+      "original_file": "voice/tests/test_install.py",
+      "original_class": "InstallTests",
+      "original_method": "test_a_second_run_changes_nothing",
+      "original_line": 87,
+      "native_function": "install::run / install_at / place / check",
+      "disposition": "macos_native_case",
+      "evidence": "voice/tests/native-install.test.mjs::test_a_second_run_changes_nothing (original macOS classification retained; native entrypoint adaptation)"
+    },
+    {
+      "original_file": "voice/tests/test_install.py",
+      "original_class": "InstallTests",
+      "original_method": "test_moving_an_install_without_the_hook_does_not_add_it",
+      "original_line": 96,
+      "native_function": "install::run / install_at / place / check",
+      "disposition": "macos_native_case",
+      "evidence": "voice/tests/native-install.test.mjs::test_moving_an_install_without_the_hook_does_not_add_it (original macOS classification retained; native entrypoint adaptation)"
+    },
+    {
+      "original_file": "voice/tests/test_install.py",
+      "original_class": "InstallTests",
+      "original_method": "test_a_new_install_adds_the_hook",
+      "original_line": 104,
+      "native_function": "install::run / install_at / place / check",
+      "disposition": "macos_native_case",
+      "evidence": "voice/tests/native-install.test.mjs::test_a_new_install_adds_the_hook (original macOS classification retained; native entrypoint adaptation)"
+    },
+    {
+      "original_file": "voice/tests/test_install.py",
+      "original_class": "InstallTests",
+      "original_method": "test_check_fails_while_an_old_folder_is_linked",
+      "original_line": 113,
+      "native_function": "install::run / install_at / place / check",
+      "disposition": "macos_native_case",
+      "evidence": "voice/tests/native-install.test.mjs::test_check_fails_while_an_old_folder_is_linked (original macOS classification retained; native entrypoint adaptation)"
+    },
+    {
+      "original_file": "voice/tests/test_install.py",
+      "original_class": "InstallTests",
+      "original_method": "test_an_update_swaps_the_copy_in_place",
+      "original_line": 118,
+      "native_function": "install::run / install_at / place / check",
+      "disposition": "macos_native_case",
+      "evidence": "voice/tests/native-install.test.mjs::test_an_update_swaps_the_copy_in_place (original macOS classification retained; native entrypoint adaptation)"
+    },
+    {
+      "original_file": "voice/tests/test_voice_device_recovery.py",
+      "original_class": "DeviceRecoveryTests",
+      "original_method": "test_audio_table_comments_preserve_the_configured_device",
+      "original_line": 24,
+      "native_function": "recovery::audio_selection / device_signature / stable_devices / eligible / confirmed_closure / upgrade_state / tick_with; queue::prepare_app_codex_with",
+      "disposition": "named_native_case",
+      "evidence": "rust/tests/voice_original_additional.rs::test_audio_table_comments_preserve_the_configured_device"
+    },
+    {
+      "original_file": "voice/tests/test_voice_device_recovery.py",
+      "original_class": "DeviceRecoveryTests",
+      "original_method": "test_device_failure_requires_a_ready_stable_device_gate",
+      "original_line": 37,
+      "native_function": "recovery::audio_selection / device_signature / stable_devices / eligible / confirmed_closure / upgrade_state / tick_with; queue::prepare_app_codex_with",
+      "disposition": "named_native_case",
+      "evidence": "rust/tests/voice_original_additional.rs::test_device_failure_requires_a_ready_stable_device_gate"
+    },
+    {
+      "original_file": "voice/tests/test_voice_device_recovery.py",
+      "original_class": "DeviceRecoveryTests",
+      "original_method": "test_default_devices_need_nonzero_channels_and_supported_rates",
+      "original_line": 43,
+      "native_function": "recovery::audio_selection / device_signature / stable_devices / eligible / confirmed_closure / upgrade_state / tick_with; queue::prepare_app_codex_with",
+      "disposition": "named_native_case",
+      "evidence": "rust/tests/voice_original_additional.rs::test_default_devices_need_nonzero_channels_and_supported_rates"
+    },
+    {
+      "original_file": "voice/tests/test_voice_device_recovery.py",
+      "original_class": "DeviceRecoveryTests",
+      "original_method": "test_a_missing_configured_microphone_never_falls_back_silently",
+      "original_line": 51,
+      "native_function": "recovery::audio_selection / device_signature / stable_devices / eligible / confirmed_closure / upgrade_state / tick_with; queue::prepare_app_codex_with",
+      "disposition": "aggregate_assertions",
+      "evidence": "rust/src/voice/probe.rs::original_python_contract_corpus op=device-signature"
+    },
+    {
+      "original_file": "voice/tests/test_voice_device_recovery.py",
+      "original_class": "DeviceRecoveryTests",
+      "original_method": "test_device_change_or_removal_resets_the_stability_window",
+      "original_line": 55,
+      "native_function": "recovery::audio_selection / device_signature / stable_devices / eligible / confirmed_closure / upgrade_state / tick_with; queue::prepare_app_codex_with",
+      "disposition": "named_native_case",
+      "evidence": "rust/tests/voice_original_additional.rs::test_device_change_or_removal_resets_the_stability_window"
+    },
+    {
+      "original_file": "voice/tests/test_voice_device_recovery.py",
+      "original_class": "DeviceRecoveryTests",
+      "original_method": "test_device_log_class_is_kept_distinct_from_transport_expiry",
+      "original_line": 65,
+      "native_function": "recovery::audio_selection / device_signature / stable_devices / eligible / confirmed_closure / upgrade_state / tick_with; queue::prepare_app_codex_with",
+      "disposition": "aggregate_assertions",
+      "evidence": "rust/src/voice/recovery.rs::sqlite_reader_is_bounded_metadata_only_and_preserves_failure_class"
+    },
+    {
+      "original_file": "voice/tests/test_voice_device_recovery.py",
+      "original_class": "DeviceRecoveryTests",
+      "original_method": "test_upgrade_catches_only_recent_device_errors_once",
+      "original_line": 71,
+      "native_function": "recovery::audio_selection / device_signature / stable_devices / eligible / confirmed_closure / upgrade_state / tick_with; queue::prepare_app_codex_with",
+      "disposition": "named_native_case",
+      "evidence": "rust/tests/voice_original_lifecycle.rs::test_upgrade_catches_only_recent_device_errors_once"
+    },
+    {
+      "original_file": "voice/tests/test_voice_device_recovery.py",
+      "original_class": "DeviceRecoveryTests",
+      "original_method": "test_focus_startup_does_not_bypass_device_failure_recovery",
+      "original_line": 83,
+      "native_function": "recovery::audio_selection / device_signature / stable_devices / eligible / confirmed_closure / upgrade_state / tick_with; queue::prepare_app_codex_with",
+      "disposition": "named_native_case",
+      "evidence": "rust/tests/voice_original_dictation.rs::test_focus_startup_does_not_bypass_device_failure_recovery"
+    },
+    {
+      "original_file": "voice/tests/test_voice_device_recovery.py",
+      "original_class": "DeviceRecoveryTests",
+      "original_method": "test_hidden_error_caption_needs_independent_closed_actor_evidence",
+      "original_line": 90,
+      "native_function": "recovery::audio_selection / device_signature / stable_devices / eligible / confirmed_closure / upgrade_state / tick_with; queue::prepare_app_codex_with",
+      "disposition": "named_native_case",
+      "evidence": "rust/tests/voice_original_additional.rs::test_hidden_error_caption_needs_independent_closed_actor_evidence"
+    },
+    {
+      "original_file": "voice/tests/test_voice_device_recovery.py",
+      "original_class": "DeviceRecoveryTests",
+      "original_method": "test_corresponding_session_actor_must_confirm_same_pid_and_time",
+      "original_line": 97,
+      "native_function": "recovery::audio_selection / device_signature / stable_devices / eligible / confirmed_closure / upgrade_state / tick_with; queue::prepare_app_codex_with",
+      "disposition": "aggregate_assertions",
+      "evidence": "rust/src/voice/recovery.rs::independent_closure_must_match_process_and_time"
+    },
+    {
+      "original_file": "voice/tests/test_voice_device_recovery.py",
+      "original_class": "DeviceRecoveryTests",
+      "original_method": "test_confirmed_device_closure_recovers_only_after_preflight",
+      "original_line": 107,
+      "native_function": "recovery::audio_selection / device_signature / stable_devices / eligible / confirmed_closure / upgrade_state / tick_with; queue::prepare_app_codex_with",
+      "disposition": "named_native_case",
+      "evidence": "rust/tests/voice_original_lifecycle.rs::test_confirmed_device_closure_recovers_only_after_preflight"
+    },
+    {
+      "original_file": "voice/tests/test_voice_policy.py",
+      "original_class": "OwnDictationTests",
+      "original_method": "test_own_speech_that_explains_the_text_passes",
+      "original_line": 19,
+      "native_function": "policy::own_dictation",
+      "disposition": "aggregate_assertions",
+      "evidence": "rust/src/voice/policy.rs::speech_must_explain_current_text"
+    },
+    {
+      "original_file": "voice/tests/test_voice_policy.py",
+      "original_class": "OwnDictationTests",
+      "original_method": "test_text_the_gate_never_heard_is_not_the_users",
+      "original_line": 22,
+      "native_function": "policy::own_dictation",
+      "disposition": "aggregate_assertions",
+      "evidence": "rust/src/voice/policy.rs::speech_must_explain_current_text"
+    },
+    {
+      "original_file": "voice/tests/test_voice_policy.py",
+      "original_class": "OwnDictationTests",
+      "original_method": "test_speech_from_before_the_recording_does_not_count",
+      "original_line": 25,
+      "native_function": "policy::own_dictation",
+      "disposition": "aggregate_assertions",
+      "evidence": "rust/src/voice/policy.rs::speech_must_explain_current_text"
+    },
+    {
+      "original_file": "voice/tests/test_voice_policy.py",
+      "original_class": "OwnDictationTests",
+      "original_method": "test_a_word_of_the_users_cannot_carry_a_long_text",
+      "original_line": 29,
+      "native_function": "policy::own_dictation",
+      "disposition": "aggregate_assertions",
+      "evidence": "rust/src/voice/policy.rs::speech_must_explain_current_text"
+    },
+    {
+      "original_file": "voice/tests/test_voice_policy.py",
+      "original_class": "OwnDictationTests",
+      "original_method": "test_another_voice_doing_most_of_the_talking_fails",
+      "original_line": 32,
+      "native_function": "policy::own_dictation",
+      "disposition": "aggregate_assertions",
+      "evidence": "rust/src/voice/policy.rs::speech_must_explain_current_text"
+    },
+    {
+      "original_file": "voice/tests/test_voice_policy.py",
+      "original_class": "OwnDictationTests",
+      "original_method": "test_a_short_reply_counts_only_if_it_sounds_like_the_user",
+      "original_line": 36,
+      "native_function": "policy::own_dictation",
+      "disposition": "aggregate_assertions",
+      "evidence": "rust/src/voice/policy.rs::speech_must_explain_current_text"
+    },
+    {
+      "original_file": "voice/tests/test_voice_policy.py",
+      "original_class": "DeviceTests",
+      "original_method": "test_only_a_headset_records_and_sends",
+      "original_line": 42,
+      "native_function": "policy::headset / default_input",
+      "disposition": "named_native_case",
+      "evidence": "rust/tests/voice_original_additional.rs::test_only_a_headset_records_and_sends"
+    },
+    {
+      "original_file": "voice/tests/test_voice_policy.py",
+      "original_class": "DeviceTests",
+      "original_method": "test_the_default_input_is_read_without_opening_it",
+      "original_line": 47,
+      "native_function": "policy::headset / default_input",
+      "disposition": "named_native_case",
+      "evidence": "rust/tests/voice_original_additional.rs::test_the_default_input_is_read_without_opening_it"
+    },
+    {
+      "original_file": "voice/tests/test_voice_policy.py",
+      "original_class": "SubmitHookTests",
+      "original_method": "test_unheard_dictation_is_refused",
+      "original_line": 56,
+      "native_function": "policy::decide",
+      "disposition": "aggregate_assertions",
+      "evidence": "rust/src/voice/probe.rs::original_python_contract_corpus op=hook; policy.rs::keyboard_hc_and_slash_pass_closed_gate"
+    },
+    {
+      "original_file": "voice/tests/test_voice_policy.py",
+      "original_class": "SubmitHookTests",
+      "original_method": "test_own_dictation_passes",
+      "original_line": 59,
+      "native_function": "policy::decide",
+      "disposition": "aggregate_assertions",
+      "evidence": "rust/src/voice/probe.rs::original_python_contract_corpus op=hook; policy.rs::keyboard_hc_and_slash_pass_closed_gate"
+    },
+    {
+      "original_file": "voice/tests/test_voice_policy.py",
+      "original_class": "SubmitHookTests",
+      "original_method": "test_a_hand_on_the_keyboard_always_passes",
+      "original_line": 62,
+      "native_function": "policy::decide",
+      "disposition": "aggregate_assertions",
+      "evidence": "rust/src/voice/probe.rs::original_python_contract_corpus op=hook; policy.rs::keyboard_hc_and_slash_pass_closed_gate"
+    },
+    {
+      "original_file": "voice/tests/test_voice_policy.py",
+      "original_class": "SubmitHookTests",
+      "original_method": "test_messages_from_other_agents_pass",
+      "original_line": 65,
+      "native_function": "policy::decide",
+      "disposition": "aggregate_assertions",
+      "evidence": "rust/src/voice/probe.rs::original_python_contract_corpus op=hook; policy.rs::keyboard_hc_and_slash_pass_closed_gate"
+    },
+    {
+      "original_file": "voice/tests/test_voice_policy.py",
+      "original_class": "SubmitHookTests",
+      "original_method": "test_a_pane_that_has_not_been_recording_is_left_alone",
+      "original_line": 69,
+      "native_function": "policy::decide",
+      "disposition": "aggregate_assertions",
+      "evidence": "rust/src/voice/probe.rs::original_python_contract_corpus op=hook; policy.rs::keyboard_hc_and_slash_pass_closed_gate"
+    },
+    {
+      "original_file": "voice/tests/test_voice_policy.py",
+      "original_class": "SubmitHookTests",
+      "original_method": "test_dictation_the_gate_cannot_vouch_for_is_refused",
+      "original_line": 74,
+      "native_function": "policy::decide",
+      "disposition": "aggregate_assertions",
+      "evidence": "rust/src/voice/probe.rs::original_python_contract_corpus op=hook; policy.rs::keyboard_hc_and_slash_pass_closed_gate"
+    },
+    {
+      "original_file": "voice/tests/test_voice_policy.py",
+      "original_class": "SubmitHookTests",
+      "original_method": "test_a_hand_still_sends_what_the_gate_refuses",
+      "original_line": 80,
+      "native_function": "policy::decide",
+      "disposition": "aggregate_assertions",
+      "evidence": "rust/src/voice/probe.rs::original_python_contract_corpus op=hook; policy.rs::keyboard_hc_and_slash_pass_closed_gate"
+    },
+    {
+      "original_file": "voice/tests/test_voice_recovery.py",
+      "original_class": "RecoveryPolicyTests",
+      "original_method": "test_confirmed_failure_in_a_ready_focused_pane_can_recover",
+      "original_line": 19,
+      "native_function": "recovery::eligible / failures / tick_with",
+      "disposition": "aggregate_assertions",
+      "evidence": "rust/src/voice/probe.rs::original_python_contract_corpus op=eligible; recovery.rs::requires_confirmed_loss_and_empty_focused_box"
+    },
+    {
+      "original_file": "voice/tests/test_voice_recovery.py",
+      "original_class": "RecoveryPolicyTests",
+      "original_method": "test_healthy_muted_and_listening_calls_are_never_toggled",
+      "original_line": 22,
+      "native_function": "recovery::eligible / failures / tick_with",
+      "disposition": "named_native_case",
+      "evidence": "rust/tests/voice_original_additional.rs::test_healthy_muted_and_listening_calls_are_never_toggled"
+    },
+    {
+      "original_file": "voice/tests/test_voice_recovery.py",
+      "original_class": "RecoveryPolicyTests",
+      "original_method": "test_missing_footer_without_failure_evidence_is_not_a_disconnect",
+      "original_line": 27,
+      "native_function": "recovery::eligible / failures / tick_with",
+      "disposition": "named_native_case",
+      "evidence": "rust/tests/voice_original_additional.rs::test_missing_footer_without_failure_evidence_is_not_a_disconnect"
+    },
+    {
+      "original_file": "voice/tests/test_voice_recovery.py",
+      "original_class": "RecoveryPolicyTests",
+      "original_method": "test_user_stop_background_focus_and_a_draft_are_preserved",
+      "original_line": 32,
+      "native_function": "recovery::eligible / failures / tick_with",
+      "disposition": "aggregate_assertions",
+      "evidence": "rust/src/voice/probe.rs::original_python_contract_corpus op=eligible; recovery.rs::requires_confirmed_loss_and_empty_focused_box"
+    },
+    {
+      "original_file": "voice/tests/test_voice_recovery.py",
+      "original_class": "RecoveryPolicyTests",
+      "original_method": "test_restart_and_rate_limits_prevent_repeated_voice_toggles",
+      "original_line": 38,
+      "native_function": "recovery::eligible / failures / tick_with",
+      "disposition": "named_native_case",
+      "evidence": "rust/tests/voice_original_additional.rs::test_restart_and_rate_limits_prevent_repeated_voice_toggles"
+    },
+    {
+      "original_file": "voice/tests/test_voice_recovery.py",
+      "original_class": "RecoveryPolicyTests",
+      "original_method": "test_already_restarted_history_is_not_replayed_as_a_new_failure",
+      "original_line": 45,
+      "native_function": "recovery::eligible / failures / tick_with",
+      "disposition": "aggregate_assertions",
+      "evidence": "rust/src/voice/probe.rs::original_python_contract_corpus op=eligible; recovery.rs::requires_confirmed_loss_and_empty_focused_box"
+    },
+    {
+      "original_file": "voice/tests/test_voice_recovery.py",
+      "original_class": "RecoveryPolicyTests",
+      "original_method": "test_log_reader_uses_exact_metadata_and_does_not_replay_old_events",
+      "original_line": 49,
+      "native_function": "recovery::eligible / failures / tick_with",
+      "disposition": "aggregate_assertions",
+      "evidence": "rust/src/voice/recovery.rs::sqlite_reader_is_bounded_metadata_only_and_preserves_failure_class"
+    },
+    {
+      "original_file": "voice/tests/test_voice_recovery.py",
+      "original_class": "RecoveryPolicyTests",
+      "original_method": "test_normal_live_tick_sends_no_voice_command",
+      "original_line": 60,
+      "native_function": "recovery::eligible / failures / tick_with",
+      "disposition": "named_native_case",
+      "evidence": "rust/tests/voice_original_lifecycle.rs::test_normal_live_tick_sends_no_voice_command"
+    },
+    {
+      "original_file": "voice/tests/test_voice_recovery.py",
+      "original_class": "RecoveryPolicyTests",
+      "original_method": "test_recovery_requires_fresh_focus_and_confirms_the_new_footer",
+      "original_line": 73,
+      "native_function": "recovery::eligible / failures / tick_with",
+      "disposition": "named_native_case",
+      "evidence": "rust/tests/voice_original_lifecycle.rs::test_recovery_requires_fresh_focus_and_confirms_the_new_footer"
+    },
+    {
+      "original_file": "voice/tests/test_voice_recovery.py",
+      "original_class": "RecoveryPolicyTests",
+      "original_method": "test_focus_change_before_action_cancels_recovery",
+      "original_line": 92,
+      "native_function": "recovery::eligible / failures / tick_with",
+      "disposition": "named_native_case",
+      "evidence": "rust/tests/voice_original_lifecycle.rs::test_focus_change_before_action_cancels_recovery"
+    },
+    {
+      "original_file": "voice/tests/test_voice_settings.py",
+      "original_class": "SettingsTests",
+      "original_method": "test_no_file_means_general_defaults_and_no_auto_send_microphone",
+      "original_line": 30,
+      "native_function": "settings::path / read / load / merge / update / device_key / device_threshold",
+      "disposition": "named_native_case",
+      "evidence": "rust/tests/voice_original_additional.rs::test_no_file_means_general_defaults_and_no_auto_send_microphone"
+    },
+    {
+      "original_file": "voice/tests/test_voice_settings.py",
+      "original_class": "SettingsTests",
+      "original_method": "test_the_persons_file_overrides_defaults",
+      "original_line": 36,
+      "native_function": "settings::path / read / load / merge / update / device_key / device_threshold",
+      "disposition": "named_native_case",
+      "evidence": "rust/tests/voice_original_additional.rs::test_the_persons_file_overrides_defaults"
+    },
+    {
+      "original_file": "voice/tests/test_voice_settings.py",
+      "original_class": "SettingsTests",
+      "original_method": "test_wrong_types_and_unknown_keys_are_ignored",
+      "original_line": 44,
+      "native_function": "settings::path / read / load / merge / update / device_key / device_threshold",
+      "disposition": "aggregate_assertions",
+      "evidence": "rust/src/voice/settings.rs::overrides_are_typed_and_unknown_ignored"
+    },
+    {
+      "original_file": "voice/tests/test_voice_settings.py",
+      "original_class": "SettingsTests",
+      "original_method": "test_a_broken_file_falls_back_to_defaults",
+      "original_line": 52,
+      "native_function": "settings::path / read / load / merge / update / device_key / device_threshold",
+      "disposition": "named_native_case",
+      "evidence": "rust/tests/voice_original_additional.rs::test_a_broken_file_falls_back_to_defaults"
+    },
+    {
+      "original_file": "voice/tests/test_voice_settings.py",
+      "original_class": "SettingsTests",
+      "original_method": "test_update_keeps_other_keys_and_writes_atomically",
+      "original_line": 57,
+      "native_function": "settings::path / read / load / merge / update / device_key / device_threshold",
+      "disposition": "named_native_case",
+      "evidence": "rust/tests/voice_original_additional.rs::test_update_keeps_other_keys_and_writes_atomically"
+    },
+    {
+      "original_file": "voice/tests/test_voice_settings.py",
+      "original_class": "SettingsTests",
+      "original_method": "test_device_key_matches_voiceprint_file_names",
+      "original_line": 64,
+      "native_function": "settings::path / read / load / merge / update / device_key / device_threshold",
+      "disposition": "aggregate_assertions",
+      "evidence": "rust/src/voice/settings.rs::microphone_keys_keep_unicode"
+    },
+    {
+      "original_file": "voice/tests/test_voice_settings.py",
+      "original_class": "SettingsTests",
+      "original_method": "test_default_path_is_beside_the_app_data",
+      "original_line": 67,
+      "native_function": "settings::path / read / load / merge / update / device_key / device_threshold",
+      "disposition": "named_native_case",
+      "evidence": "rust/tests/voice_original_additional.rs::test_default_path_is_beside_the_app_data"
+    },
+    {
+      "original_file": "voice/tests/test_voicegate_learner.py",
+      "original_class": "LearnerTests",
+      "original_method": "test_without_a_voiceprint_nothing_is_learned",
+      "original_line": 47,
+      "native_function": "gate::Learner::confirm",
+      "disposition": "aggregate_assertions",
+      "evidence": "rust/src/voice/gate.rs::unenrolled_speech_never_creates_a_voiceprint"
+    },
+    {
+      "original_file": "voice/tests/test_voicegate_learner.py",
+      "original_class": "LearnerTests",
+      "original_method": "test_only_speech_that_already_sounds_like_the_user_is_pooled",
+      "original_line": 53,
+      "native_function": "gate::Learner::confirm",
+      "disposition": "aggregate_assertions",
+      "evidence": "rust/src/voice/gate.rs::pooling_uses_fixed_score_and_rebuilds_only_confirmed_speech"
+    },
+    {
+      "original_file": "voice/tests/test_voicegate_learner.py",
+      "original_class": "LearnerTests",
+      "original_method": "test_a_new_learner_has_nothing_pending_from_the_old_microphone",
+      "original_line": 59,
+      "native_function": "gate::Learner::confirm",
+      "disposition": "aggregate_assertions",
+      "evidence": "rust/src/voice/gate.rs::pooling_uses_fixed_score_and_rebuilds_only_confirmed_speech"
+    },
+    {
+      "original_file": "voice/tests/test_voicegate_learner.py",
+      "original_class": "CalibrationTests",
+      "original_method": "test_a_headset_is_allowed_to_send_and_gets_a_gain_for_its_level",
+      "original_line": 96,
+      "native_function": "gate::calibrate / Files::load",
+      "disposition": "named_native_case",
+      "evidence": "rust/tests/voice_original_additional.rs::test_a_headset_is_allowed_to_send_and_gets_a_gain_for_its_level"
+    },
+    {
+      "original_file": "voice/tests/test_voicegate_learner.py",
+      "original_class": "CalibrationTests",
+      "original_method": "test_a_builtin_microphone_is_calibrated_but_not_allowed_to_send",
+      "original_line": 106,
+      "native_function": "gate::calibrate / Files::load",
+      "disposition": "named_native_case",
+      "evidence": "rust/tests/voice_original_additional.rs::test_a_builtin_microphone_is_calibrated_but_not_allowed_to_send"
+    },
+    {
+      "original_file": "voice/tests/test_voicegate_learner.py",
+      "original_class": "CalibrationTests",
+      "original_method": "test_a_threshold_set_for_the_microphone_wins_over_the_voiceprint",
+      "original_line": 112,
+      "native_function": "gate::calibrate / Files::load",
+      "disposition": "named_native_case",
+      "evidence": "rust/tests/voice_original_additional.rs::test_a_threshold_set_for_the_microphone_wins_over_the_voiceprint"
+    }
+  ]
+}

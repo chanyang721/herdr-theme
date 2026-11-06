@@ -36,15 +36,67 @@ pub fn vector(value: &Value) -> Vec<f64> {
         .collect()
 }
 pub fn percentile(values: &[f64], q: f64) -> f64 {
-    if values.is_empty() {
+    if values.is_empty() || values.iter().any(|value| value.is_nan()) {
         return f64::NAN;
     }
     let mut x = values.to_vec();
     x.sort_by(f64::total_cmp);
     let pos = q * (x.len() - 1) as f64;
-    let lo = pos.floor() as usize;
-    let hi = pos.ceil() as usize;
-    x[lo] + (x[hi] - x[lo]) * (pos - lo as f64)
+    // NumPy _get_indexes uses -1 for both neighbours at the upper bound;
+    // _get_gamma subtracts that signed index before _lerp. Preserve this even
+    // for a singleton or signed zero instead of clipping the interpolation.
+    let (lo, hi, fraction) = if pos >= (x.len() - 1) as f64 {
+        (x.len() - 1, x.len() - 1, pos + 1.)
+    } else {
+        let lo = pos.floor() as usize;
+        (lo, lo + 1, pos - lo as f64)
+    };
+    let difference = x[hi] - x[lo];
+    if fraction >= 0.5 {
+        x[hi] - difference * (1. - fraction)
+    } else {
+        x[lo] + difference * fraction
+    }
+}
+pub fn median(values: &[f64]) -> f64 {
+    if values.is_empty() || values.iter().any(|value| value.is_nan()) {
+        return f64::NAN;
+    }
+    let mut sorted = values.to_vec();
+    sorted.sort_by(f64::total_cmp);
+    let middle = sorted.len() / 2;
+    if sorted.len() % 2 == 0 {
+        (0. + sorted[middle - 1] + sorted[middle]) / 2.
+    } else {
+        (0. + sorted[middle]) / 1.
+    }
+}
+#[cfg(test)]
+#[test]
+fn frozen_numpy_quantiles_and_medians_are_bit_exact() {
+    let corpus: Value = serde_json::from_str(include_str!("review-numeric-fixtures.json")).unwrap();
+    for (index, row) in corpus["quantiles"].as_array().unwrap().iter().enumerate() {
+        let values: Vec<_> = row["value_bits"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|x| f64::from_bits(u64::from_str_radix(x.as_str().unwrap(), 16).unwrap()))
+            .collect();
+        for item in row["percentiles"].as_array().unwrap() {
+            let got = percentile(&values, item["q"].as_f64().unwrap());
+            let expected = u64::from_str_radix(item["bits"].as_str().unwrap(), 16).unwrap();
+            assert!(
+                got.to_bits() == expected || (got.is_nan() && f64::from_bits(expected).is_nan()),
+                "quantile row {index}: {item}, got={got:?}"
+            );
+        }
+        let got = median(&values);
+        let expected = u64::from_str_radix(row["median_bits"].as_str().unwrap(), 16).unwrap();
+        assert!(
+            got.to_bits() == expected || (got.is_nan() && f64::from_bits(expected).is_nan()),
+            "median row {index}: got={got:?}"
+        );
+    }
 }
 pub fn build(vectors: &[Vec<f64>], weights: &[f64], threshold: f64) -> Result<Vec<f64>> {
     if vectors.is_empty()
@@ -151,13 +203,16 @@ impl Files {
         })
     }
     pub fn load(&self) -> Option<(Vec<f64>, f64)> {
+        self.load_with_settings(&settings::load())
+    }
+    pub fn load_with_settings(&self, settings: &Value) -> Option<(Vec<f64>, f64)> {
         let data = settings::read_file(&self.print);
         if !data["vector"].is_array() {
             return None;
         }
         Some((
             vector(&data["vector"]),
-            settings::device_threshold(&self.device)
+            settings::threshold_in(settings, &self.device)
                 .unwrap_or(data["threshold"].as_f64().unwrap_or(0.4)),
         ))
     }
@@ -177,8 +232,9 @@ impl Files {
             .filter(|s| *s >= default)
             .collect();
         scores.sort_by(f64::total_cmp);
-        write_json(
+        super::replace_json(
             &self.print,
+            &PathBuf::from(format!("{}.tmp", self.print.display())),
             &json!({"vector":centre,"model":EMBEDDING_MODEL,"speech_seconds":round(seconds,1),"threshold":adapted_threshold(held,&previous,cfg),"held_out_scores":held.iter().map(|n|round(*n,3)).collect::<Vec<_>>(),"threshold_pinned":previous["threshold_pinned"]==true,"created":chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string()}),
         )?;
         Ok(scores)
@@ -216,8 +272,12 @@ impl Learner {
             return Ok(false);
         };
         f.seek(SeekFrom::Start(self.offset))?;
-        let mut text = String::new();
-        f.read_to_string(&mut text)?;
+        let mut bytes = Vec::new();
+        f.read_to_end(&mut bytes)?;
+        let text = crate::legacy_text::universal_newlines(&crate::legacy_text::decode_default(
+            &bytes,
+            crate::legacy_text::ErrorPolicy::Strict,
+        )?);
         self.offset = f.stream_position()?;
         let spans = text
             .lines()
@@ -335,10 +395,18 @@ pub fn sum_squares32(samples: &[f32]) -> f32 {
     }
 }
 pub fn calibrate(name: &str, levels: &[f64], builtin: bool) -> Result<(f64, f64, bool)> {
-    let speech_db = percentile(levels, 0.5);
+    calibrate_at(name, levels, builtin, &settings::path())
+}
+pub fn calibrate_at(
+    name: &str,
+    levels: &[f64],
+    builtin: bool,
+    path: &std::path::Path,
+) -> Result<(f64, f64, bool)> {
+    let speech_db = median(levels);
     let gain = round(10f64.powf((-19. - speech_db) / 20.).clamp(1., 30.), 2);
     let key = settings::device_key(name);
-    settings::update(|d| {
+    settings::update_at(path, |d| {
         if !d["devices"].is_object() {
             d["devices"] = json!({});
         }
@@ -373,7 +441,7 @@ pub fn run(args: &[String]) -> Result<()> {
         "serve" => serve(),
         "tail" => tail(),
         "default-input" => {
-            println!("{}", native::Microphone::default_name()?);
+            voice_println!("{}", native::Microphone::default_name()?);
             Ok(())
         }
         _ => Err(include_str!("help/voicegate.txt").trim_end().into()),
@@ -392,7 +460,7 @@ fn enroll(seconds: u64) -> Result<()> {
     let files = Files::for_device(&mic.name)?;
     let cfg = settings::load();
     let engine = engine(None)?;
-    println!(
+    voice_println!(
         "{seconds}초 동안 평소처럼 말해 주세요. 아래 문장을 읽어도 되고 아무 말이나 해도 됩니다.\n"
     );
     for s in [
@@ -405,16 +473,16 @@ fn enroll(seconds: u64) -> Result<()> {
         "팀에 보낼 메시지는 짧게 핵심만 정리해 줘.",
         "배포 전에 로컬 CI가 통과하는지 먼저 확인해.",
     ] {
-        println!("  {s}");
+        voice_println!("  {s}");
     }
-    println!("\n녹음 시작");
+    voice_println!("\n녹음 시작");
     let deadline = now() + seconds as f64;
     let mut speech = vec![];
     loop {
         for s in feed(&engine, &mic.block()?, files.gain)? {
             let duration = s.len() as f64 / 16000.;
             speech.push(s);
-            println!(
+            voice_println!(
                 "  말 {duration:.1}초 (누적 {:.0}초)",
                 speech.iter().map(Vec::len).sum::<usize>() as f64 / 16000.
             );
@@ -445,20 +513,20 @@ fn enroll(seconds: u64) -> Result<()> {
                         &json!({"end":now(),"seconds":w/16000.,"vector":v.iter().map(|n|round(*n,5)).collect::<Vec<_>>()}),
                     )?;
                 }
-                println!("\n저장: {}", files.print.display());
+                voice_println!("\n저장: {}", files.print.display());
                 if !scores.is_empty() {
-                    println!("말소리 {total:.0}초, 구간 {}개, 본인 점수 최저 {:.2} / 중간 {:.2} (기준 {})",vectors.len(),scores[0],scores[scores.len()/2],cfg["default_threshold"]);
+                    voice_println!("말소리 {total:.0}초, 구간 {}개, 본인 점수 최저 {:.2} / 중간 {:.2} (기준 {})",vectors.len(),scores[0],median(&scores),cfg["default_threshold"]);
                 }
                 let (db, gain, headset) = calibrate(
                     &mic.name,
                     &speech.iter().map(|s| rms_db(s)).collect::<Vec<_>>(),
                     policy::builtin_input(),
                 )?;
-                println!(
+                voice_println!(
                     "마이크 보정: 말소리 {db:.0} dBFS, 감지 증폭 {gain}배 → {}",
                     settings::path().display()
                 );
-                println!(
+                voice_println!(
                     "{}",
                     if headset {
                         "이 마이크의 받아쓰기는 자동 전송합니다."
@@ -567,11 +635,14 @@ pub fn serve() -> Result<()> {
                     written += 1;
                     if written % 200 == 0 {
                         let path = dir.join("voice-segments.jsonl");
-                        let text = fs::read_to_string(&path)?;
+                        let text = crate::legacy_text::read(
+                            &path,
+                            crate::legacy_text::ErrorPolicy::Strict,
+                        )?;
                         let lines: Vec<_> = text.lines().collect();
-                        fs::write(
+                        crate::legacy_text::write(
                             path,
-                            lines[lines.len().saturating_sub(200)..].join("\n") + "\n",
+                            &(lines[lines.len().saturating_sub(200)..].join("\n") + "\n"),
                         )?;
                     }
                 }
@@ -589,7 +660,7 @@ fn tail() -> Result<()> {
     let files = Files::for_device(&mic.name)?;
     let engine = engine(None)?;
     let (print, threshold) = files.load().ok_or("no voiceprint for this microphone")?;
-    println!("기준 {threshold}. 말하면 구간마다 점수를 보여 줍니다 (Ctrl+C 종료)");
+    voice_println!("기준 {threshold}. 말하면 구간마다 점수를 보여 줍니다 (Ctrl+C 종료)");
     loop {
         for s in feed(&engine, &mic.block()?, files.gain)? {
             let at = Instant::now();
@@ -602,7 +673,7 @@ fn tail() -> Result<()> {
             } else {
                 "다른 사람"
             };
-            println!(
+            voice_println!(
                 "{}  {duration:4.1}초  점수 {score:5.2}  {verdict}  (판정 {:.0}ms)",
                 chrono::Local::now().format("%H:%M:%S"),
                 at.elapsed().as_secs_f64() * 1000.

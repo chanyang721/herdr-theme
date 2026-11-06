@@ -38,7 +38,7 @@
 
 ## 자동 분배와 설정
 
-`enable`은 `data/sixfold/collaboration.json`에 설치된 스크립트 주소와 설정을 기록한다. sidebar가 켜진 설정의 스크립트를 `drain`으로 주기 실행한다. 수동 `drain`과 `--drain`도 지원한다. 기존 route 대기열이 비어 있어도 독립적으로 작동한다. 새 세션·공간·탭을 만들지 않으며 포커스를 옮기지 않는다.
+`enable`은 `data/sixfold/collaboration.json`에 설치된 네이티브 명령과 설정을 기록한다. sidebar가 켜진 설정의 명령을 `drain`으로 주기 실행한다. 수동 `drain`과 `--drain`도 지원한다. 기존 route 대기열이 비어 있어도 독립적으로 작동한다. 새 세션·공간·탭을 만들지 않으며 포커스를 옮기지 않는다.
 
 ```sh
 ~/.config/herdr-app/scripts/sixfold/herdr-theme collaborate enable
@@ -57,4 +57,4 @@
 
 **모든 raw `hc` 메시지의 미처리 여부나 임의 에이전트의 독립 작업 수를 자동 관측하지 않는다.** 현재 `hc schema`에는 이 의미를 판정할 처리 원장이 없다. 메시지 send/working 상태만 보고 실행 중인 지시를 다시 넘기면 원 세션과 중복 실행할 위험이 있으므로 등록된 작업만 사용한다. 기존 route로 받은 지시도 원 세션이 독립 작업으로 나누어 enqueue/start해야 한다. 현재 완료 기록은 파일로 수집되며 원 세션 자동 깨우기·자동 사용자 발화는 구현하지 않는다. 원 세션이 status/report를 실행해야 한다. at-most-once는 중복을 막는 대신 결과 불명확 시 자동 복구를 포기한다. 실제 실행이 중단된 작업의 취소·재배정은 별도 확인이 필요하다.
 
-실제 core 전달 시험은 `herdr-theme native_collaboration /tmp/native-collaboration.json`으로 실행한다. 별도 HC_SESSION과 scratch XDG 경로에서만 core와 deterministic 읽기 전용 수신 프로세스 둘을 사용하고 종료한다. workspace 목록만 fixture이며 전송·PTY 수신·수락·실제 README 줄 수 계산·완료·원 세션 통합 출력은 실제 프로세스와 원장으로 확인한다. 사용자 LLM 세션의 자율 수행 검증은 아니다.
+실제 core 전달 시험은 `herdr-theme native-collaboration /tmp/native-collaboration.json`으로 실행한다. 별도 HC_SESSION과 scratch XDG 경로에서만 core와 deterministic 읽기 전용 수신 프로세스 둘을 사용하고 종료한다. workspace 목록만 fixture이며 전송·PTY 수신·수락·실제 README 줄 수 계산·완료·원 세션 통합 출력은 실제 프로세스와 원장으로 확인한다. 사용자 LLM 세션의 자율 수행 검증은 아니다.

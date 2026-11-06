@@ -121,3 +121,18 @@ fn original_python_ignorecase_status_contracts() {
         );
     }
 }
+#[test]
+fn original_python_greedy_boundary_status_contracts() {
+    let cases: Vec<Value> = serde_json::from_str(include_str!(
+        "../../../../tests/fixtures/pinned-status-boundary.json"
+    ))
+    .unwrap();
+    for case in cases {
+        assert_eq!(
+            evaluate(&case).unwrap(),
+            case["value"],
+            "unchanged original mask for {:?}",
+            case["args"]
+        );
+    }
+}

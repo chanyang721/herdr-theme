@@ -10,6 +10,14 @@ use std::{
     time::Duration,
 };
 pub const SHERPA_VERSION: &str = "2.0.1";
+/// Native counterpart of the old optional voice-interpreter presence check.
+/// SDK presence, rather than model/device health, controls listener startup.
+pub fn runtime_available() -> bool {
+    std::env::var_os("HERDR_SHERPA_LIBRARY")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| settings::voice_home().join("native/lib/libsherpa-onnx-c-api.dylib"))
+        .exists()
+}
 type Handle = *const c_void;
 #[repr(C)]
 struct EmbeddingConfig {

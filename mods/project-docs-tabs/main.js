@@ -23,7 +23,7 @@ const COLUMN = 200;
 const LOCATION_ICONS = { docs: '🗂', harness: '🧭', opened: '👁', archived: '🗄' };
 const HARNESS_TAG = '하네스 생성물 · 읽기 전용';
 const isHtml = path => /\.html?$/i.test(path);
-const windows = () => typeof hostWindow === 'function' && hostWindow().platform === 'windows';
+const windows = () => typeof hostWindow === 'function' && hostWindow()?.platform === 'windows';
 const native = () => `${appHome()}/scripts/sixfold/herdr-theme${windows()?'.exe':''}`;
 const desktop = (action, path) => exec(native(), ['desktop', action, path]);
 // Explicit user-owned scripts are an external adapter, as the harness is. The

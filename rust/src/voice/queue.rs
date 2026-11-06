@@ -1,6 +1,7 @@
+pub mod dictation;
 use super::{
-    alive, append_json, json_output, mtime, now, output, policy, self_launch, settings, write_json,
-    Result,
+    alive, append_json, json_unchecked, mtime, now, output_unchecked, policy, self_launch,
+    settings, Result,
 };
 use serde_json::{json, Map, Value};
 use std::{
@@ -23,14 +24,7 @@ pub fn app() -> String {
     binary("herdr-app")
 }
 fn find_binary(name: &str) -> Option<String> {
-    let path = env::var_os("PATH")?;
-    for folder in env::split_paths(&path) {
-        let candidate = folder.join(name);
-        if candidate.is_file() {
-            return Some(candidate.to_string_lossy().into_owned());
-        }
-    }
-    None
+    crate::common::find_executable(name).map(|p| p.to_string_lossy().into_owned())
 }
 fn binary(name: &str) -> String {
     find_binary(name).unwrap_or_else(|| {
@@ -50,11 +44,15 @@ pub fn log(message: &str) {
         .open(dir.join("focus-queue.log"))
     {
         use std::io::Write;
-        let _ = writeln!(
-            f,
-            "{} {message}",
-            chrono::Local::now().format("%H:%M:%S%.3f")
-        );
+        if let Ok(bytes) = crate::legacy_text::encode_default(
+            &crate::legacy_text::platform_newlines(&format!(
+                "{} {message}\n",
+                chrono::Local::now().format("%H:%M:%S%.3f")
+            )),
+            crate::legacy_text::ErrorPolicy::Strict,
+        ) {
+            let _ = f.write_all(&bytes);
+        }
     }
 }
 pub fn plain(text: &str) -> String {
@@ -147,9 +145,9 @@ pub fn find_event(value: &Value) -> Option<Value> {
 }
 pub fn screen(pane: &str) -> Result<String> {
     if let Some(id) = pane.strip_prefix("app:") {
-        output(&core(), &["read", id], 5.)
+        output_unchecked(&core(), &["read", id], 5.)
     } else {
-        output(
+        output_unchecked(
             &herdr(),
             &[
                 "pane", "read", pane, "--source", "visible", "--lines", "14", "--ansi",
@@ -159,6 +157,15 @@ pub fn screen(pane: &str) -> Result<String> {
     }
 }
 pub fn send_keys(pane: &str, keys: &[&str]) -> Result<()> {
+    let (program, args) = key_command(pane, keys);
+    output_unchecked(
+        &program,
+        &args.iter().map(String::as_str).collect::<Vec<_>>(),
+        10.,
+    )?;
+    Ok(())
+}
+pub fn key_command(pane: &str, keys: &[&str]) -> (String, Vec<String>) {
     let mut args = if let Some(id) = pane.strip_prefix("app:") {
         vec!["keys", id]
     } else {
@@ -170,8 +177,7 @@ pub fn send_keys(pane: &str, keys: &[&str]) -> Result<()> {
     } else {
         herdr()
     };
-    output(&program, &args, 10.)?;
-    Ok(())
+    (program, args.into_iter().map(str::to_owned).collect())
 }
 pub fn press<F: FnMut() -> Result<bool>>(
     pane: &str,
@@ -202,7 +208,7 @@ pub fn recording(pane: &str) -> Result<bool> {
 pub fn session_of(pane: &Value) -> Result<String> {
     let pid = pane["pane_id"].as_str().ok_or("pane lacks identity")?;
     if let Some(id) = pid.strip_prefix("app:") {
-        let record = json_output(&core(), &["get", id], 5.)?;
+        let record = super::checked_json_bytes(&core(), &["get", id])?;
         return Ok(format!(
             "{pid}:{}",
             record["foreground"]["pid"]
@@ -211,8 +217,8 @@ pub fn session_of(pane: &Value) -> Result<String> {
                 .unwrap_or_else(|| "None".into())
         ));
     }
-    let info =
-        json_output(&herdr(), &["pane", "process-info", "--pane", pid], 5.).unwrap_or(Value::Null);
+    let text = output_unchecked(&herdr(), &["pane", "process-info", "--pane", pid], 5.)?;
+    let info = serde_json::from_str::<Value>(&text).unwrap_or(Value::Null);
     let group = info["result"]["process_info"]["foreground_process_group_id"]
         .as_i64()
         .map(|v| v.to_string())
@@ -221,13 +227,15 @@ pub fn session_of(pane: &Value) -> Result<String> {
     Ok(format!("{pid}:{group}"))
 }
 pub fn front_is_app() -> Result<bool> {
-    let front = output("lsappinfo", &["front"], 3.)?;
-    Ok(output(
+    let front = output_unchecked("lsappinfo", &["front"], 3.)?;
+    Ok(bundle_is_app(&output_unchecked(
         "lsappinfo",
         &["info", "-only", "bundleid", front.trim()],
         3.,
-    )?
-    .contains("dev.herdr.app"))
+    )?))
+}
+pub fn bundle_is_app(bundle: &str) -> bool {
+    bundle.contains("dev.herdr.app")
 }
 pub fn app_focus() -> Option<Value> {
     let value = settings::read_file(&settings::app_home().join("data/sixfold/voice-focus.json"));
@@ -236,6 +244,44 @@ pub fn app_focus() -> Option<Value> {
     }
     asked_focus()
 }
+pub trait WindowBackend {
+    fn clock(&self) -> f64 {
+        now()
+    }
+    fn front(&mut self, checked: bool) -> Result<bool> {
+        if !checked {
+            return front_is_app();
+        }
+        let front = super::checked_stdout("lsappinfo", &["front"], Some(2.))?;
+        if front.trim().is_empty() {
+            return Ok(false);
+        }
+        Ok(bundle_is_app(&super::checked_stdout(
+            "lsappinfo",
+            &["info", "-only", "bundleid", front.trim()],
+            Some(2.),
+        )?))
+    }
+    fn app(&mut self, args: &[&str], checked: bool) -> Result<Value> {
+        if checked {
+            codex_json(&app(), args, 3.)
+        } else {
+            json_unchecked(&app(), args, 3.)
+        }
+    }
+    fn core(&mut self, args: &[&str], checked: bool) -> Result<Value> {
+        if checked {
+            codex_json(&core(), args, 3.)
+        } else {
+            json_unchecked(&core(), args, 3.)
+        }
+    }
+    fn tui(&mut self) -> Result<Value> {
+        codex_json(&herdr(), &["pane", "list"], 3.)
+    }
+}
+struct RuntimeWindow;
+impl WindowBackend for RuntimeWindow {}
 pub fn asked_focus() -> Option<Value> {
     static CACHE: std::sync::OnceLock<std::sync::Mutex<(f64, Option<Value>)>> =
         std::sync::OnceLock::new();
@@ -246,13 +292,17 @@ pub fn asked_focus() -> Option<Value> {
     if now() - cache.0 < 0.5 {
         return cache.1.clone();
     }
-    if !front_is_app().ok()? {
-        *cache = (now(), None);
-        return None;
+    let value = asked_focus_with(&mut RuntimeWindow).ok()?;
+    *cache = (now(), value.clone());
+    value
+}
+pub fn asked_focus_with<B: WindowBackend>(b: &mut B) -> Result<Option<Value>> {
+    if !b.front(false)? {
+        return Ok(None);
     }
     let asked = (|| -> Result<Value> {
-        let focused = json_output(&app(), &["status"], 3.)?["focused_pane"].clone();
-        let listed = json_output(&app(), &["ls"], 3.)?;
+        let focused = b.app(&["status"], false)?["focused_pane"].clone();
+        let listed = b.app(&["ls"], false)?;
         let terminal = listed["spaces"]
             .as_array()
             .into_iter()
@@ -262,11 +312,10 @@ pub fn asked_focus() -> Option<Value> {
             .find(|t| !focused.is_null() && t["pane"] == focused)
             .and_then(|t| t["terminal"].as_str())
             .map(str::to_owned);
-        let all = json_output(&core(), &["ls", "--json"], 3.)?;
-        let bridged = json_output(
-            &core(),
+        let all = b.core(&["ls", "--json"], false)?;
+        let bridged = b.core(
             &["ls", "--json", "--label", "sixfold.source-session=default"],
-            3.,
+            false,
         )?;
         let ids: Vec<_> = bridged["terminals"]
             .as_array()
@@ -274,32 +323,32 @@ pub fn asked_focus() -> Option<Value> {
             .flatten()
             .filter_map(|t| t["address"].as_str())
             .collect();
-        let labels = terminal
-            .as_ref()
-            .and_then(|t| json_output(&core(), &["get", t], 3.).ok())
-            .unwrap_or(Value::Null);
+        let labels = if let Some(terminal) = terminal.as_ref() {
+            b.core(&["get", terminal], false)?
+        } else {
+            Value::Null
+        };
         let panes:Vec<_>=all["terminals"].as_array().into_iter().flatten().filter(|t|!ids.contains(&t["address"].as_str().unwrap_or(""))&&["claude","claude-code","codex"].contains(&t["agent"].as_str().unwrap_or(""))).map(|t|json!({"pane_id":format!("app:{}",t["address"].as_str().unwrap_or("")),"agent":if t["agent"]=="claude-code"{"claude"}else{t["agent"].as_str().unwrap_or("")},"agent_status":t["status"]})).collect();
         Ok(
-            json!({"at":now()*1000.,"active":true,"terminal":terminal,"asked":true,"source":labels["labels"]["sixfold.source-pane"],"panes":panes}),
+            json!({"at":b.clock()*1000.,"active":true,"terminal":terminal,"asked":true,"source":labels["labels"]["sixfold.source-pane"],"panes":panes}),
         )
     })();
     let value = match asked {
         Ok(value) => Some(value),
         Err(_) => {
-            if front_is_app().unwrap_or(false) {
+            if b.front(false).unwrap_or(false) {
                 Some(
-                    json!({"at":now()*1000.,"active":true,"terminal":null,"asked":true,"panes":[]}),
+                    json!({"at":b.clock()*1000.,"active":true,"terminal":null,"asked":true,"panes":[]}),
                 )
             } else {
                 None
             }
         }
     };
-    *cache = (now(), value.clone());
-    value
+    Ok(value)
 }
 pub fn panes() -> Result<BTreeMap<String, Value>> {
-    let listed = json_output(&herdr(), &["pane", "list"], 5.)?;
+    let listed = json_unchecked(&herdr(), &["pane", "list"], 5.)?;
     let mut current: BTreeMap<_, _> = listed["result"]["panes"]
         .as_array()
         .into_iter()
@@ -332,13 +381,23 @@ pub fn project(
     }
     current
 }
+fn codex_json(command: &str, args: &[&str], timeout: f64) -> Result<Value> {
+    Ok(serde_json::from_str(&super::checked_stdout(
+        command,
+        args,
+        Some(timeout),
+    )?)?)
+}
 pub fn selected() -> Option<String> {
-    if !front_is_app().ok()? {
+    selected_with(&mut RuntimeWindow)
+}
+pub fn selected_with<B: WindowBackend>(b: &mut B) -> Option<String> {
+    if !b.front(true).ok()? {
         return None;
     }
-    let status = json_output(&app(), &["status"], 3.).ok()?;
+    let status = b.app(&["status"], true).ok()?;
     let t = status["agent"].as_str()?;
-    let labels = json_output(&core(), &["get", t], 3.).ok()?;
+    let labels = b.core(&["get", t], true).ok()?;
     Some(
         labels["labels"]["sixfold.source-pane"]
             .as_str()
@@ -347,7 +406,11 @@ pub fn selected() -> Option<String> {
     )
 }
 pub fn targets() -> Result<BTreeMap<String, Value>> {
-    let mut current = json_output(&herdr(), &["pane", "list"], 5.)
+    targets_with(&mut RuntimeWindow)
+}
+pub fn targets_with<B: WindowBackend>(b: &mut B) -> Result<BTreeMap<String, Value>> {
+    let mut current = b
+        .tui()
         .ok()
         .map(|v| {
             v["result"]["panes"]
@@ -358,11 +421,10 @@ pub fn targets() -> Result<BTreeMap<String, Value>> {
                 .collect::<BTreeMap<_, _>>()
         })
         .unwrap_or_default();
-    let all = json_output(&core(), &["ls", "--json"], 3.)?;
-    let bridges = json_output(
-        &core(),
+    let all = b.core(&["ls", "--json"], true)?;
+    let bridges = b.core(
         &["ls", "--json", "--label", "sixfold.source-session=default"],
-        3.,
+        true,
     )?;
     let ids: Vec<_> = bridges["terminals"]
         .as_array()
@@ -532,7 +594,7 @@ pub fn codex_sync() -> Result<()> {
         .unwrap_or_default();
     owned.retain(|id, _| current.contains_key(id));
     reconcile(&current, &mut owned, &mut RuntimeGuard);
-    write_json(&path, &Value::Object(owned))
+    super::replace_json(&path, &path.with_extension("tmp"), &Value::Object(owned))
 }
 pub fn codex_run(args: &[String]) -> Result<()> {
     if !args.iter().any(|s| s == "--serve") {
@@ -568,8 +630,21 @@ fn headset() -> bool {
     policy::headset(&input.1, &settings::load())
 }
 fn voice_state(since: f64, until: Option<f64>) -> (&'static str, Option<f64>) {
-    let items: Vec<_> = policy::segments(&settings::state_dir().join("voice-segments.jsonl"), 50)
-        .into_iter()
+    voice_state_from(
+        &policy::segments(&settings::state_dir().join("voice-segments.jsonl"), 50),
+        since,
+        until,
+        settings::state_dir().join("voiceprint.json").exists(),
+    )
+}
+pub fn voice_state_from(
+    segments: &[Value],
+    since: f64,
+    until: Option<f64>,
+    learned: bool,
+) -> (&'static str, Option<f64>) {
+    let items: Vec<_> = segments
+        .iter()
         .filter(|s| {
             s["end"].as_f64().unwrap_or(0.) >= since
                 && until
@@ -578,7 +653,7 @@ fn voice_state(since: f64, until: Option<f64>) -> (&'static str, Option<f64>) {
         })
         .collect();
     let last = items.last().and_then(|i| i["end"].as_f64());
-    if !settings::state_dir().join("voiceprint.json").exists() {
+    if !learned {
         return ("unknown", last);
     }
     let mine: f64 = items
@@ -603,8 +678,8 @@ fn voice_state(since: f64, until: Option<f64>) -> (&'static str, Option<f64>) {
     )
 }
 fn user_in_herdr() -> Result<bool> {
-    let front = output("lsappinfo", &["front"], 5.)?;
-    let bundle = output(
+    let front = output_unchecked("lsappinfo", &["front"], 5.)?;
+    let bundle = output_unchecked(
         "lsappinfo",
         &["info", "-only", "bundleid", front.trim()],
         5.,
@@ -646,22 +721,6 @@ fn listen_pid(id: &str) -> std::path::PathBuf {
 fn recording_since(id: &str) -> f64 {
     mtime(&policy::marker(&settings::state_dir(), "armed", id)).unwrap_or(now() - 60.)
 }
-fn may_send(speaker: &str) -> bool {
-    speaker == "me" && headset()
-}
-fn stop_key(text: &str, status: &str, speaker: &str) -> &'static str {
-    if !composer(text, "❯").is_empty() {
-        if may_send(speaker) {
-            "f8"
-        } else {
-            "esc"
-        }
-    } else if ["idle", "done"].contains(&status) {
-        "esc"
-    } else {
-        "f8"
-    }
-}
 fn read_kept(id: &str) -> (String, bool) {
     let v = settings::read_file(
         &settings::state_dir().join(format!("kept-{}.json", id.replace(':', "_"))),
@@ -677,47 +736,17 @@ fn write_kept(id: &str, text: &str, spoken: bool) -> Result<()> {
         let _ = fs::remove_file(path);
         Ok(())
     } else {
-        write_json(&path, &json!({"text":text,"spoken":spoken}))
+        super::write_json_direct(
+            &path,
+            &json!({"text":text,"spoken":spoken}),
+            false,
+            false,
+            false,
+        )
     }
-}
-fn erase(id: &str, count: usize) -> Result<()> {
-    if count > 0 {
-        send_keys(id, &vec!["backspace"; count])?;
-    }
-    Ok(())
-}
-fn restore_box(id: &str, before: &str, speaker: &str) -> Result<()> {
-    let keep = if speaker == "other" {
-        read_kept(id).0
-    } else {
-        before.to_owned()
-    };
-    if keep.is_empty() {
-        return Ok(());
-    }
-    thread::sleep(Duration::from_secs(1));
-    let current = composer(&screen(id)?, "❯");
-    if current == keep {
-        return Ok(());
-    }
-    if id.starts_with("app:") {
-        log(&format!(
-            "claude dictation lost {id}: cannot type into app panes ({} chars)",
-            keep.chars().count()
-        ));
-        return Ok(());
-    }
-    erase(id, current.chars().count())?;
-    output(&herdr(), &["pane", "send-text", id, &keep], 10.)?;
-    write_kept(id, &keep, true)?;
-    log(&format!(
-        "claude dictation kept {id} after its recording stopped ({} chars, {speaker} voice)",
-        keep.chars().count()
-    ));
-    Ok(())
 }
 fn confirm_voice(since: Option<f64>) -> Result<()> {
-    if let Some(since) = since {
+    if let Some(since) = since.filter(|since| *since != 0. && super::native::runtime_available()) {
         append_json(
             &settings::state_dir().join("voice-confirmed.jsonl"),
             &json!({"start":super::round(since,3),"end":super::round(now(),3)}),
@@ -726,7 +755,7 @@ fn confirm_voice(since: Option<f64>) -> Result<()> {
     Ok(())
 }
 fn start_gate() -> Result<()> {
-    if !alive(&settings::state_dir().join("voicegate.pid")) {
+    if super::native::runtime_available() {
         super::self_launch_logged(
             "voicegate",
             &["serve"],
@@ -738,53 +767,6 @@ fn start_gate() -> Result<()> {
 fn start_listening(id: &str) -> Result<()> {
     if !alive(&listen_pid(id)) {
         self_launch("focus_queue", &["--listen", id])?;
-    }
-    Ok(())
-}
-fn clear_blocked(id: &str) -> Result<bool> {
-    let path = policy::marker(&settings::state_dir(), "blocked", id);
-    let Some(at) = mtime(&path) else {
-        return Ok(false);
-    };
-    let text = composer(&screen(id)?, "❯");
-    if !text.is_empty() && now() - at < 5. {
-        erase(id, text.chars().count())?;
-        log(&format!(
-            "claude dictation refused {id} ({} chars)",
-            text.chars().count()
-        ));
-    }
-    if !text.is_empty() || now() - at >= 5. {
-        fs::remove_file(path)?;
-    }
-    Ok(true)
-}
-fn finish_dictation(id: &str, spoken: Option<f64>, mut since: f64) -> Result<()> {
-    let (speaker, end) = voice_state(spoken.unwrap_or(0.), None);
-    let heard = end
-        .unwrap_or(0.)
-        .max(mtime(&settings::state_dir().join("voice-speaking")).unwrap_or(0.));
-    let mut typed = String::new();
-    let deadline = now() + 5.;
-    while now() < deadline {
-        thread::sleep(Duration::from_millis(300));
-        let text = composer(&screen(id)?, "❯");
-        if text.is_empty() {
-            continue;
-        }
-        if text != typed {
-            typed = text;
-            since = now();
-        }
-        if may_send(speaker) && sentence_end(&typed) && now() - since.max(heard) >= 2. {
-            send_keys(id, &["enter"])?;
-            confirm_voice(spoken)?;
-            log(&format!(
-                "claude dictation sent {id} after focus left ({} chars, {speaker} voice)",
-                typed.chars().count()
-            ));
-            return Ok(());
-        }
     }
     Ok(())
 }
@@ -805,332 +787,222 @@ pub fn listen(id: &str) -> Result<()> {
     let pid = listen_pid(id);
     fs::write(&pid, std::process::id().to_string())?;
     start_gate()?;
-    let result = (|| -> Result<()> {
-        let (mut last, mut since, mut started, mut misses, mut engaged) =
-            (None::<String>, now(), None::<f64>, 0, false);
-        let mut spoken_since = None;
-        let mut dictated = false;
-        let (mut kept, mut spoken) = read_kept(id);
-        if !kept.is_empty() && !composer(&screen(id)?, "❯").starts_with(&kept) {
-            write_kept(id, "", false)?;
-            kept.clear();
-            spoken = false;
-        }
-        let mut gate_checked = 0.;
-        while misses < 6 {
-            thread::sleep(Duration::from_millis(300));
-            let pane = panes()?.get(id).cloned().unwrap_or(Value::Null);
-            if pane["focused"] != true || pane["agent"] != "claude" {
-                if pane["agent"] == "claude"
-                    && last.as_ref().map(|s| !s.is_empty()).unwrap_or(false)
-                    && dictated
-                {
-                    finish_dictation(id, spoken_since, since)?;
-                    last = None;
-                    started = None;
-                    spoken_since = None;
-                    dictated = false;
-                    if panes()?
-                        .get(id)
-                        .map(|p| p["focused"] == true)
-                        .unwrap_or(false)
-                    {
-                        continue;
-                    }
-                }
-                return Ok(());
-            }
-            if clear_blocked(id)? {
-                last = None;
-                started = None;
-                spoken_since = None;
-                dictated = false;
-                continue;
-            }
-            if now() - gate_checked >= 5. {
-                gate_checked = now();
-                start_gate()?;
-            }
-            let text = screen(id)?;
-            let in_box = composer(&text, "❯");
-            let hand = !in_box.is_empty() && policy::seconds_since_key() < 1.5;
-            if in_box.is_empty() {
-                if !kept.is_empty() {
-                    write_kept(id, "", false)?;
-                }
-                kept.clear();
-                spoken = false;
-            } else if (hand || !in_box.starts_with(&kept)) && in_box != kept {
-                spoken = spoken || dictated;
-                kept = in_box.clone();
-                write_kept(id, &kept, spoken)?;
-            }
-            let fresh = in_box.strip_prefix(&kept).unwrap_or(&in_box);
-            if fresh.is_empty() {
-                dictated = false;
-            }
-            let headset = headset();
-            if !headset || !user_in_herdr()? {
-                if footer(&text, "❯").contains("REC · ") && kept.is_empty() {
-                    let speaker = voice_state(recording_since(id), None).0;
-                    press(
-                        id,
-                        stop_key(&text, pane["agent_status"].as_str().unwrap_or(""), speaker),
-                        || Ok(!recording(id)?),
-                        1.5,
-                    )?;
-                    log(&format!(
-                        "claude voice paused {id}: {}",
-                        if headset {
-                            "another app is in front"
-                        } else {
-                            "input is not a headset"
-                        }
-                    ));
-                }
-                if composer(&screen(id)?, "❯").is_empty() {
-                    last = None;
-                    started = None;
-                    spoken_since = None;
-                    dictated = false;
-                }
-                continue;
-            }
-            if !footer(&text, "❯").contains("REC · ") {
-                let typed = composer(&text, "❯");
-                if dictated && !typed.is_empty() {
-                    if last.as_deref() != Some(&typed) {
-                        last = Some(typed.clone());
-                        since = now();
-                    }
-                    if now() - since < 1. {
-                        continue;
-                    }
-                    let speaker = spoken_since
-                        .map(|at| voice_state(at, None).0)
-                        .unwrap_or("unknown");
-                    if may_send(speaker) {
-                        send_keys(id, &["enter"])?;
-                        confirm_voice(spoken_since)?;
-                        log(&format!("claude dictation sent {id} after recording ended ({} chars, {speaker} voice)",typed.chars().count()));
-                    } else {
-                        erase(
-                            id,
-                            typed.chars().count().saturating_sub(kept.chars().count()),
-                        )?;
-                        log(&format!("claude dictation discarded {id} after recording ended ({} chars, {speaker} voice)",typed.chars().count().saturating_sub(kept.chars().count())));
-                    }
-                    last = None;
-                    started = None;
-                    spoken_since = None;
-                    dictated = false;
-                    continue;
-                }
-                if last.as_ref().map(|s| !s.is_empty()).unwrap_or(false)
-                    && dictated
-                    && typed.is_empty()
-                {
-                    confirm_voice(spoken_since)?;
-                    log(&format!("claude dictation submitted by user {id}"));
-                }
-                last = None;
-                started = None;
-                spoken_since = None;
-                dictated = false;
-                let draft = spoken
-                    && !kept.is_empty()
-                    && policy::seconds_since_key() >= 1.5
-                    && input_ready(&text, "❯", true);
-                if ["done", "idle", "working"]
-                    .contains(&pane["agent_status"].as_str().unwrap_or(""))
-                    && (input_ready(&text, "❯", false) || draft)
-                {
-                    let on = press(id, "f8", || recording(id), 1.)?;
-                    misses = if on { 0 } else { misses + 1 };
-                    log(&format!(
-                        "claude voice re-armed {id}{}",
-                        if on { "" } else { " (no change)" }
-                    ));
-                }
-                continue;
-            }
-            if started.is_none() {
-                started = Some(now());
-                fs::write(policy::marker(&dir, "armed", id), "")?;
-            }
-            let typed = composer(&text, "❯");
-            if last.as_ref().map(|s| !s.is_empty()).unwrap_or(false) && dictated && typed.is_empty()
-            {
-                confirm_voice(spoken_since)?;
-                log(&format!("claude dictation submitted by user {id}"));
-            }
-            dictated = !fresh.is_empty() && !hand && (dictated || meter(&text, "❯") > 1);
-            if fresh.is_empty() {
-                spoken_since = None;
-            } else if spoken_since.is_none() {
-                spoken_since = Some(now() - 2.);
-            }
-            let (speaker, speech_end) = spoken_since
-                .map(|at| voice_state(at, None))
-                .unwrap_or(("unknown", None));
-            let current_engaged =
-                (!typed.is_empty() || meter(&text, "❯") > 1 || recently_active(id))
-                    && speaker != "other";
-            if engaged && !current_engaged {
-                main_event(true)?;
-            }
-            engaged = current_engaged;
-            if (last.as_deref() != Some(&typed) || meter(&text, "❯") > 1)
-                && (!typed.is_empty() || meter(&text, "❯") > 1)
-                && speaker != "other"
-            {
-                fs::write(active_path(id), "")?;
-            }
-            let heard = speech_end
-                .unwrap_or(0.)
-                .max(mtime(&dir.join("voice-speaking")).unwrap_or(0.));
-            if last.as_deref() != Some(&typed) {
-                last = Some(typed.clone());
-                since = now();
-            } else if dictated
-                && may_send(speaker)
-                && sentence_end(&typed)
-                && now() - since.max(heard) >= 2.
-            {
-                send_keys(id, &["enter"])?;
-                confirm_voice(spoken_since)?;
-                log(&format!(
-                    "claude dictation sent {id} ({} chars, {speaker} voice)",
-                    typed.chars().count()
-                ));
-                last = None;
-            } else if dictated && !may_send(speaker) && now() - since.max(heard) >= 3. {
-                if kept.is_empty() {
-                    press(id, "esc", || Ok(!recording(id)?), 1.5)?;
-                }
-                erase(
-                    id,
-                    composer(&screen(id)?, "❯")
-                        .chars()
-                        .count()
-                        .saturating_sub(kept.chars().count()),
-                )?;
-                log(&format!(
-                    "claude dictation discarded {id} ({} chars, {speaker} voice)",
-                    typed.chars().count().saturating_sub(kept.chars().count())
-                ));
-                last = None;
-            } else if typed.is_empty()
-                && now() - started.unwrap_or(now()) >= 100.
-                && ["idle", "done"].contains(&pane["agent_status"].as_str().unwrap_or(""))
-            {
-                press(id, "esc", || Ok(!recording(id)?), 1.5)?;
-                log(&format!("claude voice recycled {id}"));
-            }
-        }
-        log(&format!("claude voice stopped re-arming {id}: F8 ignored"));
-        Ok(())
-    })();
+    let result = dictation::listen_with(id, &mut dictation::Runtime, dictation::Timing::default());
     let _ = fs::remove_file(pid);
     result
 }
-fn set_voice(pane: &Value, on: bool, state: &mut Value) -> Result<()> {
+/// Production voice-on transitions and the offline diagnostic share this protocol.
+pub trait VoiceOnBackend {
+    fn listening(&mut self, id: &str) -> bool;
+    fn screen(&mut self, id: &str) -> Result<String>;
+    fn recording_footer(&mut self, text: &str) -> bool;
+    fn session(&mut self, pane: &Value) -> Result<String>;
+    fn ready(&mut self, id: &str) -> Result<bool>;
+    fn eligible(&mut self) -> Result<bool>;
+    fn start(&mut self, id: &str) -> Result<()>;
+    fn press_on(&mut self, id: &str) -> Result<bool>;
+    fn clock(&self) -> f64;
+    fn report(&mut self, message: &str);
+}
+pub fn set_voice_on<B: VoiceOnBackend>(
+    pane: &Value,
+    state: &mut Value,
+    backend: &mut B,
+) -> Result<()> {
     let id = pane["pane_id"].as_str().unwrap_or("");
-    if pane["agent"] == "codex" {
-        return codex_sync();
-    }
-    if pane["agent"] != "claude" {
+    if backend.listening(id) {
         return Ok(());
     }
-    if on && alive(&listen_pid(id)) {
-        return Ok(());
-    }
-    let text = screen(id)?;
-    let session = session_of(pane)?;
-    if !state["voice_key_failures"].is_object() {
-        state["voice_key_failures"] = json!({});
-    }
-    if footer(&text, "❯").contains("REC · ") == on {
-        if on {
+    let text = backend.screen(id)?;
+    if backend.recording_footer(&text) {
+        if state["voice_key_failures"]
+            .as_object()
+            .is_some_and(|m| !m.is_empty())
+        {
+            let session = backend.session(pane)?;
             state["voice_key_failures"]
                 .as_object_mut()
                 .unwrap()
                 .remove(&session);
-            start_listening(id)?;
         }
+        backend.start(id)?;
+        return Ok(());
+    }
+    if !state["voice_key_failures"].is_object() {
+        state["voice_key_failures"] = json!({});
+    }
+    let session = backend.session(pane)?;
+    if voice_key_locked(&state["voice_key_failures"][&session], backend.clock())
+        && !text.contains("Voice mode enabled")
+    {
         return Ok(());
     }
     let status = pane["agent_status"].as_str().unwrap_or("");
-    if on {
-        let failure = &state["voice_key_failures"][&session];
-        if voice_key_locked(failure, now()) && !text.contains("Voice mode enabled") {
-            return Ok(());
-        }
-        if !["done", "idle", "working"].contains(&status)
-            || !input_ready(&screen(id)?, "❯", false)
-            || !user_in_herdr()?
-            || !headset()
-        {
-            start_listening(id)?;
-            return Ok(());
-        }
-    }
-    let before = if on {
-        String::new()
-    } else {
-        composer(&text, "❯")
-    };
-    let mut speaker = "unknown";
-    if !before.is_empty() {
-        let left = now();
-        loop {
-            speaker = voice_state(recording_since(id), Some(left)).0;
-            if speaker != "unknown" || now() >= left + 3. {
-                break;
-            }
-            thread::sleep(Duration::from_millis(300));
-        }
-    }
-    let mut key = if on {
-        "f8"
-    } else {
-        stop_key(&text, status, speaker)
-    };
-    if key == "f8"
-        && !before.is_empty()
-        && !id.starts_with("app:")
-        && composer(&screen(id)?, "❯") != before
+    if !["done", "idle", "working"].contains(&status)
+        || !backend.ready(id)?
+        || !backend.eligible()?
     {
-        key = "esc";
+        backend.start(id)?;
+        return Ok(());
     }
-    let flipped = press(
-        id,
-        key,
-        || Ok(recording(id)? == on),
-        if on { 3. } else { 1.5 },
-    )?;
-    log(&format!(
-        "claude voice {} {id}{}",
-        if on { "on" } else { "off" },
+    let flipped = backend.press_on(id)?;
+    backend.report(&format!(
+        "claude voice on {id}{}",
         if flipped { "" } else { " (no change)" }
     ));
-    if key == "esc" && !before.is_empty() {
-        restore_box(id, &before, speaker)?;
-    }
-    if on && !flipped && ["idle", "done"].contains(&status) {
+    if !flipped && ["idle", "done"].contains(&status) {
+        let session = backend.session(pane)?;
         let failure = &state["voice_key_failures"][&session];
         let misses = if failure.is_array() {
             failure[0].as_u64().unwrap_or(0)
         } else {
             failure.as_u64().unwrap_or(0)
         } + 1;
-        state["voice_key_failures"][&session] = json!([misses, now()]);
-    } else if on {
+        let session = backend.session(pane)?;
+        state["voice_key_failures"][&session] = json!([misses, backend.clock()]);
+        if misses >= 2 {
+            backend.report(&format!(
+                "claude voice key ignored in {id} ({misses} times); trying again in 60 s"
+            ));
+        }
+    } else {
+        let session = backend.session(pane)?;
         state["voice_key_failures"]
             .as_object_mut()
             .unwrap()
             .remove(&session);
-        start_listening(id)?;
+        backend.start(id)?;
+    }
+    Ok(())
+}
+struct RuntimeVoiceOn;
+impl VoiceOnBackend for RuntimeVoiceOn {
+    fn listening(&mut self, id: &str) -> bool {
+        alive(&listen_pid(id))
+    }
+    fn screen(&mut self, id: &str) -> Result<String> {
+        screen(id)
+    }
+    fn recording_footer(&mut self, text: &str) -> bool {
+        footer(text, "❯").contains("REC · ")
+    }
+    fn session(&mut self, pane: &Value) -> Result<String> {
+        session_of(pane)
+    }
+    fn ready(&mut self, id: &str) -> Result<bool> {
+        Ok(input_ready(&screen(id)?, "❯", false))
+    }
+    fn eligible(&mut self) -> Result<bool> {
+        Ok(user_in_herdr()? && headset())
+    }
+    fn start(&mut self, id: &str) -> Result<()> {
+        start_listening(id)
+    }
+    fn press_on(&mut self, id: &str) -> Result<bool> {
+        press(id, "f8", || recording(id), 3.)
+    }
+    fn clock(&self) -> f64 {
+        now()
+    }
+    fn report(&mut self, message: &str) {
+        log(message)
+    }
+}
+fn set_voice(pane: &Value, on: bool, state: &mut Value) -> Result<()> {
+    set_voice_with_codex(pane, on, state, codex_sync)
+}
+pub fn set_voice_with_codex<F: FnMut() -> Result<()>>(
+    pane: &Value,
+    on: bool,
+    state: &mut Value,
+    mut sync: F,
+) -> Result<()> {
+    if pane["agent"] == "codex" {
+        return sync();
+    }
+    if pane["agent"] != "claude" {
+        return Ok(());
+    }
+    if on {
+        return set_voice_on(pane, state, &mut RuntimeVoiceOn);
+    }
+    dictation::voice_off(
+        pane,
+        state,
+        &mut dictation::Runtime,
+        dictation::Timing::default(),
+    )
+}
+pub trait FocusBackend {
+    fn pause(&mut self, seconds: f64) {
+        thread::sleep(Duration::from_secs_f64(seconds));
+    }
+    fn active(&mut self) -> bool {
+        app_focus()
+            .map(|value| value["active"] == true)
+            .unwrap_or(false)
+    }
+    fn panes(&mut self) -> Result<BTreeMap<String, Value>> {
+        super_panes()
+    }
+    fn codex_sync(&mut self) -> Result<()> {
+        codex_sync()
+    }
+    fn voice(&mut self, pane: &Value, on: bool, state: &mut Value) -> Result<()> {
+        set_voice(pane, on, state)
+    }
+    fn report(&mut self, message: &str) {
+        log(message)
+    }
+}
+fn super_panes() -> Result<BTreeMap<String, Value>> {
+    panes()
+}
+struct RuntimeFocus;
+impl FocusBackend for RuntimeFocus {}
+pub fn settle_voice_with<B: FocusBackend>(
+    mut current: BTreeMap<String, Value>,
+    mut focused: Option<String>,
+    state: &mut Value,
+    b: &mut B,
+) -> Result<()> {
+    let wait = if b.active() { 0.6 } else { 0.15 };
+    b.pause(wait);
+    let settled = b.panes()?;
+    let now_focus = settled
+        .iter()
+        .find(|(_, p)| p["focused"] == true)
+        .map(|(id, _)| id.clone());
+    if now_focus != focused {
+        b.report(&format!(
+            "focus moved to {} while settling (was {})",
+            now_focus.as_deref().unwrap_or("None"),
+            focused.as_deref().unwrap_or("None")
+        ));
+        focused = now_focus;
+        current = settled;
+    }
+    if current.values().any(|p| p["agent"] == "codex") {
+        b.codex_sync()?;
+    }
+    if let Some(id) = focused.as_ref() {
+        if let Some(p) = current.get(id) {
+            if p["agent"] != "codex"
+                && (attention(p["agent_status"].as_str().unwrap_or(""))
+                    || p["agent_status"] == "working")
+                && b.panes()?
+                    .get(id)
+                    .map(|p| p["focused"] == true)
+                    .unwrap_or(false)
+            {
+                b.voice(p, true, state)?;
+            }
+        }
+    }
+    for (id, p) in &current {
+        if Some(id) != focused.as_ref() && p["agent"] == "claude" {
+            b.voice(p, false, state)?;
+        }
     }
     Ok(())
 }
@@ -1161,6 +1033,9 @@ pub fn main_event(advance: bool) -> Result<()> {
     fs2::FileExt::lock_exclusive(&lock)?;
     let path = dir.join("state.json");
     let mut state = settings::read_file(&path);
+    if state.get("queue").is_none() {
+        state["queue"] = json!([]);
+    }
     let mut queue: Vec<String> = state["queue"]
         .as_array()
         .into_iter()
@@ -1208,58 +1083,53 @@ pub fn main_event(advance: bool) -> Result<()> {
     };
     if !queue.is_empty() && !busy && !app_focus().map(|v| v["active"] == true).unwrap_or(false) {
         let target = queue.remove(0);
-        output(&herdr(), &["agent", "focus", &target], 5.)?;
-        log(&format!("focused {target} (was {focused:?})"));
+        output_unchecked(&herdr(), &["agent", "focus", &target], 5.)?;
+        log(&format!(
+            "focused {target} (was {}: {})",
+            focused.as_deref().unwrap_or("None"),
+            focused_pane
+                .and_then(|p| p["agent_status"].as_str())
+                .unwrap_or("None")
+        ));
         focused = Some(target);
     }
-    thread::sleep(Duration::from_secs_f64(
-        if app_focus().map(|v| v["active"] == true).unwrap_or(false) {
-            0.6
-        } else {
-            0.15
-        },
-    ));
-    let settled = panes()?;
-    let now_focus = settled
-        .iter()
-        .find(|(_, p)| p["focused"] == true)
-        .map(|(id, _)| id.clone());
-    if now_focus != focused {
-        focused = now_focus;
-        current = settled;
-    }
-    if current.values().any(|p| p["agent"] == "codex") {
-        codex_sync()?;
-    }
-    if let Some(id) = focused.as_ref() {
-        if let Some(p) = current.get(id) {
-            if p["agent"] != "codex"
-                && (attention(p["agent_status"].as_str().unwrap_or(""))
-                    || p["agent_status"] == "working")
-                && panes()?
-                    .get(id)
-                    .map(|p| p["focused"] == true)
-                    .unwrap_or(false)
-            {
-                set_voice(p, true, &mut state)?;
-            }
-        }
-    }
-    for (id, p) in &current {
-        if Some(id) != focused.as_ref() && p["agent"] == "claude" {
-            set_voice(p, false, &mut state)?;
-        }
-    }
+    settle_voice_with(current, focused, &mut state, &mut RuntimeFocus)?;
     state["queue"] = json!(queue);
-    write_json(&path, &state)
+    super::write_json_direct(&path, &state, true, false, false)
 }
 pub fn attention(s: &str) -> bool {
     ["done", "blocked", "idle"].contains(&s)
 }
 /// Retained explicit startup helper. The normal focus actor does not call it;
 /// only a fresh sidebar heartbeat may request startup of an observed empty CLI.
+pub trait AppCodexBackend {
+    fn focus(&mut self) -> Option<Value> {
+        app_focus()
+    }
+    fn screen(&mut self, id: &str) -> Result<String> {
+        screen(id)
+    }
+    fn start(&mut self, terminal: &str) -> Result<()> {
+        super::capture(&hc(), &["send", terminal, "/voice"], Some(2.))?;
+        Ok(())
+    }
+    fn clock(&self) -> f64 {
+        now()
+    }
+    fn pause(&mut self, seconds: f64) {
+        thread::sleep(Duration::from_secs_f64(seconds));
+    }
+    fn report(&mut self, message: &str) {
+        log(message)
+    }
+}
+struct RuntimeAppCodex;
+impl AppCodexBackend for RuntimeAppCodex {}
 pub fn prepare_app_codex() -> Result<()> {
-    let Some(value) = app_focus() else {
+    prepare_app_codex_with(&mut RuntimeAppCodex)
+}
+pub fn prepare_app_codex_with<B: AppCodexBackend>(b: &mut B) -> Result<()> {
+    let Some(value) = b.focus() else {
         return Ok(());
     };
     if value["active"] != true
@@ -1283,7 +1153,7 @@ pub fn prepare_app_codex() -> Result<()> {
     {
         return Ok(());
     }
-    let text = screen(&id)?;
+    let text = b.screen(&id)?;
     if text.contains("/voice stop")
         || text.contains("voice ")
         || !composer(&text, "›").is_empty()
@@ -1292,10 +1162,14 @@ pub fn prepare_app_codex() -> Result<()> {
     {
         return Ok(());
     }
-    let _ = output(&hc(), &["send", terminal, "/voice"], 2.);
-    let deadline = now() + 6.;
-    while now() < deadline {
-        let fresh = app_focus();
+    match b.start(terminal) {
+        Ok(_) => {}
+        Err(error) if error.is::<super::ProcessTimeout>() => {}
+        Err(error) => return Err(error),
+    }
+    let deadline = b.clock() + 6.;
+    while b.clock() < deadline {
+        let fresh = b.focus();
         if fresh
             .as_ref()
             .map(|v| v["active"] != true || v["terminal"] != terminal)
@@ -1303,14 +1177,14 @@ pub fn prepare_app_codex() -> Result<()> {
         {
             return Ok(());
         }
-        let screen = screen(&id)?;
+        let screen = b.screen(&id)?;
         if screen.contains("/voice stop") || screen.contains("voice ") {
-            log(&format!("app codex voice connected {id}"));
+            b.report(&format!("app codex voice connected {id}"));
             return Ok(());
         }
-        thread::sleep(Duration::from_millis(200));
+        b.pause(0.2);
     }
-    log(&format!("app codex voice startup unconfirmed {id}"));
+    b.report(&format!("app codex voice startup unconfirmed {id}"));
     Ok(())
 }
 pub fn run(args: &[String]) -> Result<()> {

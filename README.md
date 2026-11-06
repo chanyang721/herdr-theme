@@ -79,11 +79,11 @@ Options: `--without-workspace-mods` installs the theme alone (the `sixfold` layo
 
 ### Updating an installation
 
-After the first install, **use only `herdr-theme update_install`; never copy files into the running app by hand.** List the theme files you reviewed; the pinned Workspace Mods are brought to the pinned release in the same run (unchanged files are skipped, so nothing reloads needlessly):
+After the first install, **use only `herdr-theme update-install`; never copy files into the running app by hand.** List the theme files you reviewed; the pinned Workspace Mods are brought to the pinned release in the same run (unchanged files are skipped, so nothing reloads needlessly):
 
 ```sh
-herdr-theme update_install mods/sixfold-desk/main.js mods/sixfold-desk/model.js
-herdr-theme update_install            # only bring the Workspace Mods to the pinned release
+herdr-theme update-install mods/sixfold-desk/main.js mods/sixfold-desk/model.js
+herdr-theme update-install            # only bring the Workspace Mods to the pinned release
 ```
 
 The examples assume the built executable is on PATH; alternatively use `./rust/target/release/herdr-theme` or `.\rust\target\release\herdr-theme.exe`. `--without-workspace-mods` leaves the pinned mods as installed; a run that lists only `voice` never touches them. Include `scripts/herdr-theme` (`scripts/herdr-theme.exe` on Windows) when updating native helper code.
@@ -166,18 +166,18 @@ There is no permanent message panel. A new send shows a sender → recipient not
 
 The sidebar reads sends from the app's in-memory `messageEvents()` (see [Requirements](#requirements)); events carry sender, recipient, time and the observed `started` result, never message text. Send with the core CLI directly: `hc send TARGET "message"`.
 
-**Removing the old tracing launcher.** Earlier versions shipped a Python launcher; it has been removed. If you installed it, remove `~/.local/share/herdr-sixfold/bin` from your PATH, stop calling `hc_trace.py`, check that `hc` resolves to the core CLI (`Get-Command hc -All` / `command -v hc`), restore a `~/.local/bin/hc` symlink that points at the launcher, delete `hc_trace.py`, `bin/hc` and `bin/hc.cmd` under `~/.local/share/herdr-sixfold/`, and update installed `herdr-theme route` and `herdr-theme collect_workflow`.
+**Removing the old tracing launcher.** Earlier versions shipped a Python launcher; it has been removed. If you installed it, remove `~/.local/share/herdr-sixfold/bin` from your PATH, stop calling `hc_trace.py`, check that `hc` resolves to the core CLI (`Get-Command hc -All` / `command -v hc`), restore a `~/.local/bin/hc` symlink that points at the launcher, delete `hc_trace.py`, `bin/hc` and `bin/hc.cmd` under `~/.local/share/herdr-sixfold/`, and update installed `herdr-theme route` and `herdr-theme collect-workflow`.
 
 ## Subagent trees and the workflow collector
 
-Subagents expand under their parent with `▸ N`; new delegations open the tree and animate a pipeline. `herdr-theme collect_workflow` reads Claude metadata, the read-only Codex database and hc parent links into `data/sixfold/workflow.json` (`--once`, or every three seconds writing only changes). It runs on macOS, Linux and Windows (on Windows without opening console windows).
+Subagents expand under their parent with `▸ N`; new delegations open the tree and animate a pipeline. `herdr-theme collect-workflow` reads Claude metadata, the read-only Codex database and hc parent links into `data/sixfold/workflow.json` (`--once`, or every three seconds writing only changes). It runs on macOS, Linux and Windows (on Windows without opening console windows).
 
 The installed native helper includes the collector, but does not register or start it in the background. On Windows you can run it at logon, hidden, one instance at a time:
 
 ```powershell
 $home_ = "$HOME\.config\herdr-app"
 $collector = "$home_\scripts\sixfold\herdr-theme.exe"
-$command = "Start-Process -WindowStyle Hidden -Wait -FilePath '$collector' -ArgumentList 'collect_workflow'"
+$command = "Start-Process -WindowStyle Hidden -Wait -FilePath '$collector' -ArgumentList 'collect-workflow'"
 $encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($command))
 $action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument "-NoProfile -NonInteractive -WindowStyle Hidden -EncodedCommand $encoded" -WorkingDirectory $home_
 $trigger = New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME
@@ -245,11 +245,11 @@ A project file tree and a preview panel for Markdown (and on macOS images, PDFs 
 
 **Channel alerts.** New channel messages listed in `data/sixfold/project-alerts.json` appear on a line under the workspace title; the `sixfold-slack-inbox` mod shows mentions from `data/sixfold/slack-mentions.json` grouped by thread. Collecting from Slack is a separate tool.
 
-**Grids and new workspaces.** `herdr-theme balance_grid` equalises six-terminal tabs without restarting anything; `herdr-theme workspace "Example" /path` creates a workspace like **+ Space** with one coordinating session (`--shells` for a plain shell; `--tiers high` opens that one session on the model for the given task tier, default `high`, see `rust/src/automation/tiers.rs`). More panes come from the harness `dispatch`. Creating a workspace leaves the window showing what you were looking at: the selection is put back if the new space took it (a pane or tab you chose yourself is left alone). Known limit: if the creation fails midway and another process makes a terminal at the same moment that you then select, the earlier selection is restored over it.
+**Grids and new workspaces.** `herdr-theme balance-grid` equalises six-terminal tabs without restarting anything; `herdr-theme workspace "Example" /path` creates a workspace like **+ Space** with one coordinating session (`--shells` for a plain shell; `--tiers high` opens that one session on the model for the given task tier, default `high`, see `rust/src/automation/tiers.rs`). More panes come from the harness `dispatch`. Creating a workspace leaves the window showing what you were looking at: the selection is put back if the new space took it (a pane or tab you chose yourself is left alone). Known limit: if the creation fails midway and another process makes a terminal at the same moment that you then select, the earlier selection is restored over it.
 
-**Pins, icons and local settings.** `data/sixfold/workspace-pins.local.json` (`{"spaces":[{"id":"…","machine":null}]}`) marks exact workspaces with a pin and accent border. `herdr-theme set_workspace_icon 'ID or name' icon.png` sets a project icon (SVG/PNG/JPEG/WebP). Per-person names, colours, folders and the Slack address live in `data/sixfold/site.local.json` (start from `config/site.example.json`); `"pane_header_index": true` brings back pane numbers. `*.local.json` is git-ignored.
+**Pins, icons and local settings.** `data/sixfold/workspace-pins.local.json` (`{"spaces":[{"id":"…","machine":null}]}`) marks exact workspaces with a pin and accent border. `herdr-theme set-workspace-icon 'ID or name' icon.png` sets a project icon (SVG/PNG/JPEG/WebP). Per-person names, colours, folders and the Slack address live in `data/sixfold/site.local.json` (start from `config/site.example.json`); `"pane_header_index": true` brings back pane numbers. `*.local.json` is git-ignored.
 
-**macOS only.** Idle sessions can be put to sleep and finished workspaces listed by two LaunchAgent observers (`herdr-theme install_session_sleep`, `herdr-theme install_space_cleanup`), dry-run until you enable apply; workspaces are never closed unless `space_close_enabled: true` is set. The live TUI bridge (`herdr-theme tui_bridge`, also Linux) attaches an existing Herdr TUI pane without importing it. The voice plugin in [`voice/`](voice/README.md) records only the focused pane.
+**macOS only.** Idle sessions can be put to sleep and finished workspaces listed by two LaunchAgent observers (`herdr-theme install-session-sleep`, `herdr-theme install-space-cleanup`), dry-run until you enable apply; workspaces are never closed unless `space_close_enabled: true` is set. The live TUI bridge (`herdr-theme tui-bridge`, also Linux) attaches an existing Herdr TUI pane without importing it. The voice plugin in [`voice/`](voice/README.md) records only the focused pane.
 
 Message routing between a common workspace and project slots: [COMMON_ROUTING.md](COMMON_ROUTING.md). Collaboration under overload: [docs/overload-collaboration.md](docs/overload-collaboration.md). Project document tracking: [docs/project-documents.md](docs/project-documents.md).
 

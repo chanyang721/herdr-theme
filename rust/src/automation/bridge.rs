@@ -172,8 +172,8 @@ mod unix {
             libc::forkpty(
                 &mut master,
                 std::ptr::null_mut(),
-                std::ptr::null(),
-                std::ptr::null(),
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
             )
         };
         if child < 0 {
@@ -314,6 +314,36 @@ pub fn run(args: &[String]) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    fn after(chunks: &[&[u8]]) -> bool {
+        let mut boundary = StreamBoundary::default();
+        for chunk in chunks {
+            boundary.feed(chunk);
+        }
+        boundary.safe()
+    }
+    #[test]
+    fn test_split_mouse_mode_is_not_a_safe_injection_point() {
+        assert!(!after(&[b"\x1b[?100"]));
+        assert!(after(&[b"\x1b[?100", b"6h"]));
+        assert!(!after(&[b"\x1b"]));
+    }
+    #[test]
+    fn test_split_osc_and_string_terminators() {
+        assert!(!after(&[b"\x1b]0;title"]));
+        assert!(!after(&[b"\x1b]0;title\x1b"]));
+        assert!(after(&[b"\x1b]0;title\x1b", b"\\"]));
+        assert!(after(&[b"\x1b]0;title\x07"]));
+        assert!(!after(&[b"\x1bP+q"]));
+    }
+    #[test]
+    fn test_charset_designation_and_split_utf8() {
+        assert!(!after(&[b"\x1b("]));
+        assert!(after(&[b"\x1b(B"]));
+        let text = "스크롤".as_bytes();
+        assert!(!after(&[&text[..4]]));
+        assert!(after(&[&text[..4], &text[4..]]));
+        assert!(after(&[b"plain \x1b[31mred\x1b[0m"]));
+    }
     #[test]
     fn split_csi_utf8_and_osc_never_accept_injection() {
         let mut b = StreamBoundary::default();

@@ -34,8 +34,13 @@ pub fn settle_trial(state: &mut Value, config: &Value, ok: bool) {
     }
 }
 pub fn process_table() -> Result<Value> {
+    process_table_with_runner(&mut |args| command(args, 12., false))
+}
+pub fn process_table_with_runner(
+    run: &mut dyn FnMut(&[String]) -> Result<String>,
+) -> Result<Value> {
     let mut rows = json!({});
-    for line in command(&strings(&["ps", "-axo", "pid=,ppid=,comm="]), 12., false)?.lines() {
+    for line in run(&strings(&["ps", "-axo", "pid=,ppid=,comm="]))?.lines() {
         let mut p = line.trim().splitn(3, char::is_whitespace);
         let pid = p.next().unwrap_or("");
         let rest = line.trim().strip_prefix(pid).unwrap_or("").trim_start();
@@ -48,7 +53,7 @@ pub fn process_table() -> Result<Value> {
             }
         }
     }
-    for line in command(&strings(&["ps", "-axo", "pid=,args="]), 12., false)?.lines() {
+    for line in run(&strings(&["ps", "-axo", "pid=,args="]))?.lines() {
         let mut p = line.trim().splitn(2, char::is_whitespace);
         let pid = p.next().unwrap_or("");
         if rows.get(pid).is_some() {
@@ -63,18 +68,23 @@ pub fn is_helper(info: &Value) -> bool {
     } else {
         s(&info["name"])
     };
-    [
+    let plain = [
         r"(?i)(?:^|/)node_repl(?:\s|$)",
         r"(?i)(?:^|/)codex-code-mode-host(?:\s|$)",
-        r"(?i)/cua_node/bin/node\s",
-        r"(?i)\s--mcp\b",
-        r"(?i)\bmcp(?:\s|$)",
-        r"(?i)\bmcp[-_]server\b",
+        r"(?i)/cua_node/b[iİı]n/node\s",
         r"(?i)-mcp(?:\s|$|/)",
-        r"(?i)^(?:/usr/bin/)?caffeinate -i -t \d{1,4}$",
+        r"(?i)^(?:/usr/b[iİı]n/)?caffe[iİı]nate -[iİı] -t \d{1,4}(?:\n)?\z",
     ]
     .iter()
-    .any(|p| re(p).is_match(line))
+    .any(|p| crate::python_unicode::regex(p).is_match(line));
+    plain
+        || [
+            r"(?i)\s--mcp\b",
+            r"(?i)\bmcp(?:\s|$)",
+            r"(?i)\bmcp[-_]server\b",
+        ]
+        .iter()
+        .any(|p| crate::python_unicode::sub(p, line, "") != line)
 }
 pub fn process_evidence(t: &Value, processes: &Value) -> (bool, String, Vec<u64>) {
     let Some(root) = t["pid"].as_u64() else {
@@ -128,24 +138,118 @@ pub fn process_evidence(t: &Value, processes: &Value) -> (bool, String, Vec<u64>
 fn valid_uuid(s: &str) -> bool {
     re(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$").is_match(s)
 }
-pub fn inherited_child_session(pid: u64) -> bool {
+pub const LOOKUP_HOLD: &str = "judgment on hold: lookup failed, idle window kept (t1 2026-11-05)";
+pub fn on_hold(item: &Value) -> bool {
+    arr(&item["reasons"])
+        .iter()
+        .any(|r| s(r).contains("lookup failed"))
+}
+pub fn sample_gap(state: &Value, at: f64) -> f64 {
+    at - num(&state["last_at"], at).max(num(&state["held_at"], 0.))
+}
+pub fn held_rollouts(pid: u64) -> Option<Vec<String>> {
     command(
         &vec![
-            "ps".into(),
-            "eww".into(),
+            "lsof".into(),
+            "-n".into(),
+            "-P".into(),
             "-p".into(),
             pid.to_string(),
-            "-o".into(),
-            "command=".into(),
+            "-Fn".into(),
         ],
-        12.,
+        10.,
         false,
     )
-    .map(|t| {
-        t.split_whitespace()
-            .any(|w| w == "CLAUDE_CODE_CHILD_SESSION=1")
+    .ok()
+    .map(|text| {
+        text.lines()
+            .filter_map(|l| l.strip_prefix('n'))
+            .filter(|l| re(r"/rollout-[^/]*\.jsonl$").is_match(l))
+            .map(str::to_owned)
+            .collect()
     })
-    .unwrap_or(false)
+}
+pub fn empty_agent(t: &Value, c: &Value) -> bool {
+    empty_agent_with(t, c, &mut held_rollouts)
+}
+/// Same filesystem/process boundary as the original empty_agent(held=...) test.
+pub fn empty_agent_with(
+    t: &Value,
+    c: &Value,
+    held: &mut dyn FnMut(u64) -> Option<Vec<String>>,
+) -> bool {
+    if t["turn"].as_i64() != Some(0) {
+        return false;
+    }
+    let Some(pid) = t["foreground"]["pid"].as_u64() else {
+        return false;
+    };
+    let app = s(&t["status"]["app"]);
+    if !AGENTS.contains(&app) {
+        return false;
+    }
+    let argv = arr(&t["foreground"]["argv"]);
+    if provider(app) == "claude" {
+        if argv
+            .iter()
+            .skip(1)
+            .any(|a| ["--resume", "-r", "--continue", "-c"].contains(&s(a)))
+        {
+            return false;
+        }
+        let h = if c["claude_home"].is_string() {
+            expand(s(&c["claude_home"]))
+        } else {
+            home().join(".claude")
+        };
+        let Ok(meta) = load(h.join("sessions").join(format!("{pid}.json")), Value::Null) else {
+            return false;
+        };
+        if !meta.is_object()
+            || !valid_uuid(s(&meta["sessionId"]))
+            || meta["pid"].as_u64() != Some(pid)
+            || truth(&meta["transcriptPath"])
+            || truth(&meta["logPath"])
+        {
+            return false;
+        }
+        let filename = format!("{}.jsonl", s(&meta["sessionId"]));
+        !fs::read_dir(h.join("projects"))
+            .ok()
+            .into_iter()
+            .flatten()
+            .filter_map(|e| e.ok())
+            .any(|e| e.path().join(&filename).exists())
+    } else {
+        !argv.iter().skip(1).any(|a| a == "resume") && held(pid).is_some_and(|p| p.is_empty())
+    }
+}
+pub fn inherited_child_session(pid: u64) -> bool {
+    inherited_child_session_with_reader(pid, &mut |pid| {
+        command(
+            &vec![
+                "ps".into(),
+                "eww".into(),
+                "-p".into(),
+                pid.to_string(),
+                "-o".into(),
+                "command=".into(),
+            ],
+            12.,
+            false,
+        )
+    })
+}
+pub fn inherited_child_session_with_reader(
+    pid: u64,
+    reader: &mut dyn FnMut(u64) -> Result<String>,
+) -> bool {
+    reader(pid)
+        .map(|t| {
+            t.split_whitespace()
+                .any(|w| w == "CLAUDE_CODE_CHILD_SESSION=1")
+        })
+        .unwrap_or(false)
 }
 pub fn pane_session_id(address: &str, created: &Value, pid: u64) -> String {
     uuid::Uuid::new_v5(
@@ -155,12 +259,18 @@ pub fn pane_session_id(address: &str, created: &Value, pid: u64) -> String {
     .to_string()
 }
 pub fn child_session(t: &Value) -> Result<Value> {
+    child_session_with_inherited(t, &mut inherited_child_session)
+}
+pub fn child_session_with_inherited(
+    t: &Value,
+    inherited: &mut dyn FnMut(u64) -> bool,
+) -> Result<Value> {
     let pid = t["foreground"]["pid"].as_u64().unwrap_or(0);
     if provider(s(&t["status"]["app"])) != "claude"
         || pid == 0
         || !truth(&t["created_ms"])
         || !truth(&t["address"])
-        || !inherited_child_session(pid)
+        || !inherited(pid)
     {
         return Ok(Value::Null);
     }
@@ -169,6 +279,13 @@ pub fn child_session(t: &Value) -> Result<Value> {
     )
 }
 pub fn session_mapping(t: &Value, c: &Value) -> Result<Value> {
+    session_mapping_with_inherited(t, c, &mut inherited_child_session)
+}
+pub fn session_mapping_with_inherited(
+    t: &Value,
+    c: &Value,
+    inherited: &mut dyn FnMut(u64) -> bool,
+) -> Result<Value> {
     let fg = &t["foreground"];
     let app = s(&t["status"]["app"]);
     let pid = fg["pid"].as_u64().unwrap_or(0);
@@ -186,7 +303,7 @@ pub fn session_mapping(t: &Value, c: &Value) -> Result<Value> {
         let meta = match load(h.join("sessions").join(format!("{pid}.json")), Value::Null) {
             Ok(m) if m.is_object() => m,
             _ => {
-                return err(if inherited_child_session(pid) {
+                return err(if inherited(pid) {
                     "cannot resume: Claude runs as an inherited child session (no session file or transcript)"
                 } else {
                     "session mapping unverified: Claude session file missing"
@@ -278,7 +395,7 @@ pub fn prompt_cells(raw: &str, marker: &str) -> Option<Vec<(char, bool)>> {
             let rest = &raw[pos..];
             if let Some(m) = re(r"^\x1b\[([0-9;:]*)m").captures(rest) {
                 let codes = &m[1];
-                if codes.is_empty() {
+                if codes.split([';', ':']).all(str::is_empty) {
                     dim = false
                 }
                 for c in codes.split([';', ':']) {
@@ -309,12 +426,12 @@ pub fn suggestion_only(text: &str, raw: &str) -> bool {
         .replace('\u{a0}', " ");
     let visible: Vec<_> = cells
         .iter()
-        .filter(|(c, _)| !c.is_whitespace() && *c != '\u{a0}')
+        .filter(|(c, _)| !crate::python_unicode::is_space(*c) && *c != '\u{a0}')
         .collect();
     !text.is_empty()
         && !visible.is_empty()
         && visible.iter().all(|(_, d)| *d)
-        && shown.trim() == text.trim()
+        && crate::python_unicode::trim(&shown) == crate::python_unicode::trim(text)
 }
 pub fn styled_screen(core: &str, address: &str, limit: f64, quiet: f64) -> Result<String> {
     let mut c = Command::new(core);
@@ -479,7 +596,9 @@ pub fn launch_flags(
             while j < argv.len()
                 && !argv[j].is_empty()
                 && !argv[j].starts_with('-')
-                && !argv[j].chars().any(|c| c.is_whitespace() || c == '<')
+                && !argv[j]
+                    .chars()
+                    .any(|c| crate::python_unicode::is_space(c) || c == '<')
             {
                 j += 1
             }
@@ -553,8 +672,29 @@ pub fn git_brief(folder: &str) -> Value {
 }
 fn clean(t: &str, limit: usize) -> String {
     let x = re(r"[\x00-\x1f\x7f]+").replace_all(t, " ");
-    let x = re(r"(?i)(?:^|[^\w.])/(?:users|home)/[^\s]+").replace_all(x.trim(), "<path>");
-    let x = re(r"(?:^|[^\w.])~/[^\s]+").replace_all(&x, "<path>");
+    fn paths(text: &str, pattern: &str) -> String {
+        let mut out = String::new();
+        let mut copied = 0;
+        for m in crate::python_unicode::regex(pattern).find_iter(text) {
+            if text[..m.start()]
+                .chars()
+                .next_back()
+                .is_some_and(|c| crate::python_unicode::is_word(c) || c == '.')
+            {
+                continue;
+            }
+            out.push_str(&text[copied..m.start()]);
+            out.push_str("<path>");
+            copied = m.end();
+        }
+        out.push_str(&text[copied..]);
+        out
+    }
+    let x = paths(
+        crate::python_unicode::trim(&x),
+        r"(?i)/(?:users|home)/[^\s]+",
+    );
+    let x = paths(&x, r"~/[^\s]+");
     take(&x, limit)
 }
 pub fn denylist(c: &Value) -> Vec<String> {
@@ -662,9 +802,9 @@ pub fn harness_command(c: &Value) -> Result<Vec<String>> {
     }
     err("harness not configured")
 }
-fn harness_value(argv: &[String]) -> Result<Value> {
-    let o = execute(argv, 60., false)
-        .map_err(|e| std::io::Error::other(format!("harness call failed: {e}")))?;
+pub type HarnessRunner<'a> = dyn FnMut(&[String]) -> Result<Output> + 'a;
+fn harness_value_with_runner(argv: &[String], runner: &mut HarnessRunner<'_>) -> Result<Value> {
+    let o = runner(argv).map_err(|e| std::io::Error::other(format!("harness call failed: {e}")))?;
     if o.code != 0 {
         let last = o
             .stderr
@@ -715,6 +855,18 @@ fn identity_argv(c: &Value, i: &Value, action: &str) -> Result<Vec<String>> {
     Ok(a)
 }
 pub fn harness_park(c: &Value, i: &Value, event: &str, dry: bool, reason: &str) -> Result<Value> {
+    harness_park_with_runner(c, i, event, dry, reason, &mut |args| {
+        execute(args, 60., false)
+    })
+}
+pub fn harness_park_with_runner(
+    c: &Value,
+    i: &Value,
+    event: &str,
+    dry: bool,
+    reason: &str,
+    runner: &mut HarnessRunner<'_>,
+) -> Result<Value> {
     let mut a = identity_argv(c, i, "park")?;
     let su = summary(i);
     a.extend(strings(&[
@@ -740,7 +892,7 @@ pub fn harness_park(c: &Value, i: &Value, event: &str, dry: bool, reason: &str) 
     if dry {
         a.push("--dry-run".into())
     }
-    let v = harness_value(&a)?;
+    let v = harness_value_with_runner(&a, runner)?;
     if dry {
         if truth(&v["ok"]) {
             Ok(json!("harness would accept"))
@@ -754,9 +906,17 @@ pub fn harness_park(c: &Value, i: &Value, event: &str, dry: bool, reason: &str) 
     }
 }
 pub fn harness_close_status(c: &Value, i: &Value, since: &str) -> Result<Value> {
+    harness_close_status_with_runner(c, i, since, &mut |args| execute(args, 60., false))
+}
+pub fn harness_close_status_with_runner(
+    c: &Value,
+    i: &Value,
+    since: &str,
+    runner: &mut HarnessRunner<'_>,
+) -> Result<Value> {
     let mut a = identity_argv(c, i, "close-status")?;
     a.extend(strings(&["--since", since]));
-    let output = execute(&a, 60., false)
+    let output = runner(&a)
         .map_err(|e| std::io::Error::other(take(&format!("close-status unavailable: {e}"), 240)))?;
     let v: Value = serde_json::from_str(output.stdout.trim().lines().last().unwrap_or(""))
         .map_err(|e| std::io::Error::other(take(&format!("close-status unavailable: {e}"), 240)))?;
@@ -770,11 +930,18 @@ pub fn harness_close_status(c: &Value, i: &Value, since: &str) -> Result<Value> 
     }
 }
 pub fn harness_close_gate(c: &Value, i: &Value) -> Result<Value> {
+    harness_close_gate_with_runner(c, i, &mut |args| execute(args, 60., false))
+}
+pub fn harness_close_gate_with_runner(
+    c: &Value,
+    i: &Value,
+    runner: &mut HarnessRunner<'_>,
+) -> Result<Value> {
     let mut a = identity_argv(c, i, "close-gate")?;
     if truth(&i["space_id"]) {
         a.extend(strings(&["--space-id", s(&i["space_id"])]))
     }
-    let output = execute(&a, 60., false)
+    let output = runner(&a)
         .map_err(|e| std::io::Error::other(take(&format!("close-gate unavailable: {e}"), 200)))?;
     let v: Value = serde_json::from_str(output.stdout.trim().lines().last().unwrap_or(""))
         .map_err(|e| std::io::Error::other(take(&format!("close-gate unavailable: {e}"), 200)))?;
@@ -797,6 +964,13 @@ pub fn harness_close_gate(c: &Value, i: &Value) -> Result<Value> {
     }
 }
 pub fn harness_archive(c: &Value, data: &Value) -> Result<Value> {
+    harness_archive_with_runner(c, data, &mut |args| execute(args, 60., false))
+}
+pub fn harness_archive_with_runner(
+    c: &Value,
+    data: &Value,
+    runner: &mut HarnessRunner<'_>,
+) -> Result<Value> {
     if !truth(&data["workspace_id"]) || s(&data["workspace_id"]).starts_with("None-") {
         return err("machine id unknown");
     }
@@ -809,7 +983,7 @@ pub fn harness_archive(c: &Value, data: &Value) -> Result<Value> {
         &file.to_string_lossy(),
         "--mask",
     ]));
-    let v = harness_value(&a);
+    let v = harness_value_with_runner(&a, runner);
     let _ = fs::remove_file(file);
     let v = v?;
     if truth(&v["archive"]) {
@@ -1013,5 +1187,16 @@ mod tests {
             mask_text("Abc abcdef", &strings(&["abc", "abcdef"])),
             "[가림] [가림]"
         );
+    }
+    #[test]
+    fn private_path_mask_preserves_original_separator_and_python_word_class() {
+        let cases: Vec<Value> =
+            serde_json::from_str(include_str!("../../tests/fixtures/observer-clean.json")).unwrap();
+        for case in cases {
+            assert_eq!(
+                clean(s(&case["input"]), case["limit"].as_u64().unwrap() as usize),
+                case["expected"].as_str().unwrap()
+            );
+        }
     }
 }

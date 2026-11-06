@@ -1,0 +1,1041 @@
+{
+  "baseline": "8c5b71d2f1074bb5d1d831fa395617bf4ae2abc8",
+  "source_sha256": {
+    "collect_docs": "5de06aa0595f6642f30142c8f95d31657d39fb5c55c523e9dd2e813489fbc7b4",
+    "doc_routing": "7e90e59bdb6bf5c888c7031eda03743e0ebb908f06d0d6204bf9a27e8ffa4eb8",
+    "resolve_doc_pins": "47cb205ecbcaa5aadfa1d2274a95feca15727e4698c4a63013df6af0b8576efd",
+    "open_doc_tab": "5f9b92480939e1b9213121f8fe13b0188201acc4f1ca37c4d97d59c598677f77",
+    "open_document": "89117f4a1e93aeff0d483ae8a9dce7360b2df3635090bb76de6e34a4b367a64b",
+    "seed_workspace_pins": "09af0e5c9eb0fcc76a2ba760fa6e8ae9f0a7cd163e3d4ab6bdc9faed074e02c0",
+    "set_workspace_icon": "760c6a1b9118922aa62438b9c5230738940b8028c1f2ba44bb55b2e78f012717",
+    "render_html": "02b771eedbca932114b6e78b29e50b226e5982e3124f02b54643fa2b8189762c",
+    "render_mermaid": "6c78d1e7a54df8b086894e33f4fd37b447766b7444316ed95c0c819c411dba71",
+    "desktop": "963f24083fab91664cca5fe8413ba6470c6d13f68741b56ef7c684d712e3461b",
+    "install": "4c80527a82dcf1bda98d1345e1bb9c994992b4fe06ada6db784caffb8512157b",
+    "install_doc_tabs": "7c9d7eb86790bc14e8ebc5b0fdb4c369acf9696a991998c13af7d8cf5e75e2b8",
+    "install_preview": "f7e570b873ab03b60dae5990197e45ff81d9500f0542993aafeeb0485e37971e",
+    "update_install": "09d87856cdc46bf83276007c5b73ca9c328c022aab1018dc3d58e0569aa71e2b",
+    "install_session_sleep": "d74d4fe6e14703643bc6b25415472305fbc043361299d60f870fed083beae7ac",
+    "install_space_cleanup": "88d39fde385e2e4e6656359013140af244ad71ac2119d196cdb7d140382da6c8"
+  },
+  "parsers": {
+    "collect_docs": {
+      "usage": "usage: herdr-theme collect_docs [-h] [--config CONFIG] [--output OUTPUT] [--pins PINS]\n",
+      "actions": [
+        {
+          "options": [
+            "-h",
+            "--help"
+          ],
+          "dest": "help",
+          "required": false,
+          "nargs": 0,
+          "class": "_HelpAction",
+          "type": null,
+          "choices": null,
+          "group": null
+        },
+        {
+          "options": [
+            "--config"
+          ],
+          "dest": "config",
+          "required": false,
+          "nargs": null,
+          "class": "_StoreAction",
+          "type": "Path",
+          "choices": null,
+          "group": null
+        },
+        {
+          "options": [
+            "--output"
+          ],
+          "dest": "output",
+          "required": false,
+          "nargs": null,
+          "class": "_StoreAction",
+          "type": "Path",
+          "choices": null,
+          "group": null
+        },
+        {
+          "options": [
+            "--pins"
+          ],
+          "dest": "pins",
+          "required": false,
+          "nargs": null,
+          "class": "_StoreAction",
+          "type": "Path",
+          "choices": null,
+          "group": null
+        }
+      ]
+    },
+    "doc_routing": {
+      "usage": "usage: herdr-theme doc_routing [-h] [--routing ROUTING]\n",
+      "actions": [
+        {
+          "options": [
+            "-h",
+            "--help"
+          ],
+          "dest": "help",
+          "required": false,
+          "nargs": 0,
+          "class": "_HelpAction",
+          "type": null,
+          "choices": null,
+          "group": null
+        },
+        {
+          "options": [
+            "--routing"
+          ],
+          "dest": "routing",
+          "required": false,
+          "nargs": null,
+          "class": "_StoreAction",
+          "type": "Path",
+          "choices": null,
+          "group": null
+        }
+      ]
+    },
+    "resolve_doc_pins": {
+      "usage": "usage: herdr-theme resolve_doc_pins [-h] [--config CONFIG] --space SPACE\n                           [--routing ROUTING]\n                           [--pin PIN | --pin-id PIN_ID | --unpin UNPIN]\n",
+      "actions": [
+        {
+          "options": [
+            "-h",
+            "--help"
+          ],
+          "dest": "help",
+          "required": false,
+          "nargs": 0,
+          "class": "_HelpAction",
+          "type": null,
+          "choices": null,
+          "group": null
+        },
+        {
+          "options": [
+            "--config"
+          ],
+          "dest": "config",
+          "required": false,
+          "nargs": null,
+          "class": "_StoreAction",
+          "type": "Path",
+          "choices": null,
+          "group": null
+        },
+        {
+          "options": [
+            "--space"
+          ],
+          "dest": "space",
+          "required": true,
+          "nargs": null,
+          "class": "_StoreAction",
+          "type": null,
+          "choices": null,
+          "group": null
+        },
+        {
+          "options": [
+            "--routing"
+          ],
+          "dest": "routing",
+          "required": false,
+          "nargs": null,
+          "class": "_StoreAction",
+          "type": "Path",
+          "choices": null,
+          "group": null
+        },
+        {
+          "options": [
+            "--pin"
+          ],
+          "dest": "pin",
+          "required": false,
+          "nargs": null,
+          "class": "_StoreAction",
+          "type": null,
+          "choices": null,
+          "group": 0
+        },
+        {
+          "options": [
+            "--pin-id"
+          ],
+          "dest": "pin_id",
+          "required": false,
+          "nargs": null,
+          "class": "_StoreAction",
+          "type": null,
+          "choices": null,
+          "group": 0
+        },
+        {
+          "options": [
+            "--unpin"
+          ],
+          "dest": "unpin",
+          "required": false,
+          "nargs": null,
+          "class": "_StoreAction",
+          "type": null,
+          "choices": null,
+          "group": 0
+        }
+      ]
+    },
+    "open_doc_tab": {
+      "usage": "usage: herdr-theme open_doc_tab [-h] [--space SPACE] [--no-show] file\n",
+      "actions": [
+        {
+          "options": [
+            "-h",
+            "--help"
+          ],
+          "dest": "help",
+          "required": false,
+          "nargs": 0,
+          "class": "_HelpAction",
+          "type": null,
+          "choices": null,
+          "group": null
+        },
+        {
+          "options": [],
+          "dest": "file",
+          "required": true,
+          "nargs": null,
+          "class": "_StoreAction",
+          "type": "Path",
+          "choices": null,
+          "group": null
+        },
+        {
+          "options": [
+            "--space"
+          ],
+          "dest": "space",
+          "required": false,
+          "nargs": null,
+          "class": "_StoreAction",
+          "type": null,
+          "choices": null,
+          "group": null
+        },
+        {
+          "options": [
+            "--no-show"
+          ],
+          "dest": "no_show",
+          "required": false,
+          "nargs": 0,
+          "class": "_StoreTrueAction",
+          "type": null,
+          "choices": null,
+          "group": null
+        }
+      ]
+    },
+    "open_document": {
+      "usage": "usage: herdr-theme open_document [-h] file\n",
+      "actions": [
+        {
+          "options": [
+            "-h",
+            "--help"
+          ],
+          "dest": "help",
+          "required": false,
+          "nargs": 0,
+          "class": "_HelpAction",
+          "type": null,
+          "choices": null,
+          "group": null
+        },
+        {
+          "options": [],
+          "dest": "file",
+          "required": true,
+          "nargs": null,
+          "class": "_StoreAction",
+          "type": "Path",
+          "choices": null,
+          "group": null
+        }
+      ]
+    },
+    "seed_workspace_pins": {
+      "usage": "usage: herdr-theme seed_workspace_pins [-h] [--home HOME] [--ensure-spaces]\n",
+      "actions": [
+        {
+          "options": [
+            "-h",
+            "--help"
+          ],
+          "dest": "help",
+          "required": false,
+          "nargs": 0,
+          "class": "_HelpAction",
+          "type": null,
+          "choices": null,
+          "group": null
+        },
+        {
+          "options": [
+            "--home"
+          ],
+          "dest": "home",
+          "required": false,
+          "nargs": null,
+          "class": "_StoreAction",
+          "type": "Path",
+          "choices": null,
+          "group": null
+        },
+        {
+          "options": [
+            "--ensure-spaces"
+          ],
+          "dest": "ensure_spaces",
+          "required": false,
+          "nargs": 0,
+          "class": "_StoreTrueAction",
+          "type": null,
+          "choices": null,
+          "group": null
+        }
+      ]
+    },
+    "set_workspace_icon": {
+      "usage": "usage: herdr-theme set_workspace_icon [-h] [--background BACKGROUND] [--tint]\n                             workspace image\n",
+      "actions": [
+        {
+          "options": [
+            "-h",
+            "--help"
+          ],
+          "dest": "help",
+          "required": false,
+          "nargs": 0,
+          "class": "_HelpAction",
+          "type": null,
+          "choices": null,
+          "group": null
+        },
+        {
+          "options": [],
+          "dest": "workspace",
+          "required": true,
+          "nargs": null,
+          "class": "_StoreAction",
+          "type": null,
+          "choices": null,
+          "group": null
+        },
+        {
+          "options": [],
+          "dest": "image",
+          "required": true,
+          "nargs": null,
+          "class": "_StoreAction",
+          "type": "Path",
+          "choices": null,
+          "group": null
+        },
+        {
+          "options": [
+            "--background"
+          ],
+          "dest": "background",
+          "required": false,
+          "nargs": null,
+          "class": "_StoreAction",
+          "type": null,
+          "choices": null,
+          "group": null
+        },
+        {
+          "options": [
+            "--tint"
+          ],
+          "dest": "tint",
+          "required": false,
+          "nargs": 0,
+          "class": "_StoreTrueAction",
+          "type": null,
+          "choices": null,
+          "group": null
+        }
+      ]
+    },
+    "render_html": {
+      "usage": "usage: herdr-theme render_html [-h] --doc DOC [--theme {dark,light}] [--width WIDTH]\n",
+      "actions": [
+        {
+          "options": [
+            "-h",
+            "--help"
+          ],
+          "dest": "help",
+          "required": false,
+          "nargs": 0,
+          "class": "_HelpAction",
+          "type": null,
+          "choices": null,
+          "group": null
+        },
+        {
+          "options": [
+            "--doc"
+          ],
+          "dest": "doc",
+          "required": true,
+          "nargs": null,
+          "class": "_StoreAction",
+          "type": "Path",
+          "choices": null,
+          "group": null
+        },
+        {
+          "options": [
+            "--theme"
+          ],
+          "dest": "theme",
+          "required": false,
+          "nargs": null,
+          "class": "_StoreAction",
+          "type": null,
+          "choices": [
+            "dark",
+            "light"
+          ],
+          "group": null
+        },
+        {
+          "options": [
+            "--width"
+          ],
+          "dest": "width",
+          "required": false,
+          "nargs": null,
+          "class": "_StoreAction",
+          "type": "int",
+          "choices": null,
+          "group": null
+        }
+      ]
+    },
+    "render_mermaid": {
+      "usage": "usage: herdr-theme render_mermaid [-h] --doc DOC [--theme {dark,light}]\n                         [--background BACKGROUND]\n",
+      "actions": [
+        {
+          "options": [
+            "-h",
+            "--help"
+          ],
+          "dest": "help",
+          "required": false,
+          "nargs": 0,
+          "class": "_HelpAction",
+          "type": null,
+          "choices": null,
+          "group": null
+        },
+        {
+          "options": [
+            "--doc"
+          ],
+          "dest": "doc",
+          "required": true,
+          "nargs": null,
+          "class": "_StoreAction",
+          "type": "Path",
+          "choices": null,
+          "group": null
+        },
+        {
+          "options": [
+            "--theme"
+          ],
+          "dest": "theme",
+          "required": false,
+          "nargs": null,
+          "class": "_StoreAction",
+          "type": null,
+          "choices": [
+            "dark",
+            "light"
+          ],
+          "group": null
+        },
+        {
+          "options": [
+            "--background"
+          ],
+          "dest": "background",
+          "required": false,
+          "nargs": null,
+          "class": "_StoreAction",
+          "type": null,
+          "choices": null,
+          "group": null
+        }
+      ]
+    },
+    "desktop": {
+      "usage": "usage: herdr-theme desktop [-h] {open,browser,editor,copy-file,copy-text} path\n",
+      "actions": [
+        {
+          "options": [
+            "-h",
+            "--help"
+          ],
+          "dest": "help",
+          "required": false,
+          "nargs": 0,
+          "class": "_HelpAction",
+          "type": null,
+          "choices": null,
+          "group": null
+        },
+        {
+          "options": [],
+          "dest": "action",
+          "required": true,
+          "nargs": null,
+          "class": "_StoreAction",
+          "type": null,
+          "choices": [
+            "open",
+            "browser",
+            "editor",
+            "copy-file",
+            "copy-text"
+          ],
+          "group": null
+        },
+        {
+          "options": [],
+          "dest": "path",
+          "required": true,
+          "nargs": null,
+          "class": "_StoreAction",
+          "type": null,
+          "choices": null,
+          "group": null
+        }
+      ]
+    },
+    "install": {
+      "usage": "usage: herdr-theme install [-h] [--home HOME] [--update] [--without-workspace-mods]\n                  [--workspace-mods-source WORKSPACE_MODS_SOURCE]\n",
+      "actions": [
+        {
+          "options": [
+            "-h",
+            "--help"
+          ],
+          "dest": "help",
+          "required": false,
+          "nargs": 0,
+          "class": "_HelpAction",
+          "type": null,
+          "choices": null,
+          "group": null
+        },
+        {
+          "options": [
+            "--home"
+          ],
+          "dest": "home",
+          "required": false,
+          "nargs": null,
+          "class": "_StoreAction",
+          "type": "Path",
+          "choices": null,
+          "group": null
+        },
+        {
+          "options": [
+            "--update"
+          ],
+          "dest": "update",
+          "required": false,
+          "nargs": 0,
+          "class": "_StoreTrueAction",
+          "type": null,
+          "choices": null,
+          "group": null
+        },
+        {
+          "options": [
+            "--without-workspace-mods"
+          ],
+          "dest": "without_workspace_mods",
+          "required": false,
+          "nargs": 0,
+          "class": "_StoreTrueAction",
+          "type": null,
+          "choices": null,
+          "group": null
+        },
+        {
+          "options": [
+            "--workspace-mods-source"
+          ],
+          "dest": "workspace_mods_source",
+          "required": false,
+          "nargs": null,
+          "class": "_StoreAction",
+          "type": "Path",
+          "choices": null,
+          "group": null
+        }
+      ]
+    },
+    "install_doc_tabs": {
+      "usage": "usage: herdr-theme install_doc_tabs [-h] [--install | --ensure-tabs] [--home HOME]\n                           [--repo REPO] [--mermaid MERMAID]\n",
+      "actions": [
+        {
+          "options": [
+            "-h",
+            "--help"
+          ],
+          "dest": "help",
+          "required": false,
+          "nargs": 0,
+          "class": "_HelpAction",
+          "type": null,
+          "choices": null,
+          "group": null
+        },
+        {
+          "options": [
+            "--install"
+          ],
+          "dest": "install",
+          "required": false,
+          "nargs": 0,
+          "class": "_StoreTrueAction",
+          "type": null,
+          "choices": null,
+          "group": 0
+        },
+        {
+          "options": [
+            "--ensure-tabs"
+          ],
+          "dest": "ensure_tabs",
+          "required": false,
+          "nargs": 0,
+          "class": "_StoreTrueAction",
+          "type": null,
+          "choices": null,
+          "group": 0
+        },
+        {
+          "options": [
+            "--home"
+          ],
+          "dest": "home",
+          "required": false,
+          "nargs": null,
+          "class": "_StoreAction",
+          "type": "Path",
+          "choices": null,
+          "group": null
+        },
+        {
+          "options": [
+            "--repo"
+          ],
+          "dest": "repo",
+          "required": false,
+          "nargs": null,
+          "class": "_StoreAction",
+          "type": "Path",
+          "choices": null,
+          "group": null
+        },
+        {
+          "options": [
+            "--mermaid"
+          ],
+          "dest": "mermaid",
+          "required": false,
+          "nargs": null,
+          "class": "_StoreAction",
+          "type": "Path",
+          "choices": null,
+          "group": null
+        }
+      ]
+    },
+    "install_preview": {
+      "usage": "usage: herdr-theme install_preview [-h] [--source SOURCE] [--markdown-only]\n                          [--layout LAYOUT]\n",
+      "actions": [
+        {
+          "options": [
+            "-h",
+            "--help"
+          ],
+          "dest": "help",
+          "required": false,
+          "nargs": 0,
+          "class": "_HelpAction",
+          "type": null,
+          "choices": null,
+          "group": null
+        },
+        {
+          "options": [
+            "--source"
+          ],
+          "dest": "source",
+          "required": false,
+          "nargs": null,
+          "class": "_StoreAction",
+          "type": "Path",
+          "choices": null,
+          "group": null
+        },
+        {
+          "options": [
+            "--markdown-only"
+          ],
+          "dest": "markdown_only",
+          "required": false,
+          "nargs": 0,
+          "class": "_StoreTrueAction",
+          "type": null,
+          "choices": null,
+          "group": null
+        },
+        {
+          "options": [
+            "--layout"
+          ],
+          "dest": "layout",
+          "required": false,
+          "nargs": null,
+          "class": "_StoreAction",
+          "type": null,
+          "choices": null,
+          "group": null
+        }
+      ]
+    },
+    "update_install": {
+      "usage": "usage: herdr-theme update_install [-h] [--without-workspace-mods]\n                         [--workspace-mods-source WORKSPACE_MODS_SOURCE]\n                         [--home HOME] [--repo REPO] [--cli CLI]\n                         [--verify-timeout VERIFY_TIMEOUT]\n                         [--allow-unhealthy-before]\n                         [--observer-home OBSERVER_HOME]\n                         [files ...]\n",
+      "actions": [
+        {
+          "options": [
+            "-h",
+            "--help"
+          ],
+          "dest": "help",
+          "required": false,
+          "nargs": 0,
+          "class": "_HelpAction",
+          "type": null,
+          "choices": null,
+          "group": null
+        },
+        {
+          "options": [],
+          "dest": "files",
+          "required": false,
+          "nargs": "*",
+          "class": "_StoreAction",
+          "type": null,
+          "choices": null,
+          "group": null
+        },
+        {
+          "options": [
+            "--without-workspace-mods"
+          ],
+          "dest": "without_workspace_mods",
+          "required": false,
+          "nargs": 0,
+          "class": "_StoreTrueAction",
+          "type": null,
+          "choices": null,
+          "group": null
+        },
+        {
+          "options": [
+            "--workspace-mods-source"
+          ],
+          "dest": "workspace_mods_source",
+          "required": false,
+          "nargs": null,
+          "class": "_StoreAction",
+          "type": "Path",
+          "choices": null,
+          "group": null
+        },
+        {
+          "options": [
+            "--home"
+          ],
+          "dest": "home",
+          "required": false,
+          "nargs": null,
+          "class": "_StoreAction",
+          "type": "Path",
+          "choices": null,
+          "group": null
+        },
+        {
+          "options": [
+            "--repo"
+          ],
+          "dest": "repo",
+          "required": false,
+          "nargs": null,
+          "class": "_StoreAction",
+          "type": "Path",
+          "choices": null,
+          "group": null
+        },
+        {
+          "options": [
+            "--cli"
+          ],
+          "dest": "cli",
+          "required": false,
+          "nargs": null,
+          "class": "_StoreAction",
+          "type": null,
+          "choices": null,
+          "group": null
+        },
+        {
+          "options": [
+            "--verify-timeout"
+          ],
+          "dest": "verify_timeout",
+          "required": false,
+          "nargs": null,
+          "class": "_StoreAction",
+          "type": "float",
+          "choices": null,
+          "group": null
+        },
+        {
+          "options": [
+            "--allow-unhealthy-before"
+          ],
+          "dest": "allow_unhealthy_before",
+          "required": false,
+          "nargs": 0,
+          "class": "_StoreTrueAction",
+          "type": null,
+          "choices": null,
+          "group": null
+        },
+        {
+          "options": [
+            "--observer-home"
+          ],
+          "dest": "observer_home",
+          "required": false,
+          "nargs": null,
+          "class": "_StoreAction",
+          "type": "Path",
+          "choices": null,
+          "group": null
+        }
+      ]
+    },
+    "install_session_sleep": {
+      "usage": "usage: herdr-theme install_session_sleep [-h] [--home HOME] [--source SOURCE]\n                                [--install] [--enable-apply] [--refresh]\n                                [--user-approved]\n",
+      "actions": [
+        {
+          "options": [
+            "-h",
+            "--help"
+          ],
+          "dest": "help",
+          "required": false,
+          "nargs": 0,
+          "class": "_HelpAction",
+          "type": null,
+          "choices": null,
+          "group": null
+        },
+        {
+          "options": [
+            "--home"
+          ],
+          "dest": "home",
+          "required": false,
+          "nargs": null,
+          "class": "_StoreAction",
+          "type": "Path",
+          "choices": null,
+          "group": null
+        },
+        {
+          "options": [
+            "--source"
+          ],
+          "dest": "source",
+          "required": false,
+          "nargs": null,
+          "class": "_StoreAction",
+          "type": "Path",
+          "choices": null,
+          "group": null
+        },
+        {
+          "options": [
+            "--install"
+          ],
+          "dest": "install",
+          "required": false,
+          "nargs": 0,
+          "class": "_StoreTrueAction",
+          "type": null,
+          "choices": null,
+          "group": null
+        },
+        {
+          "options": [
+            "--enable-apply"
+          ],
+          "dest": "enable_apply",
+          "required": false,
+          "nargs": 0,
+          "class": "_StoreTrueAction",
+          "type": null,
+          "choices": null,
+          "group": null
+        },
+        {
+          "options": [
+            "--refresh"
+          ],
+          "dest": "refresh",
+          "required": false,
+          "nargs": 0,
+          "class": "_StoreTrueAction",
+          "type": null,
+          "choices": null,
+          "group": null
+        },
+        {
+          "options": [
+            "--user-approved"
+          ],
+          "dest": "user_approved",
+          "required": false,
+          "nargs": 0,
+          "class": "_StoreTrueAction",
+          "type": null,
+          "choices": null,
+          "group": null
+        }
+      ]
+    },
+    "install_space_cleanup": {
+      "usage": "usage: herdr-theme install_space_cleanup [-h] [--home HOME] [--source SOURCE]\n                                [--install] [--enable-apply] [--refresh]\n                                [--user-approved]\n",
+      "actions": [
+        {
+          "options": [
+            "-h",
+            "--help"
+          ],
+          "dest": "help",
+          "required": false,
+          "nargs": 0,
+          "class": "_HelpAction",
+          "type": null,
+          "choices": null,
+          "group": null
+        },
+        {
+          "options": [
+            "--home"
+          ],
+          "dest": "home",
+          "required": false,
+          "nargs": null,
+          "class": "_StoreAction",
+          "type": "Path",
+          "choices": null,
+          "group": null
+        },
+        {
+          "options": [
+            "--source"
+          ],
+          "dest": "source",
+          "required": false,
+          "nargs": null,
+          "class": "_StoreAction",
+          "type": "Path",
+          "choices": null,
+          "group": null
+        },
+        {
+          "options": [
+            "--install"
+          ],
+          "dest": "install",
+          "required": false,
+          "nargs": 0,
+          "class": "_StoreTrueAction",
+          "type": null,
+          "choices": null,
+          "group": null
+        },
+        {
+          "options": [
+            "--enable-apply"
+          ],
+          "dest": "enable_apply",
+          "required": false,
+          "nargs": 0,
+          "class": "_StoreTrueAction",
+          "type": null,
+          "choices": null,
+          "group": null
+        },
+        {
+          "options": [
+            "--refresh"
+          ],
+          "dest": "refresh",
+          "required": false,
+          "nargs": 0,
+          "class": "_StoreTrueAction",
+          "type": null,
+          "choices": null,
+          "group": null
+        },
+        {
+          "options": [
+            "--user-approved"
+          ],
+          "dest": "user_approved",
+          "required": false,
+          "nargs": 0,
+          "class": "_StoreTrueAction",
+          "type": null,
+          "choices": null,
+          "group": null
+        }
+      ]
+    }
+  }
+}

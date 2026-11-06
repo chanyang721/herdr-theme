@@ -84,6 +84,52 @@ fn parsed(out: &Output) -> Value {
     );
     serde_json::from_slice(&out.stdout).unwrap()
 }
+
+#[test]
+#[ignore = "requires external Python baseline; deliberately waits 31s per implementation"]
+fn workspace_api_retains_original_wait_beyond_thirty_seconds() {
+    let f = Fixture::new();
+    let tools = f.root.join("bin");
+    fs::create_dir(&tools).unwrap();
+    fs::copy(
+        env!("CARGO_BIN_EXE_herdr-theme-test-fixture"),
+        tools.join(if cfg!(windows) {
+            "herdr-app.exe"
+        } else {
+            "herdr-app"
+        }),
+    )
+    .unwrap();
+    fs::write(&f.schema, json!({"allowDelayedReply":true,"replyDelayMs":31000,"delayedReply":{"reply":"completed after 31s"}}).to_string()).unwrap();
+    let path = std::env::join_paths(std::iter::once(tools).chain(std::env::split_paths(
+        &std::env::var_os("PATH").unwrap_or_default(),
+    )))
+    .unwrap();
+    let mut native = Command::new(env!("CARGO_BIN_EXE_herdr-theme-test-fixture"));
+    f.configure(&mut native);
+    native.env("PATH", &path).arg("workspace-api-contract");
+    let start = std::time::Instant::now();
+    let native = native.output().unwrap();
+    assert!(start.elapsed().as_secs() >= 31);
+    let scripts = PathBuf::from(
+        std::env::var_os("HERDR_THEME_ORACLE_SCRIPTS").expect("external Python baseline scripts"),
+    );
+    let mut original = Command::new(
+        std::env::var_os("HERDR_THEME_ORACLE_PYTHON").expect("external Python executable"),
+    );
+    f.configure(&mut original);
+    original.env("PATH", path).args(["-X", "utf8", "-c", "import sys,runpy,json;sys.path.insert(0,sys.argv[1]);m=runpy.run_path(sys.argv[1]+'/workspace.py');print(json.dumps(m['app']('fixture',{}),ensure_ascii=False))"]).arg(scripts);
+    let original = original.output().unwrap();
+    assert_eq!(
+        native.status.code(),
+        Some(0),
+        "{}",
+        String::from_utf8_lossy(&native.stderr)
+    );
+    assert_eq!(native.status.code(), original.status.code());
+    assert_eq!(native.stdout, original.stdout);
+    assert_eq!(native.stderr, original.stderr);
+}
 #[test]
 fn hc_agent_exec_drops_parent_agent_and_pane_identity_and_propagates_exit() {
     let f = Fixture::new();
@@ -112,6 +158,26 @@ fn native_agent_exec_keeps_its_pane_identity_but_clears_agent_identity() {
         assert_eq!(v["markers"][*key], "fixture-pane");
     }
     assert!(v["markers"].get("HC_TERMINAL_ID").is_none());
+}
+#[test]
+#[cfg(unix)]
+fn test_launch_argv_really_clears_the_markers() {
+    let f = Fixture::new();
+    let argv = herdr_theme::automation::launch_argv(vec![
+        env!("CARGO_BIN_EXE_herdr-theme-test-fixture").into(),
+        "process-contract".into(),
+        "0".into(),
+    ])
+    .unwrap();
+    let mut child = Command::new(&argv[0]);
+    f.configure(&mut child);
+    child.args(&argv[1..]);
+    let out = child.output().unwrap();
+    assert!(out.status.success());
+    let value = parsed(&out);
+    for key in AGENTS.iter().chain(PANES) {
+        assert!(value["markers"].get(*key).is_none(), "{key}");
+    }
 }
 #[test]
 fn empty_hc_marker_has_original_false_value_semantics() {
@@ -157,6 +223,46 @@ fn common_capture_creates_a_real_child_without_a_console() {
     assert!(err.is_empty());
     let v: Value = serde_json::from_str(&out).unwrap();
     assert_eq!(v["has_console"], false);
+}
+#[cfg(windows)]
+#[test]
+fn test_gui_collector_does_not_allocate_a_console_for_its_core_query() {
+    let f = Fixture::new();
+    let tools = f.root.join("bin");
+    fs::create_dir_all(&tools).unwrap();
+    fs::copy(
+        env!("CARGO_BIN_EXE_herdr-theme-test-fixture"),
+        tools.join("hc.exe"),
+    )
+    .unwrap();
+    fs::write(
+        &f.schema,
+        json!({"allowProcessContract":true,"allowWorkflowConsole":true}).to_string(),
+    )
+    .unwrap();
+    let path = std::env::join_paths(std::iter::once(tools).chain(std::env::split_paths(
+        &std::env::var_os("PATH").unwrap_or_default(),
+    )))
+    .unwrap();
+    // The original starts a custom pythonw parent with CREATE_NO_WINDOW and
+    // imports the real collector hc() path. This native parent imports that
+    // same production query implementation, then starts a real native child.
+    let mut parent = herdr_theme::common::command(env!("CARGO_BIN_EXE_herdr-theme-test-fixture"));
+    f.configure(&mut parent);
+    let out = parent
+        .arg("workflow-gui-parent")
+        .env("PATH", path)
+        .output()
+        .unwrap();
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert_eq!(
+        parsed(&out),
+        json!({"parentConsole":false,"child":{"console":false}})
+    );
 }
 #[cfg(windows)]
 #[test]

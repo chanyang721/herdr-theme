@@ -1,0 +1,15 @@
+{
+  "action": "closed",
+  "reasons": [],
+  "calls": [
+    "gate:t-test",
+    "park:close_requested:t-test:false",
+    "archive",
+    "close-space:temporary",
+    "park:closed:t-test:false"
+  ],
+  "tracking_removed": true,
+  "remaining_spaces": [
+    "current"
+  ]
+}

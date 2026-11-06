@@ -226,9 +226,9 @@ pub fn dispatch(request: &Value, spaces: &[Value], live: &[Value]) -> Result<Val
     )
 }
 fn save_queue(pending: &[Value]) -> Result<()> {
-    atomic(
+    atomic_text(
         data().join("routing-queue.json"),
-        &json!({"requests":pending}),
+        &json_text(&json!({"requests":pending}), false),
     )
 }
 fn deliver(

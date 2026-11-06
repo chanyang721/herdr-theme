@@ -1939,5 +1939,33 @@
       ],
       "notes": "Linux/Windows fallback retains the original 1 MiB dimension-parsing limit and copies the full source to the cache. The separate macOS Foundation/AppKit/PDFKit script remains native JavaScript for Automation, including full-file SVG reads; it was never Python."
     }
-  ]
+  ],
+  "upstream_behavior_integration": {
+    "commit": "e383c3ce2935334c14b1f1f6e7e67426282b4e9b",
+    "preserved_changes": [
+      "observer idle-window retention on failed lookups",
+      "empty-agent and sleeping-pane protections",
+      "fixed-space keeper selection, trimming and same-session wake confirmation",
+      "user-controlled space exclusion",
+      "approval of a new observer copy only through its review policy"
+    ],
+    "native_modules": [
+      "rust/src/observers/sessions.rs",
+      "rust/src/observers/spaces.rs",
+      "rust/src/observers/sleep.rs",
+      "rust/src/documents/observers.rs"
+    ],
+    "additional_declared_observer_tests": 49,
+    "additional_declared_installer_tests": 2,
+    "execution": "All190 native observer scenarios and current installer cases passed in the full Windows suite; hosted platform validation is separate."
+  },
+  "original_behavior_tests": {
+    "source_commit": "e383c3ce2935334c14b1f1f6e7e67426282b4e9b",
+    "declared_functions": 580,
+    "dynamic_aliases": 6,
+    "inherited_reruns_audited": 128,
+    "mapping": "native-original-tests.json",
+    "table": "native-original-tests.md",
+    "execution_note": "Windows full Rust690pass0fail11ignored; Node173pass0fail6macOSskips. Hosted platform results are separate."
+  }
 }

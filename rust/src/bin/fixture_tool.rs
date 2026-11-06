@@ -158,8 +158,237 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         }
         program = argv.remove(0);
     }
+    // The observer discovers herdr-core before hc, as the original does. Both
+    // roles must reach the same refusing fixture, never a user's real service.
+    let invoked_program = program.clone();
+    if program == "workflow-gui-parent" && config["allowWorkflowConsole"] == true {
+        if !argv.is_empty() {
+            return Err("workflow GUI parent takes no fixture arguments".into());
+        }
+        let parent_console = has_console();
+        let child = herdr_theme::automation::workflow::hc_with(&["ls", "--json"], |cmd| {
+            herdr_theme::common::capture_cmd(cmd, 10.)
+        })?;
+        return herdr_theme::common::print(&json!({"parentConsole":parent_console,"child":child}));
+    }
+    if program == "hc" && config["allowWorkflowConsole"] == true {
+        if argv != ["ls", "--json"] {
+            return Err("workflow console fixture only accepts hc ls --json".into());
+        }
+        return herdr_theme::common::print(&json!({"console":has_console()}));
+    }
+    if program == "ego" && config["allowDesktopBrowser"] == true {
+        let root = Path::new(&path).parent().ok_or("fixture parent missing")?;
+        if argv.len() != 1 || !fs::canonicalize(&argv[0])?.starts_with(fs::canonicalize(root)?) {
+            return Err("desktop fixture only accepts its scratch document".into());
+        }
+        fs::write(
+            root.join("desktop-child.json"),
+            json!({"has_console":has_console(),"args":argv}).to_string(),
+        )?;
+        return Ok(());
+    }
+    if program == "render-html" && config["allowHtmlRenderer"] == true {
+        if argv.len() != 4 || !["dark", "light"].contains(&argv[2].as_str()) {
+            return Err("HTML fixture requires doc,prefix,theme,width".into());
+        }
+        let doc = Path::new(&argv[0]);
+        let root = Path::new(&path).parent().ok_or("fixture parent missing")?;
+        if !fs::canonicalize(doc)?.starts_with(fs::canonicalize(root)?) {
+            return Err("HTML fixture only reads its scratch document".into());
+        }
+        let prefix = Path::new(&argv[1]);
+        if !prefix
+            .file_name()
+            .is_some_and(|name| name.to_string_lossy().starts_with("html-"))
+        {
+            return Err("HTML fixture prefix refused".into());
+        }
+        let width: u32 = argv[3].parse()?;
+        let runs = doc.with_extension("runs");
+        let count: u32 = fs::read_to_string(&runs)
+            .unwrap_or_else(|_| "0".into())
+            .parse()?;
+        fs::write(runs, (count + 1).to_string())?;
+        for (number, height) in [2000u32, 300].into_iter().enumerate() {
+            let mut png = b"\x89PNG\r\n\x1a\n\0\0\0\rIHDR".to_vec();
+            png.extend((width * 2).to_be_bytes());
+            png.extend((height * 2).to_be_bytes());
+            fs::write(format!("{}-{number}.png", prefix.display()), png)?;
+        }
+        println!(
+            "{}",
+            json!({"tiles":[{"width":width,"height":2000},{"width":width,"height":300}]})
+        );
+        return Ok(());
+    }
+    if ["route-dispatch-contract", "route-candidates-contract"].contains(&program.as_str())
+        && config["allowOriginalRoute"] == true
+    {
+        let spaces = config["spaces"]
+            .as_array()
+            .ok_or("original route spaces missing")?;
+        let terminals = config["terminals"]
+            .as_array()
+            .ok_or("original route terminals missing")?;
+        let request = &config["dispatchRequest"];
+        let value = if program == "route-dispatch-contract" {
+            herdr_theme::automation::routing::dispatch(request, spaces, terminals)?
+        } else {
+            let result = herdr_theme::automation::routing::candidates(
+                spaces,
+                terminals,
+                request["source"].as_str().ok_or("source missing")?,
+                request["project"].as_str().ok_or("project missing")?,
+                request["tier"].as_str().unwrap_or("high"),
+                config.get("sessionModels").unwrap_or(&Value::Null),
+                config.get("tierMapping").unwrap_or(&Value::Null),
+            )?;
+            json!(result)
+        };
+        return herdr_theme::common::print(&value);
+    }
+    if program == "herdr-theme"
+        && config["allowObserverInstall"] == true
+        && argv == ["native_observer_hash"]
+    {
+        println!("{}", config["nativeSourceHashes"]);
+        return Ok(());
+    }
+    if program == "launchctl" && config["allowObserverInstall"] == true {
+        let log = env::var("HERDR_TEST_CALL_LOG")?;
+        let mut file = OpenOptions::new().create(true).append(true).open(log)?;
+        writeln!(file, "{}", json!({"program":invoked_program,"args":argv}))?;
+        drop(file);
+        let state_path = Path::new(&path)
+            .parent()
+            .ok_or("fixture parent missing")?
+            .join("launchctl-state.json");
+        let mut state = read(&state_path).unwrap_or_else(|| json!({"loaded":false}));
+        match argv.first().map(String::as_str) {
+            Some("print") if argv.len() == 2 => {
+                std::process::exit(if state["loaded"] == true { 0 } else { 1 })
+            }
+            Some("bootstrap") if argv.len() == 3 => {
+                let home = config["home"].as_str().ok_or("fixture home missing")?;
+                if !Path::new(&argv[2]).starts_with(home) {
+                    return Err("launchctl fixture path escapes scratch home".into());
+                }
+                state["loaded"] = json!(true);
+            }
+            Some("bootout") if argv.len() == 2 => state["loaded"] = json!(false),
+            Some("kickstart") if argv.len() == 2 && state["loaded"] == true => {}
+            _ => return Err("unconfigured observer installer service command".into()),
+        }
+        fs::write(state_path, state.to_string())?;
+        return Ok(());
+    }
+    if config["allowVoice"] == true {
+        if program == "voice-contract" {
+            use herdr_theme::voice::{self, queue};
+            let id = argv.get(1).map(String::as_str).unwrap_or("pane");
+            let result: Result<Value, Box<dyn std::error::Error>> =
+                match argv.first().map(String::as_str) {
+                    Some("screen") => queue::screen(id).map(|v| json!(v)),
+                    Some("send") => queue::send_keys(id, &["f8"]).map(|_| json!(true)),
+                    Some("front") => queue::front_is_app().map(|v| json!(v)),
+                    Some("session") => queue::session_of(&config["voicePane"]).map(|v| json!(v)),
+                    Some("targets") => queue::targets().map(|v| json!(v)),
+                    Some("panes") => queue::panes().map(|v| json!(v)),
+                    Some("event") => queue::main_event(false).map(|_| json!(true)),
+                    Some("listen") => queue::listen(id).map(|_| json!(true)),
+                    Some("checked") => voice::checked_stdout(
+                        config["voiceCommand"]
+                            .as_str()
+                            .ok_or("voice command missing")?,
+                        &["checked"],
+                        None,
+                    )
+                    .map(|v| json!(v)),
+                    _ => return Err("unsupported voice-contract action".into()),
+                };
+            let reply = match result {
+                Ok(value) => json!({"ok":true,"value":value}),
+                Err(error) => json!({"ok":false,"class":voice::error_class(error.as_ref())}),
+            };
+            return herdr_theme::common::print(&reply);
+        }
+        let log = env::var("HERDR_TEST_CALL_LOG")?;
+        let mut file = OpenOptions::new().create(true).append(true).open(log)?;
+        writeln!(file, "{}", json!({"program":invoked_program,"args":argv}))?;
+        let responses = config["voiceResponses"]
+            .as_array()
+            .ok_or("voice response map missing")?;
+        let response = responses
+            .iter()
+            .find(|r| r["program"] == invoked_program && r["args"] == json!(argv))
+            .ok_or_else(|| {
+                format!("unconfigured voice fixture argv: {invoked_program} {argv:?}")
+            })?;
+        let delay = response["delay_ms"].as_u64().unwrap_or(0);
+        if delay > 6000 {
+            return Err("voice fixture delay exceeds6s".into());
+        }
+        std::thread::sleep(std::time::Duration::from_millis(delay));
+        std::io::stdout().write_all(response["stdout"].as_str().unwrap_or("").as_bytes())?;
+        std::io::stderr().write_all(response["stderr"].as_str().unwrap_or("").as_bytes())?;
+        std::process::exit(response["code"].as_i64().unwrap_or(0) as i32);
+    }
+    if program == "herdr-core" && config["allowObserver"] == true {
+        program = "hc".into();
+    }
     if program == "process-contract" {
         return process_contract(&config, &argv, &path);
+    }
+    if program == "legacy-stdio-contract" {
+        if config["allowLegacyText"] != true {
+            return Err("legacy text fixture was not explicitly enabled".into());
+        }
+        let text = config["text"]
+            .as_str()
+            .ok_or("synthetic legacy text missing")?;
+        if !["ASCII\n", "\u{ac00}\u{b098}\n", "\u{1f600}\n"].contains(&text) {
+            return Err("legacy fixture text is not synthetic".into());
+        }
+        let result = (|| -> herdr_theme::legacy_text::Result<()> {
+            herdr_theme::legacy_text::stdout(text)?;
+            herdr_theme::legacy_text::stdout("second\n")?;
+            herdr_theme::legacy_text::stderr(text)
+        })();
+        if let Err(error) = result {
+            herdr_theme::legacy_text::error_line(&error.to_string())?;
+            std::process::exit(1);
+        }
+        return Ok(());
+    }
+    if program == "workspace-api-contract" && config["allowDelayedReply"] == true {
+        let reply = herdr_theme::common::call(
+            "herdr-app",
+            &herdr_theme::common::strings(&["do", "fixture", "{}"]),
+        )?;
+        return herdr_theme::common::print(&reply);
+    }
+    if program == "http-contract" && config["allowLoopbackHttps"] == true {
+        let url = config["url"].as_str().ok_or("fixture HTTPS URL missing")?;
+        if !url.starts_with("https://127.0.0.1:") {
+            return Err("only explicit loopback HTTPS fixture is permitted".into());
+        }
+        let value = match herdr_theme::documents::pinned::plan::http(url, &[], None, false) {
+            Ok(value) => value,
+            Err(error) => {
+                // Diagnostic detail is restricted to this explicitly enabled
+                // loopback fixture; production provider errors stay private.
+                let detail = herdr_theme::tls::blocking_builder()?
+                    .build()?
+                    .get(url)
+                    .send()
+                    .err();
+                return Err(
+                    format!("loopback HTTPS fixture: {error}; transport: {detail:?}").into(),
+                );
+            }
+        };
+        return herdr_theme::common::print(&value);
     }
     if program == "observer-error-contract" {
         if config["allowProcessContract"] != true {
@@ -173,6 +402,13 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             &json!({"at":"2000-01-01T00:00:00+00:00","mode":"dry-run","error":"synthetic observer failure","results":[]}),
             false,
         );
+    }
+    if program == "herdr" && config["allowWorkflow"] == true {
+        if !matches!(argv.first().map(String::as_str), Some("pane")) {
+            return Err("workflow fixture only permits pane reads".into());
+        }
+        println!("{}", config["workflowReply"]);
+        std::process::exit(config["workflowExit"].as_i64().unwrap_or(0) as i32);
     }
     if !["hc", "herdr-app", "observer-harness", "ps", "lsof"].contains(&program.as_str()) {
         return Err("unsupported fixture tool name".into());
@@ -212,10 +448,21 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                 .count()
         })
         .unwrap_or(0);
-    let record = json!({"program":program,"args":argv,"actor":env::var("HC_TERMINAL_ID").ok(),"queue":queue,"ledger":ledger,"leases":leases,"has_console":has_console(),"rpc":rpc_request});
+    let record = json!({"program":invoked_program,"args":argv,"actor":env::var("HC_TERMINAL_ID").ok(),"queue":queue,"ledger":ledger,"leases":leases,"has_console":has_console(),"rpc":rpc_request});
     let mut f = OpenOptions::new().create(true).append(true).open(log)?;
     writeln!(f, "{record}")?;
     drop(f);
+    if config["allowDelayedReply"] == true {
+        let millis = config["replyDelayMs"].as_u64().unwrap_or(0);
+        if millis > 35_000 {
+            return Err("fixture delay exceeds 35s".into());
+        }
+        std::thread::sleep(std::time::Duration::from_millis(millis));
+        if program == "herdr-app" {
+            println!("{}", config["delayedReply"]);
+            return Ok(());
+        }
+    }
     if program == "observer-harness" {
         let parent = Path::new(&path).parent().ok_or("fixture parent missing")?;
         match command {
@@ -372,7 +619,15 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                                 .as_array()
                                 .ok_or("seed spaces missing")?
                                 .len();
-                            state["spaces"].as_array_mut().unwrap().push(json!({"id":format!("created-{index}"),"name":argv[3],"machine":null}));
+                            let id = if config["originalSeedIds"] == true {
+                                format!("generated-{}", argv[3])
+                            } else {
+                                format!("created-{index}")
+                            };
+                            state["spaces"]
+                                .as_array_mut()
+                                .unwrap()
+                                .push(json!({"id":id,"name":argv[3],"machine":null}));
                         }
                         Some("space.select") if argv.len() == 4 && argv[2] == "--id" => {
                             state["space"] = json!(argv[3])
@@ -408,6 +663,12 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     }
     match command {
         "label" => {
+            if config["allowWorkspaceFocus"] == true
+                && argv == ["label", "new-terminal", "sixfold.native-agent=claude"]
+            {
+                println!("{}", json!({"labeled":true}));
+                return Ok(());
+            }
             if config["allowPtyReceipt"] != true
                 || argv.get(1).map(String::as_str) != Some("fixture-stub")
                 || argv.get(2..).unwrap_or_default()

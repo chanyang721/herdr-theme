@@ -1,4 +1,4 @@
-use super::{now, output, policy, queue, settings, write_json, Result};
+use super::{now, output, policy, queue, settings, Result};
 use rusqlite::{params, Connection, OpenFlags};
 use serde_json::{json, Value};
 use std::{
@@ -188,8 +188,21 @@ pub fn device_signature(payload: &Value, selection: Option<&Value>) -> Option<Va
     Some(json!(chosen))
 }
 fn inspect_devices() -> Option<Value> {
-    let text = fs::read_to_string(settings::home().join(".codex/config.toml")).ok()?;
-    device_signature(&policy::audio_devices()?, audio_selection(&text).as_ref())
+    let text = crate::legacy_text::read(
+        settings::home().join(".codex/config.toml"),
+        crate::legacy_text::ErrorPolicy::Strict,
+    )
+    .ok()?;
+    let payload = serde_json::from_str(
+        &output(
+            "/usr/sbin/system_profiler",
+            &["-json", "SPAudioDataType"],
+            5.,
+        )
+        .ok()?,
+    )
+    .ok()?;
+    device_signature(&payload, audio_selection(&text).as_ref())
 }
 pub fn stable_devices(state: &mut Value, signature: Option<Value>, at: f64) -> bool {
     let Some(signature) = signature else {
@@ -217,11 +230,88 @@ fn recent_failure(id: &str) -> Option<bool> {
     text.ok().and_then(|s| failure_marker(&s))
 }
 fn save(state: &Value) -> Result<()> {
-    write_json(&settings::state_dir().join("voice-recovery.json"), state)
+    let path = settings::state_dir().join("voice-recovery.json");
+    super::replace_json(&path, &path.with_extension("tmp"), state)
+}
+/// Runtime effects of the original recovery actor, injectable by its original
+/// lifecycle tests without opening audio, reading user panes or sending keys.
+pub trait RecoveryBackend {
+    fn now(&mut self) -> f64;
+    fn monotonic(&mut self) -> f64;
+    fn panes(&mut self) -> Result<std::collections::BTreeMap<String, Value>>;
+    fn session_of(&mut self, pane: &Value) -> Result<String>;
+    fn screen(&mut self, id: &str) -> Result<String>;
+    fn recent_failure(&mut self, id: &str) -> Option<bool>;
+    fn inspect_devices(&mut self) -> Option<Value>;
+    fn save(&mut self, state: &Value) -> Result<()>;
+    fn send_start(&mut self, id: &str) -> Result<()>;
+    fn route(&mut self, advance: bool) -> Result<()>;
+    fn report(&mut self, message: &str);
+    fn sleep(&mut self, duration: Duration);
+}
+struct RuntimeRecovery;
+impl RecoveryBackend for RuntimeRecovery {
+    fn now(&mut self) -> f64 {
+        now()
+    }
+    fn monotonic(&mut self) -> f64 {
+        static CLOCK: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
+        CLOCK
+            .get_or_init(std::time::Instant::now)
+            .elapsed()
+            .as_secs_f64()
+    }
+    fn panes(&mut self) -> Result<std::collections::BTreeMap<String, Value>> {
+        queue::panes()
+    }
+    fn session_of(&mut self, pane: &Value) -> Result<String> {
+        queue::session_of(pane)
+    }
+    fn screen(&mut self, id: &str) -> Result<String> {
+        queue::screen(id)
+    }
+    fn recent_failure(&mut self, id: &str) -> Option<bool> {
+        recent_failure(id)
+    }
+    fn inspect_devices(&mut self) -> Option<Value> {
+        inspect_devices()
+    }
+    fn save(&mut self, state: &Value) -> Result<()> {
+        save(state)
+    }
+    fn send_start(&mut self, id: &str) -> Result<()> {
+        let request = if let Some(terminal) = id.strip_prefix("app:") {
+            super::capture(&queue::hc(), &["send", terminal, "/voice"], Some(5.))
+        } else {
+            super::capture(&queue::herdr(), &["pane", "run", id, "/voice"], Some(5.))
+        };
+        if let Err(error) = request {
+            if !error.is::<super::ProcessTimeout>() {
+                return Err(error);
+            }
+        }
+        Ok(())
+    }
+    fn route(&mut self, advance: bool) -> Result<()> {
+        queue::main_event(advance)
+    }
+    fn report(&mut self, message: &str) {
+        queue::log(message)
+    }
+    fn sleep(&mut self, duration: Duration) {
+        thread::sleep(duration)
+    }
 }
 pub fn tick(state: &mut Value, connection: &Connection) -> Result<()> {
-    let at = now();
-    let current = queue::panes()?;
+    tick_with(state, connection, &mut RuntimeRecovery)
+}
+pub fn tick_with<B: RecoveryBackend>(
+    state: &mut Value,
+    connection: &Connection,
+    backend: &mut B,
+) -> Result<()> {
+    let at = backend.now();
+    let current = backend.panes()?;
     if !state["panes"].is_object() {
         state["panes"] = json!({});
     }
@@ -232,7 +322,7 @@ pub fn tick(state: &mut Value, connection: &Connection) -> Result<()> {
             continue;
         }
         let observed = (|| -> Result<(String, String)> {
-            Ok((queue::session_of(pane)?, queue::screen(id)?))
+            Ok((backend.session_of(pane)?, backend.screen(id)?))
         })();
         let Ok((session, text)) = observed else {
             continue;
@@ -282,7 +372,7 @@ pub fn tick(state: &mut Value, connection: &Connection) -> Result<()> {
         }
         let marker = failure_marker(text).or_else(|| {
             if record["failure_ui"] != record["failure"]["id"] {
-                recent_failure(id)
+                backend.recent_failure(id)
             } else {
                 None
             }
@@ -300,7 +390,7 @@ pub fn tick(state: &mut Value, connection: &Connection) -> Result<()> {
         .values()
         .any(|r| r["failure"]["kind"] == "device")
     {
-        stable_devices(state, inspect_devices(), at)
+        stable_devices(state, backend.inspect_devices(), at)
     } else {
         false
     };
@@ -317,24 +407,24 @@ pub fn tick(state: &mut Value, connection: &Connection) -> Result<()> {
         {
             continue;
         }
-        let fresh = queue::panes()?.get(&id).cloned().unwrap_or(Value::Null);
+        let fresh = backend.panes()?.get(&id).cloned().unwrap_or(Value::Null);
         if fresh["agent"] != "codex"
             || !["done", "idle", "working"].contains(&fresh["agent_status"].as_str().unwrap_or(""))
-            || queue::session_of(&fresh)? != state["panes"][&id]["session"].as_str().unwrap_or("")
+            || backend.session_of(&fresh)? != state["panes"][&id]["session"].as_str().unwrap_or("")
         {
             continue;
         }
         if !eligible(
             &state["panes"][&id],
-            &queue::screen(&id)?,
+            &backend.screen(&id)?,
             fresh["focused"] == true,
-            now(),
+            backend.now(),
             ready,
         ) {
             continue;
         }
         if state["panes"][&id]["failure"]["kind"] == "device"
-            && inspect_devices().as_ref() != Some(&state["audio"]["signature"])
+            && backend.inspect_devices().as_ref() != Some(&state["audio"]["signature"])
         {
             state.as_object_mut().unwrap().remove("audio");
             continue;
@@ -350,38 +440,52 @@ pub fn tick(state: &mut Value, connection: &Connection) -> Result<()> {
             .collect();
         attempts.push(at);
         record["attempts"] = json!(attempts);
-        save(state)?;
-        let _ = if let Some(t) = id.strip_prefix("app:") {
-            output(&queue::hc(), &["send", t, "/voice"], 5.)
-        } else {
-            output(&queue::herdr(), &["pane", "run", &id, "/voice"], 5.)
-        };
-        queue::log(&format!(
+        backend.save(state)?;
+        backend.send_start(&id)?;
+        backend.report(&format!(
             "codex voice recovery requested {id}; confirmed helper closure {}",
             state["panes"][&id]["attempted"]
         ));
-        let deadline = now() + 12.;
+        let deadline = backend.monotonic() + 12.;
         let mut confirmed = false;
-        while now() < deadline {
-            if live(&queue::screen(&id)?) {
+        while backend.monotonic() < deadline {
+            if live(&backend.screen(&id)?) {
                 state["panes"][&id]
                     .as_object_mut()
                     .unwrap()
                     .remove("failure");
-                queue::main_event(true)?;
-                queue::log(&format!("codex voice recovery confirmed {id}"));
+                backend.route(true)?;
+                backend.report(&format!("codex voice recovery confirmed {id}"));
                 confirmed = true;
                 break;
             }
-            thread::sleep(Duration::from_millis(300));
+            backend.sleep(Duration::from_millis(300));
         }
         if !confirmed {
-            queue::log(&format!(
+            backend.report(&format!(
                 "codex voice recovery unconfirmed {id}; no repeated toggle"
             ));
         }
     }
-    save(state)
+    backend.save(state)
+}
+pub fn upgrade_state(state: &mut Value, connection: &Connection, at: f64) -> Result<()> {
+    if state["version"].as_i64().unwrap_or(1) < 2 {
+        let first = connection.query_row(
+            "select min(id) from logs where ts>=? and target=? and feedback_log_body=?",
+            params![
+                at - 900.,
+                "codex_realtime_webrtc::client",
+                "voice helper output closed phase=Some(Device) exit_code=Some(37)"
+            ],
+            |r| r.get::<_, Option<i64>>(0),
+        )?;
+        if let Some(first) = first {
+            state["cursor"] = json!(state["cursor"].as_i64().unwrap_or(0).min(first - 1));
+        }
+        state["version"] = json!(2);
+    }
+    Ok(())
 }
 pub fn serve() -> Result<()> {
     let dir = settings::state_dir();
@@ -411,25 +515,14 @@ pub fn serve() -> Result<()> {
             |r| r.get::<_, i64>(0)
         )?);
     }
-    if state["version"].as_i64().unwrap_or(1) < 2 {
-        let first = connection.query_row(
-            "select min(id) from logs where ts>=? and target=? and feedback_log_body=?",
-            params![
-                now() - 900.,
-                "codex_realtime_webrtc::client",
-                "voice helper output closed phase=Some(Device) exit_code=Some(37)"
-            ],
-            |r| r.get::<_, Option<i64>>(0),
-        )?;
-        if let Some(first) = first {
-            state["cursor"] = json!(state["cursor"].as_i64().unwrap_or(0).min(first - 1));
-        }
-        state["version"] = json!(2);
-    }
+    upgrade_state(&mut state, &connection, now())?;
     queue::log("codex voice recovery monitor started; healthy calls are observation-only");
     loop {
         if let Err(e) = tick(&mut state, &connection) {
-            queue::log(&format!("codex voice recovery observation failed: {e}"));
+            queue::log(&format!(
+                "codex voice recovery observation failed: {}",
+                super::error_class(e.as_ref())
+            ));
         }
         thread::sleep(Duration::from_secs(3));
     }

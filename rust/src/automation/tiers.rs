@@ -123,7 +123,10 @@ pub fn rank(tier: &str, have: usize) -> Result<Option<usize>> {
     Ok(have.checked_sub(want))
 }
 pub fn session_models() -> Value {
-    let shared = read_json(app_home().join("shared.json")).unwrap_or(Value::Null);
+    session_models_at(&app_home())
+}
+pub fn session_models_at(home: &std::path::Path) -> Value {
+    let shared = read_json(home.join("shared.json")).unwrap_or(Value::Null);
     let mut result = json!({});
     if let Some(ts) = shared["agent-usage.shares"]["terminals"].as_object() {
         for (k, v) in ts {

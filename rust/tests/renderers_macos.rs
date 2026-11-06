@@ -34,6 +34,51 @@ fn image_record(home: &Path, page: &Value) -> (Vec<u8>, std::time::SystemTime) {
         fs::metadata(path).unwrap().modified().unwrap(),
     )
 }
+fn original_live_render(html: &str) -> Value {
+    let temp = tempfile::tempdir().unwrap();
+    let binary = temp.path().join("render-html");
+    let repo = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
+    install::compile_swift(&repo.join("scripts/render_html.swift"), &binary, true).unwrap();
+    let doc = temp.path().join("page.html");
+    fs::write(&doc, html).unwrap();
+    let output = timeout_output(
+        command(&binary)
+            .arg(&doc)
+            .arg(temp.path().join("out/tile"))
+            .args(["dark", "600"]),
+        60,
+    )
+    .unwrap();
+    assert!(
+        output.status.success(),
+        "{}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    serde_json::from_slice(&output.stdout).unwrap()
+}
+#[test]
+fn test_short_page_is_as_tall_as_its_content() {
+    let data = original_live_render("<p style=\"margin:0;height:150px\">짧은 문서</p>");
+    assert_eq!(
+        arr(&data["tiles"])
+            .iter()
+            .map(|t| (t["width"].as_f64().unwrap(), t["height"].as_f64().unwrap()))
+            .collect::<Vec<_>>(),
+        vec![(600., 168.)]
+    );
+}
+#[test]
+fn test_viewport_height_sections_and_late_script_content_are_measured_once() {
+    let data = original_live_render("<!doctype html><body style=\"margin:0\"><div style=\"height:100vh\"></div><div style=\"height:3000px\"></div><div id=late></div><script>setTimeout(()=>{late.style.height=\"500px\"},700)</script></body>");
+    let heights = arr(&data["tiles"])
+        .iter()
+        .map(|t| t["height"].as_f64().unwrap())
+        .collect::<Vec<_>>();
+    assert_eq!(heights.iter().sum::<f64>(), 4700.);
+    assert_eq!(heights, vec![2000., 2000., 700.]);
+    assert_eq!(data["truncated"], false);
+}
 #[test]
 #[ignore = "CI opt-in: actual macOS Swift/WebKit renderers, scratch only"]
 fn actual_webkit_renderers_match_native_cache_and_dimension_contracts() {
@@ -116,6 +161,21 @@ fn actual_webkit_renderers_match_native_cache_and_dimension_contracts() {
     for page in arr(&tall["pages"]) {
         image_record(&home, &page);
     }
+    // Exact original LiveRendererTests short-page fixture, including the
+    // default eight-pixel body margins above and below its 150px content.
+    fs::write(&doc, "<p style=\"margin:0;height:150px\">짧은 문서</p>").unwrap();
+    let short = invoke(
+        &home,
+        "render_html",
+        &["--doc", doc_arg, "--theme", "dark", "--width", "600"],
+    );
+    assert_eq!(
+        arr(&short["pages"])
+            .iter()
+            .map(|p| (p["width"].as_f64().unwrap(), p["height"].as_f64().unwrap()))
+            .collect::<Vec<_>>(),
+        vec![(600., 168.)]
+    );
     let diagram = temp.path().join("public-diagram.md");
     fs::write(&diagram,"```mermaid\nflowchart LR\n A[Start] --> B[Finish]\n```\n```mermaid\nflowchart LR\n A[Start] --> B[Finish]\n```\n").unwrap();
     let diagram_arg = diagram.to_str().unwrap();

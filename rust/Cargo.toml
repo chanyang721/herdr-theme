@@ -42,7 +42,9 @@ ctrlc = "3"
 same-file = "1"
 html-escape = "0.2"
 parquet = { version = "57", default-features = false, features = ["snap", "zstd"] }
-reqwest = { version = "0.12", default-features = false, features = ["blocking", "rustls-tls"] }
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "native-tls"] }
+tokio = { version = "1", features = ["rt", "time", "net"] }
+sha1 = "0.10"
 rust_decimal = { version = "1", default-features = false, features = ["std"] }
 
 [target.'cfg(windows)'.dependencies]
@@ -54,6 +56,7 @@ incremental = false
 
 [build-dependencies]
 cc = "1"
+sha2 = "0.10"
 
 [profile.test]
 debug = 0

@@ -1,4 +1,4 @@
-use super::{gate, native, output, settings, write_json, Exit, Result};
+use super::{gate, native, output_unbounded as output, settings, write_json, Exit, Result};
 use serde_json::{json, Value};
 use std::{
     env, fs,
@@ -17,10 +17,9 @@ fn root() -> Result<PathBuf> {
     if parent.join("herdr-plugin.toml").is_file() {
         return Ok(parent.to_path_buf());
     }
-    let checkout = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .unwrap_or(Path::new("."))
-        .join("voice");
+    let checkout = crate::documents::common::source_repository()
+        .map(|repo| repo.join("voice"))
+        .unwrap_or_else(|| parent.to_path_buf());
     if checkout.join("herdr-plugin.toml").is_file() {
         Ok(checkout)
     } else {
@@ -56,7 +55,10 @@ fn claude(name: &str) -> PathBuf {
 }
 fn edit<F: FnOnce(&mut Value)>(path: &Path, change: F) -> Result<bool> {
     let mut value = if path.exists() {
-        serde_json::from_slice(&fs::read(path)?)?
+        serde_json::from_str(&crate::legacy_text::read(
+            path,
+            crate::legacy_text::ErrorPolicy::Strict,
+        )?)?
     } else {
         json!({})
     };
@@ -71,7 +73,7 @@ fn edit<F: FnOnce(&mut Value)>(path: &Path, change: F) -> Result<bool> {
             path.display(),
             chrono::Local::now().format("%Y%m%d%H%M%S")
         ));
-        fs::copy(path, backup)?;
+        crate::documents::common::copy_file(path, backup)?;
     }
     write_json(path, &value)?;
     Ok(true)
@@ -153,8 +155,23 @@ fn chat_bindings(value: &mut Value) -> &mut Value {
     &mut blocks[index]["bindings"]
 }
 fn herdr(args: &[&str]) -> Result<Value> {
-    let text = output("herdr", args, 30.)?;
-    let value: Value = serde_json::from_str(&text).unwrap_or_else(|_| json!({}));
+    let Some(binary) = crate::common::find_executable("herdr") else {
+        return Err("herdr is not installed: brew install herdr".into());
+    };
+    let response = super::capture(&binary.to_string_lossy(), args, None)?;
+    if response.code != 0 {
+        return Err(format!(
+            "herdr {} failed: {}",
+            args.join(" "),
+            if response.stderr.trim().is_empty() {
+                response.stdout.trim()
+            } else {
+                response.stderr.trim()
+            }
+        )
+        .into());
+    }
+    let value: Value = serde_json::from_str(&response.stdout).unwrap_or_else(|_| json!({}));
     Ok(value.get("result").cloned().unwrap_or_else(|| json!({})))
 }
 fn plugin() -> Result<Option<Value>> {
@@ -194,14 +211,13 @@ pub fn write_codex_agent(home: &Path, root: &Path, start: bool) -> Result<PathBu
         #[cfg(not(unix))]
         let uid = 0;
         let domain = format!("gui/{uid}");
-        let _ = output("launchctl", &["bootout", &format!("{domain}/{name}")], 10.);
-        output(
+        super::capture("launchctl", &["bootout", &format!("{domain}/{name}")], None)?;
+        super::checked_inherit(
             "launchctl",
             &["bootstrap", &domain, &path.to_string_lossy()],
-            10.,
         )?;
     }
-    println!(
+    voice_println!(
         "Codex focus guard installed: {}; manual mute preserved; no voice connection toggled",
         path.display()
     );
@@ -212,7 +228,7 @@ pub fn codex_install(args: &[String]) -> Result<()> {
         args,
         &["--target-home"],
         &["--no-start", "--uninstall"],
-        include_str!("help/install_codex_focus.txt"),
+        "install_codex_focus",
     )?
     else {
         return Ok(());
@@ -221,21 +237,24 @@ pub fn codex_install(args: &[String]) -> Result<()> {
     let home = option(args, "--target-home")
         .map(PathBuf::from)
         .unwrap_or_else(settings::home);
-    let start = !args.iter().any(|a| a == "--no-start");
-    if home.canonicalize().ok() != settings::home().canonicalize().ok() && start {
-        return Err("an isolated target home requires --no-start".into());
+    let start = !option_flag(args, "--no-start");
+    if crate::documents::common::resolved(&home)
+        != crate::documents::common::resolved(settings::home())
+        && start
+    {
+        return crate::common::usage("an isolated target home requires --no-start");
     }
-    if args.iter().any(|a| a == "--uninstall") {
+    if option_flag(args, "--uninstall") {
         if start {
             #[cfg(unix)]
             let uid = unsafe { libc::getuid() };
             #[cfg(not(unix))]
             let uid = 0;
-            let _ = output(
+            super::capture(
                 "launchctl",
                 &["bootout", &format!("gui/{uid}/{}", label(&home))],
-                10.,
-            );
+                None,
+            )?;
         }
         let _ = fs::remove_file(
             home.join("Library/LaunchAgents")
@@ -285,7 +304,7 @@ fn install_at(root: &Path) -> Result<()> {
     if want_hook {
         edit(&claude("settings.json"), |v| set_hook(v, root))?;
     } else {
-        println!("submit hook left off as before: focusq voice-hook adds it");
+        voice_println!("submit hook left off as before: focusq voice-hook adds it");
     }
     edit(&claude("keybindings.json"), |v| {
         chat_bindings(v)["f8"] = json!("voice:pushToTalk")
@@ -296,16 +315,16 @@ fn install_at(root: &Path) -> Result<()> {
         v["script"] = json!(executable(root).to_string_lossy());
     })?;
     write_codex_agent(&settings::home(), root, !no_start())?;
-    println!(
+    voice_println!(
         "installed from {}: plugin linked and enabled, Claude Code voice on F8 (tap mode)",
         root.display()
     );
     if no_start() {
-        println!("voice check not set up (HERDR_VOICE_NO_START)");
+        voice_println!("voice check not set up (HERDR_VOICE_NO_START)");
     } else {
         voice_setup()?;
     }
-    println!("restart running Claude Code sessions to pick up the F8 voice key");
+    voice_println!("restart running Claude Code sessions to pick up the F8 voice key");
     Ok(())
 }
 fn check(root: &Path) -> Result<bool> {
@@ -332,7 +351,7 @@ fn check(root: &Path) -> Result<bool> {
     if commands.iter().any(|c| is_ours(c) && *c != desired) {
         problems.push(format!("Claude submit hook: {commands:?}"));
     } else if !commands.contains(&desired.as_str()) {
-        println!("note - Claude submit hook is off (focusq voice-hook adds it)");
+        voice_println!("note - Claude submit hook is off (focusq voice-hook adds it)");
     }
     let integration = settings::read_file(&integration());
     if integration["command"] != executable(root).to_string_lossy().as_ref()
@@ -360,10 +379,10 @@ fn check(root: &Path) -> Result<bool> {
         problems.push(format!("Codex focus LaunchAgent: {arguments:?}"));
     }
     for p in &problems {
-        println!("not this copy - {p}");
+        voice_println!("not this copy - {p}");
     }
     if problems.is_empty() {
-        println!("all voice entry points run {}", root.display());
+        voice_println!("all voice entry points run {}", root.display());
     }
     Ok(problems.is_empty())
 }
@@ -376,13 +395,13 @@ fn uninstall(root: &Path) -> Result<()> {
         chat_bindings(v).as_object_mut().unwrap().remove("f8");
     })?;
     edit(&claude("settings.json"), |v| remove_hook(v, root))?;
-    println!("uninstalled: plugin unlinked, F8 voice binding and submit hook removed (voice settings kept)");
+    voice_println!("uninstalled: plugin unlinked, F8 voice binding and submit hook removed (voice settings kept)");
     Ok(())
 }
 fn status() -> Result<()> {
     match plugin()? {
-        None => println!("not installed: run focusq install"),
-        Some(p) => println!(
+        None => voice_println!("not installed: run focusq install"),
+        Some(p) => voice_println!(
             "{}  {}",
             if p["enabled"] == true {
                 "enabled"
@@ -458,8 +477,8 @@ pub fn voice_setup() -> Result<()> {
     for(model,url)in[(gate::EMBEDDING_MODEL,format!("https://github.com/k2-fsa/sherpa-onnx/releases/download/speaker-recongition-models/{}",gate::EMBEDDING_MODEL)),("silero_vad.onnx","https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/silero_vad.onnx".into())]{let target=models.join(model);if !target.exists(){let partial=target.with_extension("onnx.part");output("curl",&["-fsSL","--retry","2","-o",&partial.to_string_lossy(),&url],600.)?;fs::rename(partial,target)?;}}
     install_blas()?;
     install_sndfile()?;
-    println!(
-        "voice check ready in {}: enroll your voice for this microphone before automatic dictation",
+    voice_println!(
+        "voice check ready in {}: your voice is learned from the dictations you send",
         voice.display()
     );
     Ok(())
@@ -601,7 +620,7 @@ fn voice_off() -> Result<()> {
             }
         }
     }
-    println!("voiceprint removed: enroll again before automatic dictation");
+    voice_println!("voiceprint removed: it is learned again from the dictations you send");
     Ok(())
 }
 pub fn focusq(args: &[String]) -> Result<()> {
@@ -609,19 +628,30 @@ pub fn focusq(args: &[String]) -> Result<()> {
     let root = root()?;
     match command {
         "setup" => {
-            if output("herdr", &["--version"], 10.).is_err() {
-                output("brew", &["install", "herdr"], 600.)?;
+            if crate::common::find_executable("herdr").is_none() {
+                if crate::common::find_executable("brew").is_none() {
+                    return Err(
+                        "herdr is not installed and Homebrew is missing: https://brew.sh".into(),
+                    );
+                }
+                super::checked_inherit("brew", &["install", "herdr"])?;
             }
             install_at(&root)?;
             if settings::state_dir().join("voiceprint.json").exists() {
-                println!(
+                voice_println!(
                     "voice: already learned on this machine; it keeps learning from what you send"
                 );
             } else if args.iter().any(|a| a == "--enroll") {
-                println!("목소리를 학습합니다. 에이전트가 없는 셸 pane 에서 실행 중이어야 합니다.");
+                voice_println!(
+                    "\n목소리를 학습합니다. 에이전트가 없는 셸 pane 에서 실행 중이어야 합니다."
+                );
                 gate::run(&["enroll".into()])?;
+                voice_println!(
+                    "voice: voiceprint saved; it keeps learning from the dictations you send"
+                );
             } else {
-                println!("voice: run focusq voice-enroll to enroll this microphone before automatic dictation");
+                voice_println!("voice: learned on this machine from the dictations you send. After about 30 s of them your");
+                voice_println!("       voice is sent without the send word and other voices are not (./focusq setup --enroll to start now)");
             }
             Ok(())
         }
@@ -637,29 +667,25 @@ pub fn focusq(args: &[String]) -> Result<()> {
         "status" => status(),
         "enable" | "disable" => {
             if plugin()?.is_none() {
-                return Err("not installed: run focusq install".into());
+                return Err("not installed: run ./focusq install".into());
             }
             herdr(&["plugin", command, ID])?;
             status()
         }
         "voice-setup" => {
             voice_setup()?;
-            println!("now run focusq voice-enroll");
+            voice_println!("now run ./focusq voice-enroll");
             Ok(())
         }
         "voice-enroll" => {
-            stop_gate()?;
             let mut a = vec!["enroll".into()];
             a.extend(args.iter().skip(1).cloned());
-            gate::run(&a)
+            run_voicegate(&a)
         }
-        "voice-test" => {
-            stop_gate()?;
-            gate::run(&["tail".into()])
-        }
+        "voice-test" => run_voicegate(&["tail".into()]),
         "voice-hook" => {
             let changed = edit(&claude("settings.json"), |v| set_hook(v, &root))?;
-            println!(
+            voice_println!(
                 "submit hook {} {}: {}",
                 if changed { "added to" } else { "already in" },
                 claude("settings.json").display(),
@@ -668,21 +694,38 @@ pub fn focusq(args: &[String]) -> Result<()> {
             Ok(())
         }
         "voice-restart" => {
+            require_voice_runtime()?;
             stop_gate()?;
             super::self_launch("voicegate", &["serve"])?;
             Ok(())
         }
         "voice-off" => voice_off(),
-        "voice-crosscheck" => super::evaluate::crosscheck(),
+        "voice-crosscheck" => {
+            require_voice_runtime()?;
+            super::evaluate::crosscheck()
+        }
         _ => Err(include_str!("help/focusq.txt").trim_end().into()),
     }
 }
-fn option<'a>(args: &'a [String], name: &str) -> Option<&'a str> {
-    args.iter()
-        .position(|a| a == name)
-        .and_then(|i| args.get(i + 1))
-        .map(String::as_str)
+fn require_voice_runtime() -> Result<()> {
+    if !native::runtime_available() {
+        return Err("run ./focusq voice-setup first".into());
+    }
+    Ok(())
 }
+fn run_voicegate(args: &[String]) -> Result<()> {
+    require_voice_runtime()?;
+    stop_gate()?;
+    gate::run(args)
+}
+fn option<'a>(args: &'a [String], name: &str) -> Option<&'a str> {
+    super::cli::value(args, name, &["--home", "--source", "--target-home"])
+}
+
+fn option_flag(args: &[String], name: &str) -> bool {
+    super::cli::flag(args, name, &["--home", "--source", "--target-home"])
+}
+
 fn skip(name: &str) -> bool {
     [
         "__pycache__",
@@ -819,14 +862,14 @@ pub fn run(args: &[String]) -> Result<()> {
         args,
         &["--home", "--source"],
         &["--enroll", "--check", "--no-start"],
-        include_str!("help/install.txt"),
+        "voice_install",
     )?
     else {
         return Ok(());
     };
     let args = &args;
     if !cfg!(target_os = "macos") {
-        println!("Voice plugin skipped: macOS only.");
+        crate::legacy_text::error_line("Voice plugin skipped: macOS only.")?;
         return Ok(());
     }
     let old_home = settings::home();
@@ -839,27 +882,38 @@ pub fn run(args: &[String]) -> Result<()> {
             env::set_var("HERDR_APP_HOME", home.join(".config/herdr-app"));
         }
     }
-    if isolated || args.iter().any(|a| a == "--no-start") {
+    if isolated || option_flag(args, "--no-start") {
         env::set_var("HERDR_VOICE_NO_START", "1");
     }
     let target = home.join(".local/share/herdr-focus-queue/plugin");
-    if args.iter().any(|a| a == "--check") {
+    if option_flag(args, "--check") {
+        if !target.join("focusq").is_file() {
+            crate::legacy_text::print_line(&format!(
+                "not this copy - voice plugin not installed at {}",
+                target.display()
+            ))?;
+            return Err(Exit(1).into());
+        }
         return if check(&target)? {
             Ok(())
         } else {
             Err(Exit(1).into())
         };
     }
-    let source = option(args, "--source")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| {
-            Path::new(env!("CARGO_MANIFEST_DIR"))
-                .parent()
-                .unwrap_or(Path::new("."))
-                .join("voice")
-        });
+    let source = if let Some(source) = option(args, "--source") {
+        PathBuf::from(source)
+    } else if let Some(repo) = crate::documents::common::source_repository() {
+        repo.join("voice")
+    } else {
+        let candidate = root()?;
+        if candidate.join("herdr-plugin.toml").is_file() {
+            candidate
+        } else {
+            return Err("voice source not found; supply --source VOICE_DIRECTORY".into());
+        }
+    };
     let changed = place(&source, &target)?;
-    println!(
+    voice_println!(
         "voice plugin {}: {}",
         if changed {
             "updated"
@@ -869,8 +923,8 @@ pub fn run(args: &[String]) -> Result<()> {
         target.display()
     );
     install_at(&target)?;
-    if args.iter().any(|a| a == "--enroll") {
-        gate::run(&["enroll".into()])?;
+    if option_flag(args, "--enroll") {
+        run_voicegate(&["enroll".into()])?;
     }
     if check(&target)? {
         Ok(())
@@ -893,63 +947,15 @@ fn parse_options(
     args: &[String],
     values: &[&str],
     flags: &[&str],
-    help: &str,
+    command: &str,
 ) -> Result<Option<Vec<String>>> {
-    let mut output = vec![];
-    let mut i = 0;
-    let names: Vec<_> = values
-        .iter()
-        .chain(flags)
-        .copied()
-        .chain(["--help"])
-        .collect();
-    while i < args.len() {
-        let arg = &args[i];
-        if arg == "-h" {
-            println!("{help}\nOptions: {}", names.join(" "));
-            return Ok(None);
-        }
-        let (name, assigned) = arg
-            .split_once('=')
-            .map(|(a, b)| (a, Some(b)))
-            .unwrap_or((arg, None));
-        let matching: Vec<_> = names
-            .iter()
-            .copied()
-            .filter(|n| n.starts_with(name) && name.starts_with("--"))
-            .collect();
-        let name = if names.contains(&name) {
-            name
-        } else if matching.len() == 1 {
-            matching[0]
-        } else {
-            eprintln!("error: unrecognized or ambiguous argument: {arg}");
-            return Err(Exit(2).into());
-        };
-        if name == "--help" {
-            println!("{help}\nOptions: {}", names.join(" "));
-            return Ok(None);
-        }
-        output.push(name.to_owned());
-        if values.contains(&name) {
-            let value = if let Some(value) = assigned {
-                value.to_owned()
-            } else {
-                i += 1;
-                let Some(value) = args.get(i).filter(|v| !v.starts_with('-')) else {
-                    eprintln!("error: {name} requires an argument");
-                    return Err(Exit(2).into());
-                };
-                value.clone()
-            };
-            output.push(value);
-        } else if assigned.is_some() {
-            eprintln!("error: {name} does not take a value");
-            return Err(Exit(2).into());
-        }
-        i += 1;
+    let result = super::cli::parse(args, values, flags)?;
+    if result.help {
+        crate::help::show(command, &["--help".into()])?;
+        return Ok(None);
     }
-    Ok(Some(output))
+    super::cli::unknown(&result.unknown)?;
+    Ok(Some(result.normalized))
 }
 #[cfg(test)]
 mod tests {

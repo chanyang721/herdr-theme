@@ -92,16 +92,34 @@ pub fn save(p: &Path, v: &Value) -> Result<()> {
     }
     let mut f = tempfile::NamedTempFile::new_in(p.parent().unwrap_or(Path::new(".")))?;
     private(f.path())?;
-    writeln!(f, "{}", serde_json::to_string_pretty(v)?)?;
+    f.write_all(&crate::common::text_bytes(&format!(
+        "{}\n",
+        crate::common::json_pretty(v, false)
+    )))?;
     f.as_file().sync_all()?;
     f.persist(p)?;
     Ok(())
+}
+/// Original note/ticket write_text follows a destination symlink, then chmods
+/// that same target. State snapshots use `save` and deliberately replace it.
+pub fn save_direct(p: &Path, v: &Value) -> Result<()> {
+    if let Some(d) = p.parent() {
+        fs::create_dir_all(d)?;
+    }
+    fs::write(
+        p,
+        crate::common::text_bytes(&format!("{}\n", crate::common::json_pretty(v, false))),
+    )?;
+    private(p)
 }
 pub fn hash(bytes: impl AsRef<[u8]>) -> String {
     use sha2::{Digest, Sha256};
     format!("{:x}", Sha256::digest(bytes.as_ref()))
 }
 pub fn fingerprint(v: &Value) -> String {
+    fingerprint_ascii(v, true)
+}
+pub fn fingerprint_ascii(v: &Value, ensure_ascii: bool) -> String {
     fn canonical(v: &Value) -> Value {
         match v {
             Value::Object(o) => {
@@ -117,7 +135,7 @@ pub fn fingerprint(v: &Value) -> String {
             _ => v.clone(),
         }
     }
-    hash(serde_json::to_vec(&canonical(v)).unwrap_or_default())
+    hash(crate::common::json_text(&canonical(v), ensure_ascii))
 }
 pub fn iso(t: f64) -> String {
     chrono::DateTime::from_timestamp(t.floor() as i64, 0)
@@ -144,7 +162,7 @@ pub fn re(p: &str) -> regex::Regex {
     regex::Regex::new(p).expect("static expression")
 }
 pub fn tail(t: &str, n: usize) -> String {
-    let v: Vec<_> = t.lines().collect();
+    let v = crate::python_unicode::split_lines(t);
     v[v.len().saturating_sub(n)..].join("\n")
 }
 pub fn take(t: &str, n: usize) -> String {
@@ -167,6 +185,24 @@ pub fn execute_with(
     if !timeout.is_finite() || timeout < 0. {
         return err("command timed out");
     }
+    execute_policy(argv, Some(timeout), clean_caller, configure)
+}
+pub fn execute_unbounded_with(
+    argv: &[String],
+    clean_caller: bool,
+    configure: impl FnOnce(&mut Command),
+) -> Result<Output> {
+    execute_policy(argv, None, clean_caller, configure)
+}
+pub fn execute_unbounded(argv: &[String], clean_caller: bool) -> Result<Output> {
+    execute_unbounded_with(argv, clean_caller, |_| {})
+}
+fn execute_policy(
+    argv: &[String],
+    timeout: Option<f64>,
+    clean_caller: bool,
+    configure: impl FnOnce(&mut Command),
+) -> Result<Output> {
     if argv.is_empty() {
         return err("empty command");
     };
@@ -197,12 +233,12 @@ pub fn execute_with(
         let mut b = Vec::new();
         r.read_to_end(&mut b).map(|_| b)
     });
-    let end = Instant::now() + Duration::from_secs_f64(timeout);
+    let end = timeout.map(|seconds| Instant::now() + Duration::from_secs_f64(seconds));
     let status = loop {
         if let Some(v) = child.try_wait()? {
             break v;
         }
-        if Instant::now() >= end {
+        if end.is_some_and(|end| Instant::now() >= end) {
             let _ = child.kill();
             let _ = child.wait();
             return err(format!("command timed out: {}", argv[0]));
@@ -242,6 +278,189 @@ pub fn command(argv: &[String], timeout: f64, clean: bool) -> Result<String> {
 pub fn strings(a: &[&str]) -> Vec<String> {
     a.iter().map(|s| s.to_string()).collect()
 }
+pub fn normalize_args(args: &[String], values: &[&str], flags: &[&str]) -> Result<Vec<String>> {
+    normalize_args_with(args, values, flags, |_, _| Ok(()))
+}
+pub fn normalize_args_with(
+    args: &[String],
+    values: &[&str],
+    flags: &[&str],
+    validate_value: impl Fn(&str, &str) -> Result<()>,
+) -> Result<Vec<String>> {
+    let mut ordered = vec!["--help", "-h"];
+    for option in [
+        "--config",
+        "--state",
+        "--log",
+        "--report-dir",
+        "--data",
+        "--dry-run",
+        "--apply",
+        "--only-space",
+        "--now",
+        "--app",
+        "--core",
+        "--reloads",
+        "--failed-reloads",
+        "--install-smoke",
+        "--repo",
+    ] {
+        if values.contains(&option) || flags.contains(&option) {
+            ordered.push(option);
+        }
+    }
+    for option in values.iter().chain(flags) {
+        if !ordered.contains(option) {
+            ordered.push(option);
+        }
+    }
+    let resolve = |key: &str| -> Result<String> {
+        if key == "--" || !key.starts_with("--") || ordered.contains(&key) {
+            return Ok(key.to_owned());
+        }
+        let candidates = ordered
+            .iter()
+            .filter(|option| option.starts_with(key))
+            .copied()
+            .collect::<Vec<_>>();
+        match candidates.as_slice() {
+            [name] => Ok((*name).to_owned()),
+            [] => Ok(key.to_owned()),
+            _ => arg_error(format!(
+                "ambiguous option: {key} could match {}",
+                candidates.join(", ")
+            )),
+        }
+    };
+    let mut out = vec![];
+    let mut unknown = vec![];
+    let mut mode: Option<String> = None;
+    let mut i = 0;
+    while i < args.len() {
+        let (key, inline) = args[i]
+            .split_once('=')
+            .map(|(k, v)| (k, Some(v)))
+            .unwrap_or((&args[i], None));
+        let key = resolve(key)?;
+        let key = key.as_str();
+        if values.contains(&key) {
+            let value = if let Some(value) = inline {
+                value.to_owned()
+            } else {
+                i += 1;
+                args.get(i)
+                    .filter(|value| {
+                        !value.starts_with('-')
+                            || value.as_str() == "-"
+                            || crate::python_unicode::regex(r"^-(?:\d+|\d*\.\d+)$").is_match(value)
+                    })
+                    .cloned()
+                    .ok_or_else(|| {
+                        Box::new(crate::common::CliError {
+                            code: 2,
+                            message: format!("argument {key}: expected one argument"),
+                        }) as Box<dyn Error>
+                    })?
+            };
+            validate_value(key, &value)?;
+            out.extend([key.to_owned(), value]);
+        } else if matches!(key, "--help" | "-h") && inline.is_none() {
+            out.push("--help".into());
+            return Ok(out);
+        } else if flags.contains(&key) && inline.is_none() {
+            if matches!(key, "--apply" | "--dry-run") {
+                if let Some(previous) = &mode {
+                    if previous != key {
+                        return arg_error(format!(
+                            "argument {key}: not allowed with argument {previous}"
+                        ));
+                    }
+                }
+                mode = Some(key.to_owned());
+            }
+            out.push(key.to_owned());
+        } else if flags.contains(&key) || matches!(key, "--help" | "-h") {
+            let display = if matches!(key, "--help" | "-h") {
+                "-h/--help"
+            } else {
+                key
+            };
+            return arg_error(format!(
+                "argument {display}: ignored explicit argument {}",
+                crate::automation::format::repr(&json!(inline.unwrap()))
+            ));
+        } else if key == "--" {
+            unknown.extend(args[i..].iter().cloned());
+            break;
+        } else {
+            unknown.push(args[i].clone());
+        }
+        i += 1;
+    }
+    if unknown.is_empty() {
+        Ok(out)
+    } else {
+        arg_error(format!("unrecognized arguments: {}", unknown.join(" ")))
+    }
+}
+pub fn machine_id(value: &Value) -> String {
+    match &value["core"]["id"] {
+        Value::String(id) => id.clone(),
+        other => crate::automation::format::repr(other),
+    }
+}
+fn value_option(key: &str) -> bool {
+    [
+        "--config",
+        "--state",
+        "--log",
+        "--report-dir",
+        "--app",
+        "--core",
+        "--only-space",
+        "--data",
+        "--reloads",
+        "--failed-reloads",
+        "--repo",
+    ]
+    .contains(&key)
+}
+fn argument_positions(args: &[String]) -> Vec<usize> {
+    let (mut indices, mut i) = (vec![], 0);
+    while i < args.len() {
+        indices.push(i);
+        i += if value_option(&args[i]) { 2 } else { 1 };
+    }
+    indices
+}
+pub fn option_value<'a>(args: &'a [String], key: &str) -> Option<&'a str> {
+    argument_positions(args)
+        .into_iter()
+        .rev()
+        .find(|i| args[*i] == key)
+        .and_then(|i| args.get(i + 1))
+        .map(String::as_str)
+}
+pub fn has_flag(args: &[String], key: &str) -> bool {
+    argument_positions(args).into_iter().any(|i| args[i] == key)
+}
+pub fn apply_mode(args: &[String]) -> Result<bool> {
+    let mut seen: Option<&str> = None;
+    for index in argument_positions(args) {
+        let option = args[index].as_str();
+        if matches!(option, "--apply" | "--dry-run") {
+            if let Some(previous) = seen {
+                if previous != option {
+                    return arg_error(format!(
+                        "argument {option}: not allowed with argument {previous}"
+                    ));
+                }
+            }
+            seen = Some(option);
+        }
+    }
+    Ok(seen == Some("--apply"))
+}
 pub fn validate_args(args: &[String], values: &[&str], flags: &[&str]) -> Result<()> {
     let mut i = 0;
     while i < args.len() {
@@ -260,6 +479,9 @@ pub fn validate_args(args: &[String], values: &[&str], flags: &[&str]) -> Result
     Ok(())
 }
 pub trait Adapter {
+    fn empty(&mut self, terminal: &Value, config: &Value) -> bool {
+        sessions::empty_agent(terminal, config)
+    }
     fn snapshot(&mut self) -> Result<Value>;
     fn screen(&mut self, address: &str) -> Result<String>;
     fn styled_screen(&mut self, address: &str) -> Result<String>;
@@ -277,6 +499,14 @@ pub trait Adapter {
     }
     fn close_gate(&mut self, config: &Value, item: &Value) -> Result<Value> {
         sessions::harness_close_gate(config, item)
+    }
+    fn has_close_gate(&self) -> bool {
+        true
+    }
+    /// Original sleep adapters may omit park_check entirely. An absent optional
+    /// method must perform neither Git inspection nor a dry-run harness call.
+    fn park_check(&mut self, _: &Value, _: &Value) -> Option<Result<Value>> {
+        None
     }
     fn park(
         &mut self,
@@ -318,12 +548,19 @@ pub trait Adapter {
         sessions::git_brief(folder)
     }
     fn machine(&mut self) -> Result<String> {
-        let v: Value = serde_json::from_str(&command(
-            &strings(&["hc", "server", "status", "--json"]),
-            12.,
-            false,
-        )?)?;
-        Ok(s(&v["core"]["id"]).to_string())
+        let value = (|| -> Result<Value> {
+            Ok(serde_json::from_str(&command(
+                &strings(&["hc", "server", "status", "--json"]),
+                12.,
+                false,
+            )?)?)
+        })();
+        // Python self_core_id() returns None when this key is absent. Its
+        // archive is subsequently refused as machine-id-unknown, never '-id'.
+        Ok(match value {
+            Ok(v) => machine_id(&v),
+            Err(_) => "None".to_owned(),
+        })
     }
     fn wait(&mut self, seconds: f64) {
         std::thread::sleep(Duration::from_secs_f64(seconds));
@@ -333,38 +570,72 @@ pub struct Live {
     pub app: String,
     pub core: String,
 }
-impl Adapter for Live {
-    fn snapshot(&mut self) -> Result<Value> {
-        let status: Value = serde_json::from_str(&command(
-            &vec![self.app.clone(), "status".into()],
-            12.,
-            false,
-        )?)?;
-        let spaces: Value =
-            serde_json::from_str(&command(&vec![self.app.clone(), "ls".into()], 12., false)?)?;
-        let listing: Value = serde_json::from_str(&command(
-            &vec![
-                self.core.clone(),
-                "ls".into(),
-                "--all".into(),
-                "--json".into(),
-            ],
-            12.,
-            false,
-        )?)?;
-        let (mut terms, mut errors) = (json!({}), json!({}));
-        for t in arr(&listing["terminals"]) {
-            if t["state"] != "live" {
-                continue;
-            }
-            let address = s(&t["address"]);
-            match self.terminal(address) {
-                Ok(t) => terms[address] = t,
-                Err(e) => errors[address] = json!(take(&e.to_string(), 160)),
-            }
+pub fn pane_close_argv(app: &str, pane: &str) -> Result<Vec<String>> {
+    if pane.is_empty() {
+        return err("pane.close refused: no pane id");
+    }
+    Ok(vec![
+        app.into(),
+        "do".into(),
+        "pane.close".into(),
+        crate::common::json_text(&json!({"pane":pane}), true),
+    ])
+}
+pub fn snapshot_with_runner(
+    app: &str,
+    core: &str,
+    run: &mut dyn FnMut(&[String]) -> Result<String>,
+    process_rows: &mut dyn FnMut() -> Result<Value>,
+) -> Result<Value> {
+    let status: Value = serde_json::from_str(&run(&vec![app.into(), "status".into()])?)?;
+    let spaces: Value = serde_json::from_str(&run(&vec![app.into(), "ls".into()])?)?;
+    let listing: Value = serde_json::from_str(&run(&vec![
+        core.into(),
+        "ls".into(),
+        "--all".into(),
+        "--json".into(),
+    ])?)?;
+    let (mut terms, mut errors) = (json!({}), json!({}));
+    for t in arr(&listing["terminals"]) {
+        if t["state"] != "live" {
+            continue;
         }
-        Ok(
-            json!({"status":status,"spaces":spaces["spaces"],"terminals":terms,"lookup_errors":errors,"processes":sessions::process_table()?}),
+        let address = s(&t["address"]);
+        let terminal = (|| -> Result<Value> {
+            Ok(serde_json::from_str(&run(&vec![
+                core.into(),
+                "get".into(),
+                address.into(),
+                "--json".into(),
+            ])?)?)
+        })();
+        match terminal {
+            Ok(t) => terms[address] = t,
+            Err(e) => errors[address] = json!(take(&e.to_string(), 160)),
+        }
+    }
+    Ok(
+        json!({"status":status,"spaces":spaces["spaces"],"terminals":terms,"lookup_errors":errors,"processes":process_rows()?}),
+    )
+}
+impl Adapter for Live {
+    fn park_check(&mut self, config: &Value, item: &Value) -> Option<Result<Value>> {
+        let mut check = item.clone();
+        check["git"] = self.git(s(&item["cwd"]));
+        Some(sessions::harness_park(
+            config,
+            &check,
+            "suspended",
+            true,
+            "",
+        ))
+    }
+    fn snapshot(&mut self) -> Result<Value> {
+        snapshot_with_runner(
+            &self.app,
+            &self.core,
+            &mut |argv| command(argv, 12., false),
+            &mut sessions::process_table,
         )
     }
     fn screen(&mut self, address: &str) -> Result<String> {
@@ -428,19 +699,7 @@ impl Adapter for Live {
         Ok(())
     }
     fn close_pane(&mut self, pane: &str) -> Result<()> {
-        if pane.is_empty() {
-            return err("pane.close refused: no pane id");
-        }
-        command(
-            &vec![
-                self.app.clone(),
-                "do".into(),
-                "pane.close".into(),
-                json!({"pane":pane}).to_string(),
-            ],
-            60.,
-            false,
-        )?;
+        command(&pane_close_argv(&self.app, pane)?, 60., false)?;
         Ok(())
     }
     fn close_space(&mut self, space: &str, c: &Value) -> Result<()> {
@@ -452,7 +711,7 @@ impl Adapter for Live {
                 self.app.clone(),
                 "do".into(),
                 "space.close".into(),
-                json!({"id":space,"confirmed":true}).to_string(),
+                crate::common::json_text(&json!({"id":space,"confirmed":true}), true),
             ],
             12.,
             false,
@@ -471,6 +730,10 @@ pub fn run(command: &str, args: &[String]) -> Result<()> {
         "native-ui-reload" => native::ui_reload(args),
         "native-protocol-worker" => native::protocol_worker(args),
         "native-fixture-inventory" => native::fixture_inventory(args),
+        "native-observer-hash" => crate::common::print(&json!({
+            "cleanup":env!("HERDR_CLEANUP_SOURCE_SHA256"),
+            "sleep":env!("HERDR_SLEEP_SOURCE_SHA256"),
+        })),
         _ => err(format!("unknown observer command: {command}")),
     }
 }

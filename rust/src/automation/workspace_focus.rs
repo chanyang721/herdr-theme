@@ -1,7 +1,7 @@
 //! Preserve workspace creation selection behavior from upstream fb3c234.
 //! A failed creation with unknown IDs still has the documented concurrent-pane
 //! ambiguity; this module deliberately retains that behavior.
-use crate::common::{call, strings, Result};
+use crate::common::{call, json_text, strings, Result};
 use serde_json::{json, Map, Value};
 
 fn truthy(value: &Value) -> bool {
@@ -100,7 +100,11 @@ fn restore_with(
             args.insert(key.into(), before[index].clone());
             // Each action is independently best effort; failure must not mask
             // the creation result or prevent the following restoration actions.
-            let _ = invoke(&["do".into(), command.into(), Value::Object(args).to_string()]);
+            let _ = invoke(&[
+                "do".into(),
+                command.into(),
+                json_text(&Value::Object(args), true),
+            ]);
         }
     }
 }

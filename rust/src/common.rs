@@ -100,13 +100,15 @@ pub fn private(path: &Path) -> Result<()> {
     Ok(())
 }
 pub fn atomic(path: impl AsRef<Path>, value: &Value) -> Result<()> {
+    atomic_text(path, &json_pretty(value, false))
+}
+pub fn atomic_text(path: impl AsRef<Path>, text: &str) -> Result<()> {
     let path = path.as_ref();
     let parent = path.parent().ok_or("output has no parent")?;
     fs::create_dir_all(parent)?;
     let mut temporary = tempfile::NamedTempFile::new_in(parent)?;
     private(temporary.path())?;
-    serde_json::to_writer_pretty(&mut temporary, value)?;
-    temporary.write_all(b"\n")?;
+    temporary.write_all(&text_bytes(text))?;
     temporary.as_file().sync_all()?;
     temporary.persist(path)?;
     Ok(())
@@ -171,19 +173,127 @@ pub fn output(program: &str, args: &[String], timeout: f64) -> Result<String> {
     Ok(out)
 }
 pub fn call(program: &str, args: &[String]) -> Result<Value> {
-    Ok(serde_json::from_str(&output(program, args, 30.)?)?)
+    // The workspace API used check_output without a timeout. Explicitly timed
+    // callers use capture/output instead; do not impose a new global deadline.
+    Ok(serde_json::from_str(&checked_output(program, args)?)?)
+}
+pub fn checked_output(program: &str, args: &[String]) -> Result<String> {
+    let result = command(program).args(args).output()?;
+    if !result.status.success() {
+        return Err(format!(
+            "{program} exited {}: {}",
+            result.status.code().unwrap_or(1),
+            String::from_utf8_lossy(&result.stderr)
+        )
+        .into());
+    }
+    Ok(String::from_utf8_lossy(&result.stdout).into_owned())
 }
 pub fn strings(args: &[&str]) -> Vec<String> {
     args.iter().map(|s| s.to_string()).collect()
 }
 pub fn print(value: &Value) -> Result<()> {
-    print_line(&serde_json::to_string(value)?)
+    print_line(&json_text(value, false))
+}
+/// Python json.dumps' default separators, without changing object order.
+/// Some original commands request ensure_ascii=False, others keep its default.
+pub fn json_text(value: &Value, ensure_ascii: bool) -> String {
+    match value {
+        Value::Array(items) => format!(
+            "[{}]",
+            items
+                .iter()
+                .map(|v| json_text(v, ensure_ascii))
+                .collect::<Vec<_>>()
+                .join(", ")
+        ),
+        Value::Object(items) => format!(
+            "{{{}}}",
+            items
+                .iter()
+                .map(|(k, v)| format!(
+                    "{}: {}",
+                    json_text(&Value::String(k.clone()), ensure_ascii),
+                    json_text(v, ensure_ascii)
+                ))
+                .collect::<Vec<_>>()
+                .join(", ")
+        ),
+        Value::String(text) => {
+            let encoded = serde_json::to_string(text).expect("JSON string");
+            if !ensure_ascii {
+                return encoded;
+            }
+            let mut out = String::new();
+            for c in encoded.chars() {
+                if c as u32 >= 127 {
+                    for unit in c.to_string().encode_utf16() {
+                        out.push_str(&format!("\\u{unit:04x}"));
+                    }
+                } else {
+                    out.push(c);
+                }
+            }
+            out
+        }
+        Value::Number(n) if n.is_f64() => crate::automation::format::repr(value),
+        _ => value.to_string(),
+    }
 }
 pub fn print_line(text: &str) -> Result<()> {
     let mut out = std::io::stdout().lock();
-    out.write_all(text.as_bytes())?;
+    out.write_all(&text_bytes(text))?;
     out.write_all(if cfg!(windows) { b"\r\n" } else { b"\n" })?;
     Ok(())
+}
+pub fn error_line(text: &str) -> Result<()> {
+    let mut out = std::io::stderr().lock();
+    out.write_all(&text_bytes(text))?;
+    out.write_all(if cfg!(windows) { b"\r\n" } else { b"\n" })?;
+    Ok(())
+}
+pub fn text_bytes(text: &str) -> Vec<u8> {
+    if cfg!(windows) {
+        text.replace('\n', "\r\n").into_bytes()
+    } else {
+        text.as_bytes().to_vec()
+    }
+}
+pub fn json_pretty(value: &Value, ensure_ascii: bool) -> String {
+    fn format(value: &Value, ascii: bool, depth: usize) -> String {
+        let (open, close, entries) = match value {
+            Value::Array(items) if !items.is_empty() => (
+                "[",
+                "]",
+                items
+                    .iter()
+                    .map(|v| format(v, ascii, depth + 1))
+                    .collect::<Vec<_>>(),
+            ),
+            Value::Object(items) if !items.is_empty() => (
+                "{",
+                "}",
+                items
+                    .iter()
+                    .map(|(k, v)| {
+                        std::format!(
+                            "{}: {}",
+                            json_text(&Value::String(k.clone()), ascii),
+                            format(v, ascii, depth + 1)
+                        )
+                    })
+                    .collect::<Vec<_>>(),
+            ),
+            _ => return json_text(value, ascii),
+        };
+        std::format!(
+            "{open}\n{}{}\n{}{close}",
+            "  ".repeat(depth + 1),
+            entries.join(&std::format!(",\n{}", "  ".repeat(depth + 1))),
+            "  ".repeat(depth)
+        )
+    }
+    format(value, ensure_ascii, 0)
 }
 pub fn option(args: &[String], key: &str) -> Option<String> {
     let (mut found, mut i) = (None, 0);
@@ -299,4 +409,32 @@ pub fn find_executable(name: &str) -> Option<PathBuf> {
         }
     }
     None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn json_bytes_match_frozen_python_dumps() {
+        let cases: Value =
+            serde_json::from_str(include_str!("../tests/fixtures/python-json.json")).unwrap();
+        for case in cases.as_array().unwrap() {
+            assert_eq!(
+                json_text(&case["value"], true),
+                case["ascii"].as_str().unwrap()
+            );
+            assert_eq!(
+                json_text(&case["value"], false),
+                case["unicode"].as_str().unwrap()
+            );
+            assert_eq!(
+                json_pretty(&case["value"], true),
+                case["pretty_ascii"].as_str().unwrap()
+            );
+            assert_eq!(
+                json_pretty(&case["value"], false),
+                case["pretty_unicode"].as_str().unwrap()
+            );
+        }
+    }
 }

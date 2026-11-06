@@ -126,24 +126,141 @@ mod win {
         result
     }
 }
+fn cached_process_table(cache: &mut (f64, HashMap<u32, u32>)) -> HashMap<u32, u32> {
+    if now() - cache.0 < 1. {
+        return cache.1.clone();
+    }
+    #[cfg(windows)]
+    let p = win::processes();
+    #[cfg(not(windows))]
+    let p = output("ps", &strings(&["-axo", "pid=,ppid="]), 10.)
+        .unwrap_or_default()
+        .lines()
+        .filter_map(|l| {
+            let mut w = crate::python_unicode::split_whitespace(l).into_iter();
+            Some((w.next()?.parse().ok()?, w.next()?.parse().ok()?))
+        })
+        .collect();
+    *cache = (now(), p);
+    cache.1.clone()
+}
+pub trait RolloutBackend {
+    fn clock(&self) -> f64;
+    fn holders(&mut self, path: &str) -> HashSet<u32>;
+    fn processes(&mut self) -> HashMap<u32, u32>;
+}
+#[cfg(windows)]
+struct RuntimeRollouts<'a> {
+    processes: &'a mut (f64, HashMap<u32, u32>),
+}
+#[cfg(windows)]
+impl RolloutBackend for RuntimeRollouts<'_> {
+    fn clock(&self) -> f64 {
+        now()
+    }
+    fn holders(&mut self, path: &str) -> HashSet<u32> {
+        win::holders(path)
+    }
+    fn processes(&mut self) -> HashMap<u32, u32> {
+        cached_process_table(self.processes)
+    }
+}
+pub fn windows_codex_thread_with<B: RolloutBackend>(
+    db: &Connection,
+    pids: &[u32],
+    holder_cache: &mut HashMap<u32, String>,
+    scan_cache: &mut HashMap<Vec<u32>, f64>,
+    b: &mut B,
+) -> Result<Option<String>> {
+    for pid in pids {
+        if let Some(thread) = holder_cache.get(pid).cloned() {
+            let mut stmt = db.prepare("select rollout_path from threads where id = ?")?;
+            let rollout = stmt.query_row([&thread], |r| r.get::<_, String>(0)).ok();
+            if rollout.is_some_and(|r| b.holders(&r).contains(pid)) {
+                return Ok(Some(thread));
+            }
+            holder_cache.remove(pid);
+        }
+    }
+    if b.clock() - scan_cache.get(pids).copied().unwrap_or(0.) < 30. {
+        return Ok(None);
+    }
+    let alive = b.processes();
+    holder_cache.retain(|pid, _| alive.contains_key(pid));
+    let mut stmt=db.prepare("select id, rollout_path from threads where archived = 0 and id not in (select child_thread_id from thread_spawn_edges) order by updated_at desc limit 64")?;
+    let rows = stmt.query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))?;
+    for row in rows {
+        let (thread, rollout) = row?;
+        let holders = b.holders(&rollout);
+        for pid in &holders {
+            holder_cache.insert(*pid, thread.clone());
+        }
+        if pids.iter().any(|p| holders.contains(p)) {
+            return Ok(Some(thread));
+        }
+    }
+    scan_cache.insert(pids.to_vec(), b.clock());
+    Ok(None)
+}
+pub trait IdentifyBackend {
+    fn facts(&mut self, address: &str) -> Result<Value>;
+    fn process_tree(&mut self, pid: u32) -> Vec<u32>;
+    fn codex_thread(&mut self, pids: &[u32]) -> Result<Option<String>>;
+    fn claude_session(&mut self, pids: &[u32]) -> Option<String>;
+    fn bridged_session(&mut self, address: &str, kind: &str) -> Result<Option<String>>;
+}
+struct RuntimeIdentify<'a>(&'a mut Collector);
+impl IdentifyBackend for RuntimeIdentify<'_> {
+    fn facts(&mut self, address: &str) -> Result<Value> {
+        hc(&["get", address])
+    }
+    fn process_tree(&mut self, pid: u32) -> Vec<u32> {
+        self.0.tree(pid)
+    }
+    fn codex_thread(&mut self, pids: &[u32]) -> Result<Option<String>> {
+        self.0.codex(pids)
+    }
+    fn claude_session(&mut self, pids: &[u32]) -> Option<String> {
+        pids.iter().find_map(|pid| {
+            read_json(home().join(format!(".claude/sessions/{pid}.json")))
+                .ok()
+                .and_then(|v| v["sessionId"].as_str().map(str::to_string))
+        })
+    }
+    fn bridged_session(&mut self, address: &str, kind: &str) -> Result<Option<String>> {
+        self.0.bridged(address, kind)
+    }
+}
+pub fn identify_with<B: IdentifyBackend>(terminal: &Value, b: &mut B) -> Result<Value> {
+    let address = s(&terminal["address"]);
+    let facts = b.facts(address)?;
+    let pids = if !address.contains('/') {
+        facts["pid"]
+            .as_u64()
+            .map(|p| b.process_tree(p as u32))
+            .unwrap_or_default()
+    } else {
+        vec![]
+    };
+    let kind = family(s(&terminal["agent"]));
+    let session = if kind == "claude" {
+        b.claude_session(&pids)
+    } else if kind == "codex" {
+        b.codex_thread(&pids)?
+    } else {
+        None
+    };
+    let session = match session {
+        Some(s) => Some(s),
+        None => b.bridged_session(address, kind)?,
+    };
+    Ok(
+        json!({"pid":facts["pid"],"session":session,"parent":facts["parent"],"created":facts["created_ms"]}),
+    )
+}
 impl Collector {
     fn process_table(&mut self) -> HashMap<u32, u32> {
-        if now() - self.processes.0 < 1. {
-            return self.processes.1.clone();
-        }
-        #[cfg(windows)]
-        let p = win::processes();
-        #[cfg(not(windows))]
-        let p = output("ps", &strings(&["-axo", "pid=,ppid="]), 10.)
-            .unwrap_or_default()
-            .lines()
-            .filter_map(|l| {
-                let mut w = crate::python_unicode::split_whitespace(l).into_iter();
-                Some((w.next()?.parse().ok()?, w.next()?.parse().ok()?))
-            })
-            .collect();
-        self.processes = (now(), p);
-        self.processes.1.clone()
+        cached_process_table(&mut self.processes)
     }
     fn tree(&mut self, pid: u32) -> Vec<u32> {
         let p = self.process_table();
@@ -171,36 +288,15 @@ impl Collector {
             }
             let db = Connection::open_with_flags(db, OpenFlags::SQLITE_OPEN_READ_ONLY)?;
             db.busy_timeout(Duration::from_secs(1))?;
-            for pid in pids {
-                if let Some(thread) = self.holders.get(pid).cloned() {
-                    let mut stmt = db.prepare("select rollout_path from threads where id = ?")?;
-                    let rollout = stmt.query_row([&thread], |r| r.get::<_, String>(0)).ok();
-                    if rollout.is_some_and(|r| win::holders(&r).contains(pid)) {
-                        return Ok(Some(thread));
-                    }
-                    self.holders.remove(pid);
-                }
-            }
-            if now() - self.scanned.get(pids).copied().unwrap_or(0.) < 30. {
-                return Ok(None);
-            }
-            let alive = self.process_table();
-            self.holders.retain(|pid, _| alive.contains_key(pid));
-            let mut stmt=db.prepare("select id, rollout_path from threads where archived = 0 and id not in (select child_thread_id from thread_spawn_edges) order by updated_at desc limit 64")?;
-            let rows =
-                stmt.query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))?;
-            for row in rows {
-                let (thread, rollout) = row?;
-                let holders = win::holders(&rollout);
-                for pid in &holders {
-                    self.holders.insert(*pid, thread.clone());
-                }
-                if pids.iter().any(|p| holders.contains(p)) {
-                    return Ok(Some(thread));
-                }
-            }
-            self.scanned.insert(pids.to_vec(), now());
-            Ok(None)
+            windows_codex_thread_with(
+                &db,
+                pids,
+                &mut self.holders,
+                &mut self.scanned,
+                &mut RuntimeRollouts {
+                    processes: &mut self.processes,
+                },
+            )
         }
         #[cfg(not(windows))]
         {
@@ -225,21 +321,20 @@ impl Collector {
         else {
             return Ok(None);
         };
-        let herdr = if cfg!(windows) {
-            "herdr"
-        } else if Path::new("/opt/homebrew/bin/herdr").exists() {
-            "/opt/homebrew/bin/herdr"
-        } else {
-            "herdr"
-        };
+        let herdr =
+            find_executable("herdr").unwrap_or_else(|| PathBuf::from("/opt/homebrew/bin/herdr"));
+        let herdr = herdr.to_string_lossy();
         if kind == "claude" {
-            let result = call(herdr, &strings(&["pane", "get", &pane]))?;
+            // subprocess.run in the original consumes stdout even on a nonzero
+            // exit (pane lookup races are common); only transport/JSON fails.
+            let (_, text, _) = capture(&herdr, &strings(&["pane", "get", &pane]), 10.)?;
+            let result: Value = serde_json::from_str(if text.is_empty() { "{}" } else { &text })?;
             let result = &result["result"];
             let p = result.get("pane").unwrap_or(result);
             return Ok(p["agent_session"]["value"].as_str().map(str::to_string));
         }
-        let result = output(
-            herdr,
+        let (_, result, _) = capture(
+            &herdr,
             &strings(&["pane", "process-info", "--pane", &pane]),
             10.,
         )?;
@@ -250,35 +345,7 @@ impl Collector {
         self.codex(&pids)
     }
     fn identify(&mut self, terminal: &Value) -> Result<Value> {
-        let address = s(&terminal["address"]);
-        let facts = hc(&["get", address])?;
-        let pids = if !address.contains('/') {
-            facts["pid"]
-                .as_u64()
-                .map(|p| self.tree(p as u32))
-                .unwrap_or_default()
-        } else {
-            vec![]
-        };
-        let kind = family(s(&terminal["agent"]));
-        let session = if kind == "claude" {
-            pids.iter().find_map(|pid| {
-                read_json(home().join(format!(".claude/sessions/{pid}.json")))
-                    .ok()
-                    .and_then(|v| v["sessionId"].as_str().map(str::to_string))
-            })
-        } else if kind == "codex" {
-            self.codex(&pids)?
-        } else {
-            None
-        };
-        let session = match session {
-            Some(s) => Some(s),
-            None => self.bridged(address, kind)?,
-        };
-        Ok(
-            json!({"pid":facts["pid"],"session":session,"parent":facts["parent"],"created":facts["created_ms"]}),
-        )
+        identify_with(terminal, &mut RuntimeIdentify(self))
     }
     pub fn transcript(
         &mut self,
@@ -374,7 +441,7 @@ impl Collector {
         }
         nodes
     }
-    fn codex_children(
+    pub fn codex_children(
         &mut self,
         db: &Connection,
         thread: &str,
@@ -506,13 +573,25 @@ impl Collector {
     }
 }
 fn hc(args: &[&str]) -> Result<Value> {
-    let (code, out, _) = capture("hc", &strings(args), 10.)?;
+    hc_with(args, |command| capture_cmd(command, 10.))
+}
+pub fn hc_with<F>(args: &[&str], run: F) -> Result<Value>
+where
+    F: FnOnce(std::process::Command) -> Result<(i32, String, String)>,
+{
+    let program = hc_program();
+    let mut process = command(&program.to_string_lossy());
+    process.args(args);
+    let (code, out, _) = run(process)?;
     let _ = code;
     Ok(serde_json::from_str(if out.is_empty() {
         "{}"
     } else {
         &out
     })?)
+}
+pub fn hc_program() -> PathBuf {
+    find_executable("hc").unwrap_or_else(|| home().join(".local/share/herdr-sixfold/bin/hc"))
 }
 fn modified(path: &Path) -> f64 {
     path.metadata()
@@ -612,6 +691,9 @@ pub fn events_for(nodes: &[Value], seen: &mut Option<HashSet<String>>, events: &
         events.drain(..events.len() - 32);
     }
 }
+pub fn lock_once(file: &std::fs::File) -> bool {
+    file.try_lock_exclusive().is_ok()
+}
 pub fn run(args: &[String]) -> Result<()> {
     let base = if cfg!(windows) {
         std::env::var_os("LOCALAPPDATA")
@@ -627,7 +709,7 @@ pub fn run(args: &[String]) -> Result<()> {
         .create(true)
         .write(true)
         .open(base.join("workflow.lock"))?;
-    if lock.try_lock_exclusive().is_err() {
+    if !lock_once(&lock) {
         return Ok(());
     }
     let (mut collector, mut seen, mut events) = (Collector::default(), None, vec![]);

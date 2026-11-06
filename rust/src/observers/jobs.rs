@@ -4,6 +4,17 @@ use super::*;
 mod database_contracts;
 use std::collections::{BTreeMap, BTreeSet};
 const MAX_BYTES: u64 = 64 * 1024 * 1024;
+#[derive(Debug)]
+struct Unverified(String);
+impl std::fmt::Display for Unverified {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(&self.0)
+    }
+}
+impl std::error::Error for Unverified {}
+fn err<T>(message: impl Into<String>) -> Result<T> {
+    Err(Box::new(Unverified(message.into())))
+}
 fn identifier(v: &Value) -> Option<String> {
     match v {
         Value::String(t) if !t.is_empty() => Some(t.clone()),
@@ -388,7 +399,7 @@ fn codex(t: &Value, m: &Value, c: &Value, obs: &mut Vec<Value>) -> Result<()> {
                 [sid],
                 |r| r.get::<_, String>(0),
             )
-            .map_err(|_| std::io::Error::other("backend jobs unverified: rollout path missing"))?;
+            .map_err(|_| Unverified("backend jobs unverified: rollout path missing".into()))?;
         let (records, mtime) = read_jsonl(Path::new(&path), Some(sid), obs, false)?;
         if main && mtime <= num(&t["status_ms"], 0.) - 5000. {
             return err("stale main rollout/session mapping");
@@ -703,10 +714,18 @@ pub fn check_jobs(t: &Value, c: &Value, mapping: &Value, clean: bool) -> (bool, 
             claude(t, m, &c, &mut obs)
         }
     })();
-    let fp = fingerprint(&json!(obs));
+    let fp = fingerprint_ascii(&json!(obs), false);
     match checked {
         Ok(_) => (true, String::new(), fp),
-        Err(e) => (false, e.to_string(), fp),
+        Err(e) => (
+            false,
+            if e.is::<Unverified>() {
+                e.to_string()
+            } else {
+                "backend jobs unverified: evidence unreadable or invalid".into()
+            },
+            fp,
+        ),
     }
 }
 #[cfg(test)]

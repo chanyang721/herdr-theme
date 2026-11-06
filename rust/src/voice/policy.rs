@@ -2,14 +2,14 @@ use super::{alive, append_json, mtime, now, settings, Result};
 use serde_json::Value;
 use std::{
     fs,
-    io::{self, Read, Write},
+    io::Write,
     path::{Path, PathBuf},
     thread,
     time::Duration,
 };
 
 pub fn segments(path: &Path, lines: usize) -> Vec<Value> {
-    let Ok(text) = fs::read_to_string(path) else {
+    let Ok(text) = crate::legacy_text::read(path, crate::legacy_text::ErrorPolicy::Strict) else {
         return vec![];
     };
     let all: Vec<_> = text.lines().collect();
@@ -84,7 +84,7 @@ pub fn headset(name: &str, settings: &Value) -> bool {
             .unwrap_or(false)
 }
 pub fn audio_devices() -> Option<Value> {
-    super::output(
+    super::output_unchecked(
         "/usr/sbin/system_profiler",
         &["-json", "SPAudioDataType"],
         5.,
@@ -101,7 +101,10 @@ pub fn devices(payload: &Value) -> Vec<&Value> {
         .collect()
 }
 pub fn default_input() -> String {
-    audio_devices()
+    default_input_with(audio_devices)
+}
+pub fn default_input_with<F: FnOnce() -> Option<Value>>(metadata: F) -> String {
+    metadata()
         .map(|v| {
             devices(&v)
                 .into_iter()
@@ -190,8 +193,7 @@ pub fn decide(d: &Decision<'_>, settings: &Value) -> Option<String> {
     Some(format!("본인 목소리로 확인되지 않아 전송하지 않았습니다 ({count}자, 본인 {mine:.1}초, 다른 목소리 {others:.1}초)"))
 }
 pub fn submit_hook() -> Result<()> {
-    let mut input = String::new();
-    io::stdin().read_to_string(&mut input)?;
+    let input = crate::legacy_text::read_stdin()?;
     let payload: Value = serde_json::from_str(&input)?;
     let prompt = payload["prompt"].as_str().unwrap_or("");
     let pane = std::env::var("HERDR_PANE_ID").unwrap_or_default();
@@ -202,7 +204,10 @@ pub fn submit_hook() -> Result<()> {
     let settings = settings::load();
     let headset = armed.is_some() && headset(&default_input(), &settings);
     let keys = seconds_since_key();
-    submit_to(
+    // submit_to models a text stream for the pure diagnostic tests. Encode
+    // its final diagnostic through the real process stderr profile once.
+    let mut diagnostic = Vec::new();
+    let result = submit_to(
         prompt,
         &pane,
         &dir,
@@ -216,8 +221,12 @@ pub fn submit_hook() -> Result<()> {
         &settings,
         now,
         || thread::sleep(Duration::from_secs_f64(0.6)),
-        &mut io::stderr(),
-    )
+        &mut diagnostic,
+    );
+    if !diagnostic.is_empty() {
+        crate::legacy_text::stderr(std::str::from_utf8(&diagnostic)?)?;
+    }
+    result
 }
 pub struct HookObservation {
     pub armed: Option<f64>,

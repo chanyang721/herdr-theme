@@ -1,4 +1,5 @@
 //! Native document, desktop and installation helpers.
+mod argparse;
 pub mod arguments;
 pub mod casefold;
 pub mod catalog;
@@ -14,14 +15,14 @@ pub mod update;
 use common::*;
 
 pub fn run(command: &str, args: &[String]) -> Result<()> {
+    let normalized = arguments::normalize(command, args)?;
+    let args = normalized.as_slice();
     if has(args, "--help") || has(args, "-h") {
         if !crate::help::show(command, args)? {
             println!("herdr-theme {command} [arguments]");
         }
         return Ok(());
     }
-    let normalized = arguments::normalize(command, args)?;
-    let args = normalized.as_slice();
     if command.starts_with("pinned_") {
         return pinned::run(command, args);
     }

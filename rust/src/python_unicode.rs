@@ -169,8 +169,9 @@ fn unescaped_suffix_boundary(pattern: &str) -> bool {
 }
 /// Existing masking expressions use only a leading/trailing `\b`. Remove those
 /// assertions from the regex and check the exact frozen Python word class at the
-/// match span. Invalid candidates advance one character, preserving overlapping
-/// later candidates instead of swallowing them with a greedy invalid match.
+/// match span. A greedy body can consume trailing punctuation before `\b`:
+/// Python backtracks to the last endpoint satisfying that assertion. Replay the
+/// curated body with an anchored endpoint to retain that behavior and captures.
 pub fn sub(pattern: &str, text: &str, replacement: &str) -> String {
     let mut flags = "";
     let mut body = pattern;
@@ -196,12 +197,40 @@ pub fn sub(pattern: &str, text: &str, replacement: &str) -> String {
         "curated Python masking expressions may use only endpoint word boundaries"
     );
     let regex = regex(&format!("{flags}{body}"));
+    let end_anchored = end_boundary.then(|| self::regex(&format!("{flags}(?:{body})\\z")));
     let (mut search, mut copied) = (0, 0);
     let mut out = String::new();
     while search <= text.len() {
-        let Some(captures) = regex.captures_at(text, search) else {
+        let Some(mut captures) = regex.captures_at(text, search) else {
             break;
         };
+        let first = captures.get(0).unwrap();
+        if (!start_boundary || word_boundary(text, first.start()))
+            && end_boundary
+            && !word_boundary(text, first.end())
+        {
+            // No current curated body contains an end anchor or lookaround.
+            // Anchoring the replay only constrains the consumed endpoint; its
+            // leading context remains the complete original haystack prefix.
+            for (end, _) in text[..first.end()].char_indices().rev() {
+                if end < first.start() {
+                    break;
+                }
+                if !word_boundary(text, end) {
+                    continue;
+                }
+                if let Some(shorter) = end_anchored
+                    .as_ref()
+                    .unwrap()
+                    .captures_at(&text[..end], first.start())
+                {
+                    if shorter.get(0).unwrap().start() == first.start() {
+                        captures = shorter;
+                        break;
+                    }
+                }
+            }
+        }
         let matched = captures.get(0).unwrap();
         let valid = (!start_boundary || word_boundary(text, matched.start()))
             && (!end_boundary || word_boundary(text, matched.end()));

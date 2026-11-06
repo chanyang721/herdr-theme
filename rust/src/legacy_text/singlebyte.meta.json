@@ -1,0 +1,61 @@
+{
+  "provenance": "Untouched CPython standard-library single-byte codecs, all bytes and BMP canonical encodings",
+  "python_version": "3.12.10",
+  "table_format": "256 little-endian u16 values per file; ffff undefined",
+  "tables": [
+    {
+      "encoding": "cp1250",
+      "filename": "cp1250.bin",
+      "sha256": "e2c715653b32cbc0312b6ec9d277f58ee4386288ce087ec9409c3280ff15e006",
+      "canonical_encode_overrides": []
+    },
+    {
+      "encoding": "cp1251",
+      "filename": "cp1251.bin",
+      "sha256": "33677c46f0af953df63d609cab6d173ef2383f4cbc666239aba78277555ddf3c",
+      "canonical_encode_overrides": []
+    },
+    {
+      "encoding": "cp1253",
+      "filename": "cp1253.bin",
+      "sha256": "dbc05cad5d554de20d074288aee3d1c65139e32bf59a9223433f79108023a1e5",
+      "canonical_encode_overrides": []
+    },
+    {
+      "encoding": "cp1254",
+      "filename": "cp1254.bin",
+      "sha256": "f2378632c8c87c9a26bc7f3a024695269420a65571e4b2207fded3ddda672e37",
+      "canonical_encode_overrides": []
+    },
+    {
+      "encoding": "cp1255",
+      "filename": "cp1255.bin",
+      "sha256": "77d9818e971f3d4479f69a3013f1036bea89f2ca1954a99d0e88e592412b94a3",
+      "canonical_encode_overrides": []
+    },
+    {
+      "encoding": "cp1256",
+      "filename": "cp1256.bin",
+      "sha256": "544c3592214b8762df16607b99334d4d53df3148f5b79ab787992271f78ba593",
+      "canonical_encode_overrides": []
+    },
+    {
+      "encoding": "cp1257",
+      "filename": "cp1257.bin",
+      "sha256": "9dcfe8aa2cf0955bc985078676bf24d7856422010d02e7f68a8ad99d81d0e34a",
+      "canonical_encode_overrides": []
+    },
+    {
+      "encoding": "cp1258",
+      "filename": "cp1258.bin",
+      "sha256": "8b2838f31f93c63c0e980ee7e5d24b150755a7163fddee691ec30487522db41f",
+      "canonical_encode_overrides": []
+    },
+    {
+      "encoding": "iso8859-15",
+      "filename": "iso885915.bin",
+      "sha256": "6a31d79c1c012dc2568eb5baaa22d0b3b6d7aee1194b5bb5c6f1f5ab9f4fe59e",
+      "canonical_encode_overrides": []
+    }
+  ]
+}

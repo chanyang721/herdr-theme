@@ -18,7 +18,7 @@ async function load(file, runtime) {
   delete globalThis[key];
   return module;
 }
-async function harness({ documents = [document('a'), document('b')], selection, lineEnding, props: extra = {} } = {}) {
+async function harness({ documents = [document('a'), document('b')], selection, lineEnding, props: extra = {}, hostWindow = () => null } = {}) {
   const handlers = new Map(), calls = [], reads = [], labels = [], timer = new Map(), watchers = new Map();
   const state = { documents, selected: selection, active: false, text: path => `본문 ${path}`, result: null, stage: async text => ({ blocks: [{ text }], files: [], unavailable: false }) };
   const stored = { 'sixfold.docs.selection.v1': selection ? { Demo: selection, Other: 'other' } : { Other: 'other' } };
@@ -38,7 +38,7 @@ async function harness({ documents = [document('a'), document('b')], selection, 
     InputState: { new: () => { const input = { text: '', events: {}, value: () => input.text, set_value: v => { input.text = v; }, on: (name, fn) => { input.events[name] = fn; return true; } }; state.input = input; return input; } },
     Input: { new: () => element() },
     TextView: { markdown: (_id, text) => { labels.push(text); return element(); } },
-    props: () => ({ spaceId: 'Demo', ...extra }), appHome: () => '/app',
+    props: () => ({ spaceId: 'Demo', ...extra }), appHome: () => '/app', hostWindow,
     readTextFile: async path => { if (path.endsWith('/project-docs-open.json')) return state.request ? JSON.stringify(state.request) : null; reads.push(path); return state.text(path); },
     exec: async (command, args) => {
       calls.push({ command, args });
@@ -405,6 +405,13 @@ test('kind folders and the 수정일 column list the newest write first, whateve
   const tree = listTree(loc, docs).children[0].children;
   assert.deepEqual(finder.sortNodes(tree, { key: 'date', dir: -1 }).map(n => n.docId), ['old-name-new-write', 'middle', 'new-name-old-write']);
   assert.deepEqual(finder.sortNodes(tree, { key: 'date', dir: 1 }).map(n => n.docId), ['new-name-old-write', 'middle', 'old-name-new-write']);
+});
+
+test('native resolver tolerates no host window and selects the Windows executable', async t => {
+  const absent = await harness(); t.after(() => absent.view.close());
+  assert.deepEqual(absent.view.resolverCommand, ['/app/scripts/sixfold/herdr-theme', 'resolve_doc_pins']);
+  const windows = await harness({ hostWindow: () => ({ platform: 'windows' }) }); t.after(() => windows.view.close());
+  assert.deepEqual(windows.view.resolverCommand, ['/app/scripts/sixfold/herdr-theme.exe', 'resolve_doc_pins']);
 });
 
 test('old tabs use the native resolver and an explicit native command remains configurable', async () => {

@@ -594,24 +594,23 @@ pub fn scan_cli(args: &[String]) -> Result<()> {
         .map(PathBuf::from)
         .unwrap_or_else(|| app_home().join("mods/insights/collector.mjs"));
     if !collector.is_file() {
-        println!(
-            "{}",
-            json!({"ok":false,"error":"Insights 수집기가 설치되지 않았습니다."})
-        );
+        crate::common::print(
+            &(json!({"ok":false,"error":"Insights 수집기가 설치되지 않았습니다."})),
+        )?;
         return exit_without_diagnostic(1);
     }
     let Some(node) = find_node() else {
-        println!("{}", json!({"ok":false,"error":"node를 찾지 못했습니다."}));
+        crate::common::print(&(json!({"ok":false,"error":"node를 찾지 못했습니다."})))?;
         return exit_without_diagnostic(1);
     };
     let timeout = option(args, "--timeout")
         .unwrap_or_else(|| "60".into())
         .parse::<f64>()?;
-    let result = timeout_output(
+    let result = timeout_output_f64(
         command(node)
             .arg(collector)
             .args(["snapshot", "--store", &store]),
-        timeout.ceil() as u64,
+        timeout,
     );
     match result {
         Err(error) => {
@@ -623,7 +622,7 @@ pub fn scan_cli(args: &[String]) -> Result<()> {
             } else {
                 format!("node 실행 실패: {error}")
             };
-            println!("{}", json!({"ok":false,"error":error}));
+            crate::common::print(&(json!({"ok":false,"error":error})))?;
             exit_without_diagnostic(1)
         }
         Ok(output) if !output.status.success() => {
@@ -644,11 +643,11 @@ pub fn scan_cli(args: &[String]) -> Result<()> {
                     format!(": {detail}")
                 }
             );
-            println!("{}", json!({"ok":false,"error":message}));
+            crate::common::print(&(json!({"ok":false,"error":message})))?;
             exit_without_diagnostic(1)
         }
         Ok(_) => {
-            println!("{}", json!({"ok":true}));
+            crate::common::print(&(json!({"ok":true})))?;
             Ok(())
         }
     }

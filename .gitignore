@@ -6,5 +6,5 @@ artifacts/
 rust/target/
 .tools/
 .migration-oracle/
-artifacts-*.txt
+/artifacts-*
 original-python-utf8.txt

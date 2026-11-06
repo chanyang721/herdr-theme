@@ -1,0 +1,20 @@
+{
+  "baseline": "8c5b71d2f1074bb5d1d831fa395617bf4ae2abc8",
+  "scenario": "KeyboardInterrupt raised by original status read after installing candidate files",
+  "exit": 1,
+  "stdout": "",
+  "stderr": "Install failed: ; rolled_back; receipt: <receipt>\n",
+  "phase": "rolled_back",
+  "failure": "",
+  "rollback_conflicts": [],
+  "rollback_status": {
+    "errors": [],
+    "space": "original-space",
+    "tab": "original-tab",
+    "focused_pane": "original-pane"
+  },
+  "mod": "original mod",
+  "theme": {
+    "color": "original"
+  }
+}

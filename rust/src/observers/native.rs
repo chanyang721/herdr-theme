@@ -4,26 +4,40 @@ use super::*;
 use std::collections::BTreeMap;
 struct Environment {
     vars: BTreeMap<String, String>,
+    timeout: Option<f64>,
 }
 impl Environment {
     fn new(values: &Value) -> Self {
+        Self::with_identity(values, true)
+    }
+    fn with_identity(values: &Value, clear_caller: bool) -> Self {
         let mut vars: BTreeMap<_, _> = std::env::vars().collect();
         if let Some(o) = values.as_object() {
             for (k, v) in o {
                 vars.insert(k.clone(), s(v).into());
             }
         }
-        vars.remove("HC_TERMINAL_ID");
-        vars.remove("HERDR_PANE_ID");
-        Self { vars }
+        if clear_caller {
+            vars.remove("HC_TERMINAL_ID");
+            vars.remove("HERDR_PANE_ID");
+        }
+        Self {
+            vars,
+            timeout: Some(20.),
+        }
     }
     fn run(&self, argv: &[String], actor: Option<&str>, check: bool) -> Result<Output> {
-        let o = execute_with(argv, 20., false, |c| {
+        let configure = |c: &mut Command| {
             c.env_clear().envs(&self.vars);
             if let Some(a) = actor {
                 c.env("HC_TERMINAL_ID", a);
             }
-        })?;
+        };
+        let o = if let Some(timeout) = self.timeout {
+            execute_with(argv, timeout, false, configure)?
+        } else {
+            execute_unbounded_with(argv, false, configure)?
+        };
         if check && o.code != 0 {
             return err(format!(
                 "{:?}: {}{}",
@@ -47,12 +61,7 @@ fn repo(args: &[String]) -> PathBuf {
         .position(|a| a == "--repo")
         .and_then(|i| args.get(i + 1))
         .map(PathBuf::from)
-        .unwrap_or_else(|| {
-            PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-                .parent()
-                .unwrap()
-                .to_owned()
-        })
+        .unwrap_or_else(crate::documents::common::repo_default)
 }
 fn quote(s: &str) -> String {
     format!("'{}'", s.replace('\'', "'\"'\"'"))
@@ -65,11 +74,11 @@ fn check(condition: bool, message: impl Into<String>) -> Result<()> {
     }
 }
 fn write(path: &Path, t: &str) -> Result<()> {
-    fs::write(path, t)?;
+    fs::write(path, crate::common::text_bytes(t))?;
     Ok(())
 }
 fn json_write(path: &Path, v: &Value) -> Result<()> {
-    write(path, &v.to_string())
+    write(path, &crate::common::json_text(v, true))
 }
 fn wait(
     base: &Path,
@@ -121,7 +130,8 @@ pub fn doc_tabs(args: &[String]) -> Result<()> {
         fs::canonicalize(s(&vars["HERDR_APP_HOME"]))? == base.join("app"),
         "Disposable app home required",
     )?;
-    let env = Environment::new(&vars);
+    let mut env = Environment::with_identity(&vars, false);
+    env.timeout = None;
     let mut receipts = vec![];
     let source = base.join("project/table.md");
     let original = fs::read_to_string(&source)?;
@@ -212,7 +222,7 @@ pub fn doc_tabs(args: &[String]) -> Result<()> {
         "--stderr",
         &base.join("restart.log").to_string_lossy(),
     ]));
-    execute(&command, 20., false)?;
+    execute_unbounded(&command, false)?;
     wait(
         &base,
         "app restart restores selection and content",
@@ -224,12 +234,11 @@ pub fn doc_tabs(args: &[String]) -> Result<()> {
     shot(&env, &base, "native-restarted")?;
     write(
         &base.join("receipt.json"),
-        &serde_json::to_string_pretty(&receipts)?,
+        &crate::common::json_pretty(&json!(receipts), true),
     )?;
-    println!(
-        "{}",
-        json!({"passed":receipts.len(),"receipt":base.join("receipt.json").to_string_lossy()})
-    );
+    crate::common::print(
+        &json!({"passed":receipts.len(),"receipt":base.join("receipt.json").to_string_lossy()}),
+    )?;
     Ok(())
 }
 pub fn fixture_inventory(args: &[String]) -> Result<()> {
@@ -238,7 +247,7 @@ pub fn fixture_inventory(args: &[String]) -> Result<()> {
         .cloned()
         .or_else(|| std::env::var("FIXTURE_INVENTORY").ok())
         .ok_or_else(|| std::io::Error::other("inventory file missing"))?;
-    print!("{}", fs::read_to_string(p)?);
+    crate::common::print_line(&fs::read_to_string(p)?)?;
     Ok(())
 }
 pub fn protocol_worker(_args: &[String]) -> Result<()> {
@@ -298,17 +307,15 @@ pub fn protocol_worker(_args: &[String]) -> Result<()> {
             continue;
         };
         let binary = std::env::var("COLLAB_BINARY")?;
-        let accept = execute(
+        let accept = execute_unbounded(
             &strings(&[&binary, "collaborate", "accept", &task, "--lease", &lease]),
-            20.,
             false,
         )?;
         let mut result = json!({"id":task,"accepted":accept.code==0,"actor":std::env::var("HC_TERMINAL_ID").ok()});
         if accept.code == 0 {
-            let count = fs::read_to_string(std::env::var("COUNT_FILE")?)?
-                .lines()
-                .count();
-            let completed = execute(
+            let counted = fs::read_to_string(std::env::var("COUNT_FILE")?)?;
+            let count = crate::python_unicode::split_lines(&counted).len();
+            let completed = execute_unbounded(
                 &strings(&[
                     &binary,
                     "collaborate",
@@ -319,7 +326,6 @@ pub fn protocol_worker(_args: &[String]) -> Result<()> {
                     "--result",
                     &format!("{count} lines"),
                 ]),
-                20.,
                 false,
             )?;
             result["lines"] = json!(count);
@@ -329,7 +335,10 @@ pub fn protocol_worker(_args: &[String]) -> Result<()> {
             .create(true)
             .append(true)
             .open(std::env::var("WORKER_LOG")?)?;
-        writeln!(f, "{result}")?;
+        f.write_all(&crate::common::text_bytes(&format!(
+            "{}\n",
+            crate::common::json_text(&result, true)
+        )))?;
         emit("idle")?;
         print!("\r\n완료했습니다.\r\n› Ask Codex to do anything");
         std::io::stdout().flush()?;
@@ -480,23 +489,23 @@ pub fn collaboration(args: &[String]) -> Result<()> {
                     .all(|r| truth(&r["accepted"]) && truth(&r["completed"])),
             format!("{receipts:?}"),
         )?;
-        let evidence = json!({"kind":"real isolated hc; fixture workspace inventory; deterministic protocol workers","session":"c","addresses":addresses,"history":history,"worker_receipts":receipts,"expected_lines":fs::read_to_string(root.join("README.md"))?.lines().count(),"send_count":2,"duplicate_count":0,"origin_report_count":1});
-        write(Path::new(output), &serde_json::to_string_pretty(&evidence)?)?;
-        println!(
-            "{}",
-            json!({"evidence":output,"duplicate_count":0,"origin_report_count":1})
-        );
+        let evidence = json!({"kind":"real isolated hc; fixture workspace inventory; deterministic protocol workers","session":"c","addresses":addresses,"history":history,"worker_receipts":receipts,"expected_lines":crate::python_unicode::split_lines(&fs::read_to_string(root.join("README.md"))?).len(),"send_count":2,"duplicate_count":0,"origin_report_count":1});
+        write(
+            Path::new(output),
+            &crate::common::json_pretty(&evidence, false),
+        )?;
+        crate::common::print_line(&crate::common::json_text(
+            &json!({"evidence":output,"duplicate_count":0,"origin_report_count":1}),
+            true,
+        ))?;
         Ok(())
     })();
+    env.timeout = Some(10.);
     for a in &addresses {
         let _ = env.run(&strings(&["hc", "kill", a]), None, false);
         let _ = env.run(&strings(&["hc", "rm", a]), None, false);
     }
-    let stopped = env.run(
-        &strings(&["hc", "server", "stop"]),
-        None,
-        !addresses.is_empty(),
-    );
+    let stopped = env.run(&strings(&["hc", "server", "stop"]), None, false);
     result?;
     stopped?;
     Ok(())

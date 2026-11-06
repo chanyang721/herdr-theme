@@ -29,7 +29,7 @@ Herdr Theme 의 음성 기능이다. herdr 플러그인(id `local.focus-queue`)�
 
 1. Homebrew 설치 (Xcode Command Line Tools 도 같이 깔린다): <https://brew.sh>
 2. Claude Code 설치·로그인 (<https://code.claude.com>). Codex 는 선택
-3. Herdr Theme 저장소를 받고 `CARGO_BUILD_JOBS=1 cargo build --manifest-path rust/Cargo.toml --release`로 실행 파일을 만든 뒤 저장소 폴더에서 음성 설치를 실행한다. herdr·PortAudio가 없으면 같이 깔고, herdr를 아직 띄우지 않았어도 된다
+3. Herdr Theme 저장소를 받고 `cargo build --manifest-path rust/Cargo.toml --locked --release --bin herdr-theme --jobs 1`로 실행 파일을 만든 뒤 저장소 폴더에서 음성 설치를 실행한다. herdr·PortAudio가 없으면 같이 깔고, herdr를 아직 띄우지 않았어도 된다
    ```sh
    bash voice/install.sh
    ```
@@ -55,7 +55,7 @@ Herdr Theme 의 음성 기능이다. herdr 플러그인(id `local.focus-queue`)�
 
 ### 설치가 하는 일
 
-`herdr-theme voice_install` 가 아래를 한다. `install.sh` 는 없는 도구(herdr, PortAudio)를 Homebrew 로 깐 뒤 이것을 부른다. 테마를 `herdr-theme update_install voice` 로 설치·업데이트해도 같은 일을 한다. 여러 번 실행해도 안전하다.
+`herdr-theme voice-install` 가 아래를 한다. `install.sh` 는 없는 도구(herdr, PortAudio)를 Homebrew 로 깐 뒤 이것을 부른다. 테마를 `herdr-theme update-install voice` 로 설치·업데이트해도 같은 일을 한다. 여러 번 실행해도 안전하다.
 
 1. `voice/` 를 `~/.local/share/herdr-focus-queue/plugin` 에 복사한다. 저장소 폴더를 직접 실행하지 않으므로, 작업 중인 worktree 를 바꾸거나 고쳐도 실행 중인 음성 기능은 바뀌지 않는다. 업데이트는 폴더를 한 번에 맞바꾸므로, 그 사이에 뜬 herdr 이벤트는 옛 복사본이나 새 복사본 중 하나를 온전히 실행한다
 2. 그 복사본의 `focusq install` 로:
@@ -71,9 +71,9 @@ Herdr Theme 의 음성 기능이다. herdr 플러그인(id `local.focus-queue`)�
 ### 옵션
 
 ```sh
-./rust/target/release/herdr-theme voice_install --enroll    # 설치하면서 45초 동안 말해 목소리 등록
-./rust/target/release/herdr-theme voice_install --check     # 설치 상태만 확인
-./rust/target/release/herdr-theme voice_install --home /tmp/h   # 다른 홈에 파일만 쓴다(아무것도 띄우지 않음, 시험용)
+./rust/target/release/herdr-theme voice-install --enroll    # 설치하면서 45초 동안 말해 목소리 등록
+./rust/target/release/herdr-theme voice-install --check     # 설치 상태만 확인
+./rust/target/release/herdr-theme voice-install --home /tmp/h   # 다른 홈에 파일만 쓴다(아무것도 띄우지 않음, 시험용)
 ```
 
 - `--enroll` 은 반드시 에이전트가 없는 셸 pane 에서 한다. Claude pane 에서 하면 학습하는 말이 그 pane 에 받아써진다.
@@ -83,10 +83,10 @@ Herdr Theme 의 음성 기능이다. herdr 플러그인(id `local.focus-queue`)�
 | 파일 | 바꾸는 값 |
 |---|---|
 | `~/.claude/settings.json` | `voiceEnabled: true`, `voice.enabled: true`, `voice.mode: "tap"`, `language` 가 없으면 `"korean"` |
-| `~/.claude/settings.json` | `hooks.UserPromptSubmit` 에 `herdr-theme voice_submit_hook` 추가 |
+| `~/.claude/settings.json` | `hooks.UserPromptSubmit` 에 `herdr-theme voice-submit-hook` 추가 |
 | `~/.claude/keybindings.json` | `Chat` 의 `f8 → voice:pushToTalk` |
 | `~/Library/LaunchAgents/<label_prefix>.herdr-codex-focus.plist` | Codex 마이크 관리 |
-| `~/.config/herdr-app/data/sixfold/voice-integration.json` | `script` (Herdr 앱 포커스 연동) |
+| `~/.config/herdr-app/data/sixfold/voice-integration.json` | 네이티브 실행 파일의 `command`·`args`, 호환용 `script` (Herdr 앱 포커스 연동) |
 
 값이 실제로 바뀔 때만 `*.focusq-<시각>.bak` 백업을 남긴다. 다른 키·훅·계정 설정은 건드리지 않는다. 받아쓰기를 스페이스가 아닌 F8 토글(tap 모드)로 두는 이유는, 스페이스로 토글하면 띄어쓰기가 녹음을 끝내기 때문이다.
 
@@ -121,7 +121,7 @@ Herdr Theme 의 음성 기능이다. herdr 플러그인(id `local.focus-queue`)�
    - Herdr 앱이나 iTerm 이 맨 앞이 아니면 녹음을 멈추고, 돌아오면 다시 켠다. 다른 앱을 쓰며 한 말은 세션에 들어가지 않는다. 멈출 때 받아쓰기는 pane 을 옮길 때와 같게 처리한다.
 4. 전송 전에 포커스를 옮겨도 그 pane 에서 같은 조건으로 전송한다. 문장을 끝맺지 않은 글은 입력창에 둔다. 옮긴 뒤의 말은 새 pane 몫이라 세지 않는다.
 5. 키보드로 친 글은 지우지 않고, 그것만으로는 자동 전송하지 않는다. 입력창에 글이 있을 때 실제 키를 누르면(1.5초 안) 그때까지의 글은 받아쓴 글이라도 입력창이 빌 때까지 손으로 고친 글로 본다. 그 뒤에 이어 말한 부분은 보통 받아쓰기처럼 판정한다: 본인 목소리로 문장을 끝내면 고친 글과 함께 보내고, 다른 목소리면 이어 붙은 부분만 지운다. 받아쓴 뒤 고친 글이 남은 채 녹음이 끝났으면 키 입력이 멈춘 뒤 다시 F8 로 녹음을 켜서 이어 말할 수 있다. 처음부터 손으로 친 초안에서는 녹음을 켜지 않는다. 직접 Enter 를 쳐서 보내면 판정과 관계없이 전송된다. 그 받아쓰기 중 이미 본인 점수 0.5 이상인 구간만 목소리 갱신에 쓰인다.
-6. 마지막 관문은 `herdr-theme voice_submit_hook`(Claude Code `UserPromptSubmit` hook)다. Claude Code 가 무음 시간 초과로 스스로 보내는 받아쓰기도 여기서 막는다. 최근 녹음한 pane 의 전송은 녹음 안에서 들린 본인 말이 글자 수를 설명하고 평균 점수가 0.5 이상일 때만 통과한다. 판정기가 꺼졌거나 아무 말도 듣지 못했으면 막는다. 직접 친 키(1초 안), `hc send` 메시지, `/` 명령은 통과한다. 막힌 글은 `voice-blocked.jsonl` 에만 남고 입력창에서 지운다.
+6. 마지막 관문은 `herdr-theme voice-submit-hook`(Claude Code `UserPromptSubmit` hook)다. Claude Code 가 무음 시간 초과로 스스로 보내는 받아쓰기도 여기서 막는다. 최근 녹음한 pane 의 전송은 녹음 안에서 들린 본인 말이 글자 수를 설명하고 평균 점수가 0.5 이상일 때만 통과한다. 판정기가 꺼졌거나 아무 말도 듣지 못했으면 막는다. 직접 친 키(1초 안), `hc send` 메시지, `/` 명령은 통과한다. 막힌 글은 `voice-blocked.jsonl` 에만 남고 입력창에서 지운다.
 
 녹음 관리는 자동이다.
 - 전송했거나 2분 상한에 걸려 녹음이 끝나면, 입력창이 비는 대로 F8 로 다시 켠다.
@@ -205,8 +205,8 @@ focusq voice-crosscheck
 
 | 명령 | 하는 일 |
 |---|---|
-| `bash voice/install.sh [--enroll]` | 저장소에서. 없는 도구 설치 후 `herdr-theme voice_install` |
-| `./rust/target/release/herdr-theme voice_install [--enroll\|--check]` | 저장소에서. 복사·연결·확인 ([설치가 하는 일](#설치가-하는-일)) |
+| `bash voice/install.sh [--enroll]` | 저장소에서. 없는 도구 설치 후 `herdr-theme voice-install` |
+| `./rust/target/release/herdr-theme voice-install [--enroll\|--check]` | 저장소에서. 복사·연결·확인 ([설치가 하는 일](#설치가-하는-일)) |
 | `./focusq check` | herdr·hook·앱 연동·Codex LaunchAgent 가 모두 이 복사본을 가리키는지 |
 | `./focusq setup [--enroll]` | 없는 도구 설치 + `install` (목소리 확인 환경 포함). `--enroll` 이면 이어서 45초 학습 |
 | `./focusq install` | 플러그인 연결·활성화 + Claude Code 음성 설정과 네이티브 목소리 확인 환경 설치 |
@@ -226,14 +226,14 @@ focusq voice-crosscheck
 
 | 경로 | 내용 |
 |---|---|
-| `herdr-plugin.toml` | 플러그인 정의. `pane.agent_status_changed`, `pane.focused` 이벤트에 `herdr-theme focus_queue` 실행 |
-| `herdr-theme focus_queue` | 대기열·포커스·음성 제어, 말이 끝나면 전송, pane 별 받아쓰기 리스너 |
+| `herdr-plugin.toml` | 플러그인 정의. `pane.agent_status_changed`, `pane.focused` 이벤트에 `herdr-theme focus-queue` 실행 |
+| `herdr-theme focus-queue` | 대기열·포커스·음성 제어, 말이 끝나면 전송, pane 별 받아쓰기 리스너 |
 | `herdr-theme voicegate` | 목소리 판정·등록·갱신 (`serve`, `enroll`, `tail`) |
-| `herdr-theme voice_submit_hook`, `rust/src/voice/policy.rs` | 전송 직전 검사(`UserPromptSubmit` hook)와 그 기준 |
+| `herdr-theme voice-submit-hook`, `rust/src/voice/policy.rs` | 전송 직전 검사(`UserPromptSubmit` hook)와 그 기준 |
 | `focusq` | 설치·관리 명령 |
-| `herdr-theme voice_install`, `install.sh` | 설치 |
+| `herdr-theme voice-install`, `install.sh` | 설치 |
 | `rust/src/voice/settings.rs` | 사용자 설정 읽기·쓰기와 일반 기본값 |
-| `herdr-theme voice_check_other_device` | `voice-crosscheck` 본체 |
+| `herdr-theme voice-check-other-device` | `voice-crosscheck` 본체 |
 | `~/.local/share/herdr-focus-queue/` | 설치된 플러그인(`plugin`), 네이티브 라이브러리(`native`), 모델(`models`), crosscheck 음성 캐시 |
 | `~/.config/herdr-app/data/sixfold/voice.local.json` | 사용자 설정 (마이크·보정값). `HERDR_VOICE_SETTINGS` 로 바꿀 수 있다 |
 | `~/.local/state/herdr/plugins/local.focus-queue/` | 기록(`focus-queue.log`), 대기열 상태(`state.json`), 목소리 데이터 |
@@ -265,10 +265,10 @@ focusq voice-crosscheck
 | 하고 싶은 것 | 방법 |
 |---|---|
 | 목소리 학습을 처음부터 | `./focusq voice-off` 후 `./focusq voice-enroll`. 헤드셋을 바꿨을 때도 권장 |
-| 목소리 확인 끄기 | `~/.claude/settings.json` 의 `UserPromptSubmit` 에서 `herdr-theme voice_submit_hook` 를 빼고 `~/.local/share/herdr-focus-queue/native` 를 지운다. 그래도 플러그인은 본인 판정이 없는 받아쓰기를 자동 전송하지 않으므로 직접 Enter 로 보낸다 |
+| 목소리 확인 끄기 | `~/.claude/settings.json` 의 `UserPromptSubmit` 에서 `herdr-theme voice-submit-hook` 를 빼고 `~/.local/share/herdr-focus-queue/native` 를 지운다. 그래도 플러그인은 본인 판정이 없는 받아쓰기를 자동 전송하지 않으므로 직접 Enter 로 보낸다 |
 | 다른 헤드셋에서도 자동 전송 | 그 헤드셋으로 `voice-enroll` 하거나, `auto_send_devices` 에 이름 일부를 넣는다 |
 | 잠시 플러그인 끄기 | `./focusq disable` (다시 켤 때 `./focusq enable`) |
-| 시간 값 조정 | `herdr-theme focus_queue` 상단 상수. `END_PAUSE_SECONDS`(2.0, 문장이 끝나고 말을 멈춘 뒤 전송까지. 줄이면 빨라지지만 쉬는 사이 끊길 수 있다), `RECYCLE_SECONDS`(100, 말 없는 녹음 재시작), `ACTIVE_SECONDS`(5, 말한 뒤 포커스 유지) |
+| 시간 값 조정 | `herdr-theme focus-queue` 상단 상수. `END_PAUSE_SECONDS`(2.0, 문장이 끝나고 말을 멈춘 뒤 전송까지. 줄이면 빨라지지만 쉬는 사이 끊길 수 있다), `RECYCLE_SECONDS`(100, 말 없는 녹음 재시작), `ACTIVE_SECONDS`(5, 말한 뒤 포커스 유지) |
 | 학습 분량 조정 | `herdr-theme voicegate` 의 `LEARN_SECONDS`(30, 다시 계산하는 데 필요한 말), `POOL_SECONDS`(600, 학습에 쓰는 최근 말). 600 보다 크게 하면 다시 계산할 때마다 판정이 늦어진다 |
 
 ## 문제 해결
@@ -302,7 +302,7 @@ herdr plugin log local.focus-queue
 테마 저장소를 갱신한 뒤 저장소 폴더에서:
 
 ```sh
-./rust/target/release/herdr-theme update_install voice    # 또는 ./rust/target/release/herdr-theme voice_install
+./rust/target/release/herdr-theme update-install voice    # 또는 ./rust/target/release/herdr-theme voice-install
 ```
 
 설치된 복사본을 맞바꾸고 모든 진입점을 다시 확인한다. 받아쓰기 리스너와 판정기는 다음에 뜰 때 새 코드를 쓴다. 판정기를 바로 바꾸려면 `focusq voice-restart`.
@@ -319,7 +319,7 @@ Claude Code 의 음성 설정(`voice`, `language`)은 남긴다. 되돌리려면
 
 ## 이전 설치에서 옮기기
 
-예전에 따로 받은 `herdr-focus-queue` 폴더를 플러그인으로 연결해 쓰던 Mac 은 `./rust/target/release/herdr-theme voice_install` 한 번으로 옮겨진다.
+예전에 따로 받은 `herdr-focus-queue` 폴더를 플러그인으로 연결해 쓰던 Mac 은 `./rust/target/release/herdr-theme voice-install` 한 번으로 옮겨진다.
 
 - herdr 플러그인 연결, Claude hook, Codex LaunchAgent, 앱 연동이 새 복사본으로 바뀐다. hook 은 한 번의 쓰기로 바뀌므로 검사가 빠지거나 두 번 도는 전송이 없다. 원래 hook 을 넣지 않았던 설치는 옮긴 뒤에도 넣지 않는다(`./focusq voice-hook` 으로 추가).
 - 목소리 데이터(`~/.local/state/herdr/plugins/local.focus-queue`)는 그대로 쓴다.
@@ -356,11 +356,11 @@ pane 을 관리하는 쪽이 herdr 라서, herdr 를 쓰는 한 바깥 터미널
 
 The optional app backend reads the active sidebar heartbeat at `~/.config/herdr-app/data/sixfold/voice-focus.json`. Only focus newer than 2.5 seconds is used. Existing TUI source panes and native core sessions share the voice routing rules; a background app never overrides TUI focus. App attention sorting never moves keyboard focus.
 
-`herdr-theme voice_install` (or `herdr-theme update_install voice`) points the sidebar at the installed copy. Native Claude retains the existing sentence ending plus two seconds of silence before submission. Native Codex starts voice only from an observed empty CLI without a current connection. Existing Codex voice conversations use only F9 mute/unmute. Microphone permission, actual transcription and speaker identification remain separate observations.
+`herdr-theme voice-install` (or `herdr-theme update-install voice`) points the sidebar at the installed copy. Native Claude retains the existing sentence ending plus two seconds of silence before submission. Native Codex starts voice only from an observed empty CLI without a current connection. Existing Codex voice conversations use only F9 mute/unmute. Microphone permission, actual transcription and speaker identification remain separate observations.
 
 ## Confirmed Codex voice-loss recovery
 
-`herdr-theme voice_recovery` starts as a single observer from the focus actor. It keeps healthy calls connected and reads only helper-failure metadata from `~/.codex/logs_2.sqlite`, never audio deltas or recordings.
+`herdr-theme voice-recovery` starts as a single observer from the focus actor. It keeps healthy calls connected and reads only helper-failure metadata from `~/.codex/logs_2.sqlite`, never audio deltas or recordings.
 
 Recovery requires all of: a previously observed connection in the same CLI process, a new `InspectAudio`/exit 28 or `Device`/exit 37 closure, an observed unexpected-failure message or matching audio-session-closed metadata, an absent live footer for at least three seconds, and an empty composer in the still-focused Codex pane. A manual stop, permission prompt, draft, unknown state or another focused pane prevents action. Focus, process identity and the screen are checked again immediately before starting voice in that same pane. The coding agent and its task are not restarted.
 

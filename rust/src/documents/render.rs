@@ -162,10 +162,9 @@ pub fn html_cli(args: &[String]) -> Result<()> {
     let binary = app.join("data/sixfold/doc-tabs/render-html");
     let cache = app.join("mods/project-docs-tabs/.cache");
     if !binary.exists() {
-        println!(
-            "{}",
-            json!({"error":"HTML 렌더러가 설치되지 않았습니다. herdr-theme install-doc-tabs --install"})
-        );
+        crate::common::print(
+            &(json!({"error":"HTML 렌더러가 설치되지 않았습니다. herdr-theme install-doc-tabs --install"})),
+        )?;
         return exit_without_diagnostic(1);
     }
     let body = fs::read(&doc)?;
@@ -196,10 +195,9 @@ pub fn html_cli(args: &[String]) -> Result<()> {
         )?;
         let data:Value=serde_json::from_slice(&output.stdout).unwrap_or_else(|_|json!({"error":String::from_utf8_lossy(&output.stderr).trim().chars().rev().take(300).collect::<String>().chars().rev().collect::<String>()}));
         if !output.status.success() || !data["tiles"].is_array() {
-            println!(
-                "{}",
-                json!({"error":data["error"].as_str().filter(|s|!s.is_empty()).unwrap_or("HTML 렌더링 실패")})
-            );
+            crate::common::print(
+                &(json!({"error":data["error"].as_str().filter(|s|!s.is_empty()).unwrap_or("HTML 렌더링 실패")})),
+            )?;
             return exit_without_diagnostic(1);
         }
         fs::create_dir_all(&cache)?;
@@ -209,9 +207,11 @@ pub fn html_cli(args: &[String]) -> Result<()> {
                 cache.join(format!("html-{key}-{number}.png")),
             )?
         }
-        atomic_json(
+        write_following(
             &index,
-            &json!({"tiles":arr(&data["tiles"]).len(),"truncated":data["truncated"].as_bool().unwrap_or(false)}),
+            &text_bytes(&python_json(
+                &json!({"tiles":arr(&data["tiles"]).len(),"truncated":data["truncated"].as_bool().unwrap_or(false)}),
+            )),
         )?;
     }
     let saved = read_json(&index)?;
@@ -226,10 +226,9 @@ pub fn html_cli(args: &[String]) -> Result<()> {
         let (w, h) = png_size(&cache.join(format!("html-{key}-{number}.png")))?;
         pages.push(json!({"path":format!("mods/project-docs-tabs/.cache/html-{key}-{number}.png"),"width":w as f64/2.0,"height":h as f64/2.0}))
     }
-    println!(
-        "{}",
-        json!({"pages":pages,"width":width,"truncated":saved["truncated"].as_bool().unwrap_or(false),"interactive":interactive(&String::from_utf8_lossy(&body))})
-    );
+    crate::common::print(
+        &(json!({"pages":pages,"width":width,"truncated":saved["truncated"].as_bool().unwrap_or(false),"interactive":interactive(&String::from_utf8_lossy(&body))})),
+    )?;
     Ok(())
 }
 pub fn mermaid_cli(args: &[String]) -> Result<()> {
@@ -246,10 +245,9 @@ pub fn mermaid_cli(args: &[String]) -> Result<()> {
     let cache = app.join("mods/project-docs-tabs/.cache");
     let blocks = mermaid_blocks(&String::from_utf8_lossy(&fs::read(doc)?));
     if !blocks.is_empty() && !(binary.exists() && library.exists()) {
-        println!(
-            "{}",
-            json!({"diagrams":[],"error":"Mermaid 렌더러가 설치되지 않았습니다. herdr-theme install-doc-tabs --install --mermaid <mermaid.min.js>"})
-        );
+        crate::common::print(
+            &(json!({"diagrams":[],"error":"Mermaid 렌더러가 설치되지 않았습니다. herdr-theme install-doc-tabs --install --mermaid <mermaid.min.js>"})),
+        )?;
         return Ok(());
     }
     let version = fs::metadata(&library).map(|m| m.len()).unwrap_or(0);
@@ -302,7 +300,7 @@ pub fn mermaid_cli(args: &[String]) -> Result<()> {
         let (w, h) = png_size(&target)?;
         diagrams.push(json!({"code":code,"path":format!("mods/project-docs-tabs/.cache/{name}"),"width":w as f64/2.0,"height":h as f64/2.0}))
     }
-    println!("{}", json!({"diagrams":diagrams}));
+    crate::common::print(&(json!({"diagrams":diagrams})))?;
     Ok(())
 }
 pub fn image_dimensions(data: &[u8], ext: &str) -> Result<(f64, f64)> {
@@ -465,6 +463,42 @@ pub fn media_cli(args: &[String]) -> Result<()> {
     );
     Ok(())
 }
+#[cfg(windows)]
+pub fn windows_desktop_command(
+    action: &str,
+    path: &Path,
+    env: &dyn Fn(&str) -> String,
+    is_file: &dyn Fn(&Path) -> bool,
+) -> Result<std::process::Command> {
+    let candidates = if action == "browser" {
+        ["ProgramFiles", "LOCALAPPDATA"]
+            .iter()
+            .map(|key| Path::new(&env(key)).join("Citro Labs/ego lite/Application/ego.exe"))
+            .collect::<Vec<_>>()
+    } else if action == "editor" {
+        vec![
+            Path::new(&env("LOCALAPPDATA")).join("Programs/Microsoft VS Code/Code.exe"),
+            Path::new(&env("ProgramFiles")).join("Microsoft VS Code/Code.exe"),
+        ]
+    } else {
+        return Err("Unsupported desktop action".into());
+    };
+    let executable = candidates
+        .into_iter()
+        .find(|p| is_file(p))
+        .ok_or("Ego lite 또는 VS Code 실행 파일을 찾지 못했습니다.")?;
+    // This is the same CREATE_NO_WINDOW builder whose actual child-console
+    // behavior is tested in process_contracts; no browser is started by tests.
+    let mut cmd = command(executable);
+    if action == "editor" {
+        cmd.arg("--reuse-window");
+    }
+    cmd.arg(path)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null());
+    Ok(cmd)
+}
 pub fn desktop_cli(args: &[String]) -> Result<()> {
     let positions = positionals(args, &[]);
     let action = positions.first().ok_or("action required")?;
@@ -539,37 +573,13 @@ pub fn desktop_cli(args: &[String]) -> Result<()> {
             }
             return Ok(());
         }
-        let candidates = if action == "browser" {
-            ["ProgramFiles", "LOCALAPPDATA"]
-                .iter()
-                .map(|k| {
-                    Path::new(&std::env::var(k).unwrap_or_default())
-                        .join("Citro Labs/ego lite/Application/ego.exe")
-                })
-                .collect::<Vec<_>>()
-        } else if action == "editor" {
-            vec![
-                Path::new(&std::env::var("LOCALAPPDATA").unwrap_or_default())
-                    .join("Programs/Microsoft VS Code/Code.exe"),
-                Path::new(&std::env::var("ProgramFiles").unwrap_or_default())
-                    .join("Microsoft VS Code/Code.exe"),
-            ]
-        } else {
-            return Err("Unsupported desktop action".into());
-        };
-        let executable = candidates
-            .into_iter()
-            .find(|p| p.is_file())
-            .ok_or("Ego lite 또는 VS Code 실행 파일을 찾지 못했습니다.")?;
-        let mut cmd = command(executable);
-        if action == "editor" {
-            cmd.arg("--reuse-window");
-        }
-        cmd.arg(path)
-            .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .spawn()?;
+        windows_desktop_command(
+            action,
+            &path,
+            &|key| std::env::var(key).unwrap_or_default(),
+            &Path::is_file,
+        )?
+        .spawn()?;
         return Ok(());
     }
     #[cfg(not(windows))]

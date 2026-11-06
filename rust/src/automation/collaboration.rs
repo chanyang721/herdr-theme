@@ -290,6 +290,26 @@ fn receiver(target: &str, facts: &Value, reserved: &BTreeSet<String>) -> Result<
     Ok(code == 0 && routing::receiver_available(s(&screen["text"])))
 }
 const OWNED: &[&str] = &["local_active", "sending", "sent", "accepted", "uncertain"];
+/// Stable model-tier order used by both the original helper and the live drain.
+pub fn tier_order(
+    addresses: &[String],
+    tier: Option<&str>,
+    facts: &Value,
+    models: &Value,
+    mapping: &Value,
+) -> Result<Vec<String>> {
+    let mut peers = vec![];
+    for address in addresses {
+        if let Some(rank) = tiers::rank(
+            tier.unwrap_or("high"),
+            tiers::tier_of(s(&facts[address]["agent"]), &models[address], mapping),
+        )? {
+            peers.push((rank, peers.len(), address.clone()));
+        }
+    }
+    peers.sort();
+    Ok(peers.into_iter().map(|(_, _, address)| address).collect())
+}
 fn drain() -> Result<Value> {
     let cfg = config()?;
     if cfg["enabled"] == false {
@@ -352,17 +372,11 @@ fn drain() -> Result<Value> {
             for t in list(&tab["terminals"]) {
                 let address = s(&t["terminal"]);
                 if address != source {
-                    if let Some(rank) = tiers::rank(
-                        task["tier"].as_str().unwrap_or("high"),
-                        tiers::tier_of(s(&facts[address]["agent"]), &models[address], &mapping),
-                    )? {
-                        peers.push((rank, peers.len(), address.to_string()));
-                    }
+                    peers.push(address.to_string());
                 }
             }
         }
-        peers.sort();
-        for (_, _, target) in peers {
+        for target in tier_order(&peers, task["tier"].as_str(), &facts, &models, &mapping)? {
             if !receiver(&target, &facts, &reserved)? {
                 continue;
             }
@@ -439,10 +453,8 @@ fn drain() -> Result<Value> {
     Ok(json!(results))
 }
 fn transition(action: &str, args: &[String]) -> Result<Value> {
-    let id = args
-        .get(1)
-        .filter(|v| !v.starts_with('-'))
-        .ok_or("task id required")?;
+    let positional = super::cli::positionals(args, &["--from", "--lease", "--result"]);
+    let id = positional.get(1).ok_or("task id required")?;
     let who = actor(args)?;
     let _lock = locked()?;
     let mut ledger = load()?;
@@ -548,10 +560,20 @@ fn report(args: &[String]) -> Result<Value> {
     Ok(value)
 }
 pub fn run(args: &[String]) -> Result<()> {
-    let action = if flag(args, "--drain") {
+    let positionals = super::cli::positionals(
+        args,
+        &[
+            "--id", "--text", "--mode", "--owns", "--batch", "--from", "--tier", "--lease",
+            "--result",
+        ],
+    );
+    let action = positionals.first().map(String::as_str).unwrap_or("");
+    let action = if action == "enable" {
+        "enable"
+    } else if flag(args, "--drain") {
         "drain"
     } else {
-        args.first().map(String::as_str).unwrap_or("")
+        action
     };
     let value = match action {
         "enable" => {

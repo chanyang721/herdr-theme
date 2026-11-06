@@ -99,8 +99,7 @@ impl Fixture {
         let schema = root.join("fixture.json");
         let log = root.join("calls.jsonl");
         fs::write(&schema,json!({"allowObserver":true,"observerScenario":scenario,"observerRollout":rollout,"observerStatus":{"space":"current","tab":"current-tab","focused_pane":"current-pane","errors":[]},"observerProcesses":[{"pid":100,"parent":1,"name":"zsh","args":"zsh"},{"pid":101,"parent":100,"name":"codex","args":"codex"},{"pid":200,"parent":1,"name":"zsh","args":"zsh"},{"pid":201,"parent":200,"name":"codex","args":"codex"},{"pid":300,"parent":1,"name":"zsh","args":"zsh"},{"pid":301,"parent":300,"name":"codex","args":"codex"}],"spaces":[{"id":"current","name":"Share","machine":null,"active":true,"tabs":[{"id":"current-tab","terminals":[{"terminal":"fixture-current","pane":"current-pane"}]}]},{"id":"fixture-space","name":"Fixture Project","machine":null,"active":false,"tabs":[{"id":"fixture-tab","terminals":[{"terminal":"fixture-target","pane":"target-pane"},{"terminal":"fixture-keep","pane":"keep-pane"}]}]}],"terminals":[target,keep,current],"get":{"fixture-target":target,"fixture-keep":keep,"fixture-current":current}}).to_string()).unwrap();
-        let binary = env!("CARGO_BIN_EXE_herdr-theme");
-        let observer_hash = herdr_theme::observers::hash(fs::read(binary).unwrap());
+        let observer_hash = env!("HERDR_SLEEP_SOURCE_SHA256");
         let config = root.join("observer.json");
         fs::write(&config,json!({"idle_seconds":300,"user_approved_apply":true,"reviewed_observer_sha256":observer_hash,"codex_db":db.to_string_lossy(),"harness":{"command":[env!("CARGO_BIN_EXE_herdr-theme-test-fixture"),"observer-harness"]},"close_report":{"enabled":true,"timeout_seconds":0,"settle_seconds":0},"sessions":{"fixture-target":{"pid":100,"created_ms":1000,"agent":"codex","process_pid":101,"session_id":SID}}}).to_string()).unwrap();
         let state = root.join("observer-state.json");
@@ -185,9 +184,10 @@ impl Fixture {
         assert!(!calls
             .iter()
             .any(|c| c["program"] == "herdr-app" && c["args"][0] == "do"));
-        assert!(!calls
-            .iter()
-            .any(|c| c["program"] == "hc" && c["args"][0] == "keys"));
+        assert!(!calls.iter().any(
+            |c| matches!(c["program"].as_str(), Some("hc" | "herdr-core"))
+                && c["args"][0] == "keys"
+        ));
     }
 }
 fn target(v: &Value) -> &Value {
@@ -215,7 +215,7 @@ fn missing_harness_close_report_keeps_agent_and_never_closes() {
     let asks = f
         .calls()
         .into_iter()
-        .filter(|c| c["program"] == "hc" && c["args"][0] == "send")
+        .filter(|c| c["program"] == "herdr-core" && c["args"][0] == "send")
         .collect::<Vec<_>>();
     assert_eq!(asks.len(), 1);
     assert!(asks[0]["args"]

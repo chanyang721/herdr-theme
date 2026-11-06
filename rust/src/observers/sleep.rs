@@ -2,6 +2,149 @@ use super::*;
 use std::collections::{BTreeMap, BTreeSet};
 pub const VISIBLE: &str = "shown on screen (visible tab)";
 pub const NOT_SHELL: &str = "terminal program is not a shell: the pane would not survive /exit";
+pub const BRIDGE: &str = "TUI bridge pane: always kept (its agent runs in the Herdr TUI)";
+pub const KEEP_AWAKE: &str = "kept awake: the one pane of this fixed workspace takes instructions";
+pub const ASLEEP: &str = "already asleep";
+pub const TRIM_KEEP: &str = "kept: the one pane of this fixed workspace";
+pub const USER_CONTROLLED: &str =
+    "user-controlled workspace: no automatic sleep, report request, trim or close";
+pub fn user_controlled(space: &Value, c: &Value) -> bool {
+    let names = c
+        .get("user_controlled_names")
+        .cloned()
+        .unwrap_or_else(|| json!(["Share"]));
+    arr(&names)
+        .iter()
+        .any(|n| crate::common::casefold(s(n)) == crate::common::casefold(s(&space["name"])))
+}
+pub fn trim_keeper(space: &Value, snap: &Value, c: &Value) -> Option<String> {
+    if !space["machine"].is_null()
+        || user_controlled(space, c)
+        || !arr(&c["trim_fixed"]["names"])
+            .iter()
+            .any(|n| crate::common::casefold(s(n)) == crate::common::casefold(s(&space["name"])))
+    {
+        return None;
+    }
+    let addresses: Vec<_> = space_panes(snap, s(&space["id"]))
+        .into_iter()
+        .map(|(a, _)| a)
+        .collect();
+    let asleep = |a: &str| truth(&snap["terminals"][a]["labels"]["sixfold.sleep"]);
+    let live = |a: &str| {
+        sessions::AGENTS.contains(&s(&snap["terminals"][a]["status"]["app"])) && !asleep(a)
+    };
+    for a in arr(&c["trim_fixed"]["keep_addresses"]) {
+        if addresses.iter().any(|x| x == s(&a)) && (live(s(&a)) || asleep(s(&a))) {
+            return Some(s(&a).into());
+        }
+    }
+    let pools = [
+        addresses
+            .iter()
+            .filter(|a| live(a) && snap["terminals"][*a]["status"]["state"] == "working")
+            .cloned()
+            .collect::<Vec<_>>(),
+        addresses.iter().filter(|a| live(a)).cloned().collect(),
+        addresses.iter().filter(|a| asleep(a)).cloned().collect(),
+    ];
+    pools.into_iter().find(|v| !v.is_empty()).and_then(|v| {
+        v.into_iter().max_by(|a, b| {
+            num(&snap["terminals"][a]["status_ms"], 0.)
+                .total_cmp(&num(&snap["terminals"][b]["status_ms"], 0.))
+                .then(a.cmp(b))
+        })
+    })
+}
+pub fn trimmed_without_keeper(space: &Value, snap: &Value, c: &Value) -> bool {
+    space["machine"].is_null()
+        && !user_controlled(space, c)
+        && arr(&c["trim_fixed"]["names"])
+            .iter()
+            .any(|n| crate::common::casefold(s(n)) == crate::common::casefold(s(&space["name"])))
+        && trim_keeper(space, snap, c).is_none()
+}
+fn descends(info: &Value, root: &Value, processes: &Value) -> bool {
+    let mut info = info;
+    let mut seen = BTreeSet::new();
+    while !info.is_null() && seen.insert(info["pid"].to_string()) {
+        if &info["pid"] == root {
+            return true;
+        }
+        let parent = info["parent"].to_string();
+        info = &processes[&parent];
+    }
+    false
+}
+pub fn bridge_term(t: &Value, processes: &Value) -> Option<String> {
+    // Native bridge subcommand replaces the original tui_bridge.py foreground.
+    if !arr(&t["foreground"]["argv"])
+        .iter()
+        .any(|a| s(a).ends_with("tui_bridge.py") || ["tui_bridge", "tui-bridge"].contains(&s(a)))
+    {
+        return None;
+    }
+    processes.as_object()?.values().find_map(|info| {
+        let found = re(r"\bterminal attach (term_[0-9a-f]+)")
+            .captures(s(&info["args"]))
+            .map(|m| m[1].to_owned());
+        found.filter(|_| descends(info, &t["pid"], processes))
+    })
+}
+pub fn stub_ticket(t: &Value) -> Value {
+    arr(&t["foreground"]["argv"])
+        .iter()
+        .find(|a| s(a).ends_with(".json"))
+        .and_then(|p| load(Path::new(s(p)), Value::Null).ok())
+        .unwrap_or(Value::Null)
+}
+pub fn stub_shown(ticket: &Value) -> Vec<String> {
+    let mut candidates = vec![];
+    if let Some(argv) = ticket["argv"].as_array() {
+        if argv.iter().all(Value::is_string) {
+            candidates.push(argv.iter().map(s).collect::<Vec<_>>().join(" "));
+        }
+    }
+    let argv = stub::launch(ticket);
+    candidates.push(stub::shown(&argv, 72));
+    candidates
+}
+pub fn stub_typed(text: &str, ticket: &Value) -> Option<String> {
+    let lines = crate::python_unicode::split_lines(text);
+    let Some(last) = lines.iter().rposition(|l| {
+        l.trim_start_matches(crate::python_unicode::is_space)
+            .starts_with("직접 열기:")
+    }) else {
+        return Some("asleep screen unverified (stub prompt or ticket not found)".into());
+    };
+    if !ticket.is_object() {
+        return Some("asleep screen unverified (stub prompt or ticket not found)".into());
+    }
+    if voice_active(text) {
+        return Some("voice input active".into());
+    }
+    let squeeze = |t: &str| {
+        t.chars()
+            .filter(|c| !crate::python_unicode::is_space(*c))
+            .collect::<String>()
+    };
+    let tail = squeeze(&lines[last..].join("\n"));
+    let candidates: Vec<_> = stub_shown(ticket)
+        .iter()
+        .map(|c| squeeze(&format!("직접 열기:{c}")))
+        .collect();
+    if candidates.iter().any(|c| c == &tail) {
+        None
+    } else if candidates.iter().any(|c| tail.starts_with(c)) {
+        Some("input not empty".into())
+    } else {
+        Some("asleep screen unverified (does not match the stub screen)".into())
+    }
+}
+fn voice_active(text: &str) -> bool {
+    re(r"(?i)(?:🎙|🎤|\bListening\b|\brecording\b|녹음\s*중|받아쓰는\s*중|음성\s*입력\s*중)")
+        .is_match(text)
+}
 pub fn blockers(i: &Value) -> Vec<String> {
     arr(&i["reasons"])
         .iter()
@@ -58,6 +201,9 @@ pub fn close_blocker(
     tab: &Value,
     closed: &BTreeSet<String>,
 ) -> Option<String> {
+    if truth(&i["keeper"]) {
+        return Some(TRIM_KEEP.into());
+    }
     let panes: Vec<_> = space_panes(snap, s(&i["space_id"]))
         .into_iter()
         .filter(|(a, _)| !closed.contains(a))
@@ -87,10 +233,32 @@ pub fn focused_terminal(snap: &Value) -> String {
     String::new()
 }
 pub fn in_float(address: &str, status: &Value) -> bool {
-    let shown = json!([status["floats"], status["overlays"]]).to_string();
-    let escaped = regex::escape(address);
-    let pattern = format!(r"(?:^|[^\w/]){}(?:$|[^\w])", escaped);
-    re(&pattern).is_match(&shown)
+    let floats = if truth(&status["floats"]) {
+        status["floats"].clone()
+    } else {
+        json!({})
+    };
+    let overlays = if truth(&status["overlays"]) {
+        status["overlays"].clone()
+    } else {
+        json!([])
+    };
+    let shown = crate::common::json_text(&json!([floats, overlays]), false);
+    shown
+        .char_indices()
+        .map(|(start, _)| start)
+        .chain(std::iter::once(shown.len()))
+        .any(|start| {
+            shown[start..].starts_with(address)
+                && !shown[..start]
+                    .chars()
+                    .next_back()
+                    .is_some_and(|c| crate::python_unicode::is_word(c) || c == '/')
+                && !shown[start + address.len()..]
+                    .chars()
+                    .next()
+                    .is_some_and(crate::python_unicode::is_word)
+        })
 }
 pub fn on_screen(address: &str, space: &Value, tab: &Value, status: &Value) -> bool {
     space["id"] == status["space"] && (tab.is_null() || tab == &status["tab"])
@@ -108,6 +276,18 @@ pub fn inspect(
     let t = &snap["terminals"][address];
     let mut i =
         json!({"address":address,"space_id":space["id"],"space_name":space["name"],"reasons":[]});
+    if user_controlled(space, c) {
+        spaces::push(&mut i, USER_CONTROLLED);
+        return Ok(i);
+    }
+    if let Some(keeper) = trim_keeper(space, snap, c) {
+        i[if keeper == address { "keeper" } else { "trim" }] = json!(true);
+    } else if trimmed_without_keeper(space, snap, c) {
+        i["trim_note"] = json!("fixed workspace has no agent pane to keep: not trimmed");
+    }
+    if truth(&i["keeper"]) {
+        spaces::push(&mut i, KEEP_AWAKE);
+    }
     if !arr(&spaces::focus(status)).iter().all(truth) || truth(&status["errors"]) {
         spaces::push(&mut i, "app focus/health unverified")
     }
@@ -139,7 +319,26 @@ pub fn inspect(
     }
     if truth(&t["labels"]["sixfold.sleep"]) {
         i["asleep"] = json!(true);
-        spaces::push(&mut i, "already asleep");
+        spaces::push(&mut i, ASLEEP);
+        let slept = spaces::slept_session(t, space);
+        if !slept.is_null() {
+            for k in ["app", "session_id", "title", "cwd", "turn", "no_resume"] {
+                if let Some(v) = slept.get(k) {
+                    i[k] = v.clone();
+                }
+            }
+            let text = a.screen(address)?;
+            if let Some(why) = stub_typed(&text, &stub_ticket(t)) {
+                spaces::push(&mut i, why);
+            }
+            i["fingerprint"] = json!(fingerprint(&json!([
+                address,
+                t["pid"],
+                t["created_ms"],
+                t["labels"]["sixfold.sleep"],
+                hash(text.as_bytes())
+            ])));
+        }
         return Ok(i);
     }
     let app = s(&t["status"]["app"]);
@@ -155,6 +354,14 @@ pub fn inspect(
         .to_string_lossy();
     if !sessions::SHELLS.contains(&shell.as_ref()) {
         spaces::push(&mut i, NOT_SHELL)
+    }
+    if bridge_term(t, &snap["processes"]).is_some() {
+        spaces::push(&mut i, BRIDGE);
+        return Ok(i);
+    }
+    if truth(&i["trim"]) && t["status"]["app"].is_null() && blockers(&i).is_empty() {
+        spaces::push(&mut i, "shell pane: unsent input cannot be verified");
+        return Ok(i);
     }
     if !truth(&t["reported"])
         || !sessions::AGENTS.contains(&app)
@@ -185,6 +392,19 @@ pub fn inspect(
     let (valid, why, pids) = sessions::process_evidence(t, &snap["processes"]);
     if !valid {
         spaces::push(&mut i, why)
+    } else if blockers(&i).is_empty() && a.empty(t, c) {
+        let text = a.screen(address)?;
+        if spaces::empty_prompt(&text, app) || spaces::claude_suggestion(&text, app, a, address) {
+            i["empty"] = json!(true);
+            i["fingerprint"] = json!(fingerprint(&json!([
+                address,
+                t["pid"],
+                t["created_ms"],
+                "empty",
+                hash(text.as_bytes())
+            ])));
+            return Ok(i);
+        }
     }
     let mapping = a.session_mapping(t, c);
     let why = mapping
@@ -255,7 +475,13 @@ pub fn note(i: &Value, dir: &Path, at: f64) -> Result<String> {
         "{}-{}-{}.json",
         dt.format("%Y%m%d"),
         s(&i["address"]),
-        take(s(&i["session_id"]), 8)
+        take(
+            i["session_id"]
+                .as_str()
+                .filter(|s| !s.is_empty())
+                .unwrap_or("empty"),
+            8
+        )
     ));
     let mut v = json!({});
     for k in [
@@ -275,7 +501,7 @@ pub fn note(i: &Value, dir: &Path, at: f64) -> Result<String> {
         v[k] = i[k].clone()
     }
     v["at"] = json!(dt.to_rfc3339());
-    save(&p, &v)?;
+    save_direct(&p, &v)?;
     Ok(p.to_string_lossy().into_owned())
 }
 pub fn ticket(i: &Value, dir: &Path, config: Option<&Path>) -> Result<PathBuf> {
@@ -290,7 +516,7 @@ pub fn ticket(i: &Value, dir: &Path, config: Option<&Path>) -> Result<PathBuf> {
     if let Some(c) = config {
         v["config"] = json!(c.to_string_lossy())
     }
-    save(&p, &v)?;
+    save_direct(&p, &v)?;
     Ok(p)
 }
 fn shell_quote(t: &str) -> String {
@@ -400,7 +626,16 @@ pub fn close_recheck(
         return Ok(vec!["pane moved or closed".into()]);
     };
     let latest = inspect(s(&i["address"]), space, &snap, a, c, tab)?;
-    let mut why = blockers(&latest);
+    let mut why = if spare_kind(i).is_some() {
+        spare_blockers(&latest)
+    } else {
+        blockers(&latest)
+    };
+    if let Some(kind) = spare_kind(i) {
+        if spare_kind(&latest) != Some(kind) {
+            why.push(format!("no longer {kind}"));
+        }
+    }
     if latest["fingerprint"] != i["fingerprint"] {
         why.push("evidence changed".into())
     }
@@ -442,6 +677,9 @@ pub fn settle_pending(
     left
 }
 fn aborted(i: &mut Value, a: &mut dyn Adapter, c: &Value, why: &str) {
+    if truth(&i["empty"]) {
+        return;
+    }
     i["harness_abort"] = json!(match a.park(
         c,
         i,
@@ -466,13 +704,21 @@ pub fn close_one(
     i["_pane"] = pane_entry(snap, &address);
     let pane = pane_id(&i["_pane"]);
     i["git"] = a.git(s(&i["cwd"]));
-    match a.park(
-        c,
-        i,
-        "close_requested",
-        false,
-        "finished harness session: pane closed",
-    ) {
+    let reason = if truth(&i["close_why"]) {
+        s(&i["close_why"])
+    } else if truth(&i["empty"]) {
+        "empty agent pane (never received input): pane closed"
+    } else if truth(&i["asleep"]) {
+        "finished session asleep while its space keeps another pane: pane closed"
+    } else {
+        "finished harness session: pane closed"
+    };
+    let parked = if truth(&i["empty"]) {
+        Ok(json!("empty pane: no session to record"))
+    } else {
+        a.park(c, i, "close_requested", false, reason)
+    };
+    match parked {
         Ok(d) => i["harness"] = d,
         Err(e) => {
             spaces::push(i, format!("harness record failed: {e}"));
@@ -529,6 +775,9 @@ pub fn close_one(
         ));
     }
     let mut detail = String::new();
+    if truth(&i["empty"]) {
+        return Ok(("closed".into(), Some(after)));
+    }
     for _ in 0..2 {
         match a.park(c, i, "closed", false, "pane closed") {
             Ok(_) => return Ok(("closed".into(), Some(after))),
@@ -541,6 +790,123 @@ pub fn close_one(
     );
     Ok(("closed_unrecorded".into(), Some(after)))
 }
+pub fn spare_kind(i: &Value) -> Option<&'static str> {
+    if truth(&i["empty"]) {
+        Some("empty")
+    } else if truth(&i["asleep"]) && truth(&i["session_id"]) {
+        Some("asleep")
+    } else {
+        None
+    }
+}
+pub fn spare_blockers(i: &Value) -> Vec<String> {
+    blockers(i).into_iter().filter(|r| r != ASLEEP).collect()
+}
+pub fn spare_ready(i: &mut Value, a: &mut dyn Adapter, c: &Value) -> (bool, Option<String>) {
+    if spare_kind(i) != Some("asleep") {
+        return (true, None);
+    }
+    match a.close_status(c, i, "1970-01-01T00:00:00Z") {
+        Ok(detail) => {
+            i["close_report"] = detail["report_id"].clone();
+            i["report_task_id"] = detail["task_id"].clone();
+            (true, None)
+        }
+        Err(_) if truth(&i["trim"]) => {
+            i["close_why"]=json!("fixed workspace trimmed: asleep session closed without a close report (lifecycle and session id kept)");
+            (true, None)
+        }
+        Err(e) => (
+            false,
+            Some(format!(
+                "asleep session without a close report ({e}): kept asleep"
+            )),
+        ),
+    }
+}
+pub fn wake_keeper(
+    i: &mut Value,
+    a: &mut dyn Adapter,
+    c: &Value,
+    attempts: usize,
+) -> Result<String> {
+    let snap = a.snapshot()?;
+    let latest = match pane_of(&snap).get(s(&i["address"])) {
+        Some((sp, tab)) => Some(inspect(s(&i["address"]), sp, &snap, a, c, tab)?),
+        None => None,
+    };
+    let why = latest.as_ref().map(|v| {
+        arr(&v["reasons"])
+            .iter()
+            .map(|r| s(r).to_owned())
+            .collect::<Vec<_>>()
+    });
+    if latest.as_ref().is_none_or(|v| {
+        !truth(&v["keeper"])
+            || !truth(&v["asleep"])
+            || v["session_id"] != i["session_id"]
+            || !wake_blockers(v).is_empty()
+    }) {
+        spaces::push(
+            i,
+            format!(
+                "recheck before wake: {}",
+                why.map(|r| r.join("; "))
+                    .unwrap_or("pane moved or closed".into())
+            ),
+        );
+        return Ok("asleep".into());
+    }
+    let ticket = stub_ticket(&snap["terminals"][s(&i["address"])]);
+    if truth(&latest.unwrap()["no_resume"])
+        || !ticket.is_object()
+        || truth(&ticket["new_session"])
+        || ticket["session_id"] != i["session_id"]
+    {
+        spaces::push(
+            i,
+            "not woken: the sleep ticket does not resume the same session",
+        );
+        return Ok("asleep".into());
+    }
+    a.keys(s(&i["address"]), &["enter".into()])?;
+    let mut seen = Value::Null;
+    for _ in 0..attempts {
+        a.wait(1.);
+        let t = a.terminal(s(&i["address"]))?;
+        seen = a.session_mapping(&t, c).unwrap_or(Value::Null)["session_id"].clone();
+        if seen == i["session_id"] {
+            return Ok("woken".into());
+        }
+        if truth(&seen) {
+            break;
+        }
+    }
+    if truth(&seen) {
+        spaces::push(
+            i,
+            format!(
+                "wake mismatch: session {} started, slept {}",
+                s(&seen),
+                s(&i["session_id"])
+            ),
+        );
+        Ok("wake_mismatch".into())
+    } else {
+        spaces::push(
+            i,
+            "wake not confirmed: the same session was not seen in time",
+        );
+        Ok("wake_unconfirmed".into())
+    }
+}
+fn wake_blockers(i: &Value) -> Vec<String> {
+    arr(&i["reasons"])
+        .iter()
+        .map(|r| s(r).to_owned())
+        .filter(|r| ![ASLEEP, KEEP_AWAKE, VISIBLE].contains(&r.as_str()))
+        .collect()
+}
 pub fn cycle(
     a: &mut dyn Adapter,
     c: &Value,
@@ -549,6 +915,21 @@ pub fn cycle(
     apply: bool,
     paths: &Value,
 ) -> Result<Value> {
+    cycle_with_inspector(a, c, state, at, apply, paths, &mut inspect)
+}
+pub type Inspector<'a> =
+    dyn FnMut(&str, &Value, &Value, &mut dyn Adapter, &Value, &Value) -> Result<Value> + 'a;
+/// The original tests replaced the inspection dependency before its safety
+/// checks. Share the production cycle body while allowing that same boundary.
+pub fn cycle_with_inspector(
+    a: &mut dyn Adapter,
+    c: &Value,
+    state: &mut Value,
+    at: f64,
+    apply: bool,
+    paths: &Value,
+    inspect: &mut Inspector<'_>,
+) -> Result<Value> {
     let snap = a.snapshot().map_err(|e| {
         std::io::Error::other(format!(
             "SKIP:app/core lookup failed: {}",
@@ -556,7 +937,7 @@ pub fn cycle(
         ))
     })?;
     let previous = state["sessions"].clone();
-    let gap = at - num(&state["last_at"], at);
+    let gap = sessions::sample_gap(state, at);
     let fresh = gap >= 0. && gap <= num(&c["max_sample_gap_seconds"], 660.);
     let trial = sessions::trial_of(state, at, fresh);
     let approved = truth(&c["user_approved_apply"])
@@ -599,6 +980,158 @@ pub fn cycle(
     for (address, (space, tab)) in panes {
         let mut i=inspect(&address,&space,&snap,a,c,&tab).unwrap_or_else(|e|json!({"address":address,"space_id":space["id"],"space_name":space["name"],"reasons":[format!("lookup failed: {}",take(&e.to_string(),160))]}));
         let old = &previous[&address];
+        if sessions::on_hold(&i) {
+            spaces::push(&mut i, sessions::LOOKUP_HOLD);
+            i["action"] = json!(if truth(&i["asleep"]) {
+                "asleep"
+            } else {
+                "keep"
+            });
+            i["quiet_seconds"] = json!(if truth(&old["since"]) {
+                (at - num(&old["since"], at)).round_ties_even() as i64
+            } else {
+                0
+            });
+            if old.is_object() {
+                tracking[&address] = old.clone();
+            }
+            results.push(i);
+            continue;
+        }
+        if truth(&i["keeper"]) && truth(&i["asleep"]) {
+            i["quiet_seconds"] = json!(0);
+            i["action"] = json!("asleep");
+            let mut why = wake_blockers(&i);
+            if truth(&i["no_resume"]) {
+                why.push("its sleep ticket starts a new session, not the same one".into());
+            }
+            if !truth(&i["session_id"]) || !why.is_empty() {
+                spaces::push(
+                    &mut i,
+                    format!(
+                        "keeper asleep: not woken ({})",
+                        if why.is_empty() {
+                            "session unknown".into()
+                        } else {
+                            why.join("; ")
+                        }
+                    ),
+                );
+            } else if !apply {
+                i["action"] = json!("would_wake");
+            } else if !ready {
+                spaces::push(
+                    &mut i,
+                    "apply not approved for this observer code (one recorded dry-run first)",
+                );
+            } else if let Some(reason) = &stop {
+                spaces::push(&mut i, reason.clone());
+            } else {
+                i["action"] = json!(wake_keeper(&mut i, a, c, 15)?);
+            }
+            results.push(i);
+            continue;
+        }
+        if let Some(kind) = spare_kind(&i) {
+            let safe = spare_blockers(&i).is_empty();
+            let since = if fresh && safe && old["fingerprint"] == i["fingerprint"] {
+                num(&old["since"], at)
+            } else {
+                at
+            };
+            let quiet = at - since;
+            i["quiet_seconds"] = json!(quiet.round_ties_even() as i64);
+            i["action"] = json!(if kind == "asleep" { "asleep" } else { "keep" });
+            if safe {
+                tracking[&address] = json!({"since":since,"fingerprint":i["fingerprint"]});
+            }
+            let why_close = if close_on {
+                close_blocker(&i, &snap, &tab, &closed)
+            } else {
+                Some("close_finished_panes off".into())
+            };
+            if !safe || why_close.is_some() {
+                if kind == "empty" && safe {
+                    if let Some(why) = why_close {
+                        spaces::push(&mut i, why);
+                    }
+                }
+            } else if quiet < idle {
+                spaces::push(
+                    &mut i,
+                    format!(
+                        "{kind} pane unchanged for {} of {} minutes",
+                        (quiet / 60.).floor(),
+                        (idle / 60.).floor()
+                    ),
+                );
+            } else if !apply {
+                i["action"] = json!(format!("would_close_{kind}"));
+            } else if !ready {
+                spaces::push(
+                    &mut i,
+                    "apply not approved for this observer code (one recorded dry-run first)",
+                );
+            } else if acted >= num(&c["max_per_cycle"], 4.) {
+                spaces::push(&mut i, "per-cycle limit reached");
+            } else if let Some(reason) = &stop {
+                spaces::push(&mut i, reason.clone());
+            } else {
+                let (may, why) = spare_ready(&mut i, a, c);
+                if !may {
+                    spaces::push(&mut i, why.unwrap_or_default());
+                } else {
+                    let check = a.snapshot()?;
+                    let before = spaces::focus(&check["status"]);
+                    let (action, after) = close_one(&mut i, a, c, paths, at, &check, &closed)?;
+                    i["action"] = json!(action);
+                    if ["closed", "closed_unrecorded"].contains(&s(&i["action"])) {
+                        acted += 1.;
+                        closed.insert(address.clone());
+                        tracking.as_object_mut().unwrap().remove(&address);
+                        if i["action"] == "closed_unrecorded" {
+                            let mut entry = i.clone();
+                            entry.as_object_mut().unwrap().remove("_pane");
+                            entry.as_object_mut().unwrap().remove("screen_tail");
+                            entry["pending"] = json!("unrecorded");
+                            pending.push(entry);
+                            state["unrecorded_closes"] = json!(pending);
+                            stop = Some(
+                                "a close is still owed its harness record; settled next cycle"
+                                    .into(),
+                            );
+                        }
+                        let after = match after {
+                            Some(v) => v,
+                            None => a.snapshot()?,
+                        };
+                        if spaces::focus(&after["status"]) != before {
+                            stop = Some("focus moved during the previous close; next cycle".into());
+                            i["focus_moved"] = json!(true);
+                        }
+                    } else if i["action"] == "close_unconfirmed" {
+                        if kind == "asleep" {
+                            let mut entry = i.clone();
+                            entry.as_object_mut().unwrap().remove("_pane");
+                            entry.as_object_mut().unwrap().remove("screen_tail");
+                            entry["pending"] = json!("unconfirmed");
+                            pending.push(entry);
+                            state["unrecorded_closes"] = json!(pending);
+                        }
+                        for k in ["argv", "_pane", "_pane_id"] {
+                            i.as_object_mut().unwrap().remove(k);
+                        }
+                        results.push(i);
+                        break;
+                    }
+                }
+            }
+            for k in ["argv", "_pane", "_pane_id"] {
+                i.as_object_mut().unwrap().remove(k);
+            }
+            results.push(i);
+            continue;
+        }
         let safe = blockers(&i).is_empty();
         let sleepable = !truth(&i["reasons"]);
         let same = fresh && safe && old["fingerprint"] == i["fingerprint"];
@@ -646,12 +1179,12 @@ pub fn cycle(
                     "keep"
                 });
                 if i["action"] == "would_close" || i["action"] == "would_sleep" {
-                    let mut check = i.clone();
-                    check["git"] = a.git(s(&i["cwd"]));
-                    i["harness_check"] = match a.park(c, &check, "suspended", true, "") {
-                        Ok(d) => json!([true, d]),
-                        Err(e) => json!([false, e.to_string()]),
-                    };
+                    if let Some(check) = a.park_check(c, &i) {
+                        i["harness_check"] = match check {
+                            Ok(d) => json!([true, d]),
+                            Err(e) => json!([false, e.to_string()]),
+                        };
+                    }
                 }
             } else if !ready {
                 spaces::push(
@@ -727,7 +1260,12 @@ pub fn cycle(
                                     i["close_report"] = detail["report_id"].clone();
                                     i["report_task_id"] = detail["task_id"].clone();
                                 }
-                                if decision == "ready" && may_close {
+                                let unreported =
+                                    decision == "failed" && truth(&latest["trim"]) && may_close;
+                                if unreported {
+                                    i["close_why"]=json!("fixed workspace trimmed: no close report in time; pane closed (lifecycle and session id kept)");
+                                }
+                                if (decision == "ready" || unreported) && may_close {
                                     let (action, snapshot) =
                                         close_one(&mut i, a, c, paths, at, &check, &closed)?;
                                     i["action"] = json!(action);
@@ -858,15 +1396,17 @@ pub fn cycle(
 }
 pub fn main(args: &[String]) -> Result<()> {
     use crate::locking::FileLock;
-    if args.iter().any(|arg| arg == "--help" || arg == "-h") {
-        crate::help::show("sleep_idle_sessions", args)?;
-        return Ok(());
-    }
-    validate_args(
+    let normalized = normalize_args(
         args,
         &["--config", "--state", "--log", "--data", "--app", "--core"],
         &["--dry-run", "--apply"],
     )?;
+    let args = normalized.as_slice();
+    if has_flag(args, "--help") {
+        crate::help::show("sleep_idle_sessions", args)?;
+        return Ok(());
+    }
+    let apply = apply_mode(args)?;
     let base = spaces::state_dir();
     let config_path = spaces::option(args, "--config", &base.join("sleep-idle-sessions.json"));
     let c = load(&config_path, Value::Null)?;
@@ -875,10 +1415,6 @@ pub fn main(args: &[String]) -> Result<()> {
     }
     if num(&c["idle_seconds"], 1200.) < 300. {
         return arg_error("idle_seconds must be at least 300");
-    }
-    let apply = args.iter().any(|a| a == "--apply");
-    if apply && args.iter().any(|a| a == "--dry-run") {
-        return arg_error("--apply and --dry-run are mutually exclusive");
     }
     let state_path = spaces::option(
         args,
@@ -898,39 +1434,72 @@ pub fn main(args: &[String]) -> Result<()> {
         return Ok(());
     }
     let mut st = load(&state_path, json!({}))?;
-    let hash = spaces::observer_hash()?;
+    let hash = env!("HERDR_SLEEP_SOURCE_SHA256");
     if st["observer_sha256"] != hash {
         st = json!({"observer_sha256":hash})
     }
-    let app = spaces::option(args, "--app", Path::new("herdr-app"))
+    let default_app =
+        crate::common::find_executable("herdr-app").unwrap_or_else(|| "herdr-app".into());
+    let default_core = crate::common::find_executable("herdr-core")
+        .or_else(|| crate::common::find_executable("hc"))
+        .unwrap_or_else(|| "hc".into());
+    let app = spaces::option(args, "--app", &default_app)
         .to_string_lossy()
         .into_owned();
-    let core = spaces::option(args, "--core", Path::new("hc"))
+    let core = spaces::option(args, "--core", &default_core)
         .to_string_lossy()
         .into_owned();
     let data = spaces::option(args, "--data", &base.join("session-sleep"));
     let paths = json!({"notes":data.join("notes").to_string_lossy(),"tickets":data.join("tickets").to_string_lossy(),"stub":std::env::current_exe()?.to_string_lossy(),"config":config_path.to_string_lossy()});
     let mut a = Live { app, core };
-    let observation = match cycle(&mut a, &c, &mut st, now(), apply, &paths) {
+    run_with_adapter(
+        &mut a,
+        &c,
+        &mut st,
+        apply,
+        &paths,
+        &state_path,
+        &spaces::option(args, "--log", &base.join("sleep-idle-sessions.jsonl")),
+    )
+}
+/// The real CLI's cycle/settlement/persistence path, also usable with the same
+/// isolated adapters that the original Python main tests supplied via patching.
+pub fn run_with_adapter(
+    a: &mut dyn Adapter,
+    c: &Value,
+    st: &mut Value,
+    apply: bool,
+    paths: &Value,
+    state_path: &Path,
+    log_path: &Path,
+) -> Result<()> {
+    run_with_adapter_with_clock(a, c, st, apply, paths, state_path, log_path, &mut now)
+}
+pub fn run_with_adapter_with_clock(
+    a: &mut dyn Adapter,
+    c: &Value,
+    st: &mut Value,
+    apply: bool,
+    paths: &Value,
+    state_path: &Path,
+    log_path: &Path,
+    clock: &mut dyn FnMut() -> f64,
+) -> Result<()> {
+    let observation = match cycle(a, c, st, clock(), apply, paths) {
         Ok(v) => {
-            sessions::settle_trial(&mut st, &c, true);
+            sessions::settle_trial(st, c, true);
             v
         }
         Err(e) if e.to_string().starts_with("SKIP:") => {
-            json!({"at":local_iso(now()),"mode":if apply{"apply"}else{"dry-run"},"skipped":e.to_string().trim_start_matches("SKIP:"),"results":[]})
+            st["held_at"] = json!(clock());
+            json!({"at":local_iso(clock()),"mode":if apply{"apply"}else{"dry-run"},"skipped":e.to_string().trim_start_matches("SKIP:"),"results":[]})
         }
         Err(e) => {
-            sessions::settle_trial(&mut st, &c, false);
-            json!({"at":local_iso(now()),"mode":if apply{"apply"}else{"dry-run"},"error":e.to_string(),"results":[]})
+            sessions::settle_trial(st, c, false);
+            json!({"at":local_iso(clock()),"mode":if apply{"apply"}else{"dry-run"},"error":e.to_string(),"results":[]})
         }
     };
-    spaces::finish(
-        &state_path,
-        &spaces::option(args, "--log", &base.join("sleep-idle-sessions.jsonl")),
-        &st,
-        &observation,
-        true,
-    )
+    spaces::finish(state_path, log_path, st, &observation, true)
 }
 #[cfg(test)]
 mod tests {

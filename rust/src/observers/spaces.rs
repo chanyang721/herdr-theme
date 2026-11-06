@@ -13,34 +13,44 @@ pub fn focus(status: &Value) -> Value {
     json!([status["space"], status["tab"], status["focused_pane"]])
 }
 pub fn last_prompt_is_report_request(text: &str) -> bool {
-    text.lines()
-        .filter(|l| re(r"^\s*[❯›>]\s+\S").is_match(l))
+    crate::python_unicode::split_lines(text)
+        .into_iter()
+        .filter(|l| crate::python_unicode::regex(r"^\s*[❯›>]\s+\S").is_match(l))
         .next_back()
         .is_some_and(|l| l.contains(sessions::REPORT_MARK))
 }
 pub fn decision_pending(text: &str) -> bool {
     let mut request = false;
     let mut lines = vec![];
-    for l in text.lines() {
+    for l in crate::python_unicode::split_lines(text) {
         if l.contains(sessions::REPORT_MARK) {
             request = true;
             continue;
         }
         if request {
-            if l.trim_start().starts_with(['⏺', '•', '─']) {
+            if l.trim_start_matches(crate::python_unicode::is_space)
+                .starts_with(['⏺', '•', '─'])
+            {
                 request = false
             } else {
                 continue;
             }
         }
-        if re(r"(?i)(?:Blocked|Allowed)\s+by\s+auto\s+mode|/permissions\s+to\s+review|기억함|memory window").is_match(l){continue}
+        if crate::python_unicode::regex(r"(?i)(?:Blocked|Allowed)\s+by\s+auto\s+mode|/perm[iİı]ss[iİı]ons\s+to\s+rev[iİı]ew|기억함|memory w[iİı]ndow").is_match(l){continue}
         lines.push(l)
     }
     let t = lines.join("\n");
-    re(r"(?i)승인\s*대기|(?:사용자|직접|당신의?)\s*확인\s*필요|확인이\s*필요합니다|결정\s*대기|사용자.{0,12}(?:확인|승인).{0,8}(?:대기|기다)|awaiting\s+(?:approval|confirmation)|waiting\s+for\s+(?:your|user)\s+(?:approval|confirmation)|allow\s+(?:once|always)|Do you want to (?:proceed|make this edit|create|run|allow)\b|❯\s*1\.\s*Yes\b").is_match(&t)
+    crate::python_unicode::regex(r"(?i)승인\s*대기|(?:사용자|직접|당신의?)\s*확인\s*필요|확인이\s*필요합니다|결정\s*대기|사용자.{0,12}(?:확인|승인).{0,8}(?:대기|기다)|awa[iİı]t[iİı]ng\s+(?:approval|conf[iİı]rmat[iİı]on)|wa[iİı]t[iİı]ng\s+for\s+(?:your|user)\s+(?:approval|conf[iİı]rmat[iİı]on)|allow\s+(?:once|always)").is_match(&t)
+        || crate::python_unicode::sub(r"(?i)Do you want to (?:proceed|make th[iİı]s ed[iİı]t|create|run|allow)\b", &t, "") != t
+        || crate::python_unicode::sub(r"(?i)❯\s*1\.\s*Yes\b", &t, "") != t
 }
 pub fn background_running(text: &str) -> bool {
-    re(r"(?i)\b\d+\s+(?:monitors?|shells?|background\s+(?:tasks?|shells?|jobs?))(?:\s+still\s+running)?\b").is_match(&tail(text,8))
+    let text = tail(text, 8);
+    crate::python_unicode::sub(
+        r"(?i)\b\d+\s+(?:mon[iİı]tors?|shells?|background\s+(?:tasks?|shells?|jobs?))(?:\s+st[iİı]ll\s+runn[iİı]ng)?\b",
+        &text,
+        "",
+    ) != text
 }
 pub fn empty_prompt(text: &str, agent: &str) -> bool {
     let marker = match agent {
@@ -48,15 +58,15 @@ pub fn empty_prompt(text: &str, agent: &str) -> bool {
         "claude" | "claude-code" => '❯',
         _ => return false,
     };
-    let lines: Vec<_> = text.lines().collect();
-    let Some(i) = lines
-        .iter()
-        .rposition(|l| l.trim_start().starts_with(marker))
-    else {
+    let lines = crate::python_unicode::split_lines(text);
+    let Some(i) = lines.iter().rposition(|l| {
+        l.trim_start_matches(crate::python_unicode::is_space)
+            .starts_with(marker)
+    }) else {
         return false;
     };
-    let v = lines[i].trim();
-    let v = v.strip_prefix(marker).unwrap_or(v).trim();
+    let v = crate::python_unicode::trim(lines[i]);
+    let v = crate::python_unicode::trim(v.strip_prefix(marker).unwrap_or(v));
     let placeholders = [
         "",
         "Ask Codex to do anything",
@@ -71,23 +81,35 @@ pub fn empty_prompt(text: &str, agent: &str) -> bool {
     if !placeholders.contains(&v) {
         return false;
     }
-    let footer = re(
-        r"(?i)^(?:[─━═]{3,}$|GPT-|Claude|[←↳]|voice\b|mic\b|codex\b|[▁▂▃▄▅▆▇█]|⚠|⏵|\?\s|\d+%\s+context|f\d+\b|for agents|.*weekly limit|.*auto mode|.*shift\+tab|.*esc to interrupt)",
+    let footer = crate::python_unicode::regex(
+        r"(?i)^(?:[─━═]{3,}$|GPT-|Claude|[←↳]|[▁▂▃▄▅▆▇█]|⚠|⏵|\?\s|\d+%\s+context|for agents|.*weekly l[iİı]m[iİı]t|.*auto mode|.*sh[iİı]ft\+tab|.*esc to [iİı]nterrupt)",
     );
-    lines[i + 1..]
-        .iter()
-        .all(|l| l.trim().is_empty() || footer.is_match(l.trim()))
+    let bounded = crate::python_unicode::regex(r"(?i)^(?:vo[iİı]ce|m[iİı]c|codex|f\d+)");
+    lines[i + 1..].iter().all(|l| {
+        let line = crate::python_unicode::trim(l);
+        line.is_empty()
+            || footer.is_match(line)
+            || bounded
+                .find(line)
+                .is_some_and(|m| crate::python_unicode::word_boundary(line, m.end()))
+    })
 }
 pub fn claude_suggestion(text: &str, app: &str, a: &mut dyn Adapter, address: &str) -> bool {
     if sessions::provider(app) != "claude" {
         return false;
     }
-    let mut lines: Vec<String> = text.lines().map(str::to_owned).collect();
-    let Some(i) = lines.iter().rposition(|l| l.trim_start().starts_with('❯')) else {
+    let mut lines: Vec<String> = crate::python_unicode::split_lines(text)
+        .into_iter()
+        .map(str::to_owned)
+        .collect();
+    let Some(i) = lines.iter().rposition(|l| {
+        l.trim_start_matches(crate::python_unicode::is_space)
+            .starts_with('❯')
+    }) else {
         return false;
     };
-    let value = lines[i].trim();
-    let value = value.strip_prefix('❯').unwrap_or(value).trim().to_owned();
+    let value = crate::python_unicode::trim(&lines[i]);
+    let value = crate::python_unicode::trim(value.strip_prefix('❯').unwrap_or(value)).to_owned();
     lines[i] = "❯".into();
     if value.is_empty() || !empty_prompt(&lines.join("\n"), app) {
         return false;
@@ -99,7 +121,7 @@ pub fn claude_suggestion(text: &str, app: &str, a: &mut dyn Adapter, address: &s
 pub fn fixed(space: &Value, c: &Value) -> bool {
     arr(&c["fixed_names"])
         .iter()
-        .any(|n| s(n).to_lowercase() == s(&space["name"]).to_lowercase())
+        .any(|n| crate::common::casefold(s(n)) == crate::common::casefold(s(&space["name"])))
         || arr(&c["fixed_spaces"])
             .iter()
             .any(|i| i["id"] == space["id"] && i["machine"] == space["machine"])
@@ -150,7 +172,7 @@ pub fn inspect(space: &Value, snapshot: &Value, a: &mut dyn Adapter, c: &Value) 
     if addresses.is_empty() {
         push(&mut i, "no observable agent terminals")
     }
-    let (mut evidence, mut screens, mut sessions_v) = (vec![], vec![], vec![]);
+    let (mut evidence, mut screens, mut sessions_v, mut empty) = (vec![], vec![], vec![], vec![]);
     for address in &addresses {
         let t = &snapshot["terminals"][address];
         if truth(&snapshot["lookup_errors"][address]) {
@@ -191,15 +213,30 @@ pub fn inspect(space: &Value, snapshot: &Value, a: &mut dyn Adapter, c: &Value) 
             );
             continue;
         }
-        if snapshot["terminals"].as_object().is_some_and(|o| {
+        let children = snapshot["terminals"].as_object().is_some_and(|o| {
             o.values()
                 .any(|t| t["parent"] == *address && t["state"] == "live")
-        }) {
+        });
+        if children {
             push(&mut i, format!("{address}: live subagent terminals"))
         }
         let (valid, why, pids) = sessions::process_evidence(t, &snapshot["processes"]);
         if !valid {
             push(&mut i, format!("{address}: {why}"))
+        }
+        if valid && !children && a.empty(t, c) {
+            let text = a.screen(address)?;
+            if empty_prompt(&text, app) || claude_suggestion(&text, app, a, address) {
+                empty.push(address.clone());
+                evidence.push(json!([
+                    address,
+                    t["pid"],
+                    "empty",
+                    t["created_ms"],
+                    hash(text.as_bytes())
+                ]));
+                continue;
+            }
         }
         let (jobs_ok, jobs_reason, jobs_fp) = a.backend(t, c, valid);
         let child = if jobs_reason.contains("inherited child session") {
@@ -276,11 +313,15 @@ pub fn inspect(space: &Value, snapshot: &Value, a: &mut dyn Adapter, c: &Value) 
         2400
     ));
     i["sessions"] = json!(sessions_v);
+    i["empty_panes"] = json!(empty);
     Ok(i)
 }
 pub fn close_gate_blockers(i: &Value, a: &mut dyn Adapter, c: &Value) -> Vec<String> {
     if c["close_gate"]["enabled"] == false {
         return vec![];
+    }
+    if !a.has_close_gate() {
+        return vec!["close gate unavailable".into()];
     }
     let mut out = vec![];
     for session in arr(&i["sessions"]) {
@@ -376,12 +417,14 @@ pub fn record_space(i: &Value, dir: &Path, at: f64, terms: &[String]) -> Result<
     );
     if p.exists() {
         let mut f = OpenOptions::new().append(true).open(&p)?;
-        write!(f, "{line}")?;
+        f.write_all(&crate::common::text_bytes(&line))?;
     } else {
         let details: Vec<_> = arr(&i["folders"]).iter().map(|f| git_info(s(f))).collect();
-        let body=format!("# {} 자동 정리 기록\n\n- 공간: {}\n{}\n마지막 화면 일부(관측 자료):\n\n{}\n\n폴더·브랜치·최근 커밋·남은 미커밋·worktree 목록(삭제하지 않음):\n\n```json\n{}\n```\n{}",s(&i["name"]),s(&i["id"]),if truth(&i["archive"]){format!("- 하네스 보관: {}\n",s(&i["archive"]))}else{String::new()},s(&i["summary"]).lines().map(|l|format!("> {l}")).collect::<Vec<_>>().join("\n"),serde_json::to_string_pretty(&details)?,line);
+        let body=format!("# {} 자동 정리 기록\n\n- 공간: {}\n{}\n마지막 화면 일부(관측 자료):\n\n{}\n\n폴더·브랜치·최근 커밋·남은 미커밋·worktree 목록(삭제하지 않음):\n\n```json\n{}\n```\n{}",s(&i["name"]),s(&i["id"]),if truth(&i["archive"]){format!("- 하네스 보관: {}\n",s(&i["archive"]))}else{String::new()},s(&i["summary"]).lines().map(|l|format!("> {l}")).collect::<Vec<_>>().join("\n"),crate::common::json_pretty(&json!(details), false),line);
         let mut f = OpenOptions::new().write(true).create_new(true).open(&p)?;
-        write!(f, "{}", sessions::mask_text(&body, terms))?;
+        f.write_all(&crate::common::text_bytes(&sessions::mask_text(
+            &body, terms,
+        )))?;
     }
     Ok(p.to_string_lossy().into_owned())
 }
@@ -401,7 +444,7 @@ pub fn cycle(
         ))
     })?;
     let previous = state["spaces"].clone();
-    let gap = now - num(&state["last_at"], now);
+    let gap = sessions::sample_gap(state, now);
     let fresh = gap >= 0. && gap <= num(&c["max_sample_gap_seconds"], 660.);
     let trial = sessions::trial_of(state, now, fresh);
     let approved = truth(&c["user_approved_apply"])
@@ -423,12 +466,27 @@ pub fn cycle(
     let mut tracking = json!({});
     let mut results = vec![];
     for space in arr(&snap["spaces"]) {
-        if only.is_some_and(|id| space["id"] != id) {
+        if only.is_some_and(|id| !id.is_empty() && space["id"] != id) {
             continue;
         }
         let id = s(&space["id"]);
         let mut i=inspect(&space,&snap,a,c).unwrap_or_else(|e|json!({"id":id,"name":space["name"],"safe":false,"reasons":[format!("lookup failed: {}",take(&e.to_string(),160))]}));
         let old = &previous[id];
+        if sessions::on_hold(&i) {
+            push(&mut i, sessions::LOOKUP_HOLD);
+            i["safe"] = json!(false);
+            i["action"] = json!("keep");
+            i["quiet_seconds"] = json!(if truth(&old["since"]) {
+                now - num(&old["since"], now)
+            } else {
+                0.
+            });
+            if old.is_object() {
+                tracking[id] = old.clone();
+            }
+            results.push(i);
+            continue;
+        }
         let same = fresh
             && truth(&i["safe"])
             && (old["fingerprint"] == i["fingerprint"]
@@ -477,7 +535,12 @@ pub fn cycle(
                     push(&mut i, "the person is viewing this space")
                 } else {
                     let target = target.unwrap();
-                    let latest=inspect(&target,&check,a,c).unwrap_or_else(|e|json!({"safe":false,"reasons":[format!("recheck lookup failed: {}",take(&e.to_string(),160))]}));
+                    let latest = inspect(&target, &check, a, c).unwrap_or_else(|e| {
+                        let reason =
+                            format!("recheck lookup failed: {}", take(&e.to_string(), 160));
+                        push(&mut i, reason.clone());
+                        json!({"safe":false,"reasons":[reason]})
+                    });
                     if !truth(&latest["safe"]) || latest["fingerprint"] != i["fingerprint"] {
                         i["action"] = json!("keep");
                         push(&mut i, "evidence changed before close")
@@ -594,7 +657,11 @@ pub fn cycle(
                         tracking.as_object_mut().unwrap().remove(id);
                         for session in parked {
                             if truth(&session["session_id"]) {
-                                a.park(c, &session, "closed", false, "space closed")?;
+                                // This is a best-effort final record after the
+                                // confirmed close. Python ignores its (ok,
+                                // detail) result; an error must not discard the
+                                // completed cycle and its other observations.
+                                let _ = a.park(c, &session, "closed", false, "space closed");
                             }
                         }
                     }
@@ -647,9 +714,7 @@ pub fn cycle(
     )
 }
 pub fn option(args: &[String], key: &str, default: &Path) -> PathBuf {
-    args.iter()
-        .position(|a| a == key)
-        .and_then(|i| args.get(i + 1))
+    option_value(args, key)
         .map(PathBuf::from)
         .unwrap_or_else(|| default.to_owned())
 }
@@ -663,7 +728,20 @@ pub fn state_dir() -> PathBuf {
     )
 }
 pub fn observer_hash() -> Result<String> {
-    Ok(hash(fs::read(std::env::current_exe()?)?))
+    Ok(env!("HERDR_CLEANUP_SOURCE_SHA256").to_owned())
+}
+pub fn report_dir(site: &Value, user_home: &Path) -> PathBuf {
+    let value = site["reports_dir"]
+        .as_str()
+        .unwrap_or("~/Documents/HerdrReports");
+    let folder = if value == "~" {
+        user_home.to_owned()
+    } else if let Some(rest) = value.strip_prefix("~/") {
+        user_home.join(rest)
+    } else {
+        PathBuf::from(value)
+    };
+    folder.join("워크스페이스-기록")
 }
 pub fn finish(
     state_path: &Path,
@@ -691,7 +769,10 @@ pub fn finish(
         }
     }
     let mut f = OpenOptions::new().create(true).append(true).open(log)?;
-    writeln!(f, "{output}")?;
+    f.write_all(&crate::common::text_bytes(&format!(
+        "{}\n",
+        crate::common::json_text(&output, false)
+    )))?;
     private(log)?;
     let mut brief = observation.clone();
     brief["results"] = json!(arr(&observation["results"])
@@ -725,11 +806,7 @@ pub fn finish(
 }
 pub fn main(args: &[String]) -> Result<()> {
     use crate::locking::FileLock;
-    if args.iter().any(|arg| arg == "--help" || arg == "-h") {
-        crate::help::show("close_finished_spaces", args)?;
-        return Ok(());
-    }
-    validate_args(
+    let normalized = normalize_args(
         args,
         &[
             "--config",
@@ -742,6 +819,12 @@ pub fn main(args: &[String]) -> Result<()> {
         ],
         &["--dry-run", "--apply", "--now"],
     )?;
+    let args = normalized.as_slice();
+    if has_flag(args, "--help") {
+        crate::help::show("close_finished_spaces", args)?;
+        return Ok(());
+    }
+    let apply = apply_mode(args)?;
     let base = state_dir();
     let config_path = option(args, "--config", &base.join("close-finished-spaces.json"));
     let mut c = load(config_path, Value::Null)?;
@@ -751,21 +834,7 @@ pub fn main(args: &[String]) -> Result<()> {
     if num(&c["idle_seconds"], 600.) <= 0. || num(&c["trial_seconds"], 1800.) < 1800. {
         return arg_error("idle_seconds must be positive; live trial minimum is 1800 seconds");
     }
-    let apply = args.iter().any(|a| a == "--apply");
-    if apply && args.iter().any(|a| a == "--dry-run") {
-        return arg_error("--apply and --dry-run are mutually exclusive");
-    }
-    let only = args
-        .iter()
-        .position(|a| a == "--only-space")
-        .and_then(|i| args.get(i + 1))
-        .map(String::as_str);
-    if args.iter().any(|a| a == "--now") {
-        if !apply || only.is_none() {
-            return arg_error("--now needs --apply and --only-space");
-        }
-        c["_manual"] = json!(true)
-    }
+    let only = option_value(args, "--only-space");
     let state_path = option(
         args,
         "--state",
@@ -783,21 +852,32 @@ pub fn main(args: &[String]) -> Result<()> {
         )?;
         return Ok(());
     }
+    if has_flag(args, "--now") {
+        if !apply || !only.is_some_and(|value| !value.is_empty()) {
+            return arg_error("--now needs --apply and --only-space");
+        }
+        c["_manual"] = json!(true)
+    }
     let mut st = load(&state_path, json!({}))?;
     let hash = observer_hash()?;
     if st["observer_sha256"] != hash {
         st = json!({"observer_sha256":hash})
     }
-    let app = option(args, "--app", Path::new("herdr-app"))
+    let default_app =
+        crate::common::find_executable("herdr-app").unwrap_or_else(|| "herdr-app".into());
+    let default_core = crate::common::find_executable("herdr-core")
+        .or_else(|| crate::common::find_executable("hc"))
+        .unwrap_or_else(|| "hc".into());
+    let app = option(args, "--app", &default_app)
         .to_string_lossy()
         .into_owned();
-    let core = option(args, "--core", Path::new("hc"))
+    let core = option(args, "--core", &default_core)
         .to_string_lossy()
         .into_owned();
     let report = option(
         args,
         "--report-dir",
-        &home().join("Documents/HerdrReports/워크스페이스-기록"),
+        &report_dir(&crate::common::site(), &home()),
     );
     let mut a = Live { app, core };
     let observation = match cycle(&mut a, &c, &mut st, now(), apply, only, &report) {
@@ -806,6 +886,7 @@ pub fn main(args: &[String]) -> Result<()> {
             v
         }
         Err(e) if e.to_string().starts_with("SKIP:") => {
+            st["held_at"] = json!(now());
             json!({"at":local_iso(now()),"mode":if apply{"apply"}else{"dry-run"},"skipped":e.to_string().trim_start_matches("SKIP:"),"results":[]})
         }
         Err(e) => {

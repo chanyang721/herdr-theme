@@ -6,8 +6,50 @@ use std::{
     path::{Component, Path, PathBuf},
     time::{Duration, Instant},
 };
+pub mod cancellation;
 pub type Input = (PathBuf, Vec<u8>, u32);
-fn mode(path: &Path) -> u32 {
+/// Owned script names in the final Python source snapshot (same inventory at
+/// 8c5b71d and fb3c234). Unlisted user-supplied .py files remain copied data.
+pub const MIGRATED_SCRIPTS: &[&str] = &[
+    "agent_env.py",
+    "agent_sessions.py",
+    "balance_grid.py",
+    "close_finished_spaces.py",
+    "collaborate.py",
+    "collect_computers.py",
+    "collect_docs.py",
+    "collect_workflow.py",
+    "core_api.py",
+    "demo_agent.py",
+    "desktop.py",
+    "doc_catalog.py",
+    "doc_routing.py",
+    "file_lock.py",
+    "install.py",
+    "install_doc_tabs.py",
+    "install_preview.py",
+    "install_session_sleep.py",
+    "install_space_cleanup.py",
+    "install_voice.py",
+    "model_tier.py",
+    "open_doc_tab.py",
+    "open_document.py",
+    "render_html.py",
+    "render_mermaid.py",
+    "resolve_doc_pins.py",
+    "route.py",
+    "seed_workspace_pins.py",
+    "session_sleep_stub.py",
+    "set_workspace_icon.py",
+    "site_config.py",
+    "sleep_idle_sessions.py",
+    "space_job_evidence.py",
+    "tui_bridge.py",
+    "update_install.py",
+    "workspace.py",
+    "workspace_mods.py",
+];
+pub(crate) fn mode(path: &Path) -> u32 {
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
@@ -22,8 +64,8 @@ fn mode(path: &Path) -> u32 {
     }
 }
 pub fn atomic_write(path: &Path, bytes: &[u8], permissions: u32) -> Result<()> {
-    atomic_bytes(path, bytes)?;
-    chmod(path, permissions)
+    atomic_bytes_mode(path, bytes, Some(permissions))?;
+    Ok(())
 }
 pub fn rename_retry(source: &Path, target: &Path) -> Result<()> {
     for attempt in 0..25 {
@@ -40,49 +82,59 @@ pub fn rename_retry(source: &Path, target: &Path) -> Result<()> {
 pub fn exchange(left: &Path, right: &Path) -> Result<()> {
     #[cfg(windows)]
     {
-        let aside = left.with_file_name(format!("{}.exchange-aside", filename(left)));
-        if aside.exists() {
-            return Err(
-                format!("Exchange scratch path already exists: {}", aside.display()).into(),
-            );
-        }
-        rename_retry(right, &aside)?;
-        if let Err(error) = rename_retry(left, right) {
-            rename_retry(&aside, right)?;
-            return Err(error);
-        }
-        rename_retry(&aside, left)?;
-        Ok(())
+        exchange_windows_with_rename(left, right, &mut rename_retry)
     }
     #[cfg(unix)]
     {
-        use std::os::unix::ffi::OsStrExt;
-        let left = std::ffi::CString::new(left.as_os_str().as_bytes())?;
-        let right = std::ffi::CString::new(right.as_os_str().as_bytes())?;
-        #[cfg(target_os = "linux")]
-        let result = unsafe {
-            libc::renameat2(
-                libc::AT_FDCWD,
-                left.as_ptr(),
-                libc::AT_FDCWD,
-                right.as_ptr(),
-                libc::RENAME_EXCHANGE,
-            )
-        };
-        #[cfg(target_os = "macos")]
-        let result = unsafe { libc::renamex_np(left.as_ptr(), right.as_ptr(), 2) };
-        #[cfg(not(any(target_os = "linux", target_os = "macos")))]
-        return Err(
-            "Directory exchange requires macOS, Linux renameat2 or Windows; no unsafe fallback"
-                .into(),
-        );
-        #[cfg(any(target_os = "linux", target_os = "macos"))]
-        {
-            if result != 0 {
-                return Err(std::io::Error::last_os_error().into());
-            }
-            Ok(())
+        exchange_unix(left, right)
+    }
+}
+/// The original Windows second-rename failure test patched os.rename. Keep
+/// that operation replaceable while production uses the same retry function.
+pub fn exchange_windows_with_rename(
+    left: &Path,
+    right: &Path,
+    rename: &mut dyn FnMut(&Path, &Path) -> Result<()>,
+) -> Result<()> {
+    let aside = left.with_file_name(format!("{}.exchange-aside", filename(left)));
+    if aside.exists() {
+        return Err(format!("Exchange scratch path already exists: {}", aside.display()).into());
+    }
+    rename(right, &aside)?;
+    if let Err(error) = rename(left, right) {
+        rename(&aside, right)?;
+        return Err(error);
+    }
+    rename(&aside, left)?;
+    Ok(())
+}
+#[cfg(unix)]
+fn exchange_unix(left: &Path, right: &Path) -> Result<()> {
+    use std::os::unix::ffi::OsStrExt;
+    let left = std::ffi::CString::new(left.as_os_str().as_bytes())?;
+    let right = std::ffi::CString::new(right.as_os_str().as_bytes())?;
+    #[cfg(target_os = "linux")]
+    let result = unsafe {
+        libc::renameat2(
+            libc::AT_FDCWD,
+            left.as_ptr(),
+            libc::AT_FDCWD,
+            right.as_ptr(),
+            libc::RENAME_EXCHANGE,
+        )
+    };
+    #[cfg(target_os = "macos")]
+    let result = unsafe { libc::renamex_np(left.as_ptr(), right.as_ptr(), 2) };
+    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+    return Err(
+        "Directory exchange requires macOS, Linux renameat2 or Windows; no unsafe fallback".into(),
+    );
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    {
+        if result != 0 {
+            return Err(std::io::Error::last_os_error().into());
         }
+        Ok(())
     }
 }
 pub fn tree_digest(directory: &Path) -> Result<String> {
@@ -213,7 +265,9 @@ pub fn input_files(repo: &Path, home: &Path, names: &[String]) -> Result<Vec<Inp
         let mut source = repo.join(rel);
         let mut target_rel = rel.to_owned();
         if parts[0] == "scripts" {
-            if suffix(&source) == ".py" || parts[1] == install::native_name() {
+            if (parts.len() == 2 && MIGRATED_SCRIPTS.contains(&parts[1].as_str()))
+                || parts[1] == install::native_name()
+            {
                 source = std::env::current_exe()?;
                 target_rel = Path::new("scripts/sixfold").join(install::native_name())
             } else {
@@ -267,8 +321,32 @@ pub fn input_files(repo: &Path, home: &Path, names: &[String]) -> Result<Vec<Inp
     }
     Ok(files)
 }
-fn read_status(cli: &str, home: &Path) -> Result<Value> {
-    let out = timeout_output(command(cli).arg("status").env("HERDR_APP_HOME", home), 15)?;
+pub trait UpdateRuntime {
+    fn run(
+        &mut self,
+        cli: &str,
+        home: &Path,
+        args: &[String],
+        timeout: u64,
+    ) -> Result<std::process::Output>;
+    fn exchange(&mut self, left: &Path, right: &Path) -> Result<()> {
+        exchange(left, right)
+    }
+}
+struct NativeUpdateRuntime;
+impl UpdateRuntime for NativeUpdateRuntime {
+    fn run(
+        &mut self,
+        cli: &str,
+        home: &Path,
+        args: &[String],
+        timeout: u64,
+    ) -> Result<std::process::Output> {
+        timeout_output(command(cli).args(args).env("HERDR_APP_HOME", home), timeout)
+    }
+}
+fn read_status(cli: &str, home: &Path, runtime: &mut dyn UpdateRuntime) -> Result<Value> {
+    let out = runtime.run(cli, home, &["status".into()], 15)?;
     if !out.status.success() {
         return Err(String::from_utf8_lossy(&out.stderr).into_owned().into());
     }
@@ -278,6 +356,24 @@ fn read_status(cli: &str, home: &Path) -> Result<Value> {
     }
     Ok(status)
 }
+pub fn pinned_inputs(extra: &[(PathBuf, PathBuf)], home: &Path) -> Result<Vec<Input>> {
+    let mut inputs = Vec::new();
+    for (src, rel) in extra {
+        if !rel.starts_with("mods")
+            || rel.components().count() < 3
+            || rel.is_absolute()
+            || rel.components().any(|p| p == Component::ParentDir)
+        {
+            return Err(format!("Unsupported Workspace Mods target: {}", rel.display()).into());
+        }
+        if !src.is_file() || symlink(src) {
+            return Err(format!("Not a regular Workspace Mods file: {}", src.display()).into());
+        }
+        check_target(&home.join(rel), home)?;
+        inputs.push((rel.clone(), install::source_payload(src, rel)?, mode(src)));
+    }
+    Ok(inputs)
+}
 pub fn update(
     repo: &Path,
     home: &Path,
@@ -286,6 +382,29 @@ pub fn update(
     verify_timeout: f64,
     allow_unhealthy_before: bool,
     extra: &[(PathBuf, PathBuf)],
+) -> Result<PathBuf> {
+    update_with_runtime(
+        repo,
+        home,
+        names,
+        cli,
+        verify_timeout,
+        allow_unhealthy_before,
+        extra,
+        &mut NativeUpdateRuntime,
+    )
+}
+/// Same transaction as update(); the original tests' fake CLI is supplied at
+/// the command boundary without replacing staging, locking or rollback logic.
+pub fn update_with_runtime(
+    repo: &Path,
+    home: &Path,
+    names: &[String],
+    cli: &str,
+    verify_timeout: f64,
+    allow_unhealthy_before: bool,
+    extra: &[(PathBuf, PathBuf)],
+    runtime: &mut dyn UpdateRuntime,
 ) -> Result<PathBuf> {
     let configured_repo = absolute(repo);
     let configured_home = absolute(home);
@@ -306,27 +425,17 @@ pub fn update(
         .open(lock_path)?;
     fs2::FileExt::try_lock_exclusive(&_guard)
         .map_err(|_| "Another installation holds the lock; do not copy files manually")?;
+    let _cancellation = cancellation::Scope::enter()?;
     let mut files = input_files(&repo, &home, names)?;
-    for (src, rel) in extra {
-        if !rel.starts_with("mods")
-            || rel.components().count() < 3
-            || rel.is_absolute()
-            || rel.components().any(|p| p == Component::ParentDir)
-        {
-            return Err(format!("Unsupported Workspace Mods target: {}", rel.display()).into());
-        }
-        if !src.is_file() || symlink(src) {
-            return Err(format!("Not a regular Workspace Mods file: {}", src.display()).into());
-        }
-        check_target(&home.join(rel), &home)?;
-        if files.iter().any(|(r, _, _)| r == rel) {
+    for input in pinned_inputs(extra, &home)? {
+        if files.iter().any(|(r, _, _)| *r == input.0) {
             return Err(format!(
                 "Listed files clash with the pinned Workspace Mods: {}",
-                rel.display()
+                input.0.display()
             )
             .into());
         }
-        files.push((rel.clone(), install::source_payload(src, rel)?, mode(src)))
+        files.push(input)
     }
     let mut migrated = false;
     for spec in super::migration::CONFIGS {
@@ -371,7 +480,7 @@ pub fn update(
             }
         }
     }
-    let before = read_status(cli, &home)?;
+    let before = read_status(cli, &home, runtime)?;
     if !arr(&before["errors"]).is_empty() && !allow_unhealthy_before {
         return Err("App already reports errors; diagnose first or use --allow-unhealthy-before for an authorized repair".into());
     }
@@ -433,11 +542,13 @@ pub fn update(
         }
     }
     for name in &mods {
-        let output = timeout_output(
-            command(cli)
-                .arg("check")
-                .arg(stage.path().join(name))
-                .env("HERDR_APP_HOME", &home),
+        let output = runtime.run(
+            cli,
+            &home,
+            &[
+                "check".into(),
+                stage.path().join(name).to_string_lossy().into_owned(),
+            ],
             30,
         )?;
         if !output.status.success() {
@@ -487,6 +598,7 @@ pub fn update(
     let mut written = vec![];
     let result = (|| -> Result<()> {
         for name in &mods {
+            cancellation::check()?;
             let target = home.join("mods").join(name);
             let current = if target.exists() {
                 Some(tree_digest(&target)?)
@@ -498,13 +610,14 @@ pub fn update(
             }
             fs::create_dir_all(target.parent().unwrap())?;
             if target.exists() {
-                exchange(&stage.path().join(name), &target)?
+                runtime.exchange(&stage.path().join(name), &target)?
             } else {
                 rename_retry(&stage.path().join(name), &target)?
             }
             swapped.push(name.clone())
         }
         for (rel, bytes, permission) in &files {
+            cancellation::check()?;
             if rel.starts_with("mods") {
                 continue;
             }
@@ -522,7 +635,8 @@ pub fn update(
         let mut first_clean: Option<Instant> = None;
         let mut last_error = None;
         loop {
-            match read_status(cli, &home) {
+            cancellation::check()?;
+            match read_status(cli, &home, runtime) {
                 Ok(after) => {
                     receipt["after"] = after.clone();
                     for name in &swapped {
@@ -576,14 +690,23 @@ pub fn update(
             }
             std::thread::sleep(Duration::from_millis(200))
         }
+        cancellation::check()?;
         receipt["phase"] = json!("verified");
         save(&receipt)?;
+        cancellation::check()?;
         Ok(())
     })();
     if let Err(error) = result {
         receipt["phase"] = json!("rolling_back");
         receipt["failure"] = json!(error.to_string());
         let mut conflicts = vec![];
+        let mut rollback_errors = vec![];
+        if let Err(error) = save(&receipt) {
+            rollback_errors.push(json!({"target":"receipt.json","error":error.to_string()}));
+        }
+        // Cancellation triggers rollback, but must never interrupt its remaining
+        // restoration attempts or the terminal receipt.
+        let _rollback = cancellation::Rollback::enter();
         for name in swapped.iter().rev() {
             let target = home.join("mods").join(name);
             if !target.exists() || tree_digest(&target).ok().as_ref() != Some(&candidate_mods[name])
@@ -591,10 +714,15 @@ pub fn update(
                 conflicts.push(format!("mods/{name}"));
                 continue;
             }
-            if initial[name].is_none() {
-                rename_retry(&target, &stage.path().join(name))?
+            let restored = if initial[name].is_none() {
+                rename_retry(&target, &stage.path().join(name))
             } else {
-                exchange(&stage.path().join(name), &target)?
+                runtime.exchange(&stage.path().join(name), &target)
+            };
+            if let Err(error) = restored {
+                conflicts.push(format!("mods/{name}"));
+                rollback_errors
+                    .push(json!({"target":format!("mods/{name}"),"error":error.to_string()}));
             }
         }
         for rel in written.iter().rev() {
@@ -604,10 +732,14 @@ pub fn update(
                 conflicts.push(rel.to_string_lossy().into_owned());
                 continue;
             }
-            if let Some((bytes, permission)) = &originals[rel] {
-                atomic_write(&target, bytes, *permission)?
+            let restored = if let Some((bytes, permission)) = &originals[rel] {
+                atomic_write(&target, bytes, *permission)
             } else {
-                fs::remove_file(&target)?
+                remove_installed_file(&target)
+            };
+            if let Err(error) = restored {
+                conflicts.push(rel.to_string_lossy().into_owned());
+                rollback_errors.push(json!({"target":rel,"error":error.to_string()}));
             }
         }
         receipt["phase"] = json!(if conflicts.is_empty() {
@@ -616,12 +748,18 @@ pub fn update(
             "rollback_conflict"
         });
         receipt["rollback_conflicts"] = json!(conflicts);
-        if let Ok(status) = read_status(cli, &home) {
+        if !rollback_errors.is_empty() {
+            receipt["rollback_errors"] = json!(rollback_errors);
+        }
+        if let Ok(status) = read_status(cli, &home, runtime) {
             receipt["rollback_status"] = status
         }
-        save(&receipt)?;
+        let save_failure = save(&receipt)
+            .err()
+            .map(|error| format!("; final receipt write failed: {error}"))
+            .unwrap_or_default();
         return Err(format!(
-            "{error}; {}; receipt: {}",
+            "{error}; {}; receipt: {}{save_failure}",
             s(&receipt["phase"]),
             backup.join("receipt.json").display()
         )
@@ -629,7 +767,84 @@ pub fn update(
     }
     Ok(backup)
 }
+/// The original installer tests patch these four operations. This backend
+/// keeps the production argument routing, default pinned release and error flow.
+pub trait UpdateCliBackend {
+    fn pinned_files(
+        &mut self,
+        repo: &Path,
+        source: Option<&Path>,
+    ) -> Result<(Value, PathBuf, Vec<(PathBuf, PathBuf)>)>;
+    fn update(
+        &mut self,
+        repo: &Path,
+        home: &Path,
+        names: &[String],
+        cli: &str,
+        timeout: f64,
+        allow_unhealthy: bool,
+        extra: &[(PathBuf, PathBuf)],
+    ) -> Result<PathBuf>;
+    fn record(&mut self, home: &Path, pin: &Value) -> Result<()>;
+    fn voice(&mut self, repo: &Path, home: &Path) -> Result<()>;
+}
+/// The old test supplied a failing voice installer process. Share this command
+/// path with the real CLI while replacing only the subprocess operation.
+pub fn install_voice_with_runner(
+    repo: &Path,
+    home: &Path,
+    runner: &mut dyn FnMut(&mut std::process::Command) -> Result<std::process::Output>,
+) -> Result<()> {
+    let output = runner(
+        command(std::env::current_exe()?)
+            .arg("voice-install")
+            .arg("--source")
+            .arg(repo.join("voice"))
+            .env("HERDR_APP_HOME", home),
+    )?;
+    if !output.status.success() {
+        return Err(format!(
+            "command failed ({}): {} {}",
+            output.status,
+            String::from_utf8_lossy(&output.stdout).trim(),
+            String::from_utf8_lossy(&output.stderr).trim()
+        )
+        .into());
+    }
+    Ok(())
+}
+struct RuntimeUpdateCli;
+impl UpdateCliBackend for RuntimeUpdateCli {
+    fn pinned_files(
+        &mut self,
+        repo: &Path,
+        source: Option<&Path>,
+    ) -> Result<(Value, PathBuf, Vec<(PathBuf, PathBuf)>)> {
+        install::pinned_files(repo, source)
+    }
+    fn update(
+        &mut self,
+        repo: &Path,
+        home: &Path,
+        names: &[String],
+        cli: &str,
+        timeout: f64,
+        allow_unhealthy: bool,
+        extra: &[(PathBuf, PathBuf)],
+    ) -> Result<PathBuf> {
+        update(repo, home, names, cli, timeout, allow_unhealthy, extra)
+    }
+    fn record(&mut self, home: &Path, pin: &Value) -> Result<()> {
+        install::record(home, pin)
+    }
+    fn voice(&mut self, repo: &Path, home: &Path) -> Result<()> {
+        install_voice_with_runner(repo, home, &mut |cmd| Ok(cmd.output()?))
+    }
+}
 pub fn cli(args: &[String]) -> Result<()> {
+    cli_with_backend(args, &mut RuntimeUpdateCli)
+}
+pub fn cli_with_backend(args: &[String], backend: &mut dyn UpdateCliBackend) -> Result<()> {
     let repo = option(args, "--repo")
         .map(expand)
         .unwrap_or_else(repo_default);
@@ -655,12 +870,14 @@ pub fn cli(args: &[String]) -> Result<()> {
         .collect::<Vec<_>>();
     let voice = app_files.len() != names.len();
     let release = if !has(args, "--without-workspace-mods") && (!app_files.is_empty() || !voice) {
-        Some(install::pinned_files(
-            &repo,
-            option(args, "--workspace-mods-source")
-                .map(expand)
-                .as_deref(),
-        )?)
+        Some(
+            backend.pinned_files(
+                &repo,
+                option(args, "--workspace-mods-source")
+                    .map(expand)
+                    .as_deref(),
+            )?,
+        )
     } else {
         None
     };
@@ -671,7 +888,7 @@ pub fn cli(args: &[String]) -> Result<()> {
         );
     }
     let backup = if !app_files.is_empty() || !extra.is_empty() {
-        Some(update(
+        Some(backend.update(
             &repo,
             &home,
             &app_files,
@@ -684,32 +901,35 @@ pub fn cli(args: &[String]) -> Result<()> {
         None
     };
     if let Some((pin, _, _)) = &release {
-        install::record(&home, pin)?
+        if crate::observers::truth(pin) {
+            backend.record(&home, pin)?;
+        }
     }
     if voice {
-        checked(
-            command(std::env::current_exe()?)
-                .arg("voice-install")
-                .arg("--source")
-                .arg(repo.join("voice"))
-                .env("HERDR_APP_HOME", &home),
-        )?;
+        backend.voice(&repo, &home)?;
     }
-    if app_files
+    let observer_result = if app_files
         .iter()
         .any(|p| Path::new(p).starts_with("scripts"))
     {
         let observer_home = option(args, "--observer-home")
             .map(expand)
             .unwrap_or_else(user_home);
-        let result = observers::refresh(&observer_home, &repo)?;
-        println!("Observer copies: {result}")
-    }
+        Some(observers::refresh(&observer_home, &repo)?)
+    } else {
+        None
+    };
     if let Some(backup) = backup {
         println!(
             "Installed and verified errors=0; backup/receipt: {}",
             backup.display()
         )
+    }
+    if let Some(result) = observer_result {
+        crate::common::print_line(&format!(
+            "Observer copies: {}",
+            crate::common::json_text(&result, false)
+        ))?;
     }
     Ok(())
 }

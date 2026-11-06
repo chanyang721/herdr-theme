@@ -165,7 +165,7 @@ pub fn option(args: &[String], key: &str) -> Option<String> {
 pub fn has(args: &[String], key: &str) -> bool {
     args.iter()
         .take_while(|a| a.as_str() != "--")
-        .any(|a| a == key)
+        .any(|a| a == key || a.starts_with(&format!("{key}=")))
 }
 pub fn required(args: &[String], key: &str) -> Result<String> {
     if let Some(value) = option(args, key) {
@@ -202,8 +202,18 @@ pub fn positionals(args: &[String], flags: &[&str]) -> Vec<String> {
     result
 }
 pub fn atomic_bytes(path: impl AsRef<Path>, data: &[u8]) -> Result<bool> {
+    atomic_bytes_mode(path, data, None)
+}
+pub fn atomic_bytes_mode(
+    path: impl AsRef<Path>,
+    data: &[u8],
+    permissions: Option<u32>,
+) -> Result<bool> {
     let path = path.as_ref();
     if fs::read(path).ok().as_deref() == Some(data) {
+        if let Some(mode) = permissions {
+            chmod(path, mode)?;
+        }
         return Ok(false);
     }
     let parent = path.parent().unwrap_or(Path::new("."));
@@ -213,13 +223,138 @@ pub fn atomic_bytes(path: impl AsRef<Path>, data: &[u8]) -> Result<bool> {
         .tempfile_in(parent)?;
     temporary.write_all(data)?;
     temporary.as_file().sync_all()?;
-    temporary.persist(path).map_err(|e| e.error)?;
+    if let Some(mode) = permissions {
+        chmod(temporary.path(), mode)?;
+    }
+    persist_replacing(temporary, path)?;
     Ok(true)
 }
+fn persist_retry(
+    mut temporary: tempfile::NamedTempFile,
+    path: &Path,
+) -> std::result::Result<(), tempfile::PersistError> {
+    for attempt in 0..25 {
+        match temporary.persist(path) {
+            Ok(_) => return Ok(()),
+            Err(error)
+                if error.error.kind() == std::io::ErrorKind::PermissionDenied && attempt < 24 =>
+            {
+                temporary = error.file;
+                std::thread::sleep(Duration::from_millis(40));
+            }
+            Err(error) => return Err(error),
+        }
+    }
+    unreachable!()
+}
+fn retry_rename(source: &Path, destination: &Path) -> std::io::Result<()> {
+    for attempt in 0..25 {
+        match fs::rename(source, destination) {
+            Err(error) if error.kind() == std::io::ErrorKind::PermissionDenied && attempt < 24 => {
+                std::thread::sleep(Duration::from_millis(40));
+            }
+            result => return result,
+        }
+    }
+    unreachable!()
+}
+fn persist_replacing(temporary: tempfile::NamedTempFile, path: &Path) -> Result<()> {
+    match temporary.persist(path) {
+        Ok(_) => Ok(()),
+        Err(error) => {
+            #[cfg(windows)]
+            if error.error.kind() == std::io::ErrorKind::PermissionDenied
+                && path.extension().is_some_and(|extension| {
+                    extension.to_string_lossy().eq_ignore_ascii_case("exe")
+                })
+                && path.is_file()
+            {
+                // Windows permits a mapped image to be renamed, but refuses an
+                // overwrite. Keep its bytes under a unique name until its users
+                // exit; helpers already running continue using that same image.
+                let parent = path.parent().unwrap_or(Path::new("."));
+                let aside = tempfile::Builder::new()
+                    .prefix(&format!(".{}.replaced-", filename(path)))
+                    .tempfile_in(parent)?
+                    .into_temp_path();
+                fs::remove_file(&aside)?;
+                retry_rename(path, &aside)?;
+                let aside = aside.keep()?;
+                match persist_retry(error.file, path) {
+                    Ok(()) => {
+                        // Delete only this exact owned aside if no process maps
+                        // it. Never infer ownership of unrelated prefix files.
+                        let _ = fs::remove_file(&aside);
+                        return Ok(());
+                    }
+                    Err(install_error) => {
+                        if path.exists() {
+                            return Err(format!("Executable replacement failed: {}; original retained at {} because destination appeared concurrently", install_error.error, aside.display()).into());
+                        }
+                        if let Err(restore_error) = retry_rename(&aside, path) {
+                            return Err(format!("Executable replacement failed: {}; restoring original failed: {restore_error}; original retained at {}", install_error.error, aside.display()).into());
+                        }
+                        return Err(install_error.error.into());
+                    }
+                }
+            }
+            Err(error.error.into())
+        }
+    }
+}
+pub fn remove_installed_file(path: &Path) -> Result<()> {
+    match fs::remove_file(path) {
+        Ok(()) => Ok(()),
+        Err(error) => {
+            #[cfg(windows)]
+            if error.kind() == std::io::ErrorKind::PermissionDenied
+                && path.extension().is_some_and(|extension| {
+                    extension.to_string_lossy().eq_ignore_ascii_case("exe")
+                })
+            {
+                let aside = tempfile::Builder::new()
+                    .prefix(&format!(".{}.replaced-", filename(path)))
+                    .tempfile_in(path.parent().unwrap_or(Path::new(".")))?
+                    .into_temp_path();
+                fs::remove_file(&aside)?;
+                retry_rename(path, &aside)?;
+                let aside = aside.keep()?;
+                let _ = fs::remove_file(aside);
+                return Ok(());
+            }
+            Err(error.into())
+        }
+    }
+}
+/// Direct write semantics used only where the original helper used write_text:
+/// follow existing symlinks and retain the target's permissions.
+pub fn write_following(path: impl AsRef<Path>, data: &[u8]) -> Result<()> {
+    let path = path.as_ref();
+    fs::create_dir_all(path.parent().unwrap_or(Path::new(".")))?;
+    fs::write(path, data)?;
+    Ok(())
+}
+pub fn text_bytes(text: &str) -> Vec<u8> {
+    crate::common::text_bytes(text)
+}
+pub fn replace_named_text(path: &Path, text: &str) -> Result<()> {
+    let temporary = path.with_extension("tmp");
+    write_following(&temporary, &text_bytes(text))?;
+    retry_rename(&temporary, path)?;
+    Ok(())
+}
 pub fn atomic_json(path: impl AsRef<Path>, value: &Value) -> Result<bool> {
-    let mut data = serde_json::to_vec_pretty(value)?;
-    data.push(b'\n');
-    atomic_bytes(path, &data)
+    let path = path.as_ref();
+    let text = crate::common::json_pretty(value, false) + "\n";
+    match fs::read_to_string(path) {
+        Ok(previous) if previous.replace("\r\n", "\n").replace('\r', "\n") == text => {
+            return Ok(false)
+        }
+        Ok(_) => {}
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => return Err(error.into()),
+    }
+    atomic_bytes(path, &text_bytes(&text))
 }
 pub fn chmod(path: impl AsRef<Path>, mode: u32) -> Result<()> {
     #[cfg(unix)]
@@ -323,6 +458,9 @@ pub fn checked(cmd: &mut Command) -> Result<Output> {
     Ok(output)
 }
 pub fn timeout_output(cmd: &mut Command, seconds: u64) -> Result<Output> {
+    timeout_output_f64(cmd, seconds as f64)
+}
+pub fn timeout_output_f64(cmd: &mut Command, seconds: f64) -> Result<Output> {
     cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
     let mut child = cmd.spawn()?;
     let stdout = child.stdout.take().unwrap();
@@ -341,12 +479,21 @@ pub fn timeout_output(cmd: &mut Command, seconds: u64) -> Result<Output> {
     });
     let begin = std::time::Instant::now();
     let status = loop {
+        if super::update::cancellation::requested() {
+            let _ = child.kill();
+            let _ = child.wait();
+            let _ = a.join();
+            let _ = b.join();
+            return Err(super::update::cancellation::interruption());
+        }
         if let Some(status) = child.try_wait()? {
             break status;
         }
-        if begin.elapsed() >= Duration::from_secs(seconds) {
+        if begin.elapsed().as_secs_f64() >= seconds {
             let _ = child.kill();
             let _ = child.wait();
+            let _ = a.join();
+            let _ = b.join();
             return Err("command timeout".into());
         }
         std::thread::sleep(Duration::from_millis(20))
@@ -442,13 +589,128 @@ pub fn is_hub(space: &Value, site: &Value) -> bool {
     arr(&site["hub_space_ids"]).contains(&space["id"])
         || ["share", "공통", "common"].contains(&fold(s(&space["name"])).as_str())
 }
-pub fn repo_default() -> PathBuf {
-    std::env::var_os("HERDR_THEME_REPO")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| {
-            PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-                .parent()
-                .unwrap()
-                .to_owned()
+fn runtime_repository(executable: &Path, directory: &Path) -> Option<PathBuf> {
+    executable
+        .parent()
+        .into_iter()
+        .flat_map(Path::ancestors)
+        .chain(directory.ancestors())
+        .find(|root| {
+            root.join("workspace-mods.lock.json").is_file()
+                && root.join("keys.json").is_file()
+                && root.join("mods").is_dir()
+                && root.join("layouts").is_dir()
         })
+        .map(Path::to_owned)
+}
+pub fn source_repository() -> Option<PathBuf> {
+    if let Some(path) = std::env::var_os("HERDR_THEME_REPO") {
+        return Some(expand(path.to_string_lossy()));
+    }
+    runtime_repository(
+        &std::env::current_exe().ok()?,
+        &std::env::current_dir().ok()?,
+    )
+}
+pub fn repo_default() -> PathBuf {
+    source_repository().unwrap_or_else(|| {
+        std::env::current_exe()
+            .ok()
+            .and_then(|path| path.parent().map(Path::to_owned))
+            .unwrap_or_else(|| PathBuf::from("."))
+    })
+}
+#[cfg(test)]
+mod runtime_and_write_tests {
+    use super::*;
+    #[test]
+    fn atomic_json_preserves_original_universal_newline_noop_and_decode_errors() {
+        use base64::{engine::general_purpose::STANDARD, Engine};
+        let corpus: Value = serde_json::from_str(include_str!(
+            "../../tests/fixtures/documents-atomic-text-original.json"
+        ))
+        .unwrap();
+        for case in corpus["cases"].as_array().unwrap() {
+            let temp = tempfile::tempdir().unwrap();
+            let path = temp.path().join("out.json");
+            fs::write(
+                &path,
+                STANDARD
+                    .decode(case["input_base64"].as_str().unwrap())
+                    .unwrap(),
+            )
+            .unwrap();
+            let result = atomic_json(&path, &case["value"]);
+            if case["expected"]["error"].is_null() {
+                assert_eq!(
+                    result.unwrap(),
+                    case["expected"]["changed"].as_bool().unwrap()
+                )
+            } else {
+                assert!(result.is_err())
+            }
+            assert_eq!(
+                fs::read(&path).unwrap(),
+                STANDARD
+                    .decode(case["expected"]["output_base64"].as_str().unwrap())
+                    .unwrap(),
+                "{}",
+                case["name"]
+            );
+            assert_eq!(fs::read_dir(temp.path()).unwrap().count(), 1);
+        }
+    }
+    #[test]
+    fn repository_follows_runtime_location_and_rejects_installed_app_assets() {
+        let temp = tempfile::tempdir().unwrap();
+        let repo = temp.path().join("source");
+        fs::create_dir_all(repo.join("mods")).unwrap();
+        fs::create_dir_all(repo.join("layouts")).unwrap();
+        fs::write(repo.join("keys.json"), b"{}").unwrap();
+        fs::write(repo.join("workspace-mods.lock.json"), b"{}").unwrap();
+        assert_eq!(
+            runtime_repository(&repo.join("rust/target/release/herdr-theme"), temp.path()),
+            Some(repo.clone())
+        );
+        let app = temp.path().join("app");
+        fs::create_dir_all(app.join("mods")).unwrap();
+        fs::create_dir_all(app.join("layouts")).unwrap();
+        fs::write(app.join("keys.json"), b"{}").unwrap();
+        assert_eq!(
+            runtime_repository(&app.join("scripts/sixfold/herdr-theme"), temp.path()),
+            None
+        );
+        assert_eq!(
+            runtime_repository(&app.join("scripts/sixfold/herdr-theme"), &repo.join("docs")),
+            Some(repo)
+        );
+    }
+    #[cfg(unix)]
+    #[test]
+    fn source_specific_writes_preserve_direct_links_and_replace_atomic_links_privately() {
+        use std::os::unix::fs::{symlink, PermissionsExt};
+        let temp = tempfile::tempdir().unwrap();
+        let target = temp.path().join("target");
+        let link = temp.path().join("link.json");
+        fs::write(&target, b"original").unwrap();
+        fs::set_permissions(&target, fs::Permissions::from_mode(0o640)).unwrap();
+        symlink(&target, &link).unwrap();
+        write_following(&link, b"direct").unwrap();
+        assert!(symlink_metadata_is_link(&link));
+        assert_eq!(fs::read(&target).unwrap(), b"direct");
+        assert_eq!(
+            fs::metadata(&target).unwrap().permissions().mode() & 0o777,
+            0o640
+        );
+        atomic_json(&link, &json!({"key":"private"})).unwrap();
+        assert!(!symlink_metadata_is_link(&link));
+        assert_eq!(fs::read(&target).unwrap(), b"direct");
+        assert_eq!(
+            fs::metadata(&link).unwrap().permissions().mode() & 0o777,
+            0o600
+        );
+        fn symlink_metadata_is_link(path: &Path) -> bool {
+            fs::symlink_metadata(path).unwrap().file_type().is_symlink()
+        }
+    }
 }

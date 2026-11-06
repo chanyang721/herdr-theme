@@ -213,10 +213,9 @@ pub fn collect_cli(args: &[String]) -> Result<()> {
     }
     let _guard = lock(output.with_extension("lock"), false)?;
     let result = collect(&config, &output, Some(&pins))?;
-    println!(
-        "{}",
-        json!({"spaces":result["spaces"].as_object().unwrap().len(),"documents":result["spaces"].as_object().unwrap().values().map(|x|arr(&x["files"]).len()).sum::<usize>()})
-    );
+    crate::common::print(
+        &(json!({"spaces":result["spaces"].as_object().unwrap().len(),"documents":result["spaces"].as_object().unwrap().values().map(|x|arr(&x["files"]).len()).sum::<usize>()})),
+    )?;
     Ok(())
 }
 pub fn checked_path(value: &str, root: Option<&str>) -> Result<PathBuf> {
@@ -275,11 +274,35 @@ pub fn identity(root: &str, topic: &str) -> String {
         ))[..16]
     )
 }
+#[cfg(test)]
 fn rule_document(
     rule: &Value,
     cache: &mut HashMap<String, Vec<Value>>,
     warnings: &mut Vec<String>,
     day: NaiveDate,
+) -> Value {
+    rule_document_with_probe(rule, cache, warnings, day, &pin_is_file)
+}
+fn pin_is_file(path: &Path) -> Result<bool> {
+    match fs::metadata(path) {
+        Ok(metadata) => Ok(metadata.is_file()),
+        Err(error)
+            if matches!(
+                error.kind(),
+                std::io::ErrorKind::NotFound | std::io::ErrorKind::NotADirectory
+            ) =>
+        {
+            Ok(false)
+        }
+        Err(error) => Err(error.into()),
+    }
+}
+fn rule_document_with_probe(
+    rule: &Value,
+    cache: &mut HashMap<String, Vec<Value>>,
+    warnings: &mut Vec<String>,
+    day: NaiveDate,
+    file_probe: &dyn Fn(&Path) -> Result<bool>,
 ) -> Value {
     let mut base = json!({"pinned":true,"path":null,"status":"missing"});
     for key in ["id", "label", "kind"] {
@@ -299,7 +322,7 @@ fn rule_document(
             base["path"] = json!(path);
             base["name"] = json!(filename(&path));
             base["root"] = json!(path.parent());
-            if path.is_file() {
+            if file_probe(&path)? {
                 base["mtime"] = json!(mtime(&path));
                 base["status"] = json!("ok")
             } else {
@@ -373,6 +396,16 @@ fn rule_document(
     base
 }
 pub fn resolve(config: &Value, space: &str, day: NaiveDate) -> Result<Value> {
+    resolve_with_file_probe(config, space, day, &pin_is_file)
+}
+/// The original permission-error test injects Path.is_file; production keeps
+/// the same fallible metadata operation rather than suppressing access errors.
+pub fn resolve_with_file_probe(
+    config: &Value,
+    space: &str,
+    day: NaiveDate,
+    file_probe: &dyn Fn(&Path) -> Result<bool>,
+) -> Result<Value> {
     if config["version"] != 1 || !config["spaces"].is_object() {
         return Err("Expected version:1 and spaces mapping".into());
     }
@@ -391,7 +424,7 @@ pub fn resolve(config: &Value, space: &str, day: NaiveDate) -> Result<Value> {
     let mut cache = HashMap::new();
     let mut selected = pins
         .iter()
-        .map(|p| rule_document(p, &mut cache, &mut warnings, day))
+        .map(|p| rule_document_with_probe(p, &mut cache, &mut warnings, day, file_probe))
         .collect::<Vec<_>>();
     let days = settings["recent"]["days"].as_i64().unwrap_or(14).max(0);
     let limit = settings["recent"]["limit"]
@@ -725,7 +758,7 @@ pub fn cli(args: &[String]) -> Result<()> {
     let space = required(args, "--space")?;
     let actions = ["--pin", "--pin-id", "--unpin"]
         .iter()
-        .filter(|k| has(args, k))
+        .filter(|k| option(args, k).is_some_and(|value| !value.is_empty()))
         .count();
     if actions > 1 {
         return Err("pin actions are mutually exclusive".into());
@@ -752,10 +785,7 @@ pub fn cli(args: &[String]) -> Result<()> {
             .join("project-docs-routing.local.json")
     });
     let routing = routing::load(&routing_path).unwrap_or(json!({}));
-    println!(
-        "{}",
-        catalog(&config, &space, today(), &app_home(), &routing)?
-    );
+    crate::common::print(&(catalog(&config, &space, today(), &app_home(), &routing)?))?;
     Ok(())
 }
 pub fn choose_space(
@@ -877,14 +907,16 @@ pub fn open_tab(args: &[String]) -> Result<()> {
         requests = json!({})
     }
     requests[&space] = json!({"path":file,"at":now_ms()});
-    atomic_json(path, &json!({"version":2,"requests":requests}))?;
+    replace_named_text(
+        &path,
+        &crate::common::json_text(&json!({"version":2,"requests":requests}), false),
+    )?;
     if !has(args, "--no-show") {
         checked(command("herdr-app").args(["do", "tab.select", "--id", &tab]))?;
     }
-    println!(
-        "{}",
-        json!({"space":space,"tab":tab,"file":file,"shown":!has(args,"--no-show")})
-    );
+    crate::common::print(
+        &(json!({"space":space,"tab":tab,"file":file,"shown":!has(args,"--no-show")})),
+    )?;
     Ok(())
 }
 pub fn open_document(args: &[String]) -> Result<()> {
@@ -892,7 +924,7 @@ pub fn open_document(args: &[String]) -> Result<()> {
     let file = positions.first().ok_or("file required")?.as_str();
     let file = resolved(Path::new(file).canonicalize()?);
     if !file.is_file() {
-        return Err("select a file".into());
+        return crate::common::usage("select a file");
     }
     let app = app_home();
     for name in [
@@ -902,13 +934,16 @@ pub fn open_document(args: &[String]) -> Result<()> {
         "preview-plus",
     ] {
         if !app.join("mods").join(name).join("main.js").exists() {
-            return Err("run herdr-theme install-preview first".into());
+            return crate::common::usage("run herdr-theme install-preview first");
         }
     }
     let status = cli_json("herdr-app", &["status"])?;
-    atomic_json(
-        app.join("data/sixfold/preview-open.json"),
-        &json!({"space":status["space"],"file":file,"root":file.parent()}),
+    replace_named_text(
+        &app.join("data/sixfold/preview-open.json"),
+        &crate::common::json_text(
+            &json!({"space":status["space"],"file":file,"root":file.parent()}),
+            true,
+        ),
     )?;
     for (cmd, params) in [
         (
@@ -921,7 +956,7 @@ pub fn open_document(args: &[String]) -> Result<()> {
         ),
         ("layout.show", json!({"id":"panel"})),
     ] {
-        checked(command("herdr-app").args(["do", cmd, &params.to_string()]))?;
+        checked(command("herdr-app").args(["do", cmd, &crate::common::json_text(&params, true)]))?;
     }
     std::thread::sleep(std::time::Duration::from_millis(150));
     checked(command("herdr-app").args(["do", "sixfold-files.open"]))?;

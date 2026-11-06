@@ -1,0 +1,779 @@
+{
+  "provenance": "Untouched CPython standard-library cp949 codec; all high-lead byte pairs and BMP encodings",
+  "python_version": "3.12.10",
+  "table_format": "32768 little-endian u16 entries indexed ((lead-128)*256+trail); zero denotes invalid pair; ASCII is direct",
+  "sha256": "d85976e30af82d5221082788f7364ffeb7d43bae7f7112264976be20031fed73",
+  "valid_doublebyte_pairs": 17048,
+  "bmp_encodable_characters": 17176,
+  "singlebyte_errors": [
+    {
+      "byte": 128,
+      "reason": "incomplete multibyte sequence",
+      "start": 0,
+      "end": 1
+    },
+    {
+      "byte": 129,
+      "reason": "incomplete multibyte sequence",
+      "start": 0,
+      "end": 1
+    },
+    {
+      "byte": 130,
+      "reason": "incomplete multibyte sequence",
+      "start": 0,
+      "end": 1
+    },
+    {
+      "byte": 131,
+      "reason": "incomplete multibyte sequence",
+      "start": 0,
+      "end": 1
+    },
+    {
+      "byte": 132,
+      "reason": "incomplete multibyte sequence",
+      "start": 0,
+      "end": 1
+    },
+    {
+      "byte": 133,
+      "reason": "incomplete multibyte sequence",
+      "start": 0,
+      "end": 1
+    },
+    {
+      "byte": 134,
+      "reason": "incomplete multibyte sequence",
+      "start": 0,
+      "end": 1
+    },
+    {
+      "byte": 135,
+      "reason": "incomplete multibyte sequence",
+      "start": 0,
+      "end": 1
+    },
+    {
+      "byte": 136,
+      "reason": "incomplete multibyte sequence",
+      "start": 0,
+      "end": 1
+    },
+    {
+      "byte": 137,
+      "reason": "incomplete multibyte sequence",
+      "start": 0,
+      "end": 1
+    },
+    {
+      "byte": 138,
+      "reason": "incomplete multibyte sequence",
+      "start": 0,
+      "end": 1
+    },
+    {
+      "byte": 139,
+      "reason": "incomplete multibyte sequence",
+      "start": 0,
+      "end": 1
+    },
+    {
+      "byte": 140,
+      "reason": "incomplete multibyte sequence",
+      "start": 0,
+      "end": 1
+    },
+    {
+      "byte": 141,
+      "reason": "incomplete multibyte sequence",
+      "start": 0,
+      "end": 1
+    },
+    {
+      "byte": 142,
+      "reason": "incomplete multibyte sequence",
+      "start": 0,
+      "end": 1
+    },
+    {
+      "byte": 143,
+      "reason": "incomplete multibyte sequence",
+      "start": 0,
+      "end": 1
+    },
+    {
+      "byte": 144,
+      "reason": "incomplete multibyte sequence",
+      "start": 0,
+      "end": 1
+    },
+    {
+      "byte": 145,
+      "reason": "incomplete multibyte sequence",
+      "start": 0,
+      "end": 1
+    },
+    {
+      "byte": 146,
+      "reason": "incomplete multibyte sequence",
+      "start": 0,
+      "end": 1
+    },
+    {
+      "byte": 147,
+      "reason": "incomplete multibyte sequence",
+      "start": 0,
+      "end": 1
+    },
+    {
+      "byte": 148,
+      "reason": "incomplete multibyte sequence",
+      "start": 0,
+      "end": 1
+    },
+    {
+      "byte": 149,
+      "reason": "incomplete multibyte sequence",
+      "start": 0,
+      "end": 1
+    },
+    {
+      "byte": 150,
+      "reason": "incomplete multibyte sequence",
+      "start": 0,
+      "end": 1
+    },
+    {
+      "byte": 151,
+      "reason": "incomplete multibyte sequence",
+      "start": 0,
+      "end": 1
+    },
+    {
+      "byte": 152,
+      "reason": "incomplete multibyte sequence",
+      "start": 0,
+      "end": 1
+    },
+    {
+      "byte": 153,
+      "reason": "incomplete multibyte sequence",
+      "start": 0,
+      "end": 1
+    },
+    {
+      "byte": 154,
+      "reason": "incomplete multibyte sequence",
+      "start": 0,
+      "end": 1
+    },
+    {
+      "byte": 155,
+      "reason": "incomplete multibyte sequence",
+      "start": 0,
+      "end": 1
+    },
+    {
+      "byte": 156,
+      "reason": "incomplete multibyte sequence",
+      "start": 0,
+      "end": 1
+    },
+    {
+      "byte": 157,
+      "reason": "incomplete multibyte sequence",
+      "start": 0,
+      "end": 1
+    },
+    {
+      "byte": 158,
+      "reason": "incomplete multibyte sequence",
+      "start": 0,
+      "end": 1
+    },
+    {
+      "byte": 159,
+      "reason": "incomplete multibyte sequence",
+      "start": 0,
+      "end": 1
+    },
+    {
+      "byte": 160,
+      "reason": "incomplete multibyte sequence",
+      "start": 0,
+      "end": 1
+    },
+    {
+      "byte": 161,
+      "reason": "incomplete multibyte sequence",
+      "start": 0,
+      "end": 1
+    },
+    {
+      "byte": 162,
+      "reason": "incomplete multibyte sequence",
+      "start": 0,
+      "end": 1
+    },
+    {
+      "byte": 163,
+      "reason": "incomplete multibyte sequence",
+      "start": 0,
+      "end": 1
+    },
+    {
+      "byte": 164,
+      "reason": "incomplete multibyte sequence",
+      "start": 0,
+      "end": 1
+    },
+    {
+      "byte": 165,
+      "reason": "incomplete multibyte sequence",
+      "start": 0,
+      "end": 1
+    },
+    {
+      "byte": 166,
+      "reason": "incomplete multibyte sequence",
+      "start": 0,
+      "end": 1
+    },
+    {
+      "byte": 167,
+      "reason": "incomplete multibyte sequence",
+      "start": 0,
+      "end": 1
+    },
+    {
+      "byte": 168,
+      "reason": "incomplete multibyte sequence",
+      "start": 0,
+      "end": 1
+    },
+    {
+      "byte": 169,
+      "reason": "incomplete multibyte sequence",
+      "start": 0,
+      "end": 1
+    },
+    {
+      "byte": 170,
+      "reason": "incomplete multibyte sequence",
+      "start": 0,
+      "end": 1
+    },
+    {
+      "byte": 171,
+      "reason": "incomplete multibyte sequence",
+      "start": 0,
+      "end": 1
+    },
+    {
+      "byte": 172,
+      "reason": "incomplete multibyte sequence",
+      "start": 0,
+      "end": 1
+    },
+    {
+      "byte": 173,
+      "reason": "incomplete multibyte sequence",
+      "start": 0,
+      "end": 1
+    },
+    {
+      "byte": 174,
+      "reason": "incomplete multibyte sequence",
+      "start": 0,
+      "end": 1
+    },
+    {
+      "byte": 175,
+      "reason": "incomplete multibyte sequence",
+      "start": 0,
+      "end": 1
+    },
+    {
+      "byte": 176,
+      "reason": "incomplete multibyte sequence",
+      "start": 0,
+      "end": 1
+    },
+    {
+      "byte": 177,
+      "reason": "incomplete multibyte sequence",
+      "start": 0,
+      "end": 1
+    },
+    {
+      "byte": 178,
+      "reason": "incomplete multibyte sequence",
+      "start": 0,
+      "end": 1
+    },
+    {
+      "byte": 179,
+      "reason": "incomplete multibyte sequence",
+      "start": 0,
+      "end": 1
+    },
+    {
+      "byte": 180,
+      "reason": "incomplete multibyte sequence",
+      "start": 0,
+      "end": 1
+    },
+    {
+      "byte": 181,
+      "reason": "incomplete multibyte sequence",
+      "start": 0,
+      "end": 1
+    },
+    {
+      "byte": 182,
+      "reason": "incomplete multibyte sequence",
+      "start": 0,
+      "end": 1
+    },
+    {
+      "byte": 183,
+      "reason": "incomplete multibyte sequence",
+      "start": 0,
+      "end": 1
+    },
+    {
+      "byte": 184,
+      "reason": "incomplete multibyte sequence",
+      "start": 0,
+      "end": 1
+    },
+    {
+      "byte": 185,
+      "reason": "incomplete multibyte sequence",
+      "start": 0,
+      "end": 1
+    },
+    {
+      "byte": 186,
+      "reason": "incomplete multibyte sequence",
+      "start": 0,
+      "end": 1
+    },
+    {
+      "byte": 187,
+      "reason": "incomplete multibyte sequence",
+      "start": 0,
+      "end": 1
+    },
+    {
+      "byte": 188,
+      "reason": "incomplete multibyte sequence",
+      "start": 0,
+      "end": 1
+    },
+    {
+      "byte": 189,
+      "reason": "incomplete multibyte sequence",
+      "start": 0,
+      "end": 1
+    },
+    {
+      "byte": 190,
+      "reason": "incomplete multibyte sequence",
+      "start": 0,
+      "end": 1
+    },
+    {
+      "byte": 191,
+      "reason": "incomplete multibyte sequence",
+      "start": 0,
+      "end": 1
+    },
+    {
+      "byte": 192,
+      "reason": "incomplete multibyte sequence",
+      "start": 0,
+      "end": 1
+    },
+    {
+      "byte": 193,
+      "reason": "incomplete multibyte sequence",
+      "start": 0,
+      "end": 1
+    },
+    {
+      "byte": 194,
+      "reason": "incomplete multibyte sequence",
+      "start": 0,
+      "end": 1
+    },
+    {
+      "byte": 195,
+      "reason": "incomplete multibyte sequence",
+      "start": 0,
+      "end": 1
+    },
+    {
+      "byte": 196,
+      "reason": "incomplete multibyte sequence",
+      "start": 0,
+      "end": 1
+    },
+    {
+      "byte": 197,
+      "reason": "incomplete multibyte sequence",
+      "start": 0,
+      "end": 1
+    },
+    {
+      "byte": 198,
+      "reason": "incomplete multibyte sequence",
+      "start": 0,
+      "end": 1
+    },
+    {
+      "byte": 199,
+      "reason": "incomplete multibyte sequence",
+      "start": 0,
+      "end": 1
+    },
+    {
+      "byte": 200,
+      "reason": "incomplete multibyte sequence",
+      "start": 0,
+      "end": 1
+    },
+    {
+      "byte": 201,
+      "reason": "incomplete multibyte sequence",
+      "start": 0,
+      "end": 1
+    },
+    {
+      "byte": 202,
+      "reason": "incomplete multibyte sequence",
+      "start": 0,
+      "end": 1
+    },
+    {
+      "byte": 203,
+      "reason": "incomplete multibyte sequence",
+      "start": 0,
+      "end": 1
+    },
+    {
+      "byte": 204,
+      "reason": "incomplete multibyte sequence",
+      "start": 0,
+      "end": 1
+    },
+    {
+      "byte": 205,
+      "reason": "incomplete multibyte sequence",
+      "start": 0,
+      "end": 1
+    },
+    {
+      "byte": 206,
+      "reason": "incomplete multibyte sequence",
+      "start": 0,
+      "end": 1
+    },
+    {
+      "byte": 207,
+      "reason": "incomplete multibyte sequence",
+      "start": 0,
+      "end": 1
+    },
+    {
+      "byte": 208,
+      "reason": "incomplete multibyte sequence",
+      "start": 0,
+      "end": 1
+    },
+    {
+      "byte": 209,
+      "reason": "incomplete multibyte sequence",
+      "start": 0,
+      "end": 1
+    },
+    {
+      "byte": 210,
+      "reason": "incomplete multibyte sequence",
+      "start": 0,
+      "end": 1
+    },
+    {
+      "byte": 211,
+      "reason": "incomplete multibyte sequence",
+      "start": 0,
+      "end": 1
+    },
+    {
+      "byte": 212,
+      "reason": "incomplete multibyte sequence",
+      "start": 0,
+      "end": 1
+    },
+    {
+      "byte": 213,
+      "reason": "incomplete multibyte sequence",
+      "start": 0,
+      "end": 1
+    },
+    {
+      "byte": 214,
+      "reason": "incomplete multibyte sequence",
+      "start": 0,
+      "end": 1
+    },
+    {
+      "byte": 215,
+      "reason": "incomplete multibyte sequence",
+      "start": 0,
+      "end": 1
+    },
+    {
+      "byte": 216,
+      "reason": "incomplete multibyte sequence",
+      "start": 0,
+      "end": 1
+    },
+    {
+      "byte": 217,
+      "reason": "incomplete multibyte sequence",
+      "start": 0,
+      "end": 1
+    },
+    {
+      "byte": 218,
+      "reason": "incomplete multibyte sequence",
+      "start": 0,
+      "end": 1
+    },
+    {
+      "byte": 219,
+      "reason": "incomplete multibyte sequence",
+      "start": 0,
+      "end": 1
+    },
+    {
+      "byte": 220,
+      "reason": "incomplete multibyte sequence",
+      "start": 0,
+      "end": 1
+    },
+    {
+      "byte": 221,
+      "reason": "incomplete multibyte sequence",
+      "start": 0,
+      "end": 1
+    },
+    {
+      "byte": 222,
+      "reason": "incomplete multibyte sequence",
+      "start": 0,
+      "end": 1
+    },
+    {
+      "byte": 223,
+      "reason": "incomplete multibyte sequence",
+      "start": 0,
+      "end": 1
+    },
+    {
+      "byte": 224,
+      "reason": "incomplete multibyte sequence",
+      "start": 0,
+      "end": 1
+    },
+    {
+      "byte": 225,
+      "reason": "incomplete multibyte sequence",
+      "start": 0,
+      "end": 1
+    },
+    {
+      "byte": 226,
+      "reason": "incomplete multibyte sequence",
+      "start": 0,
+      "end": 1
+    },
+    {
+      "byte": 227,
+      "reason": "incomplete multibyte sequence",
+      "start": 0,
+      "end": 1
+    },
+    {
+      "byte": 228,
+      "reason": "incomplete multibyte sequence",
+      "start": 0,
+      "end": 1
+    },
+    {
+      "byte": 229,
+      "reason": "incomplete multibyte sequence",
+      "start": 0,
+      "end": 1
+    },
+    {
+      "byte": 230,
+      "reason": "incomplete multibyte sequence",
+      "start": 0,
+      "end": 1
+    },
+    {
+      "byte": 231,
+      "reason": "incomplete multibyte sequence",
+      "start": 0,
+      "end": 1
+    },
+    {
+      "byte": 232,
+      "reason": "incomplete multibyte sequence",
+      "start": 0,
+      "end": 1
+    },
+    {
+      "byte": 233,
+      "reason": "incomplete multibyte sequence",
+      "start": 0,
+      "end": 1
+    },
+    {
+      "byte": 234,
+      "reason": "incomplete multibyte sequence",
+      "start": 0,
+      "end": 1
+    },
+    {
+      "byte": 235,
+      "reason": "incomplete multibyte sequence",
+      "start": 0,
+      "end": 1
+    },
+    {
+      "byte": 236,
+      "reason": "incomplete multibyte sequence",
+      "start": 0,
+      "end": 1
+    },
+    {
+      "byte": 237,
+      "reason": "incomplete multibyte sequence",
+      "start": 0,
+      "end": 1
+    },
+    {
+      "byte": 238,
+      "reason": "incomplete multibyte sequence",
+      "start": 0,
+      "end": 1
+    },
+    {
+      "byte": 239,
+      "reason": "incomplete multibyte sequence",
+      "start": 0,
+      "end": 1
+    },
+    {
+      "byte": 240,
+      "reason": "incomplete multibyte sequence",
+      "start": 0,
+      "end": 1
+    },
+    {
+      "byte": 241,
+      "reason": "incomplete multibyte sequence",
+      "start": 0,
+      "end": 1
+    },
+    {
+      "byte": 242,
+      "reason": "incomplete multibyte sequence",
+      "start": 0,
+      "end": 1
+    },
+    {
+      "byte": 243,
+      "reason": "incomplete multibyte sequence",
+      "start": 0,
+      "end": 1
+    },
+    {
+      "byte": 244,
+      "reason": "incomplete multibyte sequence",
+      "start": 0,
+      "end": 1
+    },
+    {
+      "byte": 245,
+      "reason": "incomplete multibyte sequence",
+      "start": 0,
+      "end": 1
+    },
+    {
+      "byte": 246,
+      "reason": "incomplete multibyte sequence",
+      "start": 0,
+      "end": 1
+    },
+    {
+      "byte": 247,
+      "reason": "incomplete multibyte sequence",
+      "start": 0,
+      "end": 1
+    },
+    {
+      "byte": 248,
+      "reason": "incomplete multibyte sequence",
+      "start": 0,
+      "end": 1
+    },
+    {
+      "byte": 249,
+      "reason": "incomplete multibyte sequence",
+      "start": 0,
+      "end": 1
+    },
+    {
+      "byte": 250,
+      "reason": "incomplete multibyte sequence",
+      "start": 0,
+      "end": 1
+    },
+    {
+      "byte": 251,
+      "reason": "incomplete multibyte sequence",
+      "start": 0,
+      "end": 1
+    },
+    {
+      "byte": 252,
+      "reason": "incomplete multibyte sequence",
+      "start": 0,
+      "end": 1
+    },
+    {
+      "byte": 253,
+      "reason": "incomplete multibyte sequence",
+      "start": 0,
+      "end": 1
+    },
+    {
+      "byte": 254,
+      "reason": "incomplete multibyte sequence",
+      "start": 0,
+      "end": 1
+    },
+    {
+      "byte": 255,
+      "reason": "incomplete multibyte sequence",
+      "start": 0,
+      "end": 1
+    }
+  ],
+  "canonical_encode_overrides": []
+}

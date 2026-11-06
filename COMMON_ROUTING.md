@@ -8,7 +8,7 @@ herdr-theme route "Project A" '사용자가 요청한 작업 원문과 범위'
 herdr-theme route "Project B" '사용자가 요청한 작업 원문과 범위'
 ```
 
-경로는 이 저장소를 받아 둔 위치로 바꾼다. 프로젝트 별칭(`project_aliases`)과 이름이 바뀌어도 Share로 인정할
+예시는 `herdr-theme`가 PATH에 있다고 가정한다. 설치본은 `~/.config/herdr-app/scripts/sixfold/herdr-theme route`로도 실행한다(Windows 실행 파일은 `herdr-theme.exe`). 프로젝트 별칭(`project_aliases`)과 이름이 바뀌어도 Share로 인정할
 공간 ID(`hub_space_ids`)는 저장소가 아니라 이 기기의 `~/.config/herdr-app/data/sixfold/site.local.json`에
 둔다(예시: `config/site.example.json`).
 

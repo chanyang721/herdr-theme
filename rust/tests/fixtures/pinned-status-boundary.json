@@ -1,0 +1,170 @@
+[
+  {
+    "fn": "mask",
+    "args": [
+      "AAAAAAAAAAAAAAAAAAAAAAAA"
+    ],
+    "value": "<가림>"
+  },
+  {
+    "fn": "mask",
+    "args": [
+      "AAAAAAAAAAAAAAAAAAAAAAAA=="
+    ],
+    "value": "<가림>=="
+  },
+  {
+    "fn": "mask",
+    "args": [
+      "AAAAAAAAAAAAAAAAAAAAAAAA-"
+    ],
+    "value": "<가림>"
+  },
+  {
+    "fn": "mask",
+    "args": [
+      "AAAAAAAAAAAAAAAAAAAAAAAA/"
+    ],
+    "value": "<가림>/"
+  },
+  {
+    "fn": "mask",
+    "args": [
+      "AAAAAAAAAAAAAAAAAAAAAAA=="
+    ],
+    "value": "AAAAAAAAAAAAAAAAAAAAAAA=="
+  },
+  {
+    "fn": "mask",
+    "args": [
+      "AAAAAAAAAAAAAAAAAAAAAAA-"
+    ],
+    "value": "AAAAAAAAAAAAAAAAAAAAAAA"
+  },
+  {
+    "fn": "mask",
+    "args": [
+      "AAAAAAAAAAAAAAAAAAAAAAA/"
+    ],
+    "value": "AAAAAAAAAAAAAAAAAAAAAAA/"
+  },
+  {
+    "fn": "mask",
+    "args": [
+      "AAAAAAAAAAAAAAAAAAAAAAAA=/x"
+    ],
+    "value": "<가림>"
+  },
+  {
+    "fn": "mask",
+    "args": [
+      "AAAAAAAAAAAAAAAAAAAAAAAA==́"
+    ],
+    "value": "<가림>==́"
+  },
+  {
+    "fn": "mask",
+    "args": [
+      "́AAAAAAAAAAAAAAAAAAAAAAAA=="
+    ],
+    "value": "́<가림>=="
+  },
+  {
+    "fn": "mask",
+    "args": [
+      "prefix.AAAAAAAAAAAAAAAAAAAAAAAA=="
+    ],
+    "value": "prefix.<가림>=="
+  },
+  {
+    "fn": "mask",
+    "args": [
+      "AAAAAAAAAAAAAAAAAAAAAAAA."
+    ],
+    "value": "<가림>."
+  },
+  {
+    "fn": "clean_reason",
+    "args": [
+      "AAAAAAAAAAAAAAAAAAAAAAAA"
+    ],
+    "value": "<가림>"
+  },
+  {
+    "fn": "clean_reason",
+    "args": [
+      "AAAAAAAAAAAAAAAAAAAAAAAA=="
+    ],
+    "value": "<가림>=="
+  },
+  {
+    "fn": "clean_reason",
+    "args": [
+      "AAAAAAAAAAAAAAAAAAAAAAAA-"
+    ],
+    "value": "<가림>"
+  },
+  {
+    "fn": "clean_reason",
+    "args": [
+      "AAAAAAAAAAAAAAAAAAAAAAAA/"
+    ],
+    "value": "<가림>/"
+  },
+  {
+    "fn": "clean_reason",
+    "args": [
+      "AAAAAAAAAAAAAAAAAAAAAAA=="
+    ],
+    "value": "AAAAAAAAAAAAAAAAAAAAAAA=="
+  },
+  {
+    "fn": "clean_reason",
+    "args": [
+      "AAAAAAAAAAAAAAAAAAAAAAA-"
+    ],
+    "value": "AAAAAAAAAAAAAAAAAAAAAAA"
+  },
+  {
+    "fn": "clean_reason",
+    "args": [
+      "AAAAAAAAAAAAAAAAAAAAAAA/"
+    ],
+    "value": "AAAAAAAAAAAAAAAAAAAAAAA/"
+  },
+  {
+    "fn": "clean_reason",
+    "args": [
+      "AAAAAAAAAAAAAAAAAAAAAAAA=/x"
+    ],
+    "value": "<가림>"
+  },
+  {
+    "fn": "clean_reason",
+    "args": [
+      "AAAAAAAAAAAAAAAAAAAAAAAA==́"
+    ],
+    "value": "<가림>==́"
+  },
+  {
+    "fn": "clean_reason",
+    "args": [
+      "́AAAAAAAAAAAAAAAAAAAAAAAA=="
+    ],
+    "value": "́<가림>=="
+  },
+  {
+    "fn": "clean_reason",
+    "args": [
+      "prefix.AAAAAAAAAAAAAAAAAAAAAAAA=="
+    ],
+    "value": "<가림>=="
+  },
+  {
+    "fn": "clean_reason",
+    "args": [
+      "AAAAAAAAAAAAAAAAAAAAAAAA."
+    ],
+    "value": "<가림>."
+  }
+]

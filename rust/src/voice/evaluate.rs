@@ -1,6 +1,6 @@
 //! Offline tools preserve the original datasets, scenes, seeds and metrics.
 //! They never open a microphone or mutate the installed voice state.
-use super::{gate, native, output, policy, rng::Rng, round, settings, Exit, Result};
+use super::{gate, native, policy, rng::Rng, round, settings, Exit, Result};
 use serde_json::{json, Value};
 use std::{collections::BTreeMap, fs, path::Path, time::Instant};
 const RATE: usize = 16000;
@@ -73,22 +73,10 @@ fn evaluation_json(value: &Value, depth: usize) -> String {
 }
 fn evaluation_write(path: &Path, value: &Value) -> Result<()> {
     let text = evaluation_json(value, 0);
-    fs::write(
-        path,
-        if cfg!(windows) {
-            text.replace('\n', "\r\n")
-        } else {
-            text
-        },
-    )?;
-    Ok(())
+    crate::legacy_text::write(path, &text)
 }
 fn evaluation_stderr(text: &str) -> Result<()> {
-    use std::io::Write;
-    let mut stderr = std::io::stderr().lock();
-    stderr.write_all(text.as_bytes())?;
-    stderr.write_all(if cfg!(windows) { b"\r\n" } else { b"\n" })?;
-    Ok(())
+    crate::legacy_text::error_line(text)
 }
 fn vad_stdout(row: &Value) -> String {
     let repr = crate::automation::format::repr;
@@ -103,7 +91,7 @@ fn vad_stdout(row: &Value) -> String {
 /// user settings, app focus or installed state is read or modified.
 pub fn model_probe(args: &[String]) -> Result<()> {
     if args.iter().any(|a| a == "--help" || a == "-h") {
-        crate::common::print_line(&format!("herdr-theme voice_model_probe --model MODEL.onnx --vad SILERO.onnx --audio MONO_16K_PCM16.wav --library SHERPA_C_API_LIBRARY --blas PINNED_BLAS_LIBRARY [--threshold 0.35] [--gain 10]"))?;
+        crate::legacy_text::print_line(&format!("herdr-theme voice_model_probe --model MODEL.onnx --vad SILERO.onnx --audio MONO_16K_PCM16.wav --library SHERPA_C_API_LIBRARY --blas PINNED_BLAS_LIBRARY [--threshold 0.35] [--gain 10]"))?;
         return Ok(());
     }
     let model = Path::new(option(args, "--model").ok_or("--model is required")?);
@@ -170,7 +158,7 @@ pub fn model_probe(args: &[String]) -> Result<()> {
     } else {
         None
     };
-    crate::common::print_line(&format!(
+    crate::legacy_text::print_line(&format!(
         "{}",
         json!({"schema":1,"backend":"sherpa-onnx","version":native::SHERPA_VERSION,"os":std::env::consts::OS,"arch":std::env::consts::ARCH,"sample_rate":RATE,"sample_count":samples.len(),"threshold":threshold,"gain":gain,"embedding":embedding,"segments":segments,"decisions":decisions,"matrices":matrices,"abi":native::abi_layout()})
     ))?;
@@ -463,16 +451,16 @@ fn clip(name: &str) -> Result<Vec<f32>> {
     let path = cache.join(format!("{}.wav", name.replace('/', "_")));
     if !path.exists() {
         let part = path.with_extension("wav.part");
-        output(
-            "curl",
-            &[
-                "-fsSL",
-                "-o",
-                &part.to_string_lossy(),
-                &format!("https://raw.githubusercontent.com/csukuangfj/sr-data/main/{name}.wav"),
-            ],
-            120.,
-        )?;
+        let mut response = crate::tls::blocking_builder()?
+            .build()?
+            .get(format!(
+                "https://raw.githubusercontent.com/csukuangfj/sr-data/main/{name}.wav"
+            ))
+            .send()?
+            .error_for_status()?;
+        // urlretrieve writes the .part file before replacing the cached clip.
+        let mut file = fs::File::create(&part)?;
+        std::io::copy(&mut response, &mut file)?;
         fs::rename(part, &path)?;
     }
     wav(&path)
@@ -481,7 +469,7 @@ pub fn crosscheck() -> Result<()> {
     let own_pool = settings::state_dir().join("voice-pool.jsonl");
     if !own_pool.exists() {
         return Err(
-            "no voice learned on this Mac yet: send some dictations first (or focusq voice-enroll)"
+            "no voice learned on this Mac yet: send some dictations first (or ./focusq voice-enroll)"
                 .into(),
         );
     }
@@ -534,13 +522,14 @@ pub fn crosscheck() -> Result<()> {
             &["test/3d-speaker/speaker2_a_en_16k"],
         ),
     ];
-    crate::common::print_line(&format!(
+    crate::legacy_text::print_line(&format!(
         "내 목소리 구간 {}개를 다른 사람 기기 {}대에서 판정합니다.\n",
         mine.len(),
         speakers.len()
     ))?;
-    crate::common::print_line(&format!(
-        "다른 사람 기기       학습    기준  그 사람 통과  내 목소리 통과   내 최고점"
+    crate::legacy_text::print_line(&format!(
+        "{:<14} {:>5} {:>5} {:>9} {:>11} {:>8}",
+        "다른 사람 기기", "학습", "기준", "그 사람 통과", "내 목소리 통과", "내 최고점"
     ))?;
     let mut leaked = 0;
     let cfg = settings::load();
@@ -567,7 +556,7 @@ pub fn crosscheck() -> Result<()> {
             .count();
         let passed = scores.iter().filter(|s| **s >= threshold).count();
         leaked += passed;
-        crate::common::print_line(&format!(
+        crate::legacy_text::print_line(&format!(
             "{name:14} {:4.0}s {threshold:5.2} {theirs:5}/{:<3} {passed:7}/{:<3} {:8.2}",
             weights.iter().sum::<f64>(),
             held.len(),
@@ -575,7 +564,7 @@ pub fn crosscheck() -> Result<()> {
             scores.iter().copied().fold(f64::NEG_INFINITY, f64::max)
         ))?;
     }
-    crate::common::print_line(&format!(
+    crate::legacy_text::print_line(&format!(
         "\n내 목소리가 다른 사람 기기에서 본인으로 통과한 구간: {leaked}개"
     ))?;
     if leaked > 0 {
@@ -584,9 +573,12 @@ pub fn crosscheck() -> Result<()> {
         Ok(())
     }
 }
-fn log_events(day: chrono::NaiveDate) -> Result<Vec<(f64, String)>> {
+fn log_events(day: chrono::NaiveDate, state: &Path) -> Result<Vec<(f64, String)>> {
     use chrono::TimeZone;
-    let text = fs::read_to_string(settings::state_dir().join("focus-queue.log"))?;
+    let text = crate::legacy_text::read(
+        state.join("focus-queue.log"),
+        crate::legacy_text::ErrorPolicy::Ignore,
+    )?;
     let regex = regex::Regex::new(r"^(\d\d):(\d\d):(\d\d\.\d+) (.*)")?;
     let mut previous = String::new();
     let mut events = vec![];
@@ -611,15 +603,37 @@ fn log_events(day: chrono::NaiveDate) -> Result<Vec<(f64, String)>> {
     Ok(events)
 }
 pub fn replay(args: &[String]) -> Result<()> {
-    use chrono::{DateTime, TimeZone};
-    let panes = option(args, "--panes").ok_or("--panes session=pane,... is required")?;
-    let panes: BTreeMap<_, _> = panes.split(',').filter_map(|p| p.split_once('=')).collect();
-    let other = option(args, "--other").unwrap_or("");
-    let typed = option(args, "--typed").unwrap_or("");
-    let segments = policy::segments(&settings::state_dir().join("voice-segments.jsonl"), 1000);
+    use chrono::TimeZone;
+    let parsed = super::cli::parse(args, &["--panes", "--other", "--typed"], &[])?;
+    if parsed.help {
+        crate::help::show("replay_voice_policy", &["--help".into()])?;
+        return Ok(());
+    }
+    let args = &parsed.normalized;
+    let Some(panes_text) = super::cli::value(args, "--panes", &["--panes", "--other", "--typed"])
+    else {
+        return crate::common::usage("the following arguments are required: --panes");
+    };
+    super::cli::unknown(&parsed.unknown)?;
+    let mut panes = BTreeMap::new();
+    for item in panes_text.split(',') {
+        let parts = item.split('=').collect::<Vec<_>>();
+        if parts.len() != 2 {
+            return Err("invalid session prefix=pane mapping".into());
+        }
+        panes.insert(parts[0], parts[1]);
+    }
+    let other =
+        super::cli::value(args, "--other", &["--panes", "--other", "--typed"]).unwrap_or("");
+    let typed =
+        super::cli::value(args, "--typed", &["--panes", "--other", "--typed"]).unwrap_or("");
+    // This diagnostic intentionally uses the fixed personal replay directory,
+    // unlike the live plugin's HERDR_PLUGIN_STATE_DIR override.
+    let state = settings::home().join(".local/state/herdr/plugins/local.focus-queue");
+    let segments = policy::segments(&state.join("voice-segments.jsonl"), 1000);
     let since = segments
         .iter()
-        .find(|s| s["score"].is_number())
+        .find(|s| !s["score"].is_null())
         .and_then(|s| s["end"].as_f64())
         .ok_or("no scored segments")?;
     let until = segments
@@ -631,19 +645,21 @@ pub fn replay(args: &[String]) -> Result<()> {
         .single()
         .ok_or("invalid segment timestamp")?
         .date_naive();
-    let events = log_events(day)?;
+    let events = log_events(day, &state)?;
     let mut messages = vec![];
-    for entry in walkdir::WalkDir::new(settings::home().join(".claude/projects"))
-        .min_depth(2)
-        .max_depth(2)
-    {
-        let entry = entry?;
-        if entry.path().extension().is_none_or(|x| x != "jsonl")
-            || super::mtime(entry.path()).unwrap_or(0.) < since
-        {
+    let projects = settings::home().join(".claude/projects");
+    let paths = fs::read_dir(projects)
+        .into_iter()
+        .flatten()
+        .filter_map(|entry| entry.ok())
+        .filter(|entry| !entry.file_name().to_string_lossy().starts_with('.'))
+        .flat_map(|entry| glob_files(&entry.path(), "jsonl"))
+        .collect::<Vec<_>>();
+    for path in paths {
+        if super::mtime(&path).unwrap_or(0.) < since {
             continue;
         }
-        let text = String::from_utf8_lossy(&fs::read(entry.path())?).into_owned();
+        let text = crate::legacy_text::read(&path, crate::legacy_text::ErrorPolicy::Ignore)?;
         for line in text.lines() {
             if !line.contains("\"type\":\"user\"") {
                 continue;
@@ -651,7 +667,10 @@ pub fn replay(args: &[String]) -> Result<()> {
             let Ok(v) = serde_json::from_str::<Value>(line) else {
                 continue;
             };
-            if v["type"] != "user" || v["isMeta"] == true || v["isSidechain"] == true {
+            if v["type"] != "user"
+                || crate::observers::truth(&v["isMeta"])
+                || crate::observers::truth(&v["isSidechain"])
+            {
                 continue;
             }
             let content = &v["message"]["content"];
@@ -665,14 +684,12 @@ pub fn replay(args: &[String]) -> Result<()> {
                     .collect::<Vec<_>>()
                     .join(" ")
             });
-            let text = text.trim().to_owned();
-            let stamp = DateTime::parse_from_rfc3339(
+            let text = crate::python_unicode::trim(&text).to_owned();
+            let stamp = super::iso::timestamp(
                 v["timestamp"]
                     .as_str()
                     .ok_or("missing transcript timestamp")?,
-            )?
-            .timestamp_millis() as f64
-                / 1000.;
+            )?;
             if !text.is_empty()
                 && !text.starts_with('<')
                 && !text.contains("<hc from=")
@@ -681,8 +698,8 @@ pub fn replay(args: &[String]) -> Result<()> {
             {
                 messages.push((
                     stamp,
-                    entry
-                        .file_name()
+                    path.file_name()
+                        .unwrap_or_default()
                         .to_string_lossy()
                         .chars()
                         .take(6)
@@ -695,11 +712,14 @@ pub fn replay(args: &[String]) -> Result<()> {
     messages.sort_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)).then(a.2.cmp(&b.2)));
     let cfg = settings::load();
     let short = cfg["short_score"].as_f64().unwrap_or(0.5);
-    let mut tally = BTreeMap::<(String, bool), usize>::new();
+    let mut tally = Vec::<((String, bool), usize)>::new();
     for (when, session, text) in messages {
         let Some(pane) = panes.get(session.as_str()) else {
             continue;
         };
+        if pane.is_empty() {
+            continue;
+        }
         let clock = chrono::Local
             .timestamp_opt(when as i64, 0)
             .single()
@@ -709,7 +729,7 @@ pub fn replay(args: &[String]) -> Result<()> {
         if typed.contains(&clock) {
             continue;
         }
-        let pattern = regex::Regex::new(&format!(r"voice (on|re-armed) {}$", regex::escape(pane)))?;
+        let pattern = regex::Regex::new(&format!(r"voice (on|re-armed) {}$", pane))?;
         let Some((armed, _)) = events
             .iter()
             .filter(|(at, line)| *at < when - 0.4 && pattern.is_match(line))
@@ -725,16 +745,23 @@ pub fn replay(args: &[String]) -> Result<()> {
         } else {
             "own"
         };
-        *tally.entry((kind.into(), passed)).or_default() += 1;
+        if let Some((_, count)) = tally
+            .iter_mut()
+            .find(|(key, _)| key.0 == kind && key.1 == passed)
+        {
+            *count += 1;
+        } else {
+            tally.push(((kind.into(), passed), 1));
+        }
         let ratio = if mine > 0. {
             format!("{:.1}", count as f64 / mine)
         } else {
             "-".into()
         };
         let score = policy::mean_score(&segments, armed - 1., when + 1., short);
-        crate::common::print_line(&format!("{clock} {pane} {kind} {count}자 본인 {mine:.1}s 타인 {others:.1}s 자/초 {ratio} 평균 {score:.2} {} {}",if passed{"통과"}else{"차단"},if passed==(kind=="own"){String::new()}else{format!("  <== 어긋남: {}",text.chars().take(30).collect::<String>())}))?;
+        crate::legacy_text::print_line(&format!("{clock} {pane} {kind} {count}자 본인 {mine:.1}s 타인 {others:.1}s 자/초 {ratio} 평균 {score:.2} {} {}",if passed{"통과"}else{"차단"},if passed==(kind=="own"){String::new()}else{format!("  <== 어긋남: {}",text.chars().take(30).collect::<String>())}))?;
     }
-    crate::common::print_line(&format!(
+    crate::legacy_text::print_line(&format!(
         "{{{}}}",
         tally
             .iter()
@@ -794,7 +821,7 @@ pub fn vad(args: &[String]) -> Result<()> {
                 }
                 row["recall"][db.to_string()] = json!([round(found / whole, 3), missed]);
             }
-            crate::common::print_line(&vad_stdout(&row))?;
+            crate::legacy_text::print_line(&vad_stdout(&row))?;
             results.push(row);
         }
     }
@@ -881,7 +908,7 @@ fn run_model(data_dir: &Path, model: &Path) -> Result<Value> {
         }
         let threshold = gate::percentile(&other_far, 0.999);
         let miss = target.iter().filter(|x| **x < threshold).count() as f64 / target.len() as f64;
-        result["by_length"][format!("{:.1}", lengths[index])] = json!({"eer_near":eer(&target,&other_near),"eer_far":eer(&target,&other_far),"miss_at_far_0.1pct":miss,"target_p5":gate::percentile(&target,0.05),"target_median":gate::percentile(&target,0.5),"far_other_p99":gate::percentile(&other_far,0.99),"far_other_max":other_far.iter().copied().fold(f64::NEG_INFINITY,f64::max),"trials":[target.len(),other_far.len()]});
+        result["by_length"][format!("{:.1}", lengths[index])] = json!({"eer_near":eer(&target,&other_near),"eer_far":eer(&target,&other_far),"miss_at_far_0.1pct":miss,"target_p5":gate::percentile(&target,0.05),"target_median":gate::median(&target),"far_other_p99":gate::percentile(&other_far,0.99),"far_other_max":other_far.iter().copied().fold(f64::NEG_INFINITY,f64::max),"trials":[target.len(),other_far.len()]});
     }
     let sample: Vec<_> = data
         .values()
@@ -904,7 +931,7 @@ fn run_model(data_dir: &Path, model: &Path) -> Result<Value> {
 }
 pub fn models(args: &[String]) -> Result<()> {
     if args.first().map(String::as_str) == Some("--one") {
-        crate::common::print_line(&evaluation_compact(&run_model(
+        crate::legacy_text::print_line(&evaluation_compact(&run_model(
             Path::new(arg(args, 1)?),
             Path::new(arg(args, 2)?),
         )?))?;
@@ -920,53 +947,51 @@ pub fn models(args: &[String]) -> Result<()> {
     let mut results = vec![];
     for path in paths {
         let exe = std::env::current_exe()?;
-        let result = output(
+        let result = super::capture(
             &exe.to_string_lossy(),
             &["voice_eval_models", "--one", data, &path.to_string_lossy()],
-            3600.,
-        );
-        match result {
-            Ok(stdout) => {
-                let value: Value =
-                    serde_json::from_str(stdout.lines().last().ok_or("empty model report")?)?;
-                let far: serde_json::Map<String, Value> = value["by_length"]
-                    .as_object()
-                    .ok_or("model report lacks by_length")?
-                    .iter()
-                    .map(|(length, metrics)| {
-                        (
-                            length.clone(),
-                            json!(round(metrics["eer_far"].as_f64().unwrap_or(0.), 4)),
-                        )
-                    })
-                    .collect();
-                crate::common::print_line(&format!(
-                    "{} {} {} ms {} MB",
-                    value["model"].as_str().unwrap_or(""),
-                    crate::automation::format::repr(&Value::Object(far)),
-                    value["ms_per_3s"].as_f64().unwrap_or(0.).round_ties_even() as i64,
-                    value["peak_rss_mb"]
-                        .as_f64()
-                        .unwrap_or(0.)
-                        .round_ties_even() as i64,
-                ))?;
-                results.push(value);
-                evaluation_write(out, &json!(results))?;
-            }
-            Err(error) => {
-                let text = error.to_string();
-                evaluation_stderr(&format!(
-                    "{} {}",
-                    path.display(),
-                    text.chars()
-                        .rev()
-                        .take(400)
-                        .collect::<String>()
-                        .chars()
-                        .rev()
-                        .collect::<String>()
-                ))?;
-            }
+            None,
+        )?;
+        if result.code == 0 {
+            let stdout = result.stdout;
+            let value: Value =
+                serde_json::from_str(stdout.lines().last().ok_or("empty model report")?)?;
+            let far: serde_json::Map<String, Value> = value["by_length"]
+                .as_object()
+                .ok_or("model report lacks by_length")?
+                .iter()
+                .map(|(length, metrics)| {
+                    (
+                        length.clone(),
+                        json!(round(metrics["eer_far"].as_f64().unwrap_or(0.), 4)),
+                    )
+                })
+                .collect();
+            crate::legacy_text::print_line(&format!(
+                "{} {} {} ms {} MB",
+                value["model"].as_str().unwrap_or(""),
+                crate::automation::format::repr(&Value::Object(far)),
+                value["ms_per_3s"].as_f64().unwrap_or(0.).round_ties_even() as i64,
+                value["peak_rss_mb"]
+                    .as_f64()
+                    .unwrap_or(0.)
+                    .round_ties_even() as i64,
+            ))?;
+            results.push(value);
+            evaluation_write(out, &json!(results))?;
+        } else {
+            let text = result.stderr;
+            evaluation_stderr(&format!(
+                "{} {}",
+                path.display(),
+                text.chars()
+                    .rev()
+                    .take(400)
+                    .collect::<String>()
+                    .chars()
+                    .rev()
+                    .collect::<String>()
+            ))?;
         }
     }
     Ok(())
@@ -1093,7 +1118,7 @@ pub fn chain(args: &[String]) -> Result<()> {
                     json!(row["whole"].as_f64().unwrap_or(0.) + clip.len() as f64 / RATE as f64);
             }
         }
-        crate::common::print_line(&name)?;
+        crate::legacy_text::print_line(&name)?;
         for (label, row) in rows {
             let scores = gate::vector(&row["scores"]);
             let low = scores
@@ -1103,7 +1128,7 @@ pub fn chain(args: &[String]) -> Result<()> {
                 .reduce(f64::min)
                 .unwrap_or(0.);
             let high = scores.iter().copied().reduce(f64::max).unwrap_or(0.);
-            crate::common::print_line(&format!("  {label}: {}건 / 구간 없음 {} / 본인 판정 구간 있음 {} / 전송 규칙 통과 {} / 들린 비율 {:.2} / 평균 점수 범위 {low:.2}~{high:.2}",row["total"],row["unheard"],row["judged_me"],row["passed"],row["heard"].as_f64().unwrap_or(0.)/row["whole"].as_f64().unwrap_or(1.)))?;
+            crate::legacy_text::print_line(&format!("  {label}: {}건 / 구간 없음 {} / 본인 판정 구간 있음 {} / 전송 규칙 통과 {} / 들린 비율 {:.2} / 평균 점수 범위 {low:.2}~{high:.2}",row["total"],row["unheard"],row["judged_me"],row["passed"],row["heard"].as_f64().unwrap_or(0.)/row["whole"].as_f64().unwrap_or(1.)))?;
         }
     }
     Ok(())
@@ -1120,34 +1145,55 @@ pub fn check_settings(args: &[String]) -> Result<()> {
         "hold 설정",
         "hold 로 바꾸고 60초 뒤",
     ];
-    let files: Vec<_> = if args.is_empty() {
-        vec![std::env::current_exe()?.to_string_lossy().into_owned()]
+    let files = if args.is_empty() {
+        vec![None]
     } else {
-        args.to_vec()
+        args.iter().map(|s| Some(s.as_str())).collect::<Vec<_>>()
     };
-    crate::common::print_line(&format!(
+    crate::legacy_text::print_line(&format!(
         "| 조합 | {} |",
         files
             .iter()
-            .flat_map(|p| ["일반", "브리지", "앱"].map(move |k| format!("{p} {k}")))
+            .flat_map(|p| ["일반", "브리지", "앱"].map(move |k| {
+                let label = p
+                    .and_then(|p| {
+                        Path::new(p)
+                            .parent()
+                            .and_then(Path::file_name)
+                            .and_then(|s| s.to_str())
+                    })
+                    .filter(|s| !s.is_empty())
+                    .unwrap_or(p.unwrap_or("voice"));
+                format!("{label} {k}")
+            }))
             .collect::<Vec<_>>()
             .join(" | ")
     ))?;
-    crate::common::print_line(&format!("|---|{}", "---|".repeat(3 * files.len())))?;
+    crate::legacy_text::print_line(&format!("|---|{}", "---|".repeat(3 * files.len())))?;
     for (scene, title) in titles.iter().enumerate() {
         let mut cells = vec![];
         for binary in &files {
-            let response = output(
-                binary,
-                &["voice_probe", "settings-scene", &scene.to_string()],
-                10.,
-            )?;
-            let recording: bool = serde_json::from_str(response.trim())?;
-            for _ in 0..3 {
+            for kind in 0..3 {
+                let recording = if let Some(binary) = binary {
+                    let response = super::output_unbounded(
+                        binary,
+                        &[
+                            "voice_probe",
+                            "settings-scene",
+                            &scene.to_string(),
+                            &kind.to_string(),
+                            "current-input",
+                        ],
+                        0.,
+                    )?;
+                    serde_json::from_str::<bool>(response.trim())?
+                } else {
+                    super::probe::settings_scene_current(scene, kind)?
+                };
                 cells.push(if recording { "REC" } else { "꺼짐" });
             }
         }
-        crate::common::print_line(&format!("| {title} | {} |", cells.join(" | ")))?;
+        crate::legacy_text::print_line(&format!("| {title} | {} |", cells.join(" | ")))?;
     }
     Ok(())
 }

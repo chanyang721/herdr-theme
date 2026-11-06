@@ -77,8 +77,7 @@ pub fn install_binary(app: &Path) -> Result<()> {
     let src = std::env::current_exe()?;
     let dst = app.join("scripts/sixfold").join(native_name());
     if resolved(&src) != resolved(&dst) {
-        atomic_bytes(&dst, &fs::read(src)?)?;
-        chmod(dst, 0o755)?
+        atomic_bytes_mode(&dst, &fs::read(src)?, Some(0o755))?;
     }
     install_notices(app)
 }
@@ -127,10 +126,21 @@ fn git(cwd: &Path, args: &[&str]) -> Result<String> {
     )
 }
 pub fn checkout(pin: &Value, source: Option<&Path>) -> Result<PathBuf> {
+    checkout_with_cache(pin, source, None)
+}
+/// Mirrors the original tests' patched default_cache without changing HOME.
+pub fn checkout_with_cache(
+    pin: &Value,
+    source: Option<&Path>,
+    cache: Option<&Path>,
+) -> Result<PathBuf> {
     let commit = s(&pin["commit"]);
     let root = source.map(Path::to_owned).unwrap_or_else(|| {
-        user_home()
-            .join(".local/share/herdr-sixfold/vendor/herdr-workspace-mods")
+        cache
+            .map(Path::to_path_buf)
+            .unwrap_or_else(|| {
+                user_home().join(".local/share/herdr-sixfold/vendor/herdr-workspace-mods")
+            })
             .join(&commit[..12])
     });
     if source.is_none() && !root.join(".git").exists() {
@@ -139,22 +149,33 @@ pub fn checkout(pin: &Value, source: Option<&Path>) -> Result<PathBuf> {
         let stage = tempfile::Builder::new()
             .prefix(".tmp-")
             .tempdir_in(parent)?;
-        checked(
-            command("git")
-                .args([
-                    "clone",
-                    "--filter=blob:none",
-                    "--no-checkout",
-                    s(&pin["repository"]),
-                ])
-                .arg(stage.path()),
-        )?;
-        git(stage.path(), &["fetch", "--depth", "1", "origin", commit])?;
-        git(stage.path(), &["checkout", "--detach", commit])?;
-        if let Err(error) = fs::rename(stage.path(), &root) {
-            if !root.join(".git").exists() {
-                return Err(error.into());
+        let fetched = (|| -> Result<()> {
+            checked(
+                command("git")
+                    .args([
+                        "clone",
+                        "--filter=blob:none",
+                        "--no-checkout",
+                        s(&pin["repository"]),
+                    ])
+                    .arg(stage.path()),
+            )?;
+            git(stage.path(), &["fetch", "--depth", "1", "origin", commit])?;
+            git(stage.path(), &["checkout", "--detach", commit])?;
+            if let Err(error) = fs::rename(stage.path(), &root) {
+                if !root.join(".git").exists() {
+                    return Err(error.into());
+                }
             }
+            Ok(())
+        })();
+        if let Err(error) = fetched {
+            return Err(format!(
+                "could not fetch {} at {}: {error}",
+                s(&pin["repository"]),
+                &commit[..12]
+            )
+            .into());
         }
     }
     let head = git(&root, &["rev-parse", "HEAD"])?;
@@ -180,8 +201,15 @@ pub fn pinned_files(
     repo: &Path,
     source: Option<&Path>,
 ) -> Result<(Value, PathBuf, Vec<(PathBuf, PathBuf)>)> {
+    pinned_files_with_cache(repo, source, None)
+}
+pub fn pinned_files_with_cache(
+    repo: &Path,
+    source: Option<&Path>,
+    cache: Option<&Path>,
+) -> Result<(Value, PathBuf, Vec<(PathBuf, PathBuf)>)> {
     let pin = read_pin(repo)?;
-    let root = checkout(&pin, source)?;
+    let root = checkout_with_cache(&pin, source, cache)?;
     let mut files = vec![];
     for (name, folder) in pin["mods"].as_object().unwrap() {
         let folder = s(folder);
@@ -230,7 +258,8 @@ pub fn pinned_files(
     Ok((pin, root, files))
 }
 pub fn record(app: &Path, pin: &Value) -> Result<()> {
-    let mods = pin["mods"].as_object().unwrap().keys().collect::<Vec<_>>();
+    let mut mods = pin["mods"].as_object().unwrap().keys().collect::<Vec<_>>();
+    mods.sort();
     atomic_json(
         app.join("data/sixfold/workspace-mods.json"),
         &json!({"repository":pin["repository"],"tag":pin["tag"],"commit":pin["commit"],"mods":mods}),
@@ -293,7 +322,7 @@ pub fn base_install(
     files.push((binary, app.join("scripts/sixfold").join(native_name())));
     let keyfile = app.join("keys.json");
     let original = if keyfile.exists() {
-        text(&keyfile)?
+        text(&keyfile)?.replace("\r\n", "\n").replace('\r', "\n")
     } else {
         "{}".into()
     };
@@ -344,6 +373,12 @@ pub fn base_install(
         manifest[&rel] = json!(hash(source_payload(&src, Path::new(&rel))?));
         selected.push((src, dst))
     }
+    for (name, bytes) in crate::notices::files() {
+        let relative = Path::new("scripts/sixfold/native-licenses").join(name);
+        manifest[relative.to_string_lossy().replace('\\', "/")] = json!(hash(bytes));
+    }
+    // The unchanged Python installer uses sort_keys=True for this manifest.
+    let manifest = crate::voice::json_pretty_sorted(&manifest);
     fs::create_dir_all(app)?;
     let stage = tempfile::Builder::new()
         .prefix(".sixfold-install-")
@@ -397,26 +432,62 @@ pub fn base_install(
         if dst.starts_with(app.join("mods")) {
             continue;
         }
-        atomic_bytes(&dst, &fs::read(src)?)?;
-        if filename(&dst) == native_name() {
-            chmod(&dst, 0o755)?
-        }
+        atomic_bytes_mode(
+            &dst,
+            &fs::read(src)?,
+            (filename(&dst) == native_name()).then_some(0o755),
+        )?;
     }
     let old: Value = serde_json::from_str(&original)?;
     if old != existing {
         let backup = app.join("keys.json.before-sixfold");
         if keyfile.exists() && !backup.exists() {
-            atomic_bytes(&backup, original.as_bytes())?;
+            atomic_bytes(&backup, &text_bytes(&original))?;
         }
         atomic_json(&keyfile, &existing)?;
     }
     install_notices(app)?;
-    for (name, bytes) in crate::notices::files() {
-        manifest[format!("scripts/sixfold/native-licenses/{name}")] = json!(hash(bytes));
-    }
     atomic_json(&manifest_path, &manifest)?;
     super::migration::apply(configuration_migrations)?;
     Ok(())
+}
+pub fn later_command(argv: &[String], home: &Path, windows: bool) -> String {
+    if windows {
+        let quote = |value: &str| format!("'{}'", value.replace('\'', "''"));
+        let app = home.to_string_lossy().replace('/', "\\");
+        format!(
+            "$env:HERDR_APP_HOME = {}; & {}",
+            quote(&app),
+            argv.iter()
+                .map(|arg| if arg.starts_with('-') {
+                    arg.clone()
+                } else {
+                    quote(arg)
+                })
+                .collect::<Vec<_>>()
+                .join(" ")
+        )
+    } else {
+        let quote = |value: &str| {
+            if !value.is_empty()
+                && value
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || "_@%+=:,./-".contains(c))
+            {
+                value.to_owned()
+            } else {
+                format!("'{}'", value.replace('\'', "'\"'\"'"))
+            }
+        };
+        format!(
+            "HERDR_APP_HOME={} {}",
+            quote(&home.to_string_lossy()),
+            argv.iter()
+                .map(|arg| quote(arg))
+                .collect::<Vec<_>>()
+                .join(" ")
+        )
+    }
 }
 pub fn cli(args: &[String]) -> Result<()> {
     let repo = option(args, "--repo")
@@ -466,10 +537,19 @@ pub fn cli(args: &[String]) -> Result<()> {
                 println!(
                     "Document viewer: no layout with a Files panel yet (start Herdr once). Later:"
                 );
-                println!(
-                    "  HERDR_APP_HOME={:?} herdr-theme install-preview --layout '<layout>'",
-                    app
-                )
+                let mut argv = vec![
+                    app.join("scripts/sixfold")
+                        .join(native_name())
+                        .to_string_lossy()
+                        .into_owned(),
+                    "install_preview".into(),
+                    "--layout".into(),
+                    "<layout>".into(),
+                ];
+                if !cfg!(target_os = "macos") {
+                    argv.push("--markdown-only".into());
+                }
+                println!("  {}", later_command(&argv, &app, cfg!(windows)))
             }
         }
     }
@@ -786,7 +866,7 @@ pub fn ensure_document_tabs(document: &Value, app: &Path) -> (Value, Vec<Value>)
             }
             let token = hash(&id)[..24].to_owned();
             let binary = app.join("scripts/sixfold").join(native_name());
-            let tab = json!({"id":format!("sf-docs-tab-{token}"),"name":"문서","root":{"id":format!("sf-docs-pane-{token}"),"type":"block","content":{"mod":"project-docs-tabs","props":{"spaceId":id,"resolverScript":binary,"installerScript":binary}}}});
+            let tab = json!({"id":format!("sf-docs-tab-{token}"),"name":"문서","root":{"id":format!("sf-docs-pane-{token}"),"type":"block","content":{"mod":"project-docs-tabs","props":{"spaceId":id,"resolverCommand":[binary,"resolve_doc_pins"],"installerCommand":[binary,"install_doc_tabs"]}}}});
             if !space["tabs"].is_array() {
                 space["tabs"] = json!([])
             }
@@ -846,15 +926,21 @@ pub fn compile_swift(source: &Path, output: &Path, optimize: bool) -> Result<()>
     .into())
 }
 pub fn copy_feature(repo: &Path, app: &Path) -> Result<()> {
+    copy_feature_with_checker(repo, app, &mut |path| {
+        checked(command("herdr-app").arg("check").arg(path))?;
+        Ok(())
+    })
+}
+pub fn copy_feature_with_checker(
+    repo: &Path,
+    app: &Path,
+    check: &mut dyn FnMut(&Path) -> Result<()>,
+) -> Result<()> {
     let source = repo.join("mods/project-docs-tabs");
-    checked(command("herdr-app").arg("check").arg(&source))?;
+    check(&source)?;
     let tabs = repo.join("mods/sixfold-tabs/main.js");
     if tabs.exists() {
-        checked(
-            command("herdr-app")
-                .arg("check")
-                .arg(tabs.parent().unwrap()),
-        )?;
+        check(tabs.parent().unwrap())?;
     }
     copy_tree(
         source,
@@ -900,7 +986,33 @@ pub fn install_mermaid(repo: &Path, app: &Path, library: &Path) -> Result<()> {
         true,
     )
 }
+/// The original CAS test patches core calls, status and sleep. Runtime and
+/// test implementations share the complete install/retry/focus-report body.
+pub trait DocTabsBackend {
+    fn call(&mut self, method: &str, params: Value) -> Result<Value>;
+    fn status(&mut self) -> Result<Value>;
+    fn copy_feature(&mut self, repo: &Path, app: &Path) -> Result<()>;
+    fn sleep(&mut self, duration: std::time::Duration);
+}
+struct RuntimeDocTabs;
+impl DocTabsBackend for RuntimeDocTabs {
+    fn call(&mut self, method: &str, params: Value) -> Result<Value> {
+        core_call(method, params)
+    }
+    fn status(&mut self) -> Result<Value> {
+        cli_json("herdr-app", &["status"])
+    }
+    fn copy_feature(&mut self, repo: &Path, app: &Path) -> Result<()> {
+        copy_feature(repo, app)
+    }
+    fn sleep(&mut self, duration: std::time::Duration) {
+        std::thread::sleep(duration)
+    }
+}
 pub fn tabs_cli(args: &[String]) -> Result<()> {
+    crate::common::print(&tabs_with(args, &mut RuntimeDocTabs)?)
+}
+pub fn tabs_with(args: &[String], backend: &mut dyn DocTabsBackend) -> Result<Value> {
     if has(args, "--install") && has(args, "--ensure-tabs") {
         return Err("--install and --ensure-tabs are mutually exclusive".into());
     }
@@ -911,21 +1023,19 @@ pub fn tabs_cli(args: &[String]) -> Result<()> {
     if let Some(library) = option(args, "--mermaid") {
         install_mermaid(&repo, &app, &expand(library))?;
         if !has(args, "--install") && !has(args, "--ensure-tabs") {
-            println!("{}", json!({"mermaid":true}));
-            return Ok(());
+            return Ok(json!({"mermaid":true}));
         }
     }
-    let snapshot = core_call("doc.get", json!({"name":"herdr-app"}))?;
+    let snapshot = backend.call("doc.get", json!({"name":"herdr-app"}))?;
     let (_, added) = ensure_document_tabs(&snapshot["value"], &app);
     if !has(args, "--install") && !has(args, "--ensure-tabs") {
-        println!("{}", json!({"dryRun":true,"added":added}));
-        return Ok(());
+        return Ok(json!({"dryRun":true,"added":added}));
     }
     let data = app.join("data/sixfold");
     let _guard = lock(data.join("doc-tabs-install.lock"), false)?;
-    let before = cli_json("herdr-app", &["status"])?;
+    let before = backend.status()?;
     if has(args, "--install") {
-        copy_feature(&repo, &app)?;
+        backend.copy_feature(&repo, &app)?;
         let config = data.join("project-docs-pins.json");
         let project = json_or(data.join("project-docs.json"), json!({}));
         let _guard = lock(config.with_extension("lock"), false)?;
@@ -946,13 +1056,13 @@ pub fn tabs_cli(args: &[String]) -> Result<()> {
     }
     let mut added = vec![];
     for attempt in 0..3 {
-        let snapshot = core_call("doc.get", json!({"name":"herdr-app"}))?;
+        let snapshot = backend.call("doc.get", json!({"name":"herdr-app"}))?;
         let (planned, current) = ensure_document_tabs(&snapshot["value"], &app);
         added = current;
         if added.is_empty() {
             break;
         }
-        match core_call(
+        match backend.call(
             "doc.set",
             json!({"name":"herdr-app","version":snapshot["version"],"value":planned}),
         ) {
@@ -962,9 +1072,9 @@ pub fn tabs_cli(args: &[String]) -> Result<()> {
         }
     }
     if !added.is_empty() {
-        std::thread::sleep(std::time::Duration::from_millis(400))
+        backend.sleep(std::time::Duration::from_millis(400))
     }
-    let after = cli_json("herdr-app", &["status"])?;
+    let after = backend.status()?;
     let keys = ["space", "tab", "focused_pane"];
     let mut first = json!({});
     let mut last = json!({});
@@ -972,11 +1082,9 @@ pub fn tabs_cli(args: &[String]) -> Result<()> {
         first[key] = before[key].clone();
         last[key] = after[key].clone()
     }
-    println!(
-        "{}",
-        json!({"added":added,"focusBefore":first,"focusAfter":last,"focusUnchanged":keys.iter().all(|k|before[*k]==after[*k])})
-    );
-    Ok(())
+    Ok(
+        json!({"added":added,"focusBefore":first,"focusAfter":last,"focusUnchanged":keys.iter().all(|k|before[*k]==after[*k])}),
+    )
 }
 pub fn replace_files(node: &mut Value, stack: &Value) -> bool {
     if node["id"] == "files" {
@@ -1090,7 +1198,10 @@ pub fn preview_install(
         let manifest = stage.path().join(name).join("mod.json");
         let mut metadata = read_json(&manifest)?;
         metadata["place"] = json!("none");
-        atomic_json(manifest, &metadata)?;
+        write_following(
+            manifest,
+            &text_bytes(&crate::common::json_text(&metadata, true)),
+        )?;
     }
     for (name, base) in [
         ("sixfold-docs", "preview-plus"),
@@ -1152,10 +1263,13 @@ pub fn preview_install(
         &layout_path,
         layout_path.with_file_name(format!("sixfold.before-preview-{}.backup", now() as u64)),
     )?;
-    atomic_json(layout_path, &doc)?;
-    atomic_json(
+    replace_named_text(&layout_path, &(serde_json::to_string_pretty(&doc)? + "\n"))?;
+    write_following(
         data.join("preview-install.json"),
-        &json!({"repository":REPOSITORY,"commit":COMMIT,"mods":names,"html":renderer.exists()}),
+        &text_bytes(&crate::common::json_text(
+            &json!({"repository":REPOSITORY,"commit":COMMIT,"mods":names,"html":renderer.exists()}),
+            true,
+        )),
     )?;
     println!(
         "Installed live Markdown preview and local HTML rendering. Existing panes are preserved."

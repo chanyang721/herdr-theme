@@ -104,37 +104,40 @@ fn original_document_contracts() {
                     continue;
                 }
                 let app = Path::new(s(&input["app_home"]));
-                let (out, added) = install::ensure_document_tabs(&input["document"], app);
-                fn adapt(v: &mut Value, app: &Path) {
-                    if let Some(map) = v.as_object_mut() {
-                        for (k, child) in map {
-                            if k == "resolverScript" || k == "installerScript" {
-                                *child =
-                                    json!(app.join("scripts/sixfold").join(install::native_name()))
-                            } else {
-                                adapt(child, app)
-                            }
-                        }
-                    } else if let Some(a) = v.as_array_mut() {
-                        for child in a {
-                            adapt(child, app)
-                        }
-                    }
-                }
-                // Existing user-authored tabs are preserved byte-for-byte by
-                // both implementations. Only helpers in newly appended tabs
-                // change transport from an interpreter to the native binary.
-                let input_spaces = arr(&input["document"]["spaces"]);
-                if let Some(spaces) = expected[0].get_mut("spaces").and_then(Value::as_array_mut) {
-                    for space in spaces {
-                        let original_count = input_spaces
-                            .iter()
-                            .find(|original| original["id"] == space["id"])
-                            .map(|original| arr(&original["tabs"]).len())
-                            .unwrap_or(0);
-                        if let Some(tabs) = space["tabs"].as_array_mut() {
-                            for tab in tabs.iter_mut().skip(original_count) {
-                                adapt(tab, app);
+                let (mut out, added) = install::ensure_document_tabs(&input["document"], app);
+                // Explicit interpreter-removal transport exception. Neither
+                // golden paths nor arbitrary existing props are rewritten.
+                // Both transports must be independently exact before comparing
+                // every remaining document field unchanged.
+                let new_ids: HashSet<String> =
+                    added.iter().map(|row| s(&row["tab"]).to_owned()).collect();
+                if let Some(spaces) = out.get_mut("spaces").and_then(Value::as_array_mut) {
+                    for (space_index, space) in spaces.iter_mut().enumerate() {
+                        if let Some(tabs) = space.get_mut("tabs").and_then(Value::as_array_mut) {
+                            for (tab_index, tab) in tabs.iter_mut().enumerate() {
+                                if !new_ids.contains(s(&tab["id"])) {
+                                    continue;
+                                }
+                                let original = &mut expected[0]["spaces"][space_index]["tabs"]
+                                    [tab_index]["root"]["content"]["props"];
+                                let props = &mut tab["root"]["content"]["props"];
+                                let id = original["spaceId"].clone();
+                                assert_eq!(
+                                    *original,
+                                    json!({"spaceId":id,"resolverScript":app.join("scripts").join("sixfold").join("resolve_doc_pins.py"),"installerScript":app.join("scripts").join("sixfold").join("install_doc_tabs.py")})
+                                );
+                                let binary =
+                                    app.join("scripts/sixfold").join(install::native_name());
+                                assert_eq!(
+                                    *props,
+                                    json!({"spaceId":id,"resolverCommand":[binary,"resolve_doc_pins"],"installerCommand":[binary,"install_doc_tabs"]})
+                                );
+                                let original = original.as_object_mut().unwrap();
+                                original.remove("resolverScript");
+                                original.remove("installerScript");
+                                let props = props.as_object_mut().unwrap();
+                                props.remove("resolverCommand");
+                                props.remove("installerCommand");
                             }
                         }
                     }

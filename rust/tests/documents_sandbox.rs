@@ -35,6 +35,12 @@ fn native_base_install_preserves_custom_settings_and_updates_whole_mod() {
     let repo = source(temp.path());
     let app = temp.path().join("app");
     install::base_install(&repo, &app, false, &[]).unwrap();
+    let manifest = read_json(app.join("data/sixfold/install-manifest.json")).unwrap();
+    let paths: Vec<_> = manifest.as_object().unwrap().keys().collect();
+    assert!(
+        paths.windows(2).all(|pair| pair[0] < pair[1]),
+        "the original installer writes a lexically sorted manifest"
+    );
     assert!(app
         .join("scripts/sixfold")
         .join(install::native_name())
@@ -47,6 +53,10 @@ fn native_base_install_preserves_custom_settings_and_updates_whole_mod() {
     }
     assert!(!app.join("mods/sixfold-desk/jsconfig.json").exists());
     assert!(install::base_install(&repo, &app, false, &[]).is_err());
+    assert_eq!(
+        text(app.join("mods/sixfold-desk/model.js")).unwrap(),
+        "export const value=1;"
+    );
     let custom = [
         (
             "keys.json",
@@ -66,6 +76,11 @@ fn native_base_install_preserves_custom_settings_and_updates_whole_mod() {
         put(&app, path, body)
     }
     put(&repo, "mods/sixfold-desk/model.js", "export const value=2;");
+    put(
+        &repo,
+        "layouts/sixfold.json",
+        r#"{"changed-source-layout":true}"#,
+    );
     for _ in 0..2 {
         install::base_install(&repo, &app, true, &[]).unwrap()
     }
@@ -76,6 +91,69 @@ fn native_base_install_preserves_custom_settings_and_updates_whole_mod() {
     for (path, body) in custom {
         assert_eq!(text(app.join(path)).unwrap(), body, "preserved {path}");
     }
+}
+#[test]
+fn test_update_refreshes_unmodified_managed_layout() {
+    let temp = tempfile::tempdir().unwrap();
+    let repo = source(temp.path());
+    let app = temp.path().join("app");
+    install::base_install(&repo, &app, false, &[]).unwrap();
+    put(&repo, "layouts/sixfold.json", r#"{"new-layout":true}"#);
+    install::base_install(&repo, &app, true, &[]).unwrap();
+    assert_eq!(
+        text(app.join("layouts/sixfold.json")).unwrap(),
+        r#"{"new-layout":true}"#
+    );
+}
+#[test]
+fn test_update_legacy_install_preserves_existing_layout_without_manifest() {
+    let temp = tempfile::tempdir().unwrap();
+    let repo = source(temp.path());
+    let app = temp.path().join("app");
+    put(&app, "layouts/sixfold.json", r#"{"legacy-custom":true}"#);
+    install::base_install(&repo, &app, true, &[]).unwrap();
+    assert_eq!(
+        text(app.join("layouts/sixfold.json")).unwrap(),
+        r#"{"legacy-custom":true}"#
+    );
+    assert!(app.join("mods/sixfold-desk/main.js").exists());
+}
+#[test]
+fn test_layout_without_a_files_panel_installs_nothing() {
+    let temp = tempfile::tempdir().unwrap();
+    let app = temp.path().join("app");
+    put(
+        &app,
+        "layouts/sixfold.json",
+        r#"{"id":"main","content":{"tab":"active"}}"#,
+    );
+    let output = std::process::Command::new(env!("CARGO_BIN_EXE_herdr-theme"))
+        .args(["install_preview", "--markdown-only"])
+        .env("HERDR_APP_HOME", &app)
+        .env("HOME", temp.path().join("home"))
+        .env("USERPROFILE", temp.path().join("home"))
+        .env("PATH", temp.path().join("no-services"))
+        .output()
+        .unwrap();
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("Files panel"));
+    assert!(!app.join("mods").exists());
+    assert!(!app.join("data").exists());
+}
+#[test]
+fn test_replacing_content_preserves_layout_dimensions_visibility_and_other_panes() {
+    let files = json!({"id":"files","type":"block","size":{"px":360},"min":300,"hidden":true,"content":{"mod":"files"}});
+    let terminal = json!({"id":"main","content":{"tab":"active"}});
+    let mut tree = json!({"children":[terminal.clone(),files]});
+    let replacement =
+        json!({"id":"files","type":"stack","active":"tree","children":[{"id":"tree"}]});
+    assert!(install::replace_files(&mut tree, &replacement));
+    let files = &tree["children"][1];
+    assert_eq!(files["size"], json!({"px":360}));
+    assert_eq!(files["min"], 300);
+    assert_eq!(files["hidden"], true);
+    assert!(files.get("content").is_none());
+    assert_eq!(tree["children"][0], terminal);
 }
 fn fake_cli(root: &Path, fail_after: bool) -> PathBuf {
     let script = root.join("fake.mjs");

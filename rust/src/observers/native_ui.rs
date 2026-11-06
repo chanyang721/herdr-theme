@@ -19,7 +19,7 @@ struct Probe {
 }
 impl Probe {
     fn run(&self, args: &[String]) -> Result<String> {
-        let o = execute_with(args, 20., false, |c| {
+        let o = execute_unbounded_with(args, false, |c| {
             c.envs(&self.vars);
         })?;
         if o.code != 0 {
@@ -39,7 +39,7 @@ impl Probe {
         }
         let log = self.base.join("app.log").to_string_lossy().into_owned();
         args.extend(strings(&["--stdout", &log, "--stderr", &log]));
-        let o = execute(&args, 20., false)?;
+        let o = execute_unbounded(&args, false)?;
         if o.code != 0 {
             return err(o.stderr);
         }
@@ -78,53 +78,92 @@ const fixturePanes=['working','blocked','idle','done','working','blocked'].map((
 const panes=()=>fixturePanes,spaces=()=>[{id:'space',name:'Share',active:true,machine:null,tabs:[{id:'tab',active:true,name:'합성자료',panes:6}]}],terminals=()=>fixturePanes.map(p=>({address:p.terminal,status:p.status,labels:{},program:p.program,cwd:p.cwd})),agents=()=>fixturePanes.map(p=>({...p,address:p.terminal,space:'space'})),focused=()=>({space:'space',tab:'tab',pane:'pane4',terminal:'demo4'});
 "#;
 fn json_file(p: &Path, v: &Value) -> Result<()> {
-    fs::write(p, v.to_string())?;
+    fs::write(
+        p,
+        crate::common::text_bytes(&crate::common::json_text(v, true)),
+    )?;
     Ok(())
 }
-pub fn ui_reload(args: &[String]) -> Result<()> {
-    if args.iter().any(|a| a == "--help" || a == "-h") {
-        println!("macOS native regression probe in a disposable app/core. [--reloads 80] [--failed-reloads 0] [--install-smoke] [--repo DIR]");
-        return Ok(());
+fn json_line(value: &Value) -> Result<()> {
+    crate::common::print_line(&crate::common::json_text(value, true))
+}
+fn count_value(key: &str, v: &str) -> Result<i64> {
+    let invalid = || {
+        Box::new(crate::common::CliError {
+            code: 2,
+            message: format!(
+                "argument {key}: invalid int value: {}",
+                crate::automation::format::repr(&json!(v))
+            ),
+        }) as Box<dyn std::error::Error>
+    };
+    let text =
+        crate::python_unicode::decimal_ascii(v.trim_matches(|c| {
+            crate::python_unicode::is_space(c) && !matches!(c, '\u{1c}'..='\u{1f}')
+        }));
+    let (negative, digits) = if let Some(rest) = text.strip_prefix('-') {
+        (true, rest)
+    } else {
+        (false, text.strip_prefix('+').unwrap_or(&text))
+    };
+    let (mut number, mut count, mut previous) = (0i64, 0usize, false);
+    for ch in digits.chars() {
+        if ch.is_ascii_digit() {
+            number = (number * 10 + (ch as i64 - '0' as i64)).min(1001);
+            count += 1;
+            previous = true;
+        } else if ch == '_' && previous {
+            previous = false;
+        } else {
+            return Err(invalid());
+        }
     }
-    validate_args(
+    if !previous || count > 4300 {
+        return Err(invalid());
+    }
+    Ok(if negative { -number } else { number })
+}
+pub(super) fn options(args: &[String]) -> Result<(Vec<String>, usize, usize)> {
+    let normalized = normalize_args_with(
         args,
         &["--reloads", "--failed-reloads", "--repo"],
         &["--install-smoke"],
+        |key, value| {
+            if matches!(key, "--reloads" | "--failed-reloads") {
+                count_value(key, value).map(|_| ())
+            } else {
+                Ok(())
+            }
+        },
     )?;
-    let parse = |key: &str, default: usize| -> Result<usize> {
-        args.iter()
-            .position(|a| a == key)
-            .and_then(|i| args.get(i + 1))
-            .map(|v| {
-                v.parse().map_err(|_| {
-                    Box::new(crate::common::CliError {
-                        code: 2,
-                        message: format!("argument {key}: invalid integer value: {v:?}"),
-                    }) as Box<dyn std::error::Error>
-                })
-            })
-            .unwrap_or(Ok(default))
-    };
-    let reloads = parse("--reloads", 80)?;
-    let failed = parse("--failed-reloads", 0)?;
-    if reloads > 1000 || failed > 200 {
+    if has_flag(&normalized, "--help") {
+        return Ok((normalized, 80, 0));
+    }
+    let reloads = option_value(&normalized, "--reloads")
+        .map(|v| count_value("--reloads", v))
+        .unwrap_or(Ok(80))?;
+    let failed = option_value(&normalized, "--failed-reloads")
+        .map(|v| count_value("--failed-reloads", v))
+        .unwrap_or(Ok(0))?;
+    if !(0..=1000).contains(&reloads) || !(0..=200).contains(&failed) {
         return arg_error("--reloads must be 0..1000 and --failed-reloads 0..200");
+    }
+    Ok((normalized, reloads as usize, failed as usize))
+}
+pub fn ui_reload(args: &[String]) -> Result<()> {
+    let (normalized, reloads, failed) = options(args)?;
+    let args = normalized.as_slice();
+    if has_flag(args, "--help") {
+        crate::help::show("native_ui_reload", args)?;
+        return Ok(());
     }
     let core = std::env::split_paths(&std::env::var_os("PATH").unwrap_or_default())
         .map(|p| p.join("herdr-core"))
         .find(|p| p.is_file())
         .ok_or_else(|| std::io::Error::other("herdr-core must be available on PATH"))?;
-    let root = args
-        .iter()
-        .position(|a| a == "--repo")
-        .and_then(|i| args.get(i + 1))
+    let root = option_value(args, "--repo")
         .map(PathBuf::from)
-        .unwrap_or_else(|| {
-            PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-                .parent()
-                .unwrap()
-                .to_owned()
-        });
+        .unwrap_or_else(crate::documents::common::repo_default);
     let directory = tempfile::Builder::new()
         .prefix("herdr-null-repro-")
         .tempdir_in("/tmp")?;
@@ -205,7 +244,7 @@ pub fn ui_reload(args: &[String]) -> Result<()> {
     };
     let mut receipt =
         json!({"base":base.to_string_lossy(),"fixture":true,"themes":[],"reloads":[]});
-    println!("{}", base.display());
+    crate::common::print_line(&base.display().to_string())?;
     let result = (|| -> Result<()> {
         p.launch()?;
         for name in ["atom-one-dark", "sixfold-day", "sixfold-night", "win98"] {
@@ -221,7 +260,7 @@ pub fn ui_reload(args: &[String]) -> Result<()> {
             if truth(&st["errors"]) {
                 return err(st.to_string());
             }
-            println!("{}", json!({"theme":name,"errors":st["errors"]}));
+            json_line(&json!({"theme":name,"errors":st["errors"]}))?;
         }
         p.swap(
             &main,
@@ -239,16 +278,13 @@ pub fn ui_reload(args: &[String]) -> Result<()> {
             return err(st.to_string());
         }
         p.shot("partial-install")?;
-        println!("{}", json!({"partialInstallErrors":st["errors"]}));
+        json_line(&json!({"partialInstallErrors":st["errors"]}))?;
         p.swap(&main, &source)?;
         receipt["restoredAfterPartial"] = p.status()?;
         if truth(&receipt["restoredAfterPartial"]["errors"]) {
             return err("restore errors");
         }
-        println!(
-            "{}",
-            json!({"restoreErrors":receipt["restoredAfterPartial"]["errors"]})
-        );
+        json_line(&json!({"restoreErrors":receipt["restoredAfterPartial"]["errors"]}))?;
         p.stop();
         p.launch()?;
         receipt["coldBaseline"] = p.status()?;
@@ -258,12 +294,12 @@ pub fn ui_reload(args: &[String]) -> Result<()> {
             let r = json!({"generation":i,"errors":st["errors"]});
             receipt["reloads"].as_array_mut().unwrap().push(r.clone());
             if truth(&st["errors"]) {
-                println!("{r}");
+                json_line(&r)?;
                 p.shot("stress-failure")?;
                 break;
             }
             if i % 10 == 0 {
-                println!("{r}")
+                json_line(&r)?;
             }
         }
         receipt["failedReloadCycles"] = json!([]);
@@ -280,15 +316,12 @@ pub fn ui_reload(args: &[String]) -> Result<()> {
             let restored = p.status()?;
             receipt["failedReloadCycles"].as_array_mut().unwrap().push(json!({"cycle":i,"failedErrors":failed["errors"],"restoredErrors":restored["errors"]}));
             if truth(&restored["errors"]) {
-                println!(
-                    "{}",
-                    json!({"failedReloadCycle":i,"restoredErrors":restored["errors"]})
-                );
+                json_line(&json!({"failedReloadCycle":i,"restoredErrors":restored["errors"]}))?;
                 p.shot("failed-reload-stress")?;
                 break;
             }
             if i % 10 == 0 {
-                println!("{}", json!({"failedReloadCycle":i,"restoredErrors":[]}))
+                json_line(&json!({"failedReloadCycle":i,"restoredErrors":[]}))?;
             }
         }
         receipt["freshCheck"] =
@@ -300,11 +333,8 @@ pub fn ui_reload(args: &[String]) -> Result<()> {
             return err("restart errors");
         }
         p.shot("restart")?;
-        println!(
-            "{}",
-            json!({"restartErrors":receipt["cleanRestart"]["errors"]})
-        );
-        if args.iter().any(|a| a == "--install-smoke") {
+        json_line(&json!({"restartErrors":receipt["cleanRestart"]["errors"]}))?;
+        if has_flag(args, "--install-smoke") {
             let candidate = base.join("candidate");
             let source_dir = candidate.join("mods/sixfold-desk");
             fs::create_dir_all(&source_dir)?;
@@ -350,7 +380,7 @@ pub fn ui_reload(args: &[String]) -> Result<()> {
                 source_dir.join("main.js"),
                 format!("import {{stillMissing}} from './qa-dependency.js';\n{source}"),
             )?;
-            let rejected = execute_with(
+            let rejected = execute_unbounded_with(
                 &strings(&[
                     &exe,
                     "update-install",
@@ -360,7 +390,6 @@ pub fn ui_reload(args: &[String]) -> Result<()> {
                     &app.to_string_lossy(),
                     "mods/sixfold-desk/main.js",
                 ]),
-                20.,
                 false,
                 |c| {
                     c.envs(&p.vars);
@@ -374,10 +403,7 @@ pub fn ui_reload(args: &[String]) -> Result<()> {
             }
             receipt["installerRejectedPartial"] =
                 json!({"returncode":rejected.code,"stderr":rejected.stderr,"status":p.status()?});
-            println!(
-                "{}",
-                json!({"installer":"two swaps passed; partial candidate rejected"})
-            );
+            json_line(&json!({"installer":"two swaps passed; partial candidate rejected"}))?;
         }
         Ok(())
     })();
@@ -385,7 +411,7 @@ pub fn ui_reload(args: &[String]) -> Result<()> {
     let _ = p.run(&strings(&[&core.to_string_lossy(), "server", "stop"]));
     fs::write(
         base.join("receipt.json"),
-        serde_json::to_string_pretty(&receipt)?,
+        crate::common::text_bytes(&crate::common::json_pretty(&receipt, true)),
     )?;
     result
 }

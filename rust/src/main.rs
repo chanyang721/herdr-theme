@@ -10,7 +10,7 @@ fn main() {
             Ok(true) => return,
             Ok(false) => {}
             Err(error) => {
-                eprintln!("{error}");
+                let _ = herdr_theme::help::write_error(&command, &error.to_string());
                 std::process::exit(1);
             }
         }
@@ -70,14 +70,19 @@ fn main() {
         }
         if let Some(exit) = error.downcast_ref::<herdr_theme::common::CliError>() {
             if !exit.message.is_empty() {
-                eprintln!("{}", exit.message);
+                if exit.code == 2 {
+                    let message = herdr_theme::help::error_text(&command, &args, &exit.message);
+                    let _ = herdr_theme::help::write_error(&command, &message);
+                } else {
+                    let _ = herdr_theme::help::write_error(&command, &exit.message);
+                }
             }
             std::process::exit(exit.code);
         }
         if matches!(command.as_str(), "route" | "collaborate") {
-            println!("{}", serde_json::json!({"error":error.to_string()}));
+            let _ = herdr_theme::common::print(&serde_json::json!({"error":error.to_string()}));
         } else {
-            eprintln!("{error}");
+            let _ = herdr_theme::help::write_error(&command, &error.to_string());
         }
         std::process::exit(1);
     }
