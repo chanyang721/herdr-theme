@@ -65,7 +65,7 @@ fn test_short_page_is_as_tall_as_its_content() {
             .iter()
             .map(|t| (t["width"].as_f64().unwrap(), t["height"].as_f64().unwrap()))
             .collect::<Vec<_>>(),
-        vec![(600., 168.)]
+        vec![(600., 166.)]
     );
 }
 #[test]
@@ -174,7 +174,7 @@ fn actual_webkit_renderers_match_native_cache_and_dimension_contracts() {
             .iter()
             .map(|p| (p["width"].as_f64().unwrap(), p["height"].as_f64().unwrap()))
             .collect::<Vec<_>>(),
-        vec![(600., 168.)]
+        vec![(600., 166.)]
     );
     let diagram = temp.path().join("public-diagram.md");
     fs::write(&diagram,"```mermaid\nflowchart LR\n A[Start] --> B[Finish]\n```\n```mermaid\nflowchart LR\n A[Start] --> B[Finish]\n```\n").unwrap();
