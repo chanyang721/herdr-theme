@@ -1,0 +1,89 @@
+{
+  "original_source_commit": "e383c3ce2935334c14b1f1f6e7e67426282b4e9b",
+  "input_sha256": "a7995598ddb5fd86a418b4f5f99a1ac22c19a9c7cc05acfd61649878804758a9",
+  "output_sha256": "18619a0b0f76f09d38340e1bd9337bb4843e3f3569c1c1a3ede746f4842d136a",
+  "cases": 38,
+  "inputs_unchanged": true,
+  "subprocess_forbidden": true,
+  "original_sources": {
+    "agent_sessions.py": "01d9be6f8f26d441989af3b6c97f64ee552d2e7bf19c75001213821ae11275b7",
+    "close_finished_spaces.py": "e513bed3c67126440059429f5e3b046bbbba344a5d9b4b3f2f51789fd3e5a890",
+    "session_sleep_stub.py": "9751ab99ee0f18d93e020a8cd53efbcd0c531a73e35b241aeff4466d36c27cdb",
+    "site_config.py": "7158ce376b3ff090a032ca7bb185b1a2b0fa531fb2a95aa44bde0d1fe6653adf",
+    "sleep_idle_sessions.py": "abf67734cd4cb7536d95a06201f0984f8699851295ec143872c8b5a0e95d48b2"
+  },
+  "transport": "JSON process-map string keys restored to original Python integer PIDs before calls. Stored input values preserved. Module-level session_mapping and adapter methods use original mocked fixture boundaries.",
+  "changed_expected": [
+    {
+      "case": "normal",
+      "kind": "space"
+    },
+    {
+      "case": "working",
+      "kind": "space"
+    },
+    {
+      "case": "unreported",
+      "kind": "space"
+    },
+    {
+      "case": "typed",
+      "kind": "space"
+    },
+    {
+      "case": "wrapped",
+      "kind": "space"
+    },
+    {
+      "case": "decision",
+      "kind": "space"
+    },
+    {
+      "case": "monitor",
+      "kind": "space"
+    },
+    {
+      "case": "voice",
+      "kind": "space"
+    },
+    {
+      "case": "float",
+      "kind": "space"
+    },
+    {
+      "case": "missing",
+      "kind": "space"
+    },
+    {
+      "case": "lookup_error",
+      "kind": "space"
+    },
+    {
+      "case": "child_terminal",
+      "kind": "space"
+    },
+    {
+      "case": "child_process",
+      "kind": "space"
+    },
+    {
+      "case": "jobs_unknown",
+      "kind": "space"
+    },
+    {
+      "case": "helper",
+      "kind": "space"
+    },
+    {
+      "case": "helper_command",
+      "kind": "space"
+    },
+    {
+      "case": "non_shell",
+      "kind": "space"
+    }
+  ],
+  "execution": "Original immutable Python capture only; native execution results reported separately. No expected values derived from Rust.",
+  "capture_output_sha256": "b54efeedf7df4b938738657238e25ae69ad11617b2f1c83e1c8389d0c925b56b",
+  "storage": "Captured JSON values stored with repository LF line endings; capture hash retains the original Windows text-file transport. Parsed values are identical."
+}

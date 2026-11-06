@@ -1,0 +1,242 @@
+[
+  {
+    "name": "model.onnx",
+    "extension": "onnx",
+    "windows": false,
+    "expected": true
+  },
+  {
+    "name": "UPPER.ONNX",
+    "extension": "onnx",
+    "windows": false,
+    "expected": false
+  },
+  {
+    "name": "mixed.OnNx",
+    "extension": "onnx",
+    "windows": false,
+    "expected": false
+  },
+  {
+    "name": ".hidden.onnx",
+    "extension": "onnx",
+    "windows": false,
+    "expected": false
+  },
+  {
+    "name": "model.onnx.bak",
+    "extension": "onnx",
+    "windows": false,
+    "expected": false
+  },
+  {
+    "name": "data.parquet",
+    "extension": "onnx",
+    "windows": false,
+    "expected": false
+  },
+  {
+    "name": "UPPER.PARQUET",
+    "extension": "onnx",
+    "windows": false,
+    "expected": false
+  },
+  {
+    "name": ".hidden.parquet",
+    "extension": "onnx",
+    "windows": false,
+    "expected": false
+  },
+  {
+    "name": "data.parquet.bak",
+    "extension": "onnx",
+    "windows": false,
+    "expected": false
+  },
+  {
+    "name": "other",
+    "extension": "onnx",
+    "windows": false,
+    "expected": false
+  },
+  {
+    "name": "model.onnx",
+    "extension": "parquet",
+    "windows": false,
+    "expected": false
+  },
+  {
+    "name": "UPPER.ONNX",
+    "extension": "parquet",
+    "windows": false,
+    "expected": false
+  },
+  {
+    "name": "mixed.OnNx",
+    "extension": "parquet",
+    "windows": false,
+    "expected": false
+  },
+  {
+    "name": ".hidden.onnx",
+    "extension": "parquet",
+    "windows": false,
+    "expected": false
+  },
+  {
+    "name": "model.onnx.bak",
+    "extension": "parquet",
+    "windows": false,
+    "expected": false
+  },
+  {
+    "name": "data.parquet",
+    "extension": "parquet",
+    "windows": false,
+    "expected": true
+  },
+  {
+    "name": "UPPER.PARQUET",
+    "extension": "parquet",
+    "windows": false,
+    "expected": false
+  },
+  {
+    "name": ".hidden.parquet",
+    "extension": "parquet",
+    "windows": false,
+    "expected": false
+  },
+  {
+    "name": "data.parquet.bak",
+    "extension": "parquet",
+    "windows": false,
+    "expected": false
+  },
+  {
+    "name": "other",
+    "extension": "parquet",
+    "windows": false,
+    "expected": false
+  },
+  {
+    "name": "model.onnx",
+    "extension": "onnx",
+    "windows": true,
+    "expected": true
+  },
+  {
+    "name": "UPPER.ONNX",
+    "extension": "onnx",
+    "windows": true,
+    "expected": true
+  },
+  {
+    "name": "mixed.OnNx",
+    "extension": "onnx",
+    "windows": true,
+    "expected": true
+  },
+  {
+    "name": ".hidden.onnx",
+    "extension": "onnx",
+    "windows": true,
+    "expected": false
+  },
+  {
+    "name": "model.onnx.bak",
+    "extension": "onnx",
+    "windows": true,
+    "expected": false
+  },
+  {
+    "name": "data.parquet",
+    "extension": "onnx",
+    "windows": true,
+    "expected": false
+  },
+  {
+    "name": "UPPER.PARQUET",
+    "extension": "onnx",
+    "windows": true,
+    "expected": false
+  },
+  {
+    "name": ".hidden.parquet",
+    "extension": "onnx",
+    "windows": true,
+    "expected": false
+  },
+  {
+    "name": "data.parquet.bak",
+    "extension": "onnx",
+    "windows": true,
+    "expected": false
+  },
+  {
+    "name": "other",
+    "extension": "onnx",
+    "windows": true,
+    "expected": false
+  },
+  {
+    "name": "model.onnx",
+    "extension": "parquet",
+    "windows": true,
+    "expected": false
+  },
+  {
+    "name": "UPPER.ONNX",
+    "extension": "parquet",
+    "windows": true,
+    "expected": false
+  },
+  {
+    "name": "mixed.OnNx",
+    "extension": "parquet",
+    "windows": true,
+    "expected": false
+  },
+  {
+    "name": ".hidden.onnx",
+    "extension": "parquet",
+    "windows": true,
+    "expected": false
+  },
+  {
+    "name": "model.onnx.bak",
+    "extension": "parquet",
+    "windows": true,
+    "expected": false
+  },
+  {
+    "name": "data.parquet",
+    "extension": "parquet",
+    "windows": true,
+    "expected": true
+  },
+  {
+    "name": "UPPER.PARQUET",
+    "extension": "parquet",
+    "windows": true,
+    "expected": true
+  },
+  {
+    "name": ".hidden.parquet",
+    "extension": "parquet",
+    "windows": true,
+    "expected": false
+  },
+  {
+    "name": "data.parquet.bak",
+    "extension": "parquet",
+    "windows": true,
+    "expected": false
+  },
+  {
+    "name": "other",
+    "extension": "parquet",
+    "windows": true,
+    "expected": false
+  }
+]

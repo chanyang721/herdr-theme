@@ -1,0 +1,79 @@
+[
+  {
+    "value": null,
+    "repr": "None"
+  },
+  {
+    "value": true,
+    "repr": "True"
+  },
+  {
+    "value": false,
+    "repr": "False"
+  },
+  {
+    "value": {
+      "version": 8
+    },
+    "repr": "{'version': 8}"
+  },
+  {
+    "value": {
+      "balanced": [
+        "Synthetic Space / Six"
+      ],
+      "version": 8
+    },
+    "repr": "{'balanced': ['Synthetic Space / Six'], 'version': 8}"
+  },
+  {
+    "value": "한글 한 칸",
+    "repr": "'한글 한 칸'"
+  },
+  {
+    "value": "quotes'and\"both",
+    "repr": "'quotes\\'and\"both'"
+  },
+  {
+    "value": "only'one",
+    "repr": "\"only'one\""
+  },
+  {
+    "value": "\n\t\r\b\f\u0000 ‍　",
+    "repr": "'\\n\\t\\r\\x08\\x0c\\x00\\x7f\\xa0\\u200d\\u3000'"
+  },
+  {
+    "value": {
+      "한글": "😀‍猫"
+    },
+    "repr": "{'한글': '😀\\u200d猫'}"
+  },
+  {
+    "value": 0.0,
+    "repr": "0.0"
+  },
+  {
+    "value": -0.0,
+    "repr": "-0.0"
+  },
+  {
+    "value": 0.0001,
+    "repr": "0.0001"
+  },
+  {
+    "value": 1e-05,
+    "repr": "1e-05"
+  },
+  {
+    "value": 1e+16,
+    "repr": "1e+16"
+  },
+  {
+    "value": 1.2e-07,
+    "repr": "1.2e-07"
+  },
+  {
+    "value": 1.2345678901234568e+16,
+    "repr": "1.2345678901234568e+16"
+  }
+]

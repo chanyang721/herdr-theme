@@ -13,7 +13,7 @@ test('project document index recovers after cold install and partial writes and 
   try{
     const {watchDocs,currentDocs}=await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
     watchDocs(view,cx);await tasks.at(-1);assert.equal(currentDocs(view.projectDocs),null);
-    assert.deepEqual(collects,[['python3','/app/scripts/sixfold/collect_docs.py']],'the index is rebuilt on start, then at most every 30 seconds');
+    assert.deepEqual(collects,[['/app/scripts/sixfold/herdr-theme','collect_docs']],'the index is rebuilt on start, then at most every 30 seconds');
     text=JSON.stringify({version:1,spaces:{Demo:{folder:'/docs',files:[{name:'guide.md',path:'/docs/guide.md',mtime:12}]}}});
     refresh(cx);await tasks.at(-1);assert.equal(currentDocs(view.projectDocs).files[0].name,'guide.md');assert.equal(notifications,1);
     text='{partial';refresh(cx);await tasks.at(-1);assert.equal(currentDocs(view.projectDocs).files.length,1);
@@ -69,7 +69,7 @@ test('NFC/NFD filename search expands matching folders and Enter opens first mat
     const file=doc(`/docs/${'프로젝트비-보고서.md'.normalize(filenameForm)}`,30);h.view.projectDocs.spaces.Demo.files=[file,doc('/docs/unrelated.md')];h.render('Demo');
     const input=h.view.docsInputs.Demo;input.text='프로젝트비'.normalize(queryForm);input.events.change({},h.cx);h.render('Demo');
     assert.equal([...h.handlers.keys()].filter(k=>k.startsWith('sf-doc-Demo')).length,1);
-    input.events.submit({},h.cx);await h.flush();assert.deepEqual(h.calls.at(-1),{command:'python3',args:['/app/scripts/sixfold/open_doc_tab.py',file.path,'--space','Demo']});
+    input.events.submit({},h.cx);await h.flush();assert.deepEqual(h.calls.at(-1),{command:'/app/scripts/sixfold/herdr-theme',args:['open_doc_tab',file.path,'--space','Demo']});
     h.render('Other');const other=h.view.docsInputs.Other;assert.notEqual(input,other);assert.equal(h.view.docsQueries.Other,undefined);
     other.events.submit({},h.cx);await h.flush();assert.deepEqual(h.calls.at(-1).args.slice(1),['/other/other.md','--space','Other']);
     assert.equal(h.view.docsQueries.Demo,input.text);
@@ -97,7 +97,7 @@ test('folder groups and their document rows are newest first',async()=>{
 
 test('Markdown opens in the 문서 tab, other files in the default app, ↗ in VS Code; errors clear on retry',async()=>{
   const h=await sidebar();h.handlers.get('sf-docs-folder-Demo-0')({},h.cx);h.render();
-  for(const [id,command,args] of [['sf-doc-Demo-0-0','python3',['/app/scripts/sixfold/open_doc_tab.py','/docs/guide.md','--space','Demo']],['sf-doc-Demo-0-1','python3',['/app/scripts/sixfold/desktop.py','open','/docs/report.pdf']],['sf-doc-code-Demo-0-0','python3',['/app/scripts/sixfold/desktop.py','editor','/docs/guide.md']]]){
+  for(const [id,command,args] of [['sf-doc-Demo-0-0','/app/scripts/sixfold/herdr-theme',['open_doc_tab','/docs/guide.md','--space','Demo']],['sf-doc-Demo-0-1','/app/scripts/sixfold/herdr-theme',['desktop','open','/docs/report.pdf']],['sf-doc-code-Demo-0-0','/app/scripts/sixfold/herdr-theme',['desktop','editor','/docs/guide.md']]]){
     h.setRun(async()=>({code:1}));h.handlers.get(id)({},h.cx);await h.flush();assert.match(h.view.docsErrors.Demo,/열지 못했습니다/);
     assert.deepEqual(h.calls.at(-1),{command,args});
     h.setRun(async()=>({code:0}));h.handlers.get(id)({},h.cx);await h.flush();assert.equal(h.view.docsErrors.Demo,null);

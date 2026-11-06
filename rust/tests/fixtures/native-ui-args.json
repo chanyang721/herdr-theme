@@ -1,0 +1,132 @@
+[
+  {
+    "args": [],
+    "value": {
+      "reloads": 80,
+      "failed_reloads": 0,
+      "install_smoke": false
+    }
+  },
+  {
+    "args": [
+      "--reloads=1_0"
+    ],
+    "value": {
+      "reloads": 10,
+      "failed_reloads": 0,
+      "install_smoke": false
+    }
+  },
+  {
+    "args": [
+      "--reloads",
+      "1",
+      "--reloads",
+      "2"
+    ],
+    "value": {
+      "reloads": 2,
+      "failed_reloads": 0,
+      "install_smoke": false
+    }
+  },
+  {
+    "args": [
+      "--rel=١٢",
+      "--failed-r=3"
+    ],
+    "value": {
+      "reloads": 12,
+      "failed_reloads": 3,
+      "install_smoke": false
+    }
+  },
+  {
+    "args": [
+      "--reloads",
+      "-1"
+    ],
+    "code": 2,
+    "error": "--reloads must be 0..1000 and --failed-reloads 0..200"
+  },
+  {
+    "args": [
+      "--reloads=-0"
+    ],
+    "value": {
+      "reloads": 0,
+      "failed_reloads": 0,
+      "install_smoke": false
+    }
+  },
+  {
+    "args": [
+      "--reloads=1001"
+    ],
+    "code": 2,
+    "error": "--reloads must be 0..1000 and --failed-reloads 0..200"
+  },
+  {
+    "args": [
+      "--failed-reloads=201"
+    ],
+    "code": 2,
+    "error": "--reloads must be 0..1000 and --failed-reloads 0..200"
+  },
+  {
+    "args": [
+      "--reloads=1.0"
+    ],
+    "code": 2,
+    "error": "argument --reloads: invalid int value: '1.0'"
+  },
+  {
+    "args": [
+      "--reloads=\u001c1"
+    ],
+    "code": 2,
+    "error": "argument --reloads: invalid int value: '\\x1c1'"
+  },
+  {
+    "args": [
+      "--reloads= 1 "
+    ],
+    "value": {
+      "reloads": 1,
+      "failed_reloads": 0,
+      "install_smoke": false
+    }
+  },
+  {
+    "args": [
+      "--reloads",
+      "99999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999"
+    ],
+    "code": 2,
+    "error": "--reloads must be 0..1000 and --failed-reloads 0..200"
+  },
+  {
+    "args": [
+      "--reloads=1__0"
+    ],
+    "code": 2,
+    "error": "argument --reloads: invalid int value: '1__0'"
+  },
+  {
+    "args": [
+      "--failed-reloads=2_0"
+    ],
+    "value": {
+      "reloads": 80,
+      "failed_reloads": 20,
+      "install_smoke": false
+    }
+  },
+  {
+    "args": [
+      "--reloads=²"
+    ],
+    "code": 2,
+    "error": "argument --reloads: invalid int value: '²'"
+  }
+]

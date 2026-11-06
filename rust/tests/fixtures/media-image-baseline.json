@@ -1,0 +1,168 @@
+{
+  "baseline": "8c5b71d2f1074bb5d1d831fa395617bf4ae2abc8",
+  "script_sha256": "22d2321d600d312d7f67d59600dc3860051e1264198e42cef9509b0be094752b",
+  "generation": "Original embedded Python fallback, Pillow 11.2.1-generated valid raster fixtures; no Pillow needed by product or native tests.",
+  "cases": [
+    {
+      "name": "scientific.svg",
+      "body": {
+        "base64": "PHN2ZyB2aWV3Qm94PSIwIDAgMWUyMCAxZS03Ii8+"
+      },
+      "expected_dimensions": [
+        1e+20,
+        1e-07
+      ],
+      "source_sha256": "bca05dc7eb4024203c7f9aeddd459e6d5b5680c7f775898d06a27e988df51f35"
+    },
+    {
+      "name": "normal-del-\u007f.svg",
+      "body": {
+        "base64": "PHN2ZyB3aWR0aD0iOCIgaGVpZ2h0PSI5Ii8+"
+      },
+      "expected_dimensions": [
+        8.0,
+        9.0
+      ],
+      "source_sha256": "46d145f74caaad8f4cc7f171fac3bd6489021c4133381cea1ddc46798f26d254"
+    },
+    {
+      "name": "normal-unicode-\ud55c.SVG",
+      "body": {
+        "base64": "77u/PHN2ZyB2aWV3Qm94PSIwIDAgNjQgMzIiIHdpZHRoPSI5NnB4Ii8+"
+      },
+      "expected_dimensions": [
+        96.0,
+        32.0
+      ],
+      "source_sha256": "ac0b243b5d457ad7d9967ca460aea15d9fe0a01aac4feea5dc94a434c287acad"
+    },
+    {
+      "name": "large-leading-comment.svg",
+      "body": {
+        "repeat_comment_bytes": 1048676,
+        "tail": "--><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"640\" height=\"480\"/>"
+      },
+      "expected_dimensions": [
+        300,
+        150
+      ],
+      "source_sha256": "c00877fa2526056dd91e23390cccef5b1979bc62396f57fc32514f9f9524f085"
+    },
+    {
+      "name": "normal.png",
+      "body": {
+        "base64": "iVBORw0KGgoAAAANSUhEUgAAABEAAAALCAIAAAAWQvFQAAAAGElEQVR4nGNUaHjAQCJgIlXDqB4wGG56AHE9AZaKaGvvAAAAAElFTkSuQmCC"
+      },
+      "expected_dimensions": [
+        17,
+        11
+      ],
+      "source_sha256": "14dc360f7bbded540c796fa320ce2013eed80f0994c54166aa332abe30ecd6bb"
+    },
+    {
+      "name": "normal.jpg",
+      "body": {
+        "base64": "/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/2wBDAQkJCQwLDBgNDRgyIRwhMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjL/wAARCAALABEDASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwDNooor7k+NCiiigD//2Q=="
+      },
+      "expected_dimensions": [
+        17,
+        11
+      ],
+      "source_sha256": "fb165542c683ee591cad2c43dc857c69699638ba6cebc487ccf94d9001e0916e"
+    },
+    {
+      "name": "normal.jpeg",
+      "body": {
+        "base64": "/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/2wBDAQkJCQwLDBgNDRgyIRwhMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjL/wgARCAALABEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAT/xAAVAQEBAAAAAAAAAAAAAAAAAAAABf/aAAwDAQACEAMQAAABmFyMB//EABQQAQAAAAAAAAAAAAAAAAAAACD/2gAIAQEAAQUCX//EABQRAQAAAAAAAAAAAAAAAAAAABD/2gAIAQMBAT8BP//EABQRAQAAAAAAAAAAAAAAAAAAABD/2gAIAQIBAT8BP//EABQQAQAAAAAAAAAAAAAAAAAAACD/2gAIAQEABj8CX//EABQQAQAAAAAAAAAAAAAAAAAAACD/2gAIAQEAAT8hX//aAAwDAQACAAMAAAAQCC//xAAUEQEAAAAAAAAAAAAAAAAAAAAQ/9oACAEDAQE/ED//xAAUEQEAAAAAAAAAAAAAAAAAAAAQ/9oACAECAQE/ED//xAAUEAEAAAAAAAAAAAAAAAAAAAAg/9oACAEBAAE/EF//2Q=="
+      },
+      "expected_dimensions": [
+        17,
+        11
+      ],
+      "source_sha256": "4aa269e9c9019a9546a9012a28f06e48fbba7d7f3291a13d4b499a01ff77c5ba"
+    },
+    {
+      "name": "lossy.webp",
+      "body": {
+        "base64": "UklGRkYAAABXRUJQVlA4IDoAAAAQAwCdASoRAAsAPm0skkWkIqGYBABABsSgB2APwAAQigAA/uX6P//pNnibPE2fCK//+dg2JdrwAAAA"
+      },
+      "expected_dimensions": [
+        17,
+        11
+      ],
+      "source_sha256": "ad39988fa559a67a8e634c29a73c0d1363e668e776c48b9e1f8708ab3562a8ba"
+    },
+    {
+      "name": "lossless.webp",
+      "body": {
+        "base64": "UklGRh4AAABXRUJQVlA4TBEAAAAvEIACAAdQwIIUvP+BiOh/AAA="
+      },
+      "expected_dimensions": [
+        17,
+        11
+      ],
+      "source_sha256": "5e2f56325bca3f686570cd137c87b0cb6d64c9b0c29df3bd7665cdf8d2388c42"
+    },
+    {
+      "name": "alpha.webp",
+      "body": {
+        "base64": "UklGRmoAAABXRUJQVlA4WAoAAAAQAAAAEAAACgAAQUxQSAoAAAABB1DAiAhERP8DVlA4IDoAAAAQAwCdASoRAAsAPm0skkWkIqGYBABABsSgB2APwAAQigAA/uX6P//pNnibPE2fCK//+dg2JdrwAAAA"
+      },
+      "expected_dimensions": [
+        17,
+        11
+      ],
+      "source_sha256": "6a2582911fb768acfb8af83742f1f2f0f842bfe1c8988709bce01c34fe882a1e"
+    }
+  ],
+  "serialization_cases": [
+    {
+      "value": "\u007f",
+      "expected": "\"\\u007f\""
+    },
+    {
+      "value": "\ud55c \ud83d\ude00",
+      "expected": "\"\\ud55c \\ud83d\\ude00\""
+    },
+    {
+      "value": 1e-07,
+      "expected": "1e-07"
+    },
+    {
+      "value": 1e+16,
+      "expected": "1e+16"
+    },
+    {
+      "value": 1e+20,
+      "expected": "1e+20"
+    },
+    {
+      "value": 0.0001,
+      "expected": "0.0001"
+    },
+    {
+      "value": 0.0,
+      "expected": "0.0"
+    },
+    {
+      "value": -0.0,
+      "expected": "-0.0"
+    },
+    {
+      "value": 2.675,
+      "expected": "2.675"
+    },
+    {
+      "value": {
+        "bool": true,
+        "null": null,
+        "nested": [
+          false,
+          "\u007f",
+          1e-07
+        ]
+      },
+      "expected": "{\"bool\": true, \"null\": null, \"nested\": [false, \"\\u007f\", 1e-07]}"
+    }
+  ]
+}

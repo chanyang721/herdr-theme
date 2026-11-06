@@ -1,0 +1,63 @@
+[package]
+name = "herdr-theme"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+
+[lib]
+name = "herdr_theme"
+path = "src/lib.rs"
+
+[[bin]]
+name = "herdr-theme"
+path = "src/main.rs"
+
+[[bin]]
+name = "herdr-theme-test-fixture"
+path = "src/bin/fixture_tool.rs"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order", "float_roundtrip"] }
+regex = "1"
+sha2 = "0.10"
+uuid = { version = "1", features = ["v4", "v5"] }
+chrono = "0.4"
+dirs = "6"
+fs2 = "0.4"
+tempfile = "3"
+wait-timeout = "0.2"
+rusqlite = { version = "0.38", features = ["bundled"] }
+libc = "0.2"
+libloading = "0.9"
+plist = "1"
+hound = "3"
+base64 = "0.22"
+walkdir = "2"
+filetime = "0.2"
+globset = "0.4"
+unicode-normalization = "0.1"
+shell-words = "1"
+ctrlc = "3"
+same-file = "1"
+html-escape = "0.2"
+parquet = { version = "57", default-features = false, features = ["snap", "zstd"] }
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "native-tls"] }
+tokio = { version = "1", features = ["rt", "time", "net"] }
+sha1 = "0.10"
+rust_decimal = { version = "1", default-features = false, features = ["std"] }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_System_Diagnostics_ToolHelp", "Win32_System_RestartManager", "Win32_System_Threading"] }
+
+[profile.dev]
+debug = 0
+incremental = false
+
+[build-dependencies]
+cc = "1"
+sha2 = "0.10"
+
+[profile.test]
+debug = 0
+incremental = false

@@ -3,16 +3,16 @@
 Share 워크스페이스 에이전트는 특정 프로젝트의 작업을 직접 처리하기 전에 해당 프로젝트 pane으로 전달한다.
 
 ```sh
-python3 ~/work/projects/herdr-theme/scripts/route.py --enable
-python3 ~/work/projects/herdr-theme/scripts/route.py "Project A" '사용자가 요청한 작업 원문과 범위'
-python3 ~/work/projects/herdr-theme/scripts/route.py "Project B" '사용자가 요청한 작업 원문과 범위'
+herdr-theme route --enable
+herdr-theme route "Project A" '사용자가 요청한 작업 원문과 범위'
+herdr-theme route "Project B" '사용자가 요청한 작업 원문과 범위'
 ```
 
-경로는 이 저장소를 받아 둔 위치로 바꾼다. 프로젝트 별칭(`project_aliases`)과 이름이 바뀌어도 Share로 인정할
+예시는 `herdr-theme`가 PATH에 있다고 가정한다. 설치본은 `~/.config/herdr-app/scripts/sixfold/herdr-theme route`로도 실행한다(Windows 실행 파일은 `herdr-theme.exe`). 프로젝트 별칭(`project_aliases`)과 이름이 바뀌어도 Share로 인정할
 공간 ID(`hub_space_ids`)는 저장소가 아니라 이 기기의 `~/.config/herdr-app/data/sixfold/site.local.json`에
 둔다(예시: `config/site.example.json`).
 
-- `--tier low|mid|high|max`(기본 high, max는 직접 지정할 때만)로 작업 난이도를 준다. 그 tier 모델 세션을 먼저 고르고, 없으면 더 높은 모델 세션을 고른다. 낮은 모델에는 보내지 않는다. 세션 tier는 모델과 effort로 판단하며 모델을 모르는 세션은 high로 본다. 세션 모델은 칸 머리줄과 같은 `agent-usage.shares`에서 읽고, tier→모델·effort 기본값은 `scripts/model_tier.py`에 있고 이 기기의 `site.local.json` `model_tiers`가 덮는다(ADR-0008, `scripts/model_tier.py`).
+- `--tier low|mid|high|max`(기본 high, max는 직접 지정할 때만)로 작업 난이도를 준다. 그 tier 모델 세션을 먼저 고르고, 없으면 더 높은 모델 세션을 고른다. 낮은 모델에는 보내지 않는다. 세션 tier는 모델과 effort로 판단하며 모델을 모르는 세션은 high로 본다. 세션 모델은 칸 머리줄과 같은 `agent-usage.shares`에서 읽고, tier→모델·effort 기본값은 `rust/src/automation/tiers.rs`에 있고 이 기기의 `site.local.json` `model_tiers`가 덮는다(ADR-0008, `rust/src/automation/tiers.rs`).
 - 실제 발신 pane은 `HC_TERMINAL_ID`, 기존 TUI는 `HERDR_PANE_ID`와 로컬 연결표에서 읽는다. 위치를 추측하거나 다른 발신자로 가장하지 않는다.
 - 프로젝트의 활성 탭에서 같은 위치를 먼저 선택한다. 작업 중·승인 대기·done·초안·REC·응답 끝의 질문이 있는 pane은 건드리지 않고, 같은 종류의 빈 에이전트, 다른 빈 에이전트 순으로 대체한다.
 - 모두 바쁘면 로컬 대기열에 넣는다. Herdr Theme가 실행 중이면 빈 pane이 생겼을 때 전달한다. 작업을 끊거나 새 pane을 만들지 않는다.

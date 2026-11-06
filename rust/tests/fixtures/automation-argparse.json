@@ -1,0 +1,247 @@
+{
+  "source": "unchanged CPython 3.12 argparse commands; only program names translated and platform newline recorded as LF",
+  "cases": [
+    {
+      "command": "workspace",
+      "args": [],
+      "code": 2,
+      "stdout": "",
+      "stderr": "usage: herdr-theme workspace [-h] [--agents | --shells] [--tiers TIERS] [--by BY]\n                    name folder\nherdr-theme workspace: error: the following arguments are required: name, folder\n"
+    },
+    {
+      "command": "workspace",
+      "args": [
+        "name"
+      ],
+      "code": 2,
+      "stdout": "",
+      "stderr": "usage: herdr-theme workspace [-h] [--agents | --shells] [--tiers TIERS] [--by BY]\n                    name folder\nherdr-theme workspace: error: the following arguments are required: folder\n"
+    },
+    {
+      "command": "workspace",
+      "args": [
+        "name",
+        "folder",
+        "--shells",
+        "--agents"
+      ],
+      "code": 2,
+      "stdout": "",
+      "stderr": "usage: herdr-theme workspace [-h] [--agents | --shells] [--tiers TIERS] [--by BY]\n                    name folder\nherdr-theme workspace: error: argument --agents: not allowed with argument --shells\n"
+    },
+    {
+      "command": "workspace",
+      "args": [
+        "name",
+        "folder",
+        "--agents",
+        "--shells"
+      ],
+      "code": 2,
+      "stdout": "",
+      "stderr": "usage: herdr-theme workspace [-h] [--agents | --shells] [--tiers TIERS] [--by BY]\n                    name folder\nherdr-theme workspace: error: argument --shells: not allowed with argument --agents\n"
+    },
+    {
+      "command": "workspace",
+      "args": [
+        "--by",
+        "-3e2",
+        "--help"
+      ],
+      "code": 2,
+      "stdout": "",
+      "stderr": "usage: herdr-theme workspace [-h] [--agents | --shells] [--tiers TIERS] [--by BY]\n                    name folder\nherdr-theme workspace: error: argument --by: expected one argument\n"
+    },
+    {
+      "command": "workspace",
+      "args": [
+        "--by",
+        "-.5",
+        "--help"
+      ],
+      "code": 0,
+      "stdout": "usage: herdr-theme workspace [-h] [--agents | --shells] [--tiers TIERS] [--by BY]\n                    name folder\n\nCreate a workspace with ONE coordinating Claude session. More panes are added\nlater by the harness `dispatch` when work arrives, and finished panes are\nclosed by the observer. --tiers <tier> opens that one pane on the model for\nthe tier (low|mid|high|max, default high). The plan is kept in\ndata/sixfold/space-tiers.json. A site.local.json \"new_space_tiers\" list (old\nsix-pane setting) is used only as a fallback: its first value, with a warning.\nTier -> model and effort come from \"model_tiers\" (ADR-0008,\nscripts/model_tier.py).\n\npositional arguments:\n  name\n  folder\n\noptions:\n  -h, --help     show this help message and exit\n  --agents\n  --shells\n  --tiers TIERS  tier of the single session (low|mid|high|max, default high)\n  --by BY        who decided the tiers (default: this session)\n",
+      "stderr": ""
+    },
+    {
+      "command": "workspace",
+      "args": [
+        "--by",
+        "--help"
+      ],
+      "code": 2,
+      "stdout": "",
+      "stderr": "usage: herdr-theme workspace [-h] [--agents | --shells] [--tiers TIERS] [--by BY]\n                    name folder\nherdr-theme workspace: error: argument --by: expected one argument\n"
+    },
+    {
+      "command": "workspace",
+      "args": [
+        "--unknown",
+        "--help"
+      ],
+      "code": 0,
+      "stdout": "usage: herdr-theme workspace [-h] [--agents | --shells] [--tiers TIERS] [--by BY]\n                    name folder\n\nCreate a workspace with ONE coordinating Claude session. More panes are added\nlater by the harness `dispatch` when work arrives, and finished panes are\nclosed by the observer. --tiers <tier> opens that one pane on the model for\nthe tier (low|mid|high|max, default high). The plan is kept in\ndata/sixfold/space-tiers.json. A site.local.json \"new_space_tiers\" list (old\nsix-pane setting) is used only as a fallback: its first value, with a warning.\nTier -> model and effort come from \"model_tiers\" (ADR-0008,\nscripts/model_tier.py).\n\npositional arguments:\n  name\n  folder\n\noptions:\n  -h, --help     show this help message and exit\n  --agents\n  --shells\n  --tiers TIERS  tier of the single session (low|mid|high|max, default high)\n  --by BY        who decided the tiers (default: this session)\n",
+      "stderr": ""
+    },
+    {
+      "command": "route",
+      "args": [],
+      "code": 2,
+      "stdout": "",
+      "stderr": "usage: herdr-theme route [-h] [--from SOURCE] [--drain] [--reply]\n                [--tier {low,mid,high,max}] [--enable]\n                [project] [text]\nherdr-theme route: error: project \uc640 \uc791\uc5c5 \uba54\uc2dc\uc9c0\uac00 \ud544\uc694\ud569\ub2c8\ub2e4.\n"
+    },
+    {
+      "command": "route",
+      "args": [
+        "project",
+        "text",
+        "--tier",
+        "bad",
+        "--help"
+      ],
+      "code": 2,
+      "stdout": "",
+      "stderr": "usage: herdr-theme route [-h] [--from SOURCE] [--drain] [--reply]\n                [--tier {low,mid,high,max}] [--enable]\n                [project] [text]\nherdr-theme route: error: argument --tier: invalid choice: 'bad' (choose from low, mid, high, max)\n"
+    },
+    {
+      "command": "route",
+      "args": [
+        "project",
+        "text",
+        "--tier",
+        "bad",
+        "--tier",
+        "high"
+      ],
+      "code": 2,
+      "stdout": "",
+      "stderr": "usage: herdr-theme route [-h] [--from SOURCE] [--drain] [--reply]\n                [--tier {low,mid,high,max}] [--enable]\n                [project] [text]\nherdr-theme route: error: argument --tier: invalid choice: 'bad' (choose from low, mid, high, max)\n"
+    },
+    {
+      "command": "route",
+      "args": [
+        "--tier",
+        "bad",
+        "--help"
+      ],
+      "code": 2,
+      "stdout": "",
+      "stderr": "usage: herdr-theme route [-h] [--from SOURCE] [--drain] [--reply]\n                [--tier {low,mid,high,max}] [--enable]\n                [project] [text]\nherdr-theme route: error: argument --tier: invalid choice: 'bad' (choose from low, mid, high, max)\n"
+    },
+    {
+      "command": "route",
+      "args": [
+        "--help",
+        "--tier",
+        "bad"
+      ],
+      "code": 0,
+      "stdout": "usage: herdr-theme route [-h] [--from SOURCE] [--drain] [--reply]\n                [--tier {low,mid,high,max}] [--enable]\n                [project] [text]\n\nRoute Common workspace tasks to the same project slot, with idle fallback.\n\npositional arguments:\n  project\n  text\n\noptions:\n  -h, --help            show this help message and exit\n  --from SOURCE\n  --drain\n  --reply               request one explicit result reply\n  --tier {low,mid,high,max}\n                        \uc791\uc5c5 \ub09c\uc774\ub3c4 low|mid|high(\uae30\ubcf8): \uac19\uc740 \ubaa8\ub378 \uc138\uc158 \uba3c\uc800, \uc5c6\uc73c\uba74 \ub354 \ub192\uc740 \ubaa8\ub378, \ub0ae\uc740\n                        \ubaa8\ub378\uc5d4 \ubcf4\ub0b4\uc9c0 \uc54a\uc74c\n  --enable              enable the sidebar queue drain for this checkout\n",
+      "stderr": ""
+    },
+    {
+      "command": "route",
+      "args": [
+        "--bogus"
+      ],
+      "code": 2,
+      "stdout": "",
+      "stderr": "usage: herdr-theme route [-h] [--from SOURCE] [--drain] [--reply]\n                [--tier {low,mid,high,max}] [--enable]\n                [project] [text]\nherdr-theme route: error: unrecognized arguments: --bogus\n"
+    },
+    {
+      "command": "collaborate",
+      "args": [
+        "accept",
+        "--lease",
+        "x",
+        "abc",
+        "--help"
+      ],
+      "code": 0,
+      "stdout": "usage: herdr-theme collaborate accept [-h] [--from SOURCE] [--lease LEASE] id\n\npositional arguments:\n  id\n\noptions:\n  -h, --help     show this help message and exit\n  --from SOURCE\n  --lease LEASE\n",
+      "stderr": ""
+    },
+    {
+      "command": "collaborate",
+      "args": [
+        "accept",
+        "--lease=abc",
+        "--help"
+      ],
+      "code": 0,
+      "stdout": "usage: herdr-theme collaborate accept [-h] [--from SOURCE] [--lease LEASE] id\n\npositional arguments:\n  id\n\noptions:\n  -h, --help     show this help message and exit\n  --from SOURCE\n  --lease LEASE\n",
+      "stderr": ""
+    },
+    {
+      "command": "collaborate",
+      "args": [
+        "enqueue",
+        "--id",
+        "x"
+      ],
+      "code": 2,
+      "stdout": "",
+      "stderr": "usage: herdr-theme collaborate enqueue [-h] --id ID --text TEXT --mode\n                              {read-only,worktree} [--owns OWNS]\n                              [--batch BATCH] [--from SOURCE]\n                              [--tier {low,mid,high,max}]\nherdr-theme collaborate enqueue: error: the following arguments are required: --text, --mode\n"
+    },
+    {
+      "command": "collaborate",
+      "args": [
+        "complete"
+      ],
+      "code": 2,
+      "stdout": "",
+      "stderr": "usage: herdr-theme collaborate complete [-h] [--from SOURCE] [--lease LEASE] --result\n                               RESULT\n                               id\nherdr-theme collaborate complete: error: the following arguments are required: id, --result\n"
+    },
+    {
+      "command": "collaborate",
+      "args": [
+        "enable",
+        "--drain"
+      ],
+      "code": 2,
+      "stdout": "",
+      "stderr": "usage: herdr-theme collaborate [-h] [--drain]\n                      {enable,drain,status,enqueue,start,accept,complete,report}\n                      ...\nherdr-theme collaborate: error: unrecognized arguments: --drain\n"
+    },
+    {
+      "command": "collaborate",
+      "args": [
+        "invalid",
+        "--help"
+      ],
+      "code": 2,
+      "stdout": "",
+      "stderr": "usage: herdr-theme collaborate [-h] [--drain]\n                      {enable,drain,status,enqueue,start,accept,complete,report}\n                      ...\nherdr-theme collaborate: error: argument action: invalid choice: 'invalid' (choose from enable, drain, status, enqueue, start, accept, complete, report)\n"
+    },
+    {
+      "command": "demo_agent",
+      "args": [
+        "name",
+        "bad",
+        "--help"
+      ],
+      "code": 2,
+      "stdout": "",
+      "stderr": "usage: herdr-theme demo_agent [-h] name {working,blocked,done,idle}\nherdr-theme demo_agent: error: argument state: invalid choice: 'bad' (choose from working, blocked, done, idle)\n"
+    },
+    {
+      "command": "demo_agent",
+      "args": [
+        "--",
+        "name",
+        "bad"
+      ],
+      "code": 2,
+      "stdout": "",
+      "stderr": "usage: herdr-theme demo_agent [-h] name {working,blocked,done,idle}\nherdr-theme demo_agent: error: argument state: invalid choice: 'bad' (choose from working, blocked, done, idle)\n"
+    },
+    {
+      "command": "collect_workflow",
+      "args": [
+        "--unknown"
+      ],
+      "code": 2,
+      "stdout": "",
+      "stderr": "usage: herdr-theme collect_workflow [-h] [--once]\nherdr-theme collect_workflow: error: unrecognized arguments: --unknown\n"
+    }
+  ]
+}

@@ -1,0 +1,506 @@
+{
+  "baseline": "8c5b71d2f1074bb5d1d831fa395617bf4ae2abc8",
+  "capture": "unchanged runpy entrypoint; SystemExit plus text streams; no byte-encoding claim",
+  "sources": {
+    "install.py": "54ce60e925bc8490c844df62ee5160533ee2bb0e830fe00a7fd3370daca99155",
+    "install_codex_focus.py": "2f2f932c73eaa43483d3b2ce7e4df084fe8c5725b95d0897de419be6bd19bba0"
+  },
+  "profiles": [
+    {
+      "stdio": "utf-8",
+      "locale": "cp949",
+      "utf8_mode": 1
+    },
+    {
+      "stdio": "cp949",
+      "locale": "cp949",
+      "utf8_mode": 0
+    }
+  ],
+  "cases": [
+    {
+      "file": "install.py",
+      "args": [
+        "--bogus"
+      ],
+      "code": 2,
+      "stdout": "",
+      "stderr": "usage: install.py [-h] [--home HOME] [--enroll] [--check] [--no-start]\ninstall.py: error: unrecognized arguments: --bogus\n",
+      "error": "unrecognized arguments: --bogus"
+    },
+    {
+      "file": "install.py",
+      "args": [
+        "--home"
+      ],
+      "code": 2,
+      "stdout": "",
+      "stderr": "usage: install.py [-h] [--home HOME] [--enroll] [--check] [--no-start]\ninstall.py: error: argument --home: expected one argument\n",
+      "error": "argument --home: expected one argument"
+    },
+    {
+      "file": "install.py",
+      "args": [
+        "--home",
+        "--check"
+      ],
+      "code": 2,
+      "stdout": "",
+      "stderr": "usage: install.py [-h] [--home HOME] [--enroll] [--check] [--no-start]\ninstall.py: error: argument --home: expected one argument\n",
+      "error": "argument --home: expected one argument"
+    },
+    {
+      "file": "install.py",
+      "args": [
+        "--home=-x",
+        "--help"
+      ],
+      "code": 0,
+      "stdout": "usage: install.py [-h] [--home HOME] [--enroll] [--check] [--no-start]\n\nInstall the voice plugin from this checkout and point every entry point at it.\n\n  python3 voice/install.py            install or update, then check\n  python3 voice/install.py --enroll   also enroll your voice (run in a shell pane)\n  python3 voice/install.py --check    only check that everything runs the installed copy\n\nThe plugin is copied to ~/.local/share/herdr-focus-queue/plugin, not run from\nthe checkout, so editing or switching a worktree never changes what is running.\nThe copy is swapped in as one directory: a herdr event that starts during the\nupdate runs either the old copy or the new one, never a half-written mix.\n`focusq install` from that copy then links it as the herdr plugin and points\nthe Claude Code submit hook, the Codex focus LaunchAgent and the Herdr app's\nfocus routing at it, replacing links to any earlier folder in the same step.\n\nYour voice data stays where it was (~/.local/state/herdr/plugins/local.focus-\nqueue) and your own settings in voice.local.json (see voice_settings.py).\nRunning voice connections are not stopped; listeners started before the\nupdate finish on the code they started with.\n\nSafe to run again. Exit 0 means installed and checked.\n\noptions:\n  -h, --help   show this help message and exit\n  --home HOME  home folder to install into (another home implies --no-start)\n  --enroll     also enroll your voice for the current microphone\n  --check      only check the installed copy\n  --no-start   write files only; start no LaunchAgent or download\n",
+      "stderr": "",
+      "error": null
+    },
+    {
+      "file": "install.py",
+      "args": [
+        "--home",
+        "-2",
+        "--help"
+      ],
+      "code": 0,
+      "stdout": "usage: install.py [-h] [--home HOME] [--enroll] [--check] [--no-start]\n\nInstall the voice plugin from this checkout and point every entry point at it.\n\n  python3 voice/install.py            install or update, then check\n  python3 voice/install.py --enroll   also enroll your voice (run in a shell pane)\n  python3 voice/install.py --check    only check that everything runs the installed copy\n\nThe plugin is copied to ~/.local/share/herdr-focus-queue/plugin, not run from\nthe checkout, so editing or switching a worktree never changes what is running.\nThe copy is swapped in as one directory: a herdr event that starts during the\nupdate runs either the old copy or the new one, never a half-written mix.\n`focusq install` from that copy then links it as the herdr plugin and points\nthe Claude Code submit hook, the Codex focus LaunchAgent and the Herdr app's\nfocus routing at it, replacing links to any earlier folder in the same step.\n\nYour voice data stays where it was (~/.local/state/herdr/plugins/local.focus-\nqueue) and your own settings in voice.local.json (see voice_settings.py).\nRunning voice connections are not stopped; listeners started before the\nupdate finish on the code they started with.\n\nSafe to run again. Exit 0 means installed and checked.\n\noptions:\n  -h, --help   show this help message and exit\n  --home HOME  home folder to install into (another home implies --no-start)\n  --enroll     also enroll your voice for the current microphone\n  --check      only check the installed copy\n  --no-start   write files only; start no LaunchAgent or download\n",
+      "stderr": "",
+      "error": null
+    },
+    {
+      "file": "install.py",
+      "args": [
+        "--home",
+        "-.2",
+        "--help"
+      ],
+      "code": 0,
+      "stdout": "usage: install.py [-h] [--home HOME] [--enroll] [--check] [--no-start]\n\nInstall the voice plugin from this checkout and point every entry point at it.\n\n  python3 voice/install.py            install or update, then check\n  python3 voice/install.py --enroll   also enroll your voice (run in a shell pane)\n  python3 voice/install.py --check    only check that everything runs the installed copy\n\nThe plugin is copied to ~/.local/share/herdr-focus-queue/plugin, not run from\nthe checkout, so editing or switching a worktree never changes what is running.\nThe copy is swapped in as one directory: a herdr event that starts during the\nupdate runs either the old copy or the new one, never a half-written mix.\n`focusq install` from that copy then links it as the herdr plugin and points\nthe Claude Code submit hook, the Codex focus LaunchAgent and the Herdr app's\nfocus routing at it, replacing links to any earlier folder in the same step.\n\nYour voice data stays where it was (~/.local/state/herdr/plugins/local.focus-\nqueue) and your own settings in voice.local.json (see voice_settings.py).\nRunning voice connections are not stopped; listeners started before the\nupdate finish on the code they started with.\n\nSafe to run again. Exit 0 means installed and checked.\n\noptions:\n  -h, --help   show this help message and exit\n  --home HOME  home folder to install into (another home implies --no-start)\n  --enroll     also enroll your voice for the current microphone\n  --check      only check the installed copy\n  --no-start   write files only; start no LaunchAgent or download\n",
+      "stderr": "",
+      "error": null
+    },
+    {
+      "file": "install.py",
+      "args": [
+        "--home",
+        "-2.",
+        "--help"
+      ],
+      "code": 2,
+      "stdout": "",
+      "stderr": "usage: install.py [-h] [--home HOME] [--enroll] [--check] [--no-start]\ninstall.py: error: argument --home: expected one argument\n",
+      "error": "argument --home: expected one argument"
+    },
+    {
+      "file": "install.py",
+      "args": [
+        "--home",
+        "-1e3",
+        "--help"
+      ],
+      "code": 2,
+      "stdout": "",
+      "stderr": "usage: install.py [-h] [--home HOME] [--enroll] [--check] [--no-start]\ninstall.py: error: argument --home: expected one argument\n",
+      "error": "argument --home: expected one argument"
+    },
+    {
+      "file": "install.py",
+      "args": [
+        "--home",
+        "-",
+        "--help"
+      ],
+      "code": 0,
+      "stdout": "usage: install.py [-h] [--home HOME] [--enroll] [--check] [--no-start]\n\nInstall the voice plugin from this checkout and point every entry point at it.\n\n  python3 voice/install.py            install or update, then check\n  python3 voice/install.py --enroll   also enroll your voice (run in a shell pane)\n  python3 voice/install.py --check    only check that everything runs the installed copy\n\nThe plugin is copied to ~/.local/share/herdr-focus-queue/plugin, not run from\nthe checkout, so editing or switching a worktree never changes what is running.\nThe copy is swapped in as one directory: a herdr event that starts during the\nupdate runs either the old copy or the new one, never a half-written mix.\n`focusq install` from that copy then links it as the herdr plugin and points\nthe Claude Code submit hook, the Codex focus LaunchAgent and the Herdr app's\nfocus routing at it, replacing links to any earlier folder in the same step.\n\nYour voice data stays where it was (~/.local/state/herdr/plugins/local.focus-\nqueue) and your own settings in voice.local.json (see voice_settings.py).\nRunning voice connections are not stopped; listeners started before the\nupdate finish on the code they started with.\n\nSafe to run again. Exit 0 means installed and checked.\n\noptions:\n  -h, --help   show this help message and exit\n  --home HOME  home folder to install into (another home implies --no-start)\n  --enroll     also enroll your voice for the current microphone\n  --check      only check the installed copy\n  --no-start   write files only; start no LaunchAgent or download\n",
+      "stderr": "",
+      "error": null
+    },
+    {
+      "file": "install.py",
+      "args": [
+        "--home",
+        "--"
+      ],
+      "code": 2,
+      "stdout": "",
+      "stderr": "usage: install.py [-h] [--home HOME] [--enroll] [--check] [--no-start]\ninstall.py: error: argument --home: expected one argument\n",
+      "error": "argument --home: expected one argument"
+    },
+    {
+      "file": "install.py",
+      "args": [
+        "--",
+        "--bogus"
+      ],
+      "code": 2,
+      "stdout": "",
+      "stderr": "usage: install.py [-h] [--home HOME] [--enroll] [--check] [--no-start]\ninstall.py: error: unrecognized arguments: -- --bogus\n",
+      "error": "unrecognized arguments: -- --bogus"
+    },
+    {
+      "file": "install.py",
+      "args": [
+        "--he"
+      ],
+      "code": 0,
+      "stdout": "usage: install.py [-h] [--home HOME] [--enroll] [--check] [--no-start]\n\nInstall the voice plugin from this checkout and point every entry point at it.\n\n  python3 voice/install.py            install or update, then check\n  python3 voice/install.py --enroll   also enroll your voice (run in a shell pane)\n  python3 voice/install.py --check    only check that everything runs the installed copy\n\nThe plugin is copied to ~/.local/share/herdr-focus-queue/plugin, not run from\nthe checkout, so editing or switching a worktree never changes what is running.\nThe copy is swapped in as one directory: a herdr event that starts during the\nupdate runs either the old copy or the new one, never a half-written mix.\n`focusq install` from that copy then links it as the herdr plugin and points\nthe Claude Code submit hook, the Codex focus LaunchAgent and the Herdr app's\nfocus routing at it, replacing links to any earlier folder in the same step.\n\nYour voice data stays where it was (~/.local/state/herdr/plugins/local.focus-\nqueue) and your own settings in voice.local.json (see voice_settings.py).\nRunning voice connections are not stopped; listeners started before the\nupdate finish on the code they started with.\n\nSafe to run again. Exit 0 means installed and checked.\n\noptions:\n  -h, --help   show this help message and exit\n  --home HOME  home folder to install into (another home implies --no-start)\n  --enroll     also enroll your voice for the current microphone\n  --check      only check the installed copy\n  --no-start   write files only; start no LaunchAgent or download\n",
+      "stderr": "",
+      "error": null
+    },
+    {
+      "file": "install.py",
+      "args": [
+        "--h=x"
+      ],
+      "code": 2,
+      "stdout": "",
+      "stderr": "usage: install.py [-h] [--home HOME] [--enroll] [--check] [--no-start]\ninstall.py: error: ambiguous option: --h=x could match --help, --home\n",
+      "error": "ambiguous option: --h=x could match --help, --home"
+    },
+    {
+      "file": "install.py",
+      "args": [
+        "--check=x"
+      ],
+      "code": 2,
+      "stdout": "",
+      "stderr": "usage: install.py [-h] [--home HOME] [--enroll] [--check] [--no-start]\ninstall.py: error: argument --check: ignored explicit argument 'x'\n",
+      "error": "argument --check: ignored explicit argument 'x'"
+    },
+    {
+      "file": "install.py",
+      "args": [
+        "--help=x"
+      ],
+      "code": 2,
+      "stdout": "",
+      "stderr": "usage: install.py [-h] [--home HOME] [--enroll] [--check] [--no-start]\ninstall.py: error: argument -h/--help: ignored explicit argument 'x'\n",
+      "error": "argument -h/--help: ignored explicit argument 'x'"
+    },
+    {
+      "file": "install.py",
+      "args": [
+        "--help",
+        "--bad"
+      ],
+      "code": 0,
+      "stdout": "usage: install.py [-h] [--home HOME] [--enroll] [--check] [--no-start]\n\nInstall the voice plugin from this checkout and point every entry point at it.\n\n  python3 voice/install.py            install or update, then check\n  python3 voice/install.py --enroll   also enroll your voice (run in a shell pane)\n  python3 voice/install.py --check    only check that everything runs the installed copy\n\nThe plugin is copied to ~/.local/share/herdr-focus-queue/plugin, not run from\nthe checkout, so editing or switching a worktree never changes what is running.\nThe copy is swapped in as one directory: a herdr event that starts during the\nupdate runs either the old copy or the new one, never a half-written mix.\n`focusq install` from that copy then links it as the herdr plugin and points\nthe Claude Code submit hook, the Codex focus LaunchAgent and the Herdr app's\nfocus routing at it, replacing links to any earlier folder in the same step.\n\nYour voice data stays where it was (~/.local/state/herdr/plugins/local.focus-\nqueue) and your own settings in voice.local.json (see voice_settings.py).\nRunning voice connections are not stopped; listeners started before the\nupdate finish on the code they started with.\n\nSafe to run again. Exit 0 means installed and checked.\n\noptions:\n  -h, --help   show this help message and exit\n  --home HOME  home folder to install into (another home implies --no-start)\n  --enroll     also enroll your voice for the current microphone\n  --check      only check the installed copy\n  --no-start   write files only; start no LaunchAgent or download\n",
+      "stderr": "",
+      "error": null
+    },
+    {
+      "file": "install.py",
+      "args": [
+        "--bad",
+        "--help"
+      ],
+      "code": 0,
+      "stdout": "usage: install.py [-h] [--home HOME] [--enroll] [--check] [--no-start]\n\nInstall the voice plugin from this checkout and point every entry point at it.\n\n  python3 voice/install.py            install or update, then check\n  python3 voice/install.py --enroll   also enroll your voice (run in a shell pane)\n  python3 voice/install.py --check    only check that everything runs the installed copy\n\nThe plugin is copied to ~/.local/share/herdr-focus-queue/plugin, not run from\nthe checkout, so editing or switching a worktree never changes what is running.\nThe copy is swapped in as one directory: a herdr event that starts during the\nupdate runs either the old copy or the new one, never a half-written mix.\n`focusq install` from that copy then links it as the herdr plugin and points\nthe Claude Code submit hook, the Codex focus LaunchAgent and the Herdr app's\nfocus routing at it, replacing links to any earlier folder in the same step.\n\nYour voice data stays where it was (~/.local/state/herdr/plugins/local.focus-\nqueue) and your own settings in voice.local.json (see voice_settings.py).\nRunning voice connections are not stopped; listeners started before the\nupdate finish on the code they started with.\n\nSafe to run again. Exit 0 means installed and checked.\n\noptions:\n  -h, --help   show this help message and exit\n  --home HOME  home folder to install into (another home implies --no-start)\n  --enroll     also enroll your voice for the current microphone\n  --check      only check the installed copy\n  --no-start   write files only; start no LaunchAgent or download\n",
+      "stderr": "",
+      "error": null
+    },
+    {
+      "file": "install.py",
+      "args": [
+        "--bad",
+        "--home"
+      ],
+      "code": 2,
+      "stdout": "",
+      "stderr": "usage: install.py [-h] [--home HOME] [--enroll] [--check] [--no-start]\ninstall.py: error: argument --home: expected one argument\n",
+      "error": "argument --home: expected one argument"
+    },
+    {
+      "file": "install.py",
+      "args": [
+        "-hfoo"
+      ],
+      "code": 0,
+      "stdout": "usage: install.py [-h] [--home HOME] [--enroll] [--check] [--no-start]\n\nInstall the voice plugin from this checkout and point every entry point at it.\n\n  python3 voice/install.py            install or update, then check\n  python3 voice/install.py --enroll   also enroll your voice (run in a shell pane)\n  python3 voice/install.py --check    only check that everything runs the installed copy\n\nThe plugin is copied to ~/.local/share/herdr-focus-queue/plugin, not run from\nthe checkout, so editing or switching a worktree never changes what is running.\nThe copy is swapped in as one directory: a herdr event that starts during the\nupdate runs either the old copy or the new one, never a half-written mix.\n`focusq install` from that copy then links it as the herdr plugin and points\nthe Claude Code submit hook, the Codex focus LaunchAgent and the Herdr app's\nfocus routing at it, replacing links to any earlier folder in the same step.\n\nYour voice data stays where it was (~/.local/state/herdr/plugins/local.focus-\nqueue) and your own settings in voice.local.json (see voice_settings.py).\nRunning voice connections are not stopped; listeners started before the\nupdate finish on the code they started with.\n\nSafe to run again. Exit 0 means installed and checked.\n\noptions:\n  -h, --help   show this help message and exit\n  --home HOME  home folder to install into (another home implies --no-start)\n  --enroll     also enroll your voice for the current microphone\n  --check      only check the installed copy\n  --no-start   write files only; start no LaunchAgent or download\n",
+      "stderr": "",
+      "error": null
+    },
+    {
+      "file": "install.py",
+      "args": [
+        "-h=foo"
+      ],
+      "code": 2,
+      "stdout": "",
+      "stderr": "usage: install.py [-h] [--home HOME] [--enroll] [--check] [--no-start]\ninstall.py: error: argument -h/--help: ignored explicit argument 'foo'\n",
+      "error": "argument -h/--help: ignored explicit argument 'foo'"
+    },
+    {
+      "file": "install.py",
+      "args": [
+        "--home=--help",
+        "--help"
+      ],
+      "code": 0,
+      "stdout": "usage: install.py [-h] [--home HOME] [--enroll] [--check] [--no-start]\n\nInstall the voice plugin from this checkout and point every entry point at it.\n\n  python3 voice/install.py            install or update, then check\n  python3 voice/install.py --enroll   also enroll your voice (run in a shell pane)\n  python3 voice/install.py --check    only check that everything runs the installed copy\n\nThe plugin is copied to ~/.local/share/herdr-focus-queue/plugin, not run from\nthe checkout, so editing or switching a worktree never changes what is running.\nThe copy is swapped in as one directory: a herdr event that starts during the\nupdate runs either the old copy or the new one, never a half-written mix.\n`focusq install` from that copy then links it as the herdr plugin and points\nthe Claude Code submit hook, the Codex focus LaunchAgent and the Herdr app's\nfocus routing at it, replacing links to any earlier folder in the same step.\n\nYour voice data stays where it was (~/.local/state/herdr/plugins/local.focus-\nqueue) and your own settings in voice.local.json (see voice_settings.py).\nRunning voice connections are not stopped; listeners started before the\nupdate finish on the code they started with.\n\nSafe to run again. Exit 0 means installed and checked.\n\noptions:\n  -h, --help   show this help message and exit\n  --home HOME  home folder to install into (another home implies --no-start)\n  --enroll     also enroll your voice for the current microphone\n  --check      only check the installed copy\n  --no-start   write files only; start no LaunchAgent or download\n",
+      "stderr": "",
+      "error": null
+    },
+    {
+      "file": "install.py",
+      "args": [
+        "--home",
+        "a",
+        "--home",
+        "b",
+        "--help"
+      ],
+      "code": 0,
+      "stdout": "usage: install.py [-h] [--home HOME] [--enroll] [--check] [--no-start]\n\nInstall the voice plugin from this checkout and point every entry point at it.\n\n  python3 voice/install.py            install or update, then check\n  python3 voice/install.py --enroll   also enroll your voice (run in a shell pane)\n  python3 voice/install.py --check    only check that everything runs the installed copy\n\nThe plugin is copied to ~/.local/share/herdr-focus-queue/plugin, not run from\nthe checkout, so editing or switching a worktree never changes what is running.\nThe copy is swapped in as one directory: a herdr event that starts during the\nupdate runs either the old copy or the new one, never a half-written mix.\n`focusq install` from that copy then links it as the herdr plugin and points\nthe Claude Code submit hook, the Codex focus LaunchAgent and the Herdr app's\nfocus routing at it, replacing links to any earlier folder in the same step.\n\nYour voice data stays where it was (~/.local/state/herdr/plugins/local.focus-\nqueue) and your own settings in voice.local.json (see voice_settings.py).\nRunning voice connections are not stopped; listeners started before the\nupdate finish on the code they started with.\n\nSafe to run again. Exit 0 means installed and checked.\n\noptions:\n  -h, --help   show this help message and exit\n  --home HOME  home folder to install into (another home implies --no-start)\n  --enroll     also enroll your voice for the current microphone\n  --check      only check the installed copy\n  --no-start   write files only; start no LaunchAgent or download\n",
+      "stderr": "",
+      "error": null
+    },
+    {
+      "file": "install_codex_focus.py",
+      "args": [
+        "--bogus"
+      ],
+      "code": 2,
+      "stdout": "",
+      "stderr": "usage: install_codex_focus.py [-h] [--target-home TARGET_HOME] [--no-start]\n                              [--uninstall]\ninstall_codex_focus.py: error: unrecognized arguments: --bogus\n",
+      "error": "unrecognized arguments: --bogus"
+    },
+    {
+      "file": "install_codex_focus.py",
+      "args": [
+        "--target-home"
+      ],
+      "code": 2,
+      "stdout": "",
+      "stderr": "usage: install_codex_focus.py [-h] [--target-home TARGET_HOME] [--no-start]\n                              [--uninstall]\ninstall_codex_focus.py: error: argument --target-home: expected one argument\n",
+      "error": "argument --target-home: expected one argument"
+    },
+    {
+      "file": "install_codex_focus.py",
+      "args": [
+        "--target-home",
+        "--no-start"
+      ],
+      "code": 2,
+      "stdout": "",
+      "stderr": "usage: install_codex_focus.py [-h] [--target-home TARGET_HOME] [--no-start]\n                              [--uninstall]\ninstall_codex_focus.py: error: argument --target-home: expected one argument\n",
+      "error": "argument --target-home: expected one argument"
+    },
+    {
+      "file": "install_codex_focus.py",
+      "args": [
+        "--target-home=-x",
+        "--help"
+      ],
+      "code": 0,
+      "stdout": "usage: install_codex_focus.py [-h] [--target-home TARGET_HOME] [--no-start]\n                              [--uninstall]\n\nInstall the sidebar-independent Codex mic guard as a user LaunchAgent.\n\noptions:\n  -h, --help            show this help message and exit\n  --target-home TARGET_HOME\n  --no-start\n  --uninstall\n",
+      "stderr": "",
+      "error": null
+    },
+    {
+      "file": "install_codex_focus.py",
+      "args": [
+        "--target-home",
+        "-2",
+        "--help"
+      ],
+      "code": 0,
+      "stdout": "usage: install_codex_focus.py [-h] [--target-home TARGET_HOME] [--no-start]\n                              [--uninstall]\n\nInstall the sidebar-independent Codex mic guard as a user LaunchAgent.\n\noptions:\n  -h, --help            show this help message and exit\n  --target-home TARGET_HOME\n  --no-start\n  --uninstall\n",
+      "stderr": "",
+      "error": null
+    },
+    {
+      "file": "install_codex_focus.py",
+      "args": [
+        "--target-home",
+        "-.2",
+        "--help"
+      ],
+      "code": 0,
+      "stdout": "usage: install_codex_focus.py [-h] [--target-home TARGET_HOME] [--no-start]\n                              [--uninstall]\n\nInstall the sidebar-independent Codex mic guard as a user LaunchAgent.\n\noptions:\n  -h, --help            show this help message and exit\n  --target-home TARGET_HOME\n  --no-start\n  --uninstall\n",
+      "stderr": "",
+      "error": null
+    },
+    {
+      "file": "install_codex_focus.py",
+      "args": [
+        "--target-home",
+        "-2.",
+        "--help"
+      ],
+      "code": 2,
+      "stdout": "",
+      "stderr": "usage: install_codex_focus.py [-h] [--target-home TARGET_HOME] [--no-start]\n                              [--uninstall]\ninstall_codex_focus.py: error: argument --target-home: expected one argument\n",
+      "error": "argument --target-home: expected one argument"
+    },
+    {
+      "file": "install_codex_focus.py",
+      "args": [
+        "--target-home",
+        "-1e3",
+        "--help"
+      ],
+      "code": 2,
+      "stdout": "",
+      "stderr": "usage: install_codex_focus.py [-h] [--target-home TARGET_HOME] [--no-start]\n                              [--uninstall]\ninstall_codex_focus.py: error: argument --target-home: expected one argument\n",
+      "error": "argument --target-home: expected one argument"
+    },
+    {
+      "file": "install_codex_focus.py",
+      "args": [
+        "--target-home",
+        "-",
+        "--help"
+      ],
+      "code": 0,
+      "stdout": "usage: install_codex_focus.py [-h] [--target-home TARGET_HOME] [--no-start]\n                              [--uninstall]\n\nInstall the sidebar-independent Codex mic guard as a user LaunchAgent.\n\noptions:\n  -h, --help            show this help message and exit\n  --target-home TARGET_HOME\n  --no-start\n  --uninstall\n",
+      "stderr": "",
+      "error": null
+    },
+    {
+      "file": "install_codex_focus.py",
+      "args": [
+        "--target-home",
+        "--"
+      ],
+      "code": 2,
+      "stdout": "",
+      "stderr": "usage: install_codex_focus.py [-h] [--target-home TARGET_HOME] [--no-start]\n                              [--uninstall]\ninstall_codex_focus.py: error: argument --target-home: expected one argument\n",
+      "error": "argument --target-home: expected one argument"
+    },
+    {
+      "file": "install_codex_focus.py",
+      "args": [
+        "--",
+        "--bogus"
+      ],
+      "code": 2,
+      "stdout": "",
+      "stderr": "usage: install_codex_focus.py [-h] [--target-home TARGET_HOME] [--no-start]\n                              [--uninstall]\ninstall_codex_focus.py: error: unrecognized arguments: -- --bogus\n",
+      "error": "unrecognized arguments: -- --bogus"
+    },
+    {
+      "file": "install_codex_focus.py",
+      "args": [
+        "--he"
+      ],
+      "code": 0,
+      "stdout": "usage: install_codex_focus.py [-h] [--target-home TARGET_HOME] [--no-start]\n                              [--uninstall]\n\nInstall the sidebar-independent Codex mic guard as a user LaunchAgent.\n\noptions:\n  -h, --help            show this help message and exit\n  --target-home TARGET_HOME\n  --no-start\n  --uninstall\n",
+      "stderr": "",
+      "error": null
+    },
+    {
+      "file": "install_codex_focus.py",
+      "args": [
+        "--h=x"
+      ],
+      "code": 2,
+      "stdout": "",
+      "stderr": "usage: install_codex_focus.py [-h] [--target-home TARGET_HOME] [--no-start]\n                              [--uninstall]\ninstall_codex_focus.py: error: argument -h/--help: ignored explicit argument 'x'\n",
+      "error": "argument -h/--help: ignored explicit argument 'x'"
+    },
+    {
+      "file": "install_codex_focus.py",
+      "args": [
+        "--no-start=x"
+      ],
+      "code": 2,
+      "stdout": "",
+      "stderr": "usage: install_codex_focus.py [-h] [--target-home TARGET_HOME] [--no-start]\n                              [--uninstall]\ninstall_codex_focus.py: error: argument --no-start: ignored explicit argument 'x'\n",
+      "error": "argument --no-start: ignored explicit argument 'x'"
+    },
+    {
+      "file": "install_codex_focus.py",
+      "args": [
+        "--help=x"
+      ],
+      "code": 2,
+      "stdout": "",
+      "stderr": "usage: install_codex_focus.py [-h] [--target-home TARGET_HOME] [--no-start]\n                              [--uninstall]\ninstall_codex_focus.py: error: argument -h/--help: ignored explicit argument 'x'\n",
+      "error": "argument -h/--help: ignored explicit argument 'x'"
+    },
+    {
+      "file": "install_codex_focus.py",
+      "args": [
+        "--help",
+        "--bad"
+      ],
+      "code": 0,
+      "stdout": "usage: install_codex_focus.py [-h] [--target-home TARGET_HOME] [--no-start]\n                              [--uninstall]\n\nInstall the sidebar-independent Codex mic guard as a user LaunchAgent.\n\noptions:\n  -h, --help            show this help message and exit\n  --target-home TARGET_HOME\n  --no-start\n  --uninstall\n",
+      "stderr": "",
+      "error": null
+    },
+    {
+      "file": "install_codex_focus.py",
+      "args": [
+        "--bad",
+        "--help"
+      ],
+      "code": 0,
+      "stdout": "usage: install_codex_focus.py [-h] [--target-home TARGET_HOME] [--no-start]\n                              [--uninstall]\n\nInstall the sidebar-independent Codex mic guard as a user LaunchAgent.\n\noptions:\n  -h, --help            show this help message and exit\n  --target-home TARGET_HOME\n  --no-start\n  --uninstall\n",
+      "stderr": "",
+      "error": null
+    },
+    {
+      "file": "install_codex_focus.py",
+      "args": [
+        "--bad",
+        "--target-home"
+      ],
+      "code": 2,
+      "stdout": "",
+      "stderr": "usage: install_codex_focus.py [-h] [--target-home TARGET_HOME] [--no-start]\n                              [--uninstall]\ninstall_codex_focus.py: error: argument --target-home: expected one argument\n",
+      "error": "argument --target-home: expected one argument"
+    },
+    {
+      "file": "install_codex_focus.py",
+      "args": [
+        "-hfoo"
+      ],
+      "code": 0,
+      "stdout": "usage: install_codex_focus.py [-h] [--target-home TARGET_HOME] [--no-start]\n                              [--uninstall]\n\nInstall the sidebar-independent Codex mic guard as a user LaunchAgent.\n\noptions:\n  -h, --help            show this help message and exit\n  --target-home TARGET_HOME\n  --no-start\n  --uninstall\n",
+      "stderr": "",
+      "error": null
+    },
+    {
+      "file": "install_codex_focus.py",
+      "args": [
+        "-h=foo"
+      ],
+      "code": 2,
+      "stdout": "",
+      "stderr": "usage: install_codex_focus.py [-h] [--target-home TARGET_HOME] [--no-start]\n                              [--uninstall]\ninstall_codex_focus.py: error: argument -h/--help: ignored explicit argument 'foo'\n",
+      "error": "argument -h/--help: ignored explicit argument 'foo'"
+    },
+    {
+      "file": "install_codex_focus.py",
+      "args": [
+        "--target-home=--help",
+        "--help"
+      ],
+      "code": 0,
+      "stdout": "usage: install_codex_focus.py [-h] [--target-home TARGET_HOME] [--no-start]\n                              [--uninstall]\n\nInstall the sidebar-independent Codex mic guard as a user LaunchAgent.\n\noptions:\n  -h, --help            show this help message and exit\n  --target-home TARGET_HOME\n  --no-start\n  --uninstall\n",
+      "stderr": "",
+      "error": null
+    },
+    {
+      "file": "install_codex_focus.py",
+      "args": [
+        "--target-home",
+        "a",
+        "--target-home",
+        "b",
+        "--help"
+      ],
+      "code": 0,
+      "stdout": "usage: install_codex_focus.py [-h] [--target-home TARGET_HOME] [--no-start]\n                              [--uninstall]\n\nInstall the sidebar-independent Codex mic guard as a user LaunchAgent.\n\noptions:\n  -h, --help            show this help message and exit\n  --target-home TARGET_HOME\n  --no-start\n  --uninstall\n",
+      "stderr": "",
+      "error": null
+    }
+  ]
+}

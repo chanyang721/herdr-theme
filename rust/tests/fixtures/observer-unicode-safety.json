@@ -1,0 +1,402 @@
+[
+  {
+    "fn": "fixed",
+    "args": [
+      {
+        "name": "Straße"
+      },
+      {
+        "fixed_names": [
+          "STRASSE"
+        ]
+      }
+    ],
+    "value": true
+  },
+  {
+    "fn": "fixed",
+    "args": [
+      {
+        "name": "µ"
+      },
+      {
+        "fixed_names": [
+          "μ"
+        ]
+      }
+    ],
+    "value": true
+  },
+  {
+    "fn": "fixed",
+    "args": [
+      {
+        "name": "Σ"
+      },
+      {
+        "fixed_names": [
+          "ς"
+        ]
+      }
+    ],
+    "value": true
+  },
+  {
+    "fn": "in_float",
+    "args": [
+      "t",
+      {
+        "floats": [
+          "t́"
+        ]
+      }
+    ],
+    "value": true
+  },
+  {
+    "fn": "in_float",
+    "args": [
+      "t",
+      {
+        "floats": [
+          "t²"
+        ]
+      }
+    ],
+    "value": false
+  },
+  {
+    "fn": "in_float",
+    "args": [
+      "null",
+      {}
+    ],
+    "value": false
+  },
+  {
+    "fn": "in_float",
+    "args": [
+      "a.a",
+      {
+        "floats": [
+          "xa.a.a"
+        ]
+      }
+    ],
+    "value": true
+  },
+  {
+    "fn": "in_float",
+    "args": [
+      "t",
+      {
+        "floats": [
+          "/t"
+        ]
+      }
+    ],
+    "value": false
+  },
+  {
+    "fn": "in_float",
+    "args": [
+      "t",
+      {
+        "overlays": [
+          "t‍"
+        ]
+      }
+    ],
+    "value": true
+  },
+  {
+    "fn": "in_float",
+    "args": [
+      "t",
+      {
+        "floats": [
+          "t¼"
+        ]
+      }
+    ],
+    "value": false
+  },
+  {
+    "fn": "empty_prompt",
+    "args": [
+      "done› Ask Codex to do anythingGPT-6",
+      "codex"
+    ],
+    "value": true
+  },
+  {
+    "fn": "empty_prompt",
+    "args": [
+      "\u001f› Ask Codex to do anything\u001f",
+      "codex"
+    ],
+    "value": true
+  },
+  {
+    "fn": "empty_prompt",
+    "args": [
+      "›\nvoice²",
+      "codex"
+    ],
+    "value": false
+  },
+  {
+    "fn": "empty_prompt",
+    "args": [
+      "›\nvoicé",
+      "codex"
+    ],
+    "value": true
+  },
+  {
+    "fn": "empty_prompt",
+    "args": [
+      "›\nmic¼",
+      "codex"
+    ],
+    "value": false
+  },
+  {
+    "fn": "empty_prompt",
+    "args": [
+      "›\nf1́",
+      "codex"
+    ],
+    "value": true
+  },
+  {
+    "fn": "empty_prompt",
+    "args": [
+      "›\nf1²",
+      "codex"
+    ],
+    "value": false
+  },
+  {
+    "fn": "empty_prompt",
+    "args": [
+      "›\nvoıce",
+      "codex"
+    ],
+    "value": true
+  },
+  {
+    "fn": "empty_prompt",
+    "args": [
+      "›\nweekly lİmıt",
+      "codex"
+    ],
+    "value": true
+  },
+  {
+    "fn": "empty_prompt",
+    "args": [
+      "›\nGPT-6\u001ctyped instruction",
+      "codex"
+    ],
+    "value": false
+  },
+  {
+    "fn": "prompt_cells",
+    "args": [
+      "❯\u001b[2mfoo\u001b[;mbar"
+    ],
+    "value": [
+      [
+        "f",
+        true
+      ],
+      [
+        "o",
+        true
+      ],
+      [
+        "o",
+        true
+      ],
+      [
+        "b",
+        false
+      ],
+      [
+        "a",
+        false
+      ],
+      [
+        "r",
+        false
+      ]
+    ]
+  },
+  {
+    "fn": "suggestion_only",
+    "args": [
+      "foobar",
+      "❯\u001b[2mfoo\u001b[;mbar"
+    ],
+    "value": false
+  },
+  {
+    "fn": "prompt_cells",
+    "args": [
+      "❯\u001b[2mfoo\u001b[:mbar"
+    ],
+    "value": [
+      [
+        "f",
+        true
+      ],
+      [
+        "o",
+        true
+      ],
+      [
+        "o",
+        true
+      ],
+      [
+        "b",
+        false
+      ],
+      [
+        "a",
+        false
+      ],
+      [
+        "r",
+        false
+      ]
+    ]
+  },
+  {
+    "fn": "suggestion_only",
+    "args": [
+      "foobar",
+      "❯\u001b[2mfoo\u001b[:mbar"
+    ],
+    "value": false
+  },
+  {
+    "fn": "prompt_cells",
+    "args": [
+      "❯\u001b[2m\u001ffoo\u001f"
+    ],
+    "value": [
+      [
+        "\u001f",
+        true
+      ],
+      [
+        "f",
+        true
+      ],
+      [
+        "o",
+        true
+      ],
+      [
+        "o",
+        true
+      ],
+      [
+        "\u001f",
+        true
+      ]
+    ]
+  },
+  {
+    "fn": "suggestion_only",
+    "args": [
+      "foo",
+      "❯\u001b[2m\u001ffoo\u001f"
+    ],
+    "value": true
+  },
+  {
+    "fn": "background_running",
+    "args": [
+      "1 monitoŕ"
+    ],
+    "value": true
+  },
+  {
+    "fn": "background_running",
+    "args": [
+      "1 monitor²"
+    ],
+    "value": false
+  },
+  {
+    "fn": "background_running",
+    "args": [
+      "١\u001fmonitors"
+    ],
+    "value": true
+  },
+  {
+    "fn": "background_running",
+    "args": [
+      "1 monıtor still runnİng"
+    ],
+    "value": true
+  },
+  {
+    "fn": "decision_pending",
+    "args": [
+      "Do you want to proceed́"
+    ],
+    "value": true
+  },
+  {
+    "fn": "decision_pending",
+    "args": [
+      "Do you want to proceed²"
+    ],
+    "value": false
+  },
+  {
+    "fn": "decision_pending",
+    "args": [
+      "❯ 1. Yeś"
+    ],
+    "value": true
+  },
+  {
+    "fn": "decision_pending",
+    "args": [
+      "❯ 1. Yes²"
+    ],
+    "value": false
+  },
+  {
+    "fn": "decision_pending",
+    "args": [
+      "awaİtıng approval"
+    ],
+    "value": true
+  },
+  {
+    "fn": "resume_argv",
+    "args": [
+      "claude",
+      [
+        "claude",
+        "--allowedTools",
+        "Tool\u001fName",
+        "old prompt"
+      ],
+      "11111111-2222-3333-4444-555555555555"
+    ],
+    "value": [
+      "claude",
+      "--allowedTools",
+      "--resume",
+      "11111111-2222-3333-4444-555555555555"
+    ]
+  }
+]

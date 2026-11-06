@@ -23,25 +23,64 @@ jobs:
       - run: node --check mods/sixfold-desk/main.js
       - run: node --check mods/sixfold-new-space/main.js
 
-  python:
-    # The optional collectors use POSIX fcntl and executable fixtures.
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
+  rust:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-15, macos-15-intel]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    env:
+      CARGO_BUILD_JOBS: '1'
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: dtolnay/rust-toolchain@stable
         with:
-          python-version: '3.12'
-      - run: python3 -m unittest discover -s tests -p 'test_*.py'
+          components: rustfmt
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: cargo fmt --manifest-path rust/Cargo.toml --all -- --check
+      - name: Run native translations of the original behavior tests
+        run: cargo test --manifest-path rust/Cargo.toml --locked --jobs 1 --no-fail-fast -- --test-threads=1
+      - run: cargo build --manifest-path rust/Cargo.toml --locked --release --bin herdr-theme --jobs 1
+      - name: Run the original macOS voice installation cases through the native CLI
+        if: runner.os == 'macOS'
+        run: node --test voice/tests/native-install.test.mjs
+        env:
+          HERDR_THEME_BIN: ${{ github.workspace }}/rust/target/release/herdr-theme
+      - run: node scripts/check-native.mjs
+      - name: Package the tested native executable and provenance
+        shell: bash
+        run: |
+          binary=rust/target/release/herdr-theme
+          if [ "$RUNNER_OS" = Windows ]; then binary="$binary.exe"; fi
+          node scripts/package-native.mjs --binary "$binary" --out artifacts/native-dist --archive artifacts/native.tar.gz
+      - uses: actions/upload-artifact@v4
+        with:
+          name: native-executable-${{ matrix.os }}
+          path: |
+            artifacts/native.tar.gz
+            artifacts/native.tar.gz.sha256
+          if-no-files-found: error
+
+  # Preserve the required contexts and fail closed on any native matrix failure.
+  python:
+    if: always()
+    needs: rust
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - run: test "$RESULT" = success
+        env:
+          RESULT: ${{ needs.rust.result }}
 
   workflow-windows:
-    # Exercise the GUI collector's real child process, not only its JSON output.
-    runs-on: windows-latest
-    timeout-minutes: 15
+    if: always()
+    needs: rust
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-      - run: python -m unittest discover -s tests -p 'test_workflow_collector.py'
-      - run: python -m unittest discover -s tests -p 'test_windows_helpers.py'
+      - run: test "$RESULT" = success
+        env:
+          RESULT: ${{ needs.rust.result }}

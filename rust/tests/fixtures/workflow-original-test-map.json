@@ -1,0 +1,238 @@
+{
+  "original_source_commit": "fb3c2343843254ae7aee81fb6de3b014b7597d60",
+  "scope": "Every declared test method in original tests/test_workflow_collector.py",
+  "execution_claim": "Source correspondence only. Actual executed, skipped and platform results are documented separately in docs/native-rust-migration.md.",
+  "methods": [
+    {
+      "original_file": "tests/test_workflow_collector.py",
+      "original_class": "WorkflowCollectorTests",
+      "original_method": "test_background_core_queries_suppress_windows_console_windows",
+      "original_line": 19,
+      "original_assertions": [
+        "self.assertEqual(run.call_args.kwargs['creationflags'], 134217728)",
+        "self.assertEqual(run.call_args.args[0], [collector.HC, 'ls', '--json'])",
+        "self.assertEqual(collector.hc('ls', '--json'), {})"
+      ],
+      "native_function": [
+        "automation::workflow::hc_with",
+        "common::command"
+      ],
+      "evidence": [
+        "rust/tests/workflow_original.rs::test_background_core_queries_suppress_windows_console_windows",
+        "rust/tests/process_contracts.rs::common_capture_creates_a_real_child_without_a_console",
+        "rust/tests/process_contracts.rs::workflow_gui_collector_hides_its_actual_hc_child"
+      ],
+      "disposition": "original_named_assertions",
+      "gaps": [],
+      "execution": "Source mapping only; no execution or PASS claim.",
+      "platform_note": "Exact original HC argv/JSON assertions are named; CREATE_NO_WINDOW behavior uses the real Windows-only child-console tests."
+    },
+    {
+      "original_file": "tests/test_workflow_collector.py",
+      "original_class": "WorkflowCollectorTests",
+      "original_method": "test_gui_collector_does_not_allocate_a_console_for_its_core_query",
+      "original_line": 27,
+      "original_assertions": [
+        "self.assertTrue(pythonw.is_file(), 'Windows Python must include its GUI interpreter')",
+        "self.assertEqual(json.loads(result.read_text(encoding='utf-8')), {'parentConsole': False, 'child': {'console': False}})"
+      ],
+      "native_function": [
+        "automation::workflow::run",
+        "common::command"
+      ],
+      "evidence": [
+        "rust/tests/process_contracts.rs::workflow_gui_collector_hides_its_actual_hc_child"
+      ],
+      "disposition": "aggregate_assertions",
+      "gaps": [],
+      "execution": "Source mapping only; no execution or PASS claim.",
+      "platform_note": "Native actual-console checks are cfg Windows."
+    },
+    {
+      "original_file": "tests/test_workflow_collector.py",
+      "original_class": "WorkflowCollectorTests",
+      "original_method": "test_same_pty_and_agent_pid_can_switch_session",
+      "original_line": 52,
+      "original_assertions": [
+        "self.assertEqual(collector.identify(terminal, cache)['session'], 'old')",
+        "self.assertEqual(collector.identify(terminal, cache)['session'], 'new')",
+        "self.assertIsNone(collector.identify(terminal, cache)['session'])"
+      ],
+      "native_function": "automation::workflow::identify_with",
+      "evidence": [
+        "rust/tests/workflow_original.rs::test_same_pty_and_agent_pid_can_switch_session"
+      ],
+      "disposition": "original_named_assertions",
+      "gaps": [],
+      "execution": "Source mapping only; no execution or PASS claim."
+    },
+    {
+      "original_file": "tests/test_workflow_collector.py",
+      "original_class": "WorkflowCollectorTests",
+      "original_method": "test_bridged_claude_session_is_rechecked_without_pid_change",
+      "original_line": 63,
+      "original_assertions": [
+        "self.assertEqual(collector.identify(terminal, cache)['session'], 'before-clear')",
+        "self.assertEqual(collector.identify(terminal, cache)['session'], 'after-clear')"
+      ],
+      "native_function": "automation::workflow::identify_with",
+      "evidence": [
+        "rust/tests/workflow_original.rs::test_bridged_claude_session_is_rechecked_without_pid_change"
+      ],
+      "disposition": "original_named_assertions",
+      "gaps": [],
+      "execution": "Source mapping only; no execution or PASS claim."
+    },
+    {
+      "original_file": "tests/test_workflow_collector.py",
+      "original_class": "WorkflowCollectorTests",
+      "original_method": "test_history_is_baseline_and_only_a_new_child_generates_a_delegation",
+      "original_line": 73,
+      "original_assertions": [
+        "self.assertEqual(events, [])",
+        "self.assertEqual([(e['source'], e['target'], e['kind']) for e in events], [('old', 'new', 'delegate')])",
+        "self.assertEqual(len(events), 1, 'status changes must not invent return messages')"
+      ],
+      "native_function": "automation::workflow::events_for",
+      "evidence": [
+        "rust/tests/workflow_original.rs::test_history_is_baseline_and_only_a_new_child_generates_a_delegation"
+      ],
+      "disposition": "original_named_assertions",
+      "gaps": [],
+      "execution": "Source mapping only; no execution or PASS claim."
+    },
+    {
+      "original_file": "tests/test_workflow_collector.py",
+      "original_class": "LifecycleTests",
+      "original_method": "test_fork_history_is_reset_and_completion_does_not_close_link",
+      "original_line": 92,
+      "original_assertions": [
+        "self.assertEqual(collector.transcript_facts(path, 'codex', 'child'), ('working', 'codex.task_started', 'Inspect DB calls'))",
+        "self.assertEqual((row['status'], row['label'], row['task']), ('finished', 'Nash', 'Inspect DB calls'))",
+        "self.assertEqual(collector.transcript_facts(path, 'codex', 'child')[0], 'working')",
+        "self.assertEqual(collector.transcript_facts(path, 'codex', 'child')[0], 'interrupted')"
+      ],
+      "native_function": [
+        "automation::workflow::Collector::transcript",
+        "automation::workflow::Collector::codex_children"
+      ],
+      "evidence": [
+        "rust/tests/workflow_original.rs::test_fork_history_is_reset_and_completion_does_not_close_link"
+      ],
+      "disposition": "original_named_assertions",
+      "gaps": [],
+      "execution": "Source mapping only; no execution or PASS claim."
+    },
+    {
+      "original_file": "tests/test_workflow_collector.py",
+      "original_class": "LifecycleTests",
+      "original_method": "test_claude_stop_hook_is_completion_without_finished_metadata",
+      "original_line": 115,
+      "original_assertions": [
+        "self.assertEqual(collector.transcript_facts(path, 'claude')[:2], ('finished', 'claude.SubagentStop'))",
+        "self.assertIsNone(collector.transcript_facts(path, 'claude')[0])"
+      ],
+      "native_function": "automation::workflow::Collector::transcript",
+      "evidence": [
+        "rust/tests/workflow_original.rs::test_claude_stop_hook_is_completion_without_finished_metadata"
+      ],
+      "disposition": "original_named_assertions",
+      "gaps": [],
+      "execution": "Source mapping only; no execution or PASS claim."
+    },
+    {
+      "original_file": "tests/test_workflow_collector.py",
+      "original_class": "WindowsTests",
+      "original_method": "test_utf8_transcript_reads_on_any_locale",
+      "original_line": 125,
+      "original_assertions": [
+        "self.assertEqual(collector.transcript_facts(path, 'codex')[2], '검수해줘 — ✓')"
+      ],
+      "native_function": "automation::workflow::Collector::transcript",
+      "evidence": [
+        "rust/tests/workflow_original.rs::test_utf8_transcript_reads_on_any_locale"
+      ],
+      "disposition": "original_named_assertions",
+      "gaps": [],
+      "execution": "Source mapping only; no execution or PASS claim."
+    },
+    {
+      "original_file": "tests/test_workflow_collector.py",
+      "original_class": "WindowsTests",
+      "original_method": "test_remote_terminal_pid_is_not_looked_up_here",
+      "original_line": 132,
+      "original_assertions": [
+        "tree.assert_not_called()"
+      ],
+      "native_function": "automation::workflow::identify_with",
+      "evidence": [
+        "rust/tests/workflow_original.rs::test_remote_terminal_pid_is_not_looked_up_here"
+      ],
+      "disposition": "original_named_assertions",
+      "gaps": [],
+      "execution": "Source mapping only; no execution or PASS claim."
+    },
+    {
+      "original_file": "tests/test_workflow_collector.py",
+      "original_class": "WindowsTests",
+      "original_method": "test_second_collector_does_not_take_the_lock",
+      "original_line": 139,
+      "original_assertions": [
+        "self.assertTrue(collector.lock_once(first))",
+        "self.assertFalse(collector.lock_once(second))"
+      ],
+      "native_function": "automation::workflow::lock_once",
+      "evidence": [
+        "rust/tests/workflow_original.rs::test_second_collector_does_not_take_the_lock"
+      ],
+      "disposition": "original_named_assertions",
+      "gaps": [],
+      "execution": "Source mapping only; no execution or PASS claim."
+    },
+    {
+      "original_file": "tests/test_workflow_collector.py",
+      "original_class": "WindowsTests",
+      "original_method": "test_codex_thread_comes_from_the_root_rollout_a_process_holds",
+      "original_line": 149,
+      "original_assertions": [
+        "self.assertEqual(collector.windows_codex_thread([30, 40]), 'root')",
+        "self.assertNotIn('c.jsonl', calls, 'a sub-agent thread never names the session')",
+        "self.assertEqual(collector.windows_codex_thread([30, 40]), 'root')",
+        "self.assertEqual(calls, ['r.jsonl'], 'a known holder is only rechecked')",
+        "self.assertIsNone(collector.windows_codex_thread([30, 40]))",
+        "self.assertIsNone(collector.windows_codex_thread([30, 40]))",
+        "self.assertEqual(calls, [], 'a fruitless scan waits before scanning again')"
+      ],
+      "native_function": "automation::workflow::windows_codex_thread_with",
+      "evidence": [
+        "rust/tests/workflow_original.rs::test_codex_thread_comes_from_the_root_rollout_a_process_holds"
+      ],
+      "disposition": "original_named_assertions",
+      "gaps": [],
+      "execution": "Source mapping only; no execution or PASS claim."
+    },
+    {
+      "original_file": "tests/test_workflow_collector.py",
+      "original_class": "WindowsTests",
+      "original_method": "test_codex_resumed_under_a_new_pid_is_found_again",
+      "original_line": 176,
+      "original_assertions": [
+        "self.assertEqual(collector.windows_codex_thread([30, 40]), 'root')",
+        "self.assertEqual(collector.windows_codex_thread([31, 41]), 'root')",
+        "self.assertEqual(collector._codex_holders, {41: 'root'}, 'the gone pid is forgotten')"
+      ],
+      "native_function": "automation::workflow::windows_codex_thread_with",
+      "evidence": [
+        "rust/tests/workflow_original.rs::test_codex_resumed_under_a_new_pid_is_found_again"
+      ],
+      "disposition": "original_named_assertions",
+      "gaps": [],
+      "execution": "Source mapping only; no execution or PASS claim."
+    }
+  ],
+  "summary": {
+    "original_named_assertions": 11,
+    "gaps": 0,
+    "aggregate_assertions": 1
+  }
+}

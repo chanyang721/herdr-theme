@@ -1,0 +1,37 @@
+[
+  {
+    "fn": "clean_reason",
+    "args": [
+      "basİc fixture-secret"
+    ],
+    "value": "basİc <가림>"
+  },
+  {
+    "fn": "clean_reason",
+    "args": [
+      "basıc fixture-secret"
+    ],
+    "value": "basıc <가림>"
+  },
+  {
+    "fn": "clean_reason",
+    "args": [
+      "apı_key=fixture-secret"
+    ],
+    "value": "apı_key=<가림>"
+  },
+  {
+    "fn": "clean_reason",
+    "args": [
+      "cookİe=fixture-secret"
+    ],
+    "value": "cookİe=<가림>"
+  },
+  {
+    "fn": "clean_reason",
+    "args": [
+      "sessıon=fixture-secret"
+    ],
+    "value": "sessıon=<가림>"
+  }
+]

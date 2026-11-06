@@ -1,0 +1,1 @@
+Install the sidebar-independent Codex mic guard as a user LaunchAgent.

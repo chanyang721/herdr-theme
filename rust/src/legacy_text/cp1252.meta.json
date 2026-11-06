@@ -1,0 +1,39 @@
+{
+  "provenance": "Untouched CPython standard-library cp1252 codec; all 256 single bytes and BMP encodings",
+  "python_version": "3.12.10",
+  "table_format": "256 little-endian u16 entries indexed by byte; ffff denotes undefined byte",
+  "sha256": "d5c7bc220396ded3f7debc8e432da07924377a733c6d5b8d3a7735a66e3d732c",
+  "canonical_encode_overrides": [],
+  "singlebyte_errors": [
+    {
+      "byte": 129,
+      "reason": "character maps to <undefined>",
+      "start": 0,
+      "end": 1
+    },
+    {
+      "byte": 141,
+      "reason": "character maps to <undefined>",
+      "start": 0,
+      "end": 1
+    },
+    {
+      "byte": 143,
+      "reason": "character maps to <undefined>",
+      "start": 0,
+      "end": 1
+    },
+    {
+      "byte": 144,
+      "reason": "character maps to <undefined>",
+      "start": 0,
+      "end": 1
+    },
+    {
+      "byte": 157,
+      "reason": "character maps to <undefined>",
+      "start": 0,
+      "end": 1
+    }
+  ]
+}

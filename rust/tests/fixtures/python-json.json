@@ -1,0 +1,148 @@
+[
+  {
+    "value": null,
+    "ascii": "null",
+    "unicode": "null",
+    "pretty_ascii": "null",
+    "pretty_unicode": "null"
+  },
+  {
+    "value": true,
+    "ascii": "true",
+    "unicode": "true",
+    "pretty_ascii": "true",
+    "pretty_unicode": "true"
+  },
+  {
+    "value": false,
+    "ascii": "false",
+    "unicode": "false",
+    "pretty_ascii": "false",
+    "pretty_unicode": "false"
+  },
+  {
+    "value": {
+      "version": 8
+    },
+    "ascii": "{\"version\": 8}",
+    "unicode": "{\"version\": 8}",
+    "pretty_ascii": "{\n  \"version\": 8\n}",
+    "pretty_unicode": "{\n  \"version\": 8\n}"
+  },
+  {
+    "value": {
+      "balanced": [
+        "Synthetic Space / Six"
+      ],
+      "version": 8
+    },
+    "ascii": "{\"balanced\": [\"Synthetic Space / Six\"], \"version\": 8}",
+    "unicode": "{\"balanced\": [\"Synthetic Space / Six\"], \"version\": 8}",
+    "pretty_ascii": "{\n  \"balanced\": [\n    \"Synthetic Space / Six\"\n  ],\n  \"version\": 8\n}",
+    "pretty_unicode": "{\n  \"balanced\": [\n    \"Synthetic Space / Six\"\n  ],\n  \"version\": 8\n}"
+  },
+  {
+    "value": "\ud55c\uae00 \ud55c \uce78",
+    "ascii": "\"\\ud55c\\uae00 \\ud55c \\uce78\"",
+    "unicode": "\"\ud55c\uae00 \ud55c \uce78\"",
+    "pretty_ascii": "\"\\ud55c\\uae00 \\ud55c \\uce78\"",
+    "pretty_unicode": "\"\ud55c\uae00 \ud55c \uce78\""
+  },
+  {
+    "value": "quotes'and\"both",
+    "ascii": "\"quotes'and\\\"both\"",
+    "unicode": "\"quotes'and\\\"both\"",
+    "pretty_ascii": "\"quotes'and\\\"both\"",
+    "pretty_unicode": "\"quotes'and\\\"both\""
+  },
+  {
+    "value": "only'one",
+    "ascii": "\"only'one\"",
+    "unicode": "\"only'one\"",
+    "pretty_ascii": "\"only'one\"",
+    "pretty_unicode": "\"only'one\""
+  },
+  {
+    "value": "\n\t\r\b\f\u0000\u007f\u00a0\u200d\u3000",
+    "ascii": "\"\\n\\t\\r\\b\\f\\u0000\\u007f\\u00a0\\u200d\\u3000\"",
+    "unicode": "\"\\n\\t\\r\\b\\f\\u0000\u007f\u00a0\u200d\u3000\"",
+    "pretty_ascii": "\"\\n\\t\\r\\b\\f\\u0000\\u007f\\u00a0\\u200d\\u3000\"",
+    "pretty_unicode": "\"\\n\\t\\r\\b\\f\\u0000\u007f\u00a0\u200d\u3000\""
+  },
+  {
+    "value": {
+      "\ud55c\uae00": "\ud83d\ude00\u200d\u732b"
+    },
+    "ascii": "{\"\\ud55c\\uae00\": \"\\ud83d\\ude00\\u200d\\u732b\"}",
+    "unicode": "{\"\ud55c\uae00\": \"\ud83d\ude00\u200d\u732b\"}",
+    "pretty_ascii": "{\n  \"\\ud55c\\uae00\": \"\\ud83d\\ude00\\u200d\\u732b\"\n}",
+    "pretty_unicode": "{\n  \"\ud55c\uae00\": \"\ud83d\ude00\u200d\u732b\"\n}"
+  },
+  {
+    "value": 0.0,
+    "ascii": "0.0",
+    "unicode": "0.0",
+    "pretty_ascii": "0.0",
+    "pretty_unicode": "0.0"
+  },
+  {
+    "value": -0.0,
+    "ascii": "-0.0",
+    "unicode": "-0.0",
+    "pretty_ascii": "-0.0",
+    "pretty_unicode": "-0.0"
+  },
+  {
+    "value": 0.0001,
+    "ascii": "0.0001",
+    "unicode": "0.0001",
+    "pretty_ascii": "0.0001",
+    "pretty_unicode": "0.0001"
+  },
+  {
+    "value": 1e-05,
+    "ascii": "1e-05",
+    "unicode": "1e-05",
+    "pretty_ascii": "1e-05",
+    "pretty_unicode": "1e-05"
+  },
+  {
+    "value": 1e+16,
+    "ascii": "1e+16",
+    "unicode": "1e+16",
+    "pretty_ascii": "1e+16",
+    "pretty_unicode": "1e+16"
+  },
+  {
+    "value": 1.2e-07,
+    "ascii": "1.2e-07",
+    "unicode": "1.2e-07",
+    "pretty_ascii": "1.2e-07",
+    "pretty_unicode": "1.2e-07"
+  },
+  {
+    "value": 1.2345678901234568e+16,
+    "ascii": "1.2345678901234568e+16",
+    "unicode": "1.2345678901234568e+16",
+    "pretty_ascii": "1.2345678901234568e+16",
+    "pretty_unicode": "1.2345678901234568e+16"
+  },
+  {
+    "value": {
+      "text": "\ud55c \ud83d\ude00 \u007f",
+      "nested": [
+        true,
+        null,
+        1e-07,
+        1e+20,
+        -0.0
+      ],
+      "comma": ",:",
+      "newline": "\n"
+    },
+    "ascii": "{\"text\": \"\\ud55c \\ud83d\\ude00 \\u007f\", \"nested\": [true, null, 1e-07, 1e+20, -0.0], \"comma\": \",:\", \"newline\": \"\\n\"}",
+    "unicode": "{\"text\": \"\ud55c \ud83d\ude00 \u007f\", \"nested\": [true, null, 1e-07, 1e+20, -0.0], \"comma\": \",:\", \"newline\": \"\\n\"}",
+    "pretty_ascii": "{\n  \"text\": \"\\ud55c \\ud83d\\ude00 \\u007f\",\n  \"nested\": [\n    true,\n    null,\n    1e-07,\n    1e+20,\n    -0.0\n  ],\n  \"comma\": \",:\",\n  \"newline\": \"\\n\"\n}",
+    "pretty_unicode": "{\n  \"text\": \"\ud55c \ud83d\ude00 \u007f\",\n  \"nested\": [\n    true,\n    null,\n    1e-07,\n    1e+20,\n    -0.0\n  ],\n  \"comma\": \",:\",\n  \"newline\": \"\\n\"\n}"
+  }
+]

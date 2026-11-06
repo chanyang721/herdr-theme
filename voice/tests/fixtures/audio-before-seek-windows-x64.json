@@ -1,0 +1,29 @@
+{
+  "schema": 1,
+  "status": "fail-before-fix",
+  "platform": "win32-x64",
+  "native_binary_sha256": "6f0008a3838143e99891d8832bce1a647d65f7a365414a4fea266fda0585a9f4",
+  "backend": "libsndfile-1.2.2",
+  "soundfile_version": "0.13.1",
+  "source_url": "https://github.com/bastibe/python-soundfile/blob/0.13.1/soundfile.py",
+  "observed": {
+    "direct_read_vs_top_level_original": {
+      "differing_float32_samples": 4354,
+      "max_absolute_difference": 5.960464477539063e-08
+    },
+    "seek_zero_then_read_vs_top_level_original": {
+      "differing_float32_samples": 0,
+      "max_absolute_difference": 0
+    }
+  },
+  "decision": "Preserve the original SoundFile._prepare_read seek-to-zero for each seekable input; keep exact sample-bit acceptance.",
+  "reference_api": {
+    "package": "SoundFile",
+    "version": "0.13.1",
+    "entry": "soundfile.py",
+    "sha256": "e349c3858d6a0481fe8078d7a0132603261e7bef2b0facfb9596aeb44c51c563",
+    "function": "SoundFile._prepare_read",
+    "source_url": "https://github.com/bastibe/python-soundfile/blob/0.13.1/soundfile.py",
+    "behavior": "Top-level read seeks to frame zero when seekable before sf_readf_float; source is validation-only and not installed."
+  }
+}

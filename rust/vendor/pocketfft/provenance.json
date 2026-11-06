@@ -1,0 +1,19 @@
+{
+  "schema": 1,
+  "upstream": "scipy/pocketfft",
+  "commit": "9367142748fcc9696a1c9e5a99b76ed9897c9daa",
+  "scipy_release": "1.16.0",
+  "scipy_submodule": "scipy/_lib/pocketfft",
+  "sources": [
+    {
+      "filename": "pocketfft_hdronly.h",
+      "url": "https://raw.githubusercontent.com/scipy/pocketfft/9367142748fcc9696a1c9e5a99b76ed9897c9daa/pocketfft_hdronly.h",
+      "sha256": "50f4ddbe60432325f560c706b6f1c49f9e0949fc7f20ae6499f2299e37d9790c"
+    },
+    {
+      "filename": "LICENSE.md",
+      "url": "https://raw.githubusercontent.com/scipy/pocketfft/9367142748fcc9696a1c9e5a99b76ed9897c9daa/LICENSE.md",
+      "sha256": "a85ca13fdf90160b64a0698215868c13b74d835ad0a4e2ba44713b8c5058a056"
+    }
+  ]
+}

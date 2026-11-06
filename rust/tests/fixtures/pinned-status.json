@@ -1,0 +1,1422 @@
+[
+  {
+    "fn": "mask",
+    "args": [
+      ""
+    ],
+    "value": ""
+  },
+  {
+    "fn": "clean_reason",
+    "args": [
+      ""
+    ],
+    "value": ""
+  },
+  {
+    "fn": "aws_failure",
+    "args": [
+      ""
+    ],
+    "value": [
+      "error",
+      "확인 실패"
+    ]
+  },
+  {
+    "fn": "short_context",
+    "args": [
+      ""
+    ],
+    "value": ""
+  },
+  {
+    "fn": "domain_label",
+    "args": [
+      ""
+    ],
+    "value": null
+  },
+  {
+    "fn": "mask",
+    "args": [
+      "hello"
+    ],
+    "value": "hello"
+  },
+  {
+    "fn": "clean_reason",
+    "args": [
+      "hello"
+    ],
+    "value": "hello"
+  },
+  {
+    "fn": "aws_failure",
+    "args": [
+      "hello"
+    ],
+    "value": [
+      "error",
+      "hello"
+    ]
+  },
+  {
+    "fn": "short_context",
+    "args": [
+      "hello"
+    ],
+    "value": "hello"
+  },
+  {
+    "fn": "domain_label",
+    "args": [
+      "hello"
+    ],
+    "value": null
+  },
+  {
+    "fn": "mask",
+    "args": [
+      "Bearer abcdefghijklmnopqrstuvwxyz"
+    ],
+    "value": "Bearer <가림>"
+  },
+  {
+    "fn": "clean_reason",
+    "args": [
+      "Bearer abcdefghijklmnopqrstuvwxyz"
+    ],
+    "value": "Bearer <가림>"
+  },
+  {
+    "fn": "aws_failure",
+    "args": [
+      "Bearer abcdefghijklmnopqrstuvwxyz"
+    ],
+    "value": [
+      "error",
+      "Bearer <가림>"
+    ]
+  },
+  {
+    "fn": "short_context",
+    "args": [
+      "Bearer abcdefghijklmnopqrstuvwxyz"
+    ],
+    "value": "Bearer <가림>"
+  },
+  {
+    "fn": "domain_label",
+    "args": [
+      "Bearer abcdefghijklmnopqrstuvwxyz"
+    ],
+    "value": null
+  },
+  {
+    "fn": "mask",
+    "args": [
+      "token=abc password=xyz auth:abcd https://x.test?q=x"
+    ],
+    "value": "token=abc password=xyz auth:abcd <주소>"
+  },
+  {
+    "fn": "clean_reason",
+    "args": [
+      "token=abc password=xyz auth:abcd https://x.test?q=x"
+    ],
+    "value": "token=<가림> password=<가림> auth=<가림> <주소>"
+  },
+  {
+    "fn": "aws_failure",
+    "args": [
+      "token=abc password=xyz auth:abcd https://x.test?q=x"
+    ],
+    "value": [
+      "error",
+      "token=abc password=xyz auth:abcd <주소>"
+    ]
+  },
+  {
+    "fn": "short_context",
+    "args": [
+      "token=abc password=xyz auth:abcd https://x.test?q=x"
+    ],
+    "value": "token=abc password=xyz auth:abcd <주소>"
+  },
+  {
+    "fn": "domain_label",
+    "args": [
+      "token=abc password=xyz auth:abcd https://x.test?q=x"
+    ],
+    "value": null
+  },
+  {
+    "fn": "mask",
+    "args": [
+      "arn:aws:sts::123456789012:assumed-role/foo/bar"
+    ],
+    "value": "<ARN>"
+  },
+  {
+    "fn": "clean_reason",
+    "args": [
+      "arn:aws:sts::123456789012:assumed-role/foo/bar"
+    ],
+    "value": "arn:aws:sts::123456789012:assumed-role/foo/bar"
+  },
+  {
+    "fn": "aws_failure",
+    "args": [
+      "arn:aws:sts::123456789012:assumed-role/foo/bar"
+    ],
+    "value": [
+      "error",
+      "<ARN>"
+    ]
+  },
+  {
+    "fn": "short_context",
+    "args": [
+      "arn:aws:sts::123456789012:assumed-role/foo/bar"
+    ],
+    "value": "<ARN>"
+  },
+  {
+    "fn": "domain_label",
+    "args": [
+      "arn:aws:sts::123456789012:assumed-role/foo/bar"
+    ],
+    "value": null
+  },
+  {
+    "fn": "mask",
+    "args": [
+      "account 123456789012 /home/alice/project /Users/Alice/file C:\\Users\\Bob\\test"
+    ],
+    "value": "account …9012 /home/<사용자>/project /Users/<사용자>/file C:\\Users/<사용자>\\test"
+  },
+  {
+    "fn": "clean_reason",
+    "args": [
+      "account 123456789012 /home/alice/project /Users/Alice/file C:\\Users\\Bob\\test"
+    ],
+    "value": "account 123456789012 /home/<사용자>/project /Users/<사용자>/file C:\\Users/<사용자>\\test"
+  },
+  {
+    "fn": "aws_failure",
+    "args": [
+      "account 123456789012 /home/alice/project /Users/Alice/file C:\\Users\\Bob\\test"
+    ],
+    "value": [
+      "error",
+      "account …9012 /home/<사용자>/project /Users/<사용자>/file C:\\Users/<사용자>\\test"
+    ]
+  },
+  {
+    "fn": "short_context",
+    "args": [
+      "account 123456789012 /home/alice/project /Users/Alice/file C:\\Users\\Bob\\test"
+    ],
+    "value": "account …9012 /home/<사용자>/project /Users/<사용자>/file C:\\Users"
+  },
+  {
+    "fn": "domain_label",
+    "args": [
+      "account 123456789012 /home/alice/project /Users/Alice/file C:\\Users\\Bob\\test"
+    ],
+    "value": null
+  },
+  {
+    "fn": "mask",
+    "args": [
+      "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    ],
+    "value": "<가림>"
+  },
+  {
+    "fn": "clean_reason",
+    "args": [
+      "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    ],
+    "value": "<가림>"
+  },
+  {
+    "fn": "aws_failure",
+    "args": [
+      "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    ],
+    "value": [
+      "error",
+      "<가림>"
+    ]
+  },
+  {
+    "fn": "short_context",
+    "args": [
+      "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    ],
+    "value": "<가림>"
+  },
+  {
+    "fn": "domain_label",
+    "args": [
+      "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    ],
+    "value": null
+  },
+  {
+    "fn": "mask",
+    "args": [
+      " ?-: hello :?- "
+    ],
+    "value": "?-: hello :?"
+  },
+  {
+    "fn": "clean_reason",
+    "args": [
+      " ?-: hello :?- "
+    ],
+    "value": "?-: hello :?"
+  },
+  {
+    "fn": "aws_failure",
+    "args": [
+      " ?-: hello :?- "
+    ],
+    "value": [
+      "error",
+      "?-: hello :?"
+    ]
+  },
+  {
+    "fn": "short_context",
+    "args": [
+      " ?-: hello :?- "
+    ],
+    "value": "?-: hello :?"
+  },
+  {
+    "fn": "domain_label",
+    "args": [
+      " ?-: hello :?- "
+    ],
+    "value": null
+  },
+  {
+    "fn": "mask",
+    "args": [
+      "https://example.com?a=secret"
+    ],
+    "value": "<주소>"
+  },
+  {
+    "fn": "clean_reason",
+    "args": [
+      "https://example.com?a=secret"
+    ],
+    "value": "<주소>"
+  },
+  {
+    "fn": "aws_failure",
+    "args": [
+      "https://example.com?a=secret"
+    ],
+    "value": [
+      "error",
+      "<주소>"
+    ]
+  },
+  {
+    "fn": "short_context",
+    "args": [
+      "https://example.com?a=secret"
+    ],
+    "value": "<주소>"
+  },
+  {
+    "fn": "domain_label",
+    "args": [
+      "https://example.com?a=secret"
+    ],
+    "value": null
+  },
+  {
+    "fn": "mask",
+    "args": [
+      "??? test"
+    ],
+    "value": "??? test"
+  },
+  {
+    "fn": "clean_reason",
+    "args": [
+      "??? test"
+    ],
+    "value": "??? test"
+  },
+  {
+    "fn": "aws_failure",
+    "args": [
+      "??? test"
+    ],
+    "value": [
+      "error",
+      "??? test"
+    ]
+  },
+  {
+    "fn": "short_context",
+    "args": [
+      "??? test"
+    ],
+    "value": "??? test"
+  },
+  {
+    "fn": "domain_label",
+    "args": [
+      "??? test"
+    ],
+    "value": null
+  },
+  {
+    "fn": "aws_failure",
+    "args": [
+      "expired"
+    ],
+    "value": [
+      "expired",
+      "만료됨 — aws login 필요"
+    ]
+  },
+  {
+    "fn": "aws_failure",
+    "args": [
+      "Unable to locate credentials"
+    ],
+    "value": [
+      "none",
+      "자격 없음 — aws login 필요"
+    ]
+  },
+  {
+    "fn": "aws_failure",
+    "args": [
+      "profile foo not found"
+    ],
+    "value": [
+      "none",
+      "자격 없음 — aws login 필요"
+    ]
+  },
+  {
+    "fn": "aws_failure",
+    "args": [
+      "some\nerror"
+    ],
+    "value": [
+      "error",
+      "error"
+    ]
+  },
+  {
+    "fn": "short_context",
+    "args": [
+      "arn:aws:eks:us-east-1:123456789012:cluster/demo"
+    ],
+    "value": "demo"
+  },
+  {
+    "fn": "domain_label",
+    "args": [
+      "arn:aws:eks:us-east-1:123456789012:cluster/demo"
+    ],
+    "value": null
+  },
+  {
+    "fn": "short_context",
+    "args": [
+      "https://acme--dev.sandbox.my.salesforce.com/"
+    ],
+    "value": "<주소>"
+  },
+  {
+    "fn": "domain_label",
+    "args": [
+      "https://acme--dev.sandbox.my.salesforce.com/"
+    ],
+    "value": "acme--dev"
+  },
+  {
+    "fn": "short_context",
+    "args": [
+      "https://x.test/path"
+    ],
+    "value": "<주소>"
+  },
+  {
+    "fn": "domain_label",
+    "args": [
+      "https://x.test/path"
+    ],
+    "value": null
+  },
+  {
+    "fn": "short_context",
+    "args": [
+      "https://x.test"
+    ],
+    "value": "<주소>"
+  },
+  {
+    "fn": "domain_label",
+    "args": [
+      "https://x.test"
+    ],
+    "value": "x"
+  },
+  {
+    "fn": "org_type",
+    "args": [
+      {}
+    ],
+    "value": "prod"
+  },
+  {
+    "fn": "org_state",
+    "args": [
+      {}
+    ],
+    "value": [
+      "error",
+      "연결 상태를 알 수 없음"
+    ]
+  },
+  {
+    "fn": "org_type",
+    "args": [
+      {
+        "isScratch": true
+      }
+    ],
+    "value": "scratch"
+  },
+  {
+    "fn": "org_state",
+    "args": [
+      {
+        "isScratch": true
+      }
+    ],
+    "value": [
+      "error",
+      "연결 상태를 알 수 없음"
+    ]
+  },
+  {
+    "fn": "org_type",
+    "args": [
+      {
+        "isSandbox": true
+      }
+    ],
+    "value": "sandbox"
+  },
+  {
+    "fn": "org_state",
+    "args": [
+      {
+        "isSandbox": true
+      }
+    ],
+    "value": [
+      "error",
+      "연결 상태를 알 수 없음"
+    ]
+  },
+  {
+    "fn": "org_type",
+    "args": [
+      {
+        "isScratch": true,
+        "isSandbox": true
+      }
+    ],
+    "value": "scratch"
+  },
+  {
+    "fn": "org_state",
+    "args": [
+      {
+        "isScratch": true,
+        "isSandbox": true
+      }
+    ],
+    "value": [
+      "error",
+      "연결 상태를 알 수 없음"
+    ]
+  },
+  {
+    "fn": "org_type",
+    "args": [
+      {
+        "isExpired": true
+      }
+    ],
+    "value": "prod"
+  },
+  {
+    "fn": "org_state",
+    "args": [
+      {
+        "isExpired": true
+      }
+    ],
+    "value": [
+      "expired",
+      "만료된 org"
+    ]
+  },
+  {
+    "fn": "org_type",
+    "args": [
+      {
+        "status": "deleted"
+      }
+    ],
+    "value": "prod"
+  },
+  {
+    "fn": "org_state",
+    "args": [
+      {
+        "status": "deleted"
+      }
+    ],
+    "value": [
+      "expired",
+      "만료된 org"
+    ]
+  },
+  {
+    "fn": "org_type",
+    "args": [
+      {
+        "connectedStatus": "Connected"
+      }
+    ],
+    "value": "prod"
+  },
+  {
+    "fn": "org_state",
+    "args": [
+      {
+        "connectedStatus": "Connected"
+      }
+    ],
+    "value": [
+      "ok",
+      null
+    ]
+  },
+  {
+    "fn": "org_type",
+    "args": [
+      {
+        "connectedStatus": "invalid_grant"
+      }
+    ],
+    "value": "prod"
+  },
+  {
+    "fn": "org_state",
+    "args": [
+      {
+        "connectedStatus": "invalid_grant"
+      }
+    ],
+    "value": [
+      "expired",
+      "로그인 만료 — sf org login web 필요"
+    ]
+  },
+  {
+    "fn": "org_type",
+    "args": [
+      {
+        "connectedStatus": "HTTP 503 token=secret"
+      }
+    ],
+    "value": "prod"
+  },
+  {
+    "fn": "org_state",
+    "args": [
+      {
+        "connectedStatus": "HTTP 503 token=secret"
+      }
+    ],
+    "value": [
+      "expired",
+      "로그인 만료 — sf org login web 필요"
+    ]
+  },
+  {
+    "fn": "config_value",
+    "args": [
+      {}
+    ],
+    "value": {
+      "aws": {
+        "profiles": null
+      },
+      "github": true,
+      "kubectl": true,
+      "docker": true,
+      "salesforce": {
+        "orgs": null
+      }
+    }
+  },
+  {
+    "fn": "config_value",
+    "args": [
+      []
+    ],
+    "value": {
+      "aws": {
+        "profiles": null
+      },
+      "github": true,
+      "kubectl": true,
+      "docker": true,
+      "salesforce": {
+        "orgs": null
+      }
+    }
+  },
+  {
+    "fn": "config_value",
+    "args": [
+      null
+    ],
+    "value": {
+      "aws": {
+        "profiles": null
+      },
+      "github": true,
+      "kubectl": true,
+      "docker": true,
+      "salesforce": {
+        "orgs": null
+      }
+    }
+  },
+  {
+    "fn": "config_value",
+    "args": [
+      {
+        "aws": false,
+        "github": false,
+        "kubectl": null
+      }
+    ],
+    "value": {
+      "aws": false,
+      "github": false,
+      "kubectl": true,
+      "docker": true,
+      "salesforce": {
+        "orgs": null
+      }
+    }
+  },
+  {
+    "fn": "config_value",
+    "args": [
+      {
+        "aws": {
+          "profiles": [
+            "safe",
+            "bad name",
+            "../../x",
+            1,
+            "a",
+            "a",
+            "a",
+            "a",
+            "a",
+            "a",
+            "a"
+          ]
+        },
+        "salesforce": {
+          "orgs": [
+            "alias",
+            "user@example.com",
+            "x/y"
+          ]
+        }
+      }
+    ],
+    "value": {
+      "aws": {
+        "profiles": [
+          "safe",
+          "a",
+          "a",
+          "a",
+          "a",
+          "a"
+        ]
+      },
+      "github": true,
+      "kubectl": true,
+      "docker": true,
+      "salesforce": {
+        "orgs": [
+          "alias"
+        ]
+      }
+    }
+  },
+  {
+    "fn": "config_value",
+    "args": [
+      {
+        "aws": [],
+        "salesforce": "bad"
+      }
+    ],
+    "value": {
+      "aws": {
+        "profiles": null
+      },
+      "github": true,
+      "kubectl": true,
+      "docker": true,
+      "salesforce": {
+        "orgs": null
+      }
+    }
+  },
+  {
+    "fn": "parse_claude",
+    "args": [
+      ""
+    ],
+    "value": []
+  },
+  {
+    "fn": "parse_claude",
+    "args": [
+      "hello"
+    ],
+    "value": []
+  },
+  {
+    "fn": "parse_claude",
+    "args": [
+      "a: https://secret.test - ? Connected\na: /x token=secret - ? Failed\nb: node app - ! Needs authentication"
+    ],
+    "value": [
+      {
+        "agent": "claude",
+        "name": "b",
+        "state": "needs_auth",
+        "reason": "Needs authentication"
+      }
+    ]
+  },
+  {
+    "fn": "parse_claude",
+    "args": [
+      "a: c - ? Pending"
+    ],
+    "value": []
+  },
+  {
+    "fn": "parse_codex",
+    "args": [
+      ""
+    ],
+    "value": []
+  },
+  {
+    "fn": "parse_codex",
+    "args": [
+      "[]"
+    ],
+    "value": []
+  },
+  {
+    "fn": "parse_codex",
+    "args": [
+      "{}"
+    ],
+    "error": "Codex 목록 형식이 다름"
+  },
+  {
+    "fn": "parse_codex",
+    "args": [
+      "invalid"
+    ],
+    "error": "Codex 목록을 읽을 수 없음"
+  },
+  {
+    "fn": "parse_codex",
+    "args": [
+      "[{\"name\": \"a\", \"auth_status\": \"o_auth\"}, {\"name\": \"b\", \"auth_status\": \"bearer_token\"}, {\"name\": \"c\", \"auth_status\": \"not_logged_in\"}, {\"name\": \"d\", \"enabled\": false}, {\"name\": \"e\", \"auth_status\": \"unsupported\"}, {\"name\": \"f\", \"auth_status\": 5}]"
+    ],
+    "value": [
+      {
+        "agent": "codex",
+        "name": "a",
+        "state": "unknown",
+        "reason": "Codex: 설정됨, 연결은 확인하지 않음 (OAuth 로그인됨)"
+      },
+      {
+        "agent": "codex",
+        "name": "b",
+        "state": "unknown",
+        "reason": "Codex: 설정됨, 연결은 확인하지 않음 (토큰 설정됨)"
+      },
+      {
+        "agent": "codex",
+        "name": "c",
+        "state": "needs_auth",
+        "reason": "Codex: 로그인 필요"
+      },
+      {
+        "agent": "codex",
+        "name": "e",
+        "state": "unknown",
+        "reason": "Codex: 설정됨, 연결은 확인하지 않음 (인증 없음)"
+      },
+      {
+        "agent": "codex",
+        "name": "f",
+        "state": "unknown",
+        "reason": "Codex: 설정됨, 연결은 확인하지 않음 (인증 상태 미확인)"
+      }
+    ]
+  },
+  {
+    "fn": "github",
+    "args": [],
+    "reply": [
+      0,
+      "{\"hosts\": {\"github.com\": [{\"state\": \"success\"}, {\"state\": \"error\"}]}}",
+      ""
+    ],
+    "value": {
+      "kind": "github",
+      "name": "GitHub",
+      "state": "ok",
+      "hosts": [
+        {
+          "host": "github.com",
+          "accounts": 1,
+          "failed": 1
+        }
+      ],
+      "reason": "일부 계정 인증 실패 — gh auth status"
+    }
+  },
+  {
+    "fn": "github",
+    "args": [],
+    "reply": [
+      1,
+      "",
+      "not signed in"
+    ],
+    "value": {
+      "kind": "github",
+      "name": "GitHub",
+      "state": "none",
+      "reason": "로그인 필요 — gh auth login"
+    }
+  },
+  {
+    "fn": "github",
+    "args": [],
+    "reply": [
+      0,
+      "bad",
+      "oops"
+    ],
+    "value": {
+      "kind": "github",
+      "name": "GitHub",
+      "state": "error",
+      "reason": "oops"
+    }
+  },
+  {
+    "fn": "kubectl",
+    "args": [],
+    "reply": [
+      0,
+      "arn:aws:eks:us-east-1:123456789012:cluster/demo",
+      ""
+    ],
+    "value": {
+      "kind": "kubectl",
+      "name": "kubectl",
+      "state": "ok",
+      "context": "demo",
+      "reason": null
+    }
+  },
+  {
+    "fn": "kubectl",
+    "args": [],
+    "reply": [
+      1,
+      "",
+      "fail"
+    ],
+    "value": {
+      "kind": "kubectl",
+      "name": "kubectl",
+      "state": "none",
+      "context": null,
+      "reason": "현재 컨텍스트 없음"
+    }
+  },
+  {
+    "fn": "docker",
+    "args": [],
+    "reply": [
+      0,
+      "28.1.2",
+      ""
+    ],
+    "value": {
+      "kind": "docker",
+      "name": "Docker",
+      "state": "ok",
+      "version": "28.1.2",
+      "reason": null
+    }
+  },
+  {
+    "fn": "docker",
+    "args": [],
+    "reply": [
+      1,
+      "",
+      "fail"
+    ],
+    "value": {
+      "kind": "docker",
+      "name": "Docker",
+      "state": "none",
+      "version": null,
+      "reason": "데몬 꺼짐"
+    }
+  },
+  {
+    "fn": "salesforce",
+    "args": [
+      {
+        "orgs": null
+      }
+    ],
+    "reply": [
+      0,
+      "{\"result\": {}}",
+      ""
+    ],
+    "value": [
+      {
+        "kind": "salesforce",
+        "name": "Salesforce",
+        "state": "none",
+        "reason": "로그인한 org 없음 — sf org login web"
+      }
+    ]
+  },
+  {
+    "fn": "salesforce",
+    "args": [
+      {
+        "orgs": [
+          "missing",
+          "main"
+        ]
+      }
+    ],
+    "reply": [
+      0,
+      "{\"result\": {}}",
+      ""
+    ],
+    "value": [
+      {
+        "kind": "salesforce",
+        "name": "missing",
+        "alias": "missing",
+        "state": "none",
+        "reason": "로그인 기록 없음 — sf org login web 필요",
+        "type": null,
+        "domain": null,
+        "org": null,
+        "default": false,
+        "devhub": false,
+        "checked": 1000
+      },
+      {
+        "kind": "salesforce",
+        "name": "main",
+        "alias": "main",
+        "state": "none",
+        "reason": "로그인 기록 없음 — sf org login web 필요",
+        "type": null,
+        "domain": null,
+        "org": null,
+        "default": false,
+        "devhub": false,
+        "checked": 1000
+      }
+    ]
+  },
+  {
+    "fn": "salesforce",
+    "args": [
+      {
+        "orgs": null
+      }
+    ],
+    "reply": [
+      0,
+      "{\"result\": {\"nonScratchOrgs\": [{\"alias\": \"main\", \"orgId\": \"00D123456789ABCD\", \"username\": \"private@example.com\", \"instanceUrl\": \"https://acme.my.salesforce.com\", \"connectedStatus\": \"Connected\", \"isDefaultUsername\": true}]}}",
+      ""
+    ],
+    "value": [
+      {
+        "kind": "salesforce",
+        "name": "main",
+        "alias": "main",
+        "state": "ok",
+        "reason": null,
+        "type": "prod",
+        "domain": "acme",
+        "org": "ABCD",
+        "default": true,
+        "devhub": false,
+        "checked": 1000
+      }
+    ]
+  },
+  {
+    "fn": "salesforce",
+    "args": [
+      {
+        "orgs": [
+          "missing",
+          "main"
+        ]
+      }
+    ],
+    "reply": [
+      0,
+      "{\"result\": {\"nonScratchOrgs\": [{\"alias\": \"main\", \"orgId\": \"00D123456789ABCD\", \"username\": \"private@example.com\", \"instanceUrl\": \"https://acme.my.salesforce.com\", \"connectedStatus\": \"Connected\", \"isDefaultUsername\": true}]}}",
+      ""
+    ],
+    "value": [
+      {
+        "kind": "salesforce",
+        "name": "missing",
+        "alias": "missing",
+        "state": "none",
+        "reason": "로그인 기록 없음 — sf org login web 필요",
+        "type": null,
+        "domain": null,
+        "org": null,
+        "default": false,
+        "devhub": false,
+        "checked": 1000
+      },
+      {
+        "kind": "salesforce",
+        "name": "main",
+        "alias": "main",
+        "state": "ok",
+        "reason": null,
+        "type": "prod",
+        "domain": "acme",
+        "org": "ABCD",
+        "default": true,
+        "devhub": false,
+        "checked": 1000
+      }
+    ]
+  },
+  {
+    "fn": "salesforce",
+    "args": [
+      {
+        "orgs": null
+      }
+    ],
+    "reply": [
+      0,
+      "{\"result\": {\"scratchOrgs\": [{\"orgId\": \"00D123456789ABCD\", \"connectedStatus\": \"expired\", \"isScratch\": true}]}}",
+      ""
+    ],
+    "value": [
+      {
+        "kind": "salesforce",
+        "name": "org …ABCD",
+        "alias": null,
+        "state": "expired",
+        "reason": "로그인 만료 — sf org login web 필요",
+        "type": "scratch",
+        "domain": null,
+        "org": "ABCD",
+        "default": false,
+        "devhub": false,
+        "checked": 1000
+      }
+    ]
+  },
+  {
+    "fn": "salesforce",
+    "args": [
+      {
+        "orgs": [
+          "missing",
+          "main"
+        ]
+      }
+    ],
+    "reply": [
+      0,
+      "{\"result\": {\"scratchOrgs\": [{\"orgId\": \"00D123456789ABCD\", \"connectedStatus\": \"expired\", \"isScratch\": true}]}}",
+      ""
+    ],
+    "value": [
+      {
+        "kind": "salesforce",
+        "name": "missing",
+        "alias": "missing",
+        "state": "none",
+        "reason": "로그인 기록 없음 — sf org login web 필요",
+        "type": null,
+        "domain": null,
+        "org": null,
+        "default": false,
+        "devhub": false,
+        "checked": 1000
+      },
+      {
+        "kind": "salesforce",
+        "name": "main",
+        "alias": "main",
+        "state": "none",
+        "reason": "로그인 기록 없음 — sf org login web 필요",
+        "type": null,
+        "domain": null,
+        "org": null,
+        "default": false,
+        "devhub": false,
+        "checked": 1000
+      }
+    ]
+  },
+  {
+    "fn": "aws_profile",
+    "args": [
+      "fixture"
+    ],
+    "responses": {
+      "region": [
+        0,
+        "ap-northeast-2",
+        ""
+      ],
+      "identity": [
+        0,
+        "{\"Account\": \"123456789012\", \"Arn\": \"arn:aws:iam::123456789012:user/private\", \"UserId\": \"secret-user-id\"}",
+        ""
+      ],
+      "expiry": [
+        0,
+        "{\"Expiration\": \"2030-01-01T00:00:00Z\", \"AccessKeyId\": \"secret-key\", \"SecretAccessKey\": \"secret\", \"SessionToken\": \"secret-token\"}",
+        ""
+      ]
+    },
+    "value": {
+      "kind": "aws",
+      "name": "fixture",
+      "state": "ok",
+      "region": "ap-northeast-2",
+      "account": "9012",
+      "expires": "2030-01-01T00:00:00Z",
+      "reason": null
+    }
+  },
+  {
+    "fn": "aws_profile",
+    "args": [
+      "fixture"
+    ],
+    "responses": {
+      "region": [
+        0,
+        "us-east-1",
+        ""
+      ],
+      "identity": [
+        0,
+        "{\"Account\": \"123456789012\", \"Arn\": \"arn:aws:iam::123456789012:user/private\", \"UserId\": \"secret-user-id\"}",
+        ""
+      ],
+      "expiry": [
+        0,
+        "{\"Expiration\": \"2000-01-01T00:00:00Z\", \"AccessKeyId\": \"secret-key\", \"SecretAccessKey\": \"secret\", \"SessionToken\": \"secret-token\"}",
+        ""
+      ]
+    },
+    "value": {
+      "kind": "aws",
+      "name": "fixture",
+      "state": "expired",
+      "region": "us-east-1",
+      "account": "9012",
+      "expires": "2000-01-01T00:00:00Z",
+      "reason": "만료됨 — aws login 필요"
+    }
+  },
+  {
+    "fn": "aws_profile",
+    "args": [
+      "fixture"
+    ],
+    "responses": {
+      "region": [
+        0,
+        "invalid region",
+        ""
+      ],
+      "identity": [
+        0,
+        "{\"Account\": \"bad\", \"Arn\": \"arn:aws:iam::123456789012:user/private\", \"UserId\": \"secret-user-id\"}",
+        ""
+      ],
+      "expiry": [
+        0,
+        "{\"Expiration\": null, \"AccessKeyId\": \"secret-key\", \"SecretAccessKey\": \"secret\", \"SessionToken\": \"secret-token\"}",
+        ""
+      ]
+    },
+    "value": {
+      "kind": "aws",
+      "name": "fixture",
+      "state": "ok",
+      "region": null,
+      "account": null,
+      "expires": null,
+      "reason": null
+    }
+  },
+  {
+    "fn": "aws_profile",
+    "args": [
+      "fixture"
+    ],
+    "responses": {
+      "region": [
+        0,
+        "us-east-1",
+        ""
+      ],
+      "identity": [
+        0,
+        "{\"Account\": \"123456789012\", \"Arn\": \"arn:aws:iam::123456789012:user/private\", \"UserId\": \"secret-user-id\"}",
+        ""
+      ],
+      "expiry": [
+        0,
+        "{\"Expiration\": \"not a time\", \"AccessKeyId\": \"secret-key\", \"SecretAccessKey\": \"secret\", \"SessionToken\": \"secret-token\"}",
+        ""
+      ]
+    },
+    "value": {
+      "kind": "aws",
+      "name": "fixture",
+      "state": "ok",
+      "region": "us-east-1",
+      "account": "9012",
+      "expires": null,
+      "reason": null
+    }
+  },
+  {
+    "fn": "aws_profile",
+    "args": [
+      "fixture"
+    ],
+    "responses": {
+      "region": [
+        0,
+        "us-east-1",
+        ""
+      ],
+      "identity": [
+        1,
+        "",
+        "ExpiredToken"
+      ],
+      "expiry": [
+        0,
+        "{\"Expiration\": null, \"AccessKeyId\": \"secret-key\", \"SecretAccessKey\": \"secret\", \"SessionToken\": \"secret-token\"}",
+        ""
+      ]
+    },
+    "value": {
+      "kind": "aws",
+      "name": "fixture",
+      "state": "expired",
+      "region": "us-east-1",
+      "account": null,
+      "expires": null,
+      "reason": "만료됨 — aws login 필요"
+    }
+  },
+  {
+    "fn": "aws_profile",
+    "args": [
+      "fixture"
+    ],
+    "responses": {
+      "region": [
+        0,
+        "us-east-1",
+        ""
+      ],
+      "identity": [
+        1,
+        "",
+        "Unable to locate credentials"
+      ],
+      "expiry": [
+        0,
+        "{\"Expiration\": null, \"AccessKeyId\": \"secret-key\", \"SecretAccessKey\": \"secret\", \"SessionToken\": \"secret-token\"}",
+        ""
+      ]
+    },
+    "value": {
+      "kind": "aws",
+      "name": "fixture",
+      "state": "none",
+      "region": "us-east-1",
+      "account": null,
+      "expires": null,
+      "reason": "자격 없음 — aws login 필요"
+    }
+  }
+]

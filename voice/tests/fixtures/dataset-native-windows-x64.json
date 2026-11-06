@@ -1,0 +1,57 @@
+{
+  "schema": 1,
+  "platform": "win32-x64",
+  "baseline_commit": "8c5b71d2f1074bb5d1d831fa395617bf4ae2abc8",
+  "source_sha256": "117006412c90305dc51e8e5209bba52c52fd93d39bd90a5c2c7ba43f427a08c2",
+  "binary_sha256": "87d3a959fc3d2d8aaf93ac5f0ea4821962dd20f764bc32202f3f356471b493d5",
+  "library_sha256": "22518c16f9d13eda5ae5adf999c4740d7d16cc2d6b178b36dd4ac2f759a38559",
+  "native_path_empty": true,
+  "cases": [
+    {
+      "type": "int8",
+      "status": "pass",
+      "exact_loader_output": true
+    },
+    {
+      "type": "int16",
+      "status": "pass",
+      "exact_loader_output": true
+    },
+    {
+      "type": "int32",
+      "status": "pass",
+      "exact_loader_output": true
+    },
+    {
+      "type": "int64",
+      "status": "pass",
+      "exact_loader_output": true
+    },
+    {
+      "type": "uint8",
+      "status": "pass",
+      "exact_loader_output": true
+    },
+    {
+      "type": "uint16",
+      "status": "pass",
+      "exact_loader_output": true
+    },
+    {
+      "type": "uint32",
+      "status": "pass",
+      "exact_loader_output": true
+    },
+    {
+      "type": "uint64",
+      "status": "pass",
+      "exact_loader_output": true
+    },
+    {
+      "type": "string",
+      "status": "pass",
+      "exact_loader_output": true
+    }
+  ],
+  "status": "pass"
+}

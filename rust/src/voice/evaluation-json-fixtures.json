@@ -1,0 +1,31 @@
+[
+  {
+    "value": {
+      "text": "?? ??\nline",
+      "empty": [],
+      "nothing": null,
+      "negative_zero": -0.0,
+      "small": 1e-07,
+      "large": 1e+20
+    },
+    "text": "{\n \"text\": \"?? ??\\nline\",\n \"empty\": [],\n \"nothing\": null,\n \"negative_zero\": -0.0,\n \"small\": 1e-07,\n \"large\": 1e+20\n}"
+  },
+  {
+    "value": {
+      "clips": 32,
+      "rows": [
+        {
+          "noise_floor_db": -65,
+          "threshold": 0.5,
+          "recall": {
+            "-26": [
+              1.0,
+              0
+            ]
+          }
+        }
+      ]
+    },
+    "text": "{\n \"clips\": 32,\n \"rows\": [\n  {\n   \"noise_floor_db\": -65,\n   \"threshold\": 0.5,\n   \"recall\": {\n    \"-26\": [\n     1.0,\n     0\n    ]\n   }\n  }\n ]\n}"
+  }
+]

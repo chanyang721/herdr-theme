@@ -3,3 +3,8 @@ __pycache__/
 .DS_Store
 *.local.json
 artifacts/
+rust/target/
+.tools/
+.migration-oracle/
+/artifacts-*
+original-python-utf8.txt

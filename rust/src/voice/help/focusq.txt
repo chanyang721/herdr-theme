@@ -1,0 +1,18 @@
+focusq - install and toggle the herdr focus-queue plugin.
+
+./focusq setup      everything at once: tools, plugin, F8 key, voice gate
+                    (--enroll also records 45 s of your voice right away)
+./focusq install    link the plugin and set Claude Code's voice key (F8, tap mode)
+./focusq enable     turn the plugin on
+./focusq disable    turn the plugin off (panes keep their current voice state)
+./focusq status     show whether the plugin is linked and enabled
+./focusq check      check that herdr, the submit hook, the app and Codex all run this copy
+./focusq uninstall  unlink the plugin and remove the F8 voice binding
+
+./focusq voice-setup   install native voice libraries and models (no interpreter)
+./focusq voice-enroll  enroll your voice for the current microphone (needed for auto-send)
+./focusq voice-test    show live scores for each spoken segment
+./focusq voice-off     forget the voiceprint (no auto-send until you enroll again)
+./focusq voice-hook    add only the submit hook to Claude Code's settings (install does this too)
+./focusq voice-restart restart the installed native gate
+./focusq voice-crosscheck  check that your voice fails on other people's devices

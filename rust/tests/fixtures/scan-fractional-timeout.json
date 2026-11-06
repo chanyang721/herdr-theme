@@ -1,0 +1,26 @@
+{
+  "upstream_commit": "9aa50108fc3cc3c3af0fb376f0bb1760c90af3a6",
+  "cases": [
+    {
+      "timeout": 0.05,
+      "subprocess_timeout": 0.05,
+      "exit": 1,
+      "stdout": "{\"ok\": false, \"error\": \"Insights 수집이 0초 안에 끝나지 않았습니다.\"}\n",
+      "stderr": ""
+    },
+    {
+      "timeout": 0.5,
+      "subprocess_timeout": 0.5,
+      "exit": 1,
+      "stdout": "{\"ok\": false, \"error\": \"Insights 수집이 0초 안에 끝나지 않았습니다.\"}\n",
+      "stderr": ""
+    },
+    {
+      "timeout": -0.1,
+      "subprocess_timeout": -0.1,
+      "exit": 1,
+      "stdout": "{\"ok\": false, \"error\": \"Insights 수집이 0초 안에 끝나지 않았습니다.\"}\n",
+      "stderr": ""
+    }
+  ]
+}

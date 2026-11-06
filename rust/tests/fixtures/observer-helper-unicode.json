@@ -1,0 +1,102 @@
+[
+  {
+    "fn": "is_helper",
+    "args": [
+      {
+        "name": "node",
+        "args": "node --mcp²"
+      }
+    ],
+    "value": false
+  },
+  {
+    "fn": "is_helper",
+    "args": [
+      {
+        "name": "node",
+        "args": "node --mcṕ"
+      }
+    ],
+    "value": true
+  },
+  {
+    "fn": "is_helper",
+    "args": [
+      {
+        "name": "node",
+        "args": "node ²mcp"
+      }
+    ],
+    "value": false
+  },
+  {
+    "fn": "is_helper",
+    "args": [
+      {
+        "name": "node",
+        "args": "node ́mcp"
+      }
+    ],
+    "value": true
+  },
+  {
+    "fn": "is_helper",
+    "args": [
+      {
+        "name": "node",
+        "args": "node mcp-server²"
+      }
+    ],
+    "value": false
+  },
+  {
+    "fn": "is_helper",
+    "args": [
+      {
+        "name": "node",
+        "args": "node mcp-serveŕ"
+      }
+    ],
+    "value": true
+  },
+  {
+    "fn": "is_helper",
+    "args": [
+      {
+        "name": "node",
+        "args": "/fixture/node_repl\u001f--arg"
+      }
+    ],
+    "value": true
+  },
+  {
+    "fn": "is_helper",
+    "args": [
+      {
+        "name": "node",
+        "args": "/usr/bin/caffeinate -ı -t 10"
+      }
+    ],
+    "value": true
+  },
+  {
+    "fn": "is_helper",
+    "args": [
+      {
+        "name": "node",
+        "args": "/usr/bin/caffeinate -i -t 10\n"
+      }
+    ],
+    "value": true
+  },
+  {
+    "fn": "is_helper",
+    "args": [
+      {
+        "name": "node",
+        "args": "/usr/bin/caffeinate -i -t 10\n\n"
+      }
+    ],
+    "value": false
+  }
+]

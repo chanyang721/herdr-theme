@@ -31,11 +31,11 @@
 
 | 구성 | 내용 |
 |---|---|
-| `voice_policy.py` | 녹음 창의 본인 발화가 0보다 크고, 다른 목소리 이상이고, 글자 수를 설명하고(`max_chars_per_second`), 평균 점수 `dictation_score` 이상 |
-| `voice_submit_hook.py` | 모든 전송을 `UserPromptSubmit` 에서 검사. 막힌 글은 그 기기의 `voice-blocked.jsonl` 에만 남긴다 |
+| `rust/src/voice/policy.rs` | 녹음 창의 본인 발화가 0보다 크고, 다른 목소리 이상이고, 글자 수를 설명하고(`max_chars_per_second`), 평균 점수 `dictation_score` 이상 |
+| `herdr-theme voice_submit_hook` | 모든 전송을 `UserPromptSubmit` 에서 검사. 막힌 글은 그 기기의 `voice-blocked.jsonl` 에만 남긴다 |
 | 예외 | 1초 안의 실제 키 입력(직접 Enter), `hc send` 메시지, 슬래시 명령, 최근 녹음하지 않은 pane |
 | 판정기 이상 | 판정기 정지, 등록 없음, 허용되지 않은 마이크면 막는다(직접 Enter 는 통과) |
-| `focus_queue.py` | 녹음 시작 시각 기록, F8 판단을 그 시각 이후 말로 한정, hook 이 막아 되돌아온 글을 지움 |
+| `herdr-theme focus_queue` | 녹음 시작 시각 기록, F8 판단을 그 시각 이후 말로 한정, hook 이 막아 되돌아온 글을 지움 |
 
 hook 동작:
 
@@ -45,7 +45,7 @@ hook 동작:
 
 ## 화자 모델 후보
 
-원거리 조건: 다른 사람이 20 dB 작게, 잔향과 소음이 있는 채 들린다. 등록 45초, 본인 시도 208회, 타인 시도 5,200회. 본인 시도가 208회라 1% 안팎의 차이는 구분되지 않는다. 메모리는 ONNX 런타임 포함 프로세스 최대 RSS 이고, Apple Silicon CPU 2스레드 기준이다(`tests/eval_voice_models.py`).
+원거리 조건: 다른 사람이 20 dB 작게, 잔향과 소음이 있는 채 들린다. 등록 45초, 본인 시도 208회, 타인 시도 5,200회. 본인 시도가 208회라 1% 안팎의 차이는 구분되지 않는다. 메모리는 ONNX 런타임 포함 프로세스 최대 RSS 이고, Apple Silicon CPU 2스레드 기준이다(`herdr-theme voice_eval_models`).
 
 | 모델 | 크기 | 메모리 | 3초 처리 | EER 1초 | EER 2초 | EER 3초 | 3초 본인 거부(타인 통과 0.1%) |
 |---|---|---|---|---|---|---|---|
@@ -64,7 +64,7 @@ hook 동작:
 
 ## 판정기 체인 합성 시험
 
-`tests/eval_gate_chain.py`. 실제 VAD·임베딩 코드, 소음 -51 dBFS, 시나리오별 48건. "기존" 은 Silero 기본 VAD, "변경" 은 위 VAD 설정과 전송 규칙이다.
+`herdr-theme voice_eval_gate_chain`. 실제 VAD·임베딩 코드, 소음 -51 dBFS, 시나리오별 48건. "기존" 은 Silero 기본 VAD, "변경" 은 위 VAD 설정과 전송 규칙이다.
 
 | 조건 | 기존: 구간 없음 | 기존: 구간에서 본인 판정 | 변경: 구간 없음 | 변경: 구간에서 본인 판정 | 변경: 전송 규칙 통과 |
 |---|---|---|---|---|---|
@@ -77,7 +77,7 @@ hook 동작:
 
 ## VAD
 
-`tests/eval_voice_vad.py`, 60문장. 표는 들린 말의 비율이고, 소음만 있는 1분에서 잘못 잡힌 말은 모든 설정에서 0초였다.
+`herdr-theme voice_eval_vad`, 60문장. 표는 들린 말의 비율이고, 소음만 있는 1분에서 잘못 잡힌 말은 모든 설정에서 0초였다.
 
 | 소음 | 설정 | -26 dB | -46 dB | -52 dB |
 |---|---|---|---|---|

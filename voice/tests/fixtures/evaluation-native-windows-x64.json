@@ -1,0 +1,158 @@
+{
+  "schema": 1,
+  "at": "2026-11-05T18:51:35.102Z",
+  "platform": "win32-x64",
+  "baseline_commit": "8c5b71d2f1074bb5d1d831fa395617bf4ae2abc8",
+  "inputs": {
+    "binary_sha256": "87d3a959fc3d2d8aaf93ac5f0ea4821962dd20f764bc32202f3f356471b493d5",
+    "audio_sha256": "9175e523081bf6a630ce72a55b05f92148eaafaf58cbbbe743686cd81c50848e",
+    "parquet_sha256": "a8b96d55bad3597f1bd584233f64558ba52c456df6649d1427cf99f13c28d2d6",
+    "embedding_sha256": "1a331345f04805badbb495c775a6ddffcdd1a732567d5ec8b3d5749e3c7a5e4b",
+    "vad_sha256": "9e2449e1087496d8d4caba907f23e0bd3f78d91fa552479bb9c23ac09cbb1fd6",
+    "sherpa_library_sha256": "71728fb12b3a15a9ab7c4961fceafc6dd802f7fc038f461f5ea59e07d7104bec",
+    "blas_sha256": "6547e9fb966e9773caee2755e91a8bf4d6f3a2f0eebf9646b0158f8675ea4ab5",
+    "sndfile_sha256": "22518c16f9d13eda5ae5adf999c4740d7d16cc2d6b178b36dd4ac2f759a38559"
+  },
+  "dataset": {
+    "speakers": 8,
+    "speaker_encounter_order": [
+      3,
+      1,
+      7,
+      0,
+      6,
+      2,
+      5,
+      4
+    ],
+    "clips_per_speaker": 16,
+    "seconds_per_clip": 5,
+    "total_seconds": 640,
+    "identity": "synthetic circular shifts of pinned public speech; not speaker accuracy evidence"
+  },
+  "source_checksums": {
+    "tests/eval_voice_models.py": "117006412c90305dc51e8e5209bba52c52fd93d39bd90a5c2c7ba43f427a08c2",
+    "tests/eval_voice_vad.py": "a6a550c338b533965c6b801b88964a1b2620b5818ab151d0843821aa0387fa1b",
+    "tests/eval_gate_chain.py": "786be58f1339cd0ce18aac63ea898dda411a06da35f8c9c3967f30b056682c3a",
+    "voicegate.py": "d04612e66475a7726dda389c0f7f5581ce16a96592f65f37a8f3718dab970a00",
+    "voice_policy.py": "03ca597d4eb75d64bbd24a3db0840de42b59f79ded992cf03f50fd7852af79e2",
+    "voice_settings.py": "ee632afd0a96179c49378f55513e83d4a794392d8f5ade7555e1fca4c2764352"
+  },
+  "external_wheels": [
+    {
+      "package": "sherpa-onnx",
+      "filename": "sherpa_onnx-2.0.1-cp312-cp312-win_amd64.whl",
+      "sha256": "9f25448a1af23a013064264b9e2241e0c5d0e1941aeb82dafa969520c694efb9"
+    },
+    {
+      "package": "sherpa-onnx-core",
+      "filename": "sherpa_onnx_core-2.0.1-py3-none-win_amd64.whl",
+      "sha256": "08890e9ea23ed2f59f81d5840c63b6b5cc8674d0f6e48d9069126a848aa0e022"
+    },
+    {
+      "package": "numpy",
+      "filename": "numpy-2.3.0-cp312-cp312-win_amd64.whl",
+      "sha256": "0898c67a58cdaaf29994bc0e2c65230fd4de0ac40afaf1584ed0b02cd74c6fdd"
+    },
+    {
+      "package": "scipy",
+      "filename": "scipy-1.16.0-cp312-cp312-win_amd64.whl",
+      "sha256": "adf9b1999323ba335adc5d1dc7add4781cb5a4b0ef1e98b79768c05c796c4e49"
+    },
+    {
+      "package": "pyarrow",
+      "filename": "pyarrow-20.0.0-cp312-cp312-win_amd64.whl",
+      "sha256": "96d6a0a37d9c98be08f5ed6a10831d88d52cac7b13f5287f1e0f625a0de8062b"
+    },
+    {
+      "package": "soundfile",
+      "filename": "soundfile-0.13.1-py2.py3-none-win_amd64.whl",
+      "sha256": "1e70a05a0626524a69e9f0f4dd2ec174b4e9567f4d8b6c11d38b5c289be36ee9"
+    },
+    {
+      "package": "cffi",
+      "filename": "cffi-1.17.1-cp312-cp312-win_amd64.whl",
+      "sha256": "51392eae71afec0d0c8fb1a53b204dbb3bcabcb3c9b807eedf3e1e6ccf2de903"
+    },
+    {
+      "package": "pycparser",
+      "filename": "pycparser-2.22-py3-none-any.whl",
+      "sha256": "c3702b6d3dd8c7abc1afa565d7e63d53a1d0bd86cdc24edd75470f4de499cfcc"
+    }
+  ],
+  "limitations": [
+    "Synthetic identities exercise algorithms, not speaker discrimination accuracy.",
+    "Time and RSS telemetry are measured independently and cannot be numerically equal.",
+    "Windows frozen oracle has a resource telemetry shim and a rejecting sounddevice import shim; original Unix-only CLI availability is not established.",
+    "External oracle stdout uses explicitly requested UTF-8 encoding."
+  ],
+  "cases": [
+    {
+      "tool": "eval_voice_models",
+      "baseline_exit": 0,
+      "native_exit": 0,
+      "status": "pass",
+      "exact_stderr": true,
+      "max_absolute_difference": 0,
+      "compared_numeric_values": 38,
+      "differing_numeric_values": 0,
+      "numeric_metrics": "all within declared 1e-12"
+    },
+    {
+      "tool": "eval_voice_vad",
+      "baseline_exit": 0,
+      "native_exit": 0,
+      "status": "pass",
+      "exact_stderr": true,
+      "max_absolute_difference": 0,
+      "compared_numeric_values": 161,
+      "differing_numeric_values": 0,
+      "numeric_metrics": "all within declared 1e-12",
+      "exact_stdout": true,
+      "exact_result_file": true
+    },
+    {
+      "tool": "eval_gate_chain",
+      "baseline_exit": 0,
+      "native_exit": 0,
+      "status": "pass",
+      "exact_stderr": true,
+      "exact_stdout": true
+    },
+    {
+      "tool": "eval_voice_models_main",
+      "baseline_exit": 0,
+      "native_exit": 0,
+      "status": "pass",
+      "exact_stderr": true,
+      "max_absolute_difference": 0,
+      "compared_numeric_values": 38,
+      "differing_numeric_values": 0,
+      "numeric_metrics": "all within declared 1e-12",
+      "exact_nontelemetry_stdout": true,
+      "exact_nontelemetry_result_file": true,
+      "empty_model_inputs": [
+        {
+          "kind": "empty-directory",
+          "exit": 0,
+          "exact_stdout_stderr": true,
+          "preserved_output_state": true
+        },
+        {
+          "kind": "missing-directory",
+          "exit": 0,
+          "exact_stdout_stderr": true,
+          "preserved_output_state": true
+        },
+        {
+          "kind": "not-directory",
+          "exit": 0,
+          "exact_stdout_stderr": true,
+          "preserved_output_state": true
+        }
+      ]
+    }
+  ],
+  "status": "pass",
+  "native_path_empty": true
+}

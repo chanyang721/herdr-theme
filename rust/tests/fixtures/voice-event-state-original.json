@@ -1,0 +1,58 @@
+{
+  "baseline": "8c5b71d2f1074bb5d1d831fa395617bf4ae2abc8",
+  "source_sha256": "46090a07e455b13e405ac5befd117faa2d74d29d84bf3b9ea0c0a15feeceb31b",
+  "method": "unchanged AST function bodies; explicit SDK and platform-lock dependency doubles; not whole original CLI",
+  "input": {
+    "event": {
+      "type": "pane_agent_status_changed",
+      "pane_id": "target",
+      "agent_status": "done"
+    },
+    "panes": {
+      "current": {
+        "pane_id": "current",
+        "agent": "claude",
+        "agent_status": "working",
+        "focused": true
+      },
+      "target": {
+        "pane_id": "target",
+        "agent": "shell",
+        "agent_status": "done",
+        "focused": false
+      }
+    }
+  },
+  "state": {
+    "queue": [],
+    "status": {
+      "target": "done"
+    },
+    "voice_key_failures": {}
+  },
+  "state_bytes_hex": "7b227175657565223a205b5d2c2022737461747573223a207b22746172676574223a2022646f6e65227d2c2022766f6963655f6b65795f6661696c75726573223a207b7d7d",
+  "records": [
+    {
+      "log": "queued target (done)"
+    },
+    {
+      "command": [
+        "fixture-herdr",
+        "agent",
+        "focus",
+        "target"
+      ],
+      "capture_output": true,
+      "timeout": 5
+    },
+    {
+      "log": "focused target (was current: working)"
+    },
+    {
+      "log": "focus moved to current while settling (was target)"
+    },
+    {
+      "start_listening": "current"
+    }
+  ]
+}

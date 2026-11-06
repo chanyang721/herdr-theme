@@ -1,0 +1,20 @@
+Install the voice plugin from this checkout and point every entry point at it.
+
+  herdr-theme voice_install            install or update, then check
+  herdr-theme voice_install --enroll   also enroll your voice (run in a shell pane)
+  herdr-theme voice_install --check    only check that everything runs the installed copy
+
+The plugin is copied to ~/.local/share/herdr-focus-queue/plugin, not run from
+the checkout, so editing or switching a worktree never changes what is running.
+The copy is swapped in as one directory: a herdr event that starts during the
+update runs either the old copy or the new one, never a half-written mix.
+`focusq install` from that copy then links it as the herdr plugin and points
+the Claude Code submit hook, the Codex focus LaunchAgent and the Herdr app's
+focus routing at it, replacing links to any earlier folder in the same step.
+
+Your voice data stays where it was (~/.local/state/herdr/plugins/local.focus-
+queue) and your own settings in voice.local.json (see rust/src/voice/settings.rs).
+Running voice connections are not stopped; listeners started before the
+update finish on the code they started with.
+
+Safe to run again. Exit 0 means installed and checked.

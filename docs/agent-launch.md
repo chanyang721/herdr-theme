@@ -12,13 +12,13 @@ Claude·Codex 안에서 `herdr-app do space.new|tab.new|pane.split --argv …`�
 
 ## 안전한 실행 형식
 
-스크립트에서는 `scripts/agent_env.py`의 `launch_argv()`를 쓴다(`workspace.py`가 쓰는 방식). 손으로 쓸 때는 아래 argv를 쓴다.
+스크립트에서는 `rust/src/automation/mod.rs`의 `launch_argv()`를 쓴다(`herdr-theme workspace`가 쓰는 방식). 손으로 쓸 때는 아래 argv를 쓴다.
 
 ```sh
 herdr-app do space.new '{"name":"<이름>","folder":"<폴더>","argv":["env","-u","CLAUDECODE","-u","CLAUDE_CODE_CHILD_SESSION","-u","CLAUDE_CODE_ENTRYPOINT","-u","CLAUDE_CODE_EXECPATH","-u","CLAUDE_CODE_SESSION_ID","-u","CLAUDE_CODE_SESSION_ATTENDED","-u","CLAUDE_CODE_MESSAGING_SOCKET","-u","CLAUDE_CODE_MESSAGING_TOKEN","-u","CLAUDE_PID","-u","CODEX_THREAD_ID","-u","HERDR_PANE_ID","-u","HERDR_TAB_ID","-u","HERDR_WORKSPACE_ID","claude"]}'
 ```
 
-같은 목록은 `python3 -c 'import sys; sys.path.insert(0, "<앱 홈>/scripts/sixfold"); import agent_env, json; print(json.dumps(agent_env.launch_argv(["claude"])))'`로 뽑을 수 있다. 이미 떠 있는 셸에서 바로 실행할 때는 `python3 <앱 홈>/scripts/sixfold/agent_env.py claude …`를 쓴다. 이 경우 hc 터미널(`HC_TERMINAL_ID`가 있음)에서만 `HERDR_*` 칸 표식을 지우고, Herdr 원본 칸에서는 그 칸 자신의 값을 남긴다.
+같은 argv 생성 함수는 `rust/src/automation/mod.rs`의 `launch_argv()`다. 이미 떠 있는 셸에서 바로 실행할 때는 `<앱 홈>/scripts/sixfold/herdr-theme agent_env claude …`를 쓴다(Windows는 `herdr-theme.exe`). 이 경우 hc 터미널(`HC_TERMINAL_ID`가 있음)에서만 `HERDR_*` 칸 표식을 지우고, Herdr 원본 칸에서는 그 칸 자신의 값을 남긴다.
 
 이미 자식 세션으로 떠 있는 Claude(머리줄 아래 `Transcript saving is off — inherited CLAUDE_CODE_CHILD_SESSION`)도 정리는 된다. 공간 정리·절전 관찰기는 그 칸을 터미널 주소·생성 시각·에이전트 pid로 만든 대체 세션 id로 부르고(하네스 `pane_session_id`와 같은 값), 세션 스스로 `close-report --mask`로 보고한 뒤 기록·보관한다. 전사가 없으니 이어 열지는 못하고, 절전 칸을 깨우거나 `harness.py reopen`하면 새 세션이 워크스페이스 기억을 읽고 시작한다. 절전 칸을 깨울 때는 셸이 물려받은 표식을 지우고 실행한다.
 

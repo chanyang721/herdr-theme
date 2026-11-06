@@ -1,0 +1,2752 @@
+{
+  "upstream_commit": "fb3c2343843254ae7aee81fb6de3b014b7597d60",
+  "original_migration_baseline": "8c5b71d2f1074bb5d1d831fa395617bf4ae2abc8",
+  "sources": {
+    "scripts/workspace.py": "0ffe883630f7d47ddecab38b080f79c70efd9d738217a7bc787ad4d8d9b32e9e",
+    "tests/test_workspace_focus.py": "29486507f22943b3e973c8fe2328c0105dbbe7ce67dcd3cae3ad9e895e0993e1"
+  },
+  "cases": [
+    {
+      "function": "took_selection",
+      "input": {
+        "before": [
+          "old-space",
+          "old-tab",
+          "old-pane",
+          {
+            "old-terminal": "old-pane",
+            "other-terminal": "other-pane"
+          }
+        ],
+        "reply": null,
+        "after": [
+          "new-space",
+          "new-tab",
+          "new-pane",
+          {
+            "old-terminal": "old-pane",
+            "other-terminal": "other-pane",
+            "new-terminal": "new-pane",
+            "concurrent-terminal": "concurrent-pane"
+          }
+        ]
+      },
+      "expected": true
+    },
+    {
+      "function": "took_selection",
+      "input": {
+        "before": [
+          "old-space",
+          "old-tab",
+          "old-pane",
+          {
+            "old-terminal": "old-pane",
+            "other-terminal": "other-pane"
+          }
+        ],
+        "reply": null,
+        "after": [
+          "other-space",
+          "other-tab",
+          "other-pane",
+          {
+            "old-terminal": "old-pane",
+            "other-terminal": "other-pane",
+            "new-terminal": "new-pane"
+          }
+        ]
+      },
+      "expected": false
+    },
+    {
+      "function": "took_selection",
+      "input": {
+        "before": [
+          "old-space",
+          "old-tab",
+          "old-pane",
+          {
+            "old-terminal": "old-pane",
+            "other-terminal": "other-pane"
+          }
+        ],
+        "reply": null,
+        "after": [
+          "mod-space",
+          "mod-tab",
+          "mod-pane",
+          {
+            "old-terminal": "old-pane",
+            "other-terminal": "other-pane",
+            "new-terminal": "new-pane"
+          }
+        ]
+      },
+      "expected": false
+    },
+    {
+      "function": "took_selection",
+      "input": {
+        "before": [
+          "old-space",
+          "old-tab",
+          "old-pane",
+          {
+            "old-terminal": "old-pane",
+            "other-terminal": "other-pane"
+          }
+        ],
+        "reply": null,
+        "after": [
+          "other-space",
+          "concurrent-tab",
+          "concurrent-pane",
+          {
+            "old-terminal": "old-pane",
+            "other-terminal": "other-pane",
+            "concurrent-terminal": "concurrent-pane"
+          }
+        ]
+      },
+      "expected": true
+    },
+    {
+      "function": "took_selection",
+      "input": {
+        "before": [
+          "old-space",
+          "old-tab",
+          "old-pane",
+          {
+            "old-terminal": "old-pane",
+            "other-terminal": "other-pane"
+          }
+        ],
+        "reply": null,
+        "after": [
+          "new-space",
+          "new-tab",
+          "mod-pane",
+          {
+            "old-terminal": "old-pane",
+            "other-terminal": "other-pane",
+            "new-terminal": "new-pane"
+          }
+        ]
+      },
+      "expected": false
+    },
+    {
+      "function": "took_selection",
+      "input": {
+        "before": [
+          "old-space",
+          "old-tab",
+          "old-pane",
+          {
+            "old-terminal": "old-pane",
+            "other-terminal": "other-pane"
+          }
+        ],
+        "reply": null,
+        "after": [
+          "old-space",
+          "old-tab",
+          "old-pane",
+          {
+            "old-terminal": "old-pane",
+            "other-terminal": "other-pane"
+          }
+        ]
+      },
+      "expected": false
+    },
+    {
+      "function": "took_selection",
+      "input": {
+        "before": [
+          "old-space",
+          "old-tab",
+          "old-pane",
+          {
+            "old-terminal": "old-pane",
+            "other-terminal": "other-pane"
+          }
+        ],
+        "reply": {},
+        "after": [
+          "new-space",
+          "new-tab",
+          "new-pane",
+          {
+            "old-terminal": "old-pane",
+            "other-terminal": "other-pane",
+            "new-terminal": "new-pane",
+            "concurrent-terminal": "concurrent-pane"
+          }
+        ]
+      },
+      "expected": true
+    },
+    {
+      "function": "took_selection",
+      "input": {
+        "before": [
+          "old-space",
+          "old-tab",
+          "old-pane",
+          {
+            "old-terminal": "old-pane",
+            "other-terminal": "other-pane"
+          }
+        ],
+        "reply": {},
+        "after": [
+          "other-space",
+          "other-tab",
+          "other-pane",
+          {
+            "old-terminal": "old-pane",
+            "other-terminal": "other-pane",
+            "new-terminal": "new-pane"
+          }
+        ]
+      },
+      "expected": false
+    },
+    {
+      "function": "took_selection",
+      "input": {
+        "before": [
+          "old-space",
+          "old-tab",
+          "old-pane",
+          {
+            "old-terminal": "old-pane",
+            "other-terminal": "other-pane"
+          }
+        ],
+        "reply": {},
+        "after": [
+          "mod-space",
+          "mod-tab",
+          "mod-pane",
+          {
+            "old-terminal": "old-pane",
+            "other-terminal": "other-pane",
+            "new-terminal": "new-pane"
+          }
+        ]
+      },
+      "expected": false
+    },
+    {
+      "function": "took_selection",
+      "input": {
+        "before": [
+          "old-space",
+          "old-tab",
+          "old-pane",
+          {
+            "old-terminal": "old-pane",
+            "other-terminal": "other-pane"
+          }
+        ],
+        "reply": {},
+        "after": [
+          "other-space",
+          "concurrent-tab",
+          "concurrent-pane",
+          {
+            "old-terminal": "old-pane",
+            "other-terminal": "other-pane",
+            "concurrent-terminal": "concurrent-pane"
+          }
+        ]
+      },
+      "expected": true
+    },
+    {
+      "function": "took_selection",
+      "input": {
+        "before": [
+          "old-space",
+          "old-tab",
+          "old-pane",
+          {
+            "old-terminal": "old-pane",
+            "other-terminal": "other-pane"
+          }
+        ],
+        "reply": {},
+        "after": [
+          "new-space",
+          "new-tab",
+          "mod-pane",
+          {
+            "old-terminal": "old-pane",
+            "other-terminal": "other-pane",
+            "new-terminal": "new-pane"
+          }
+        ]
+      },
+      "expected": false
+    },
+    {
+      "function": "took_selection",
+      "input": {
+        "before": [
+          "old-space",
+          "old-tab",
+          "old-pane",
+          {
+            "old-terminal": "old-pane",
+            "other-terminal": "other-pane"
+          }
+        ],
+        "reply": {},
+        "after": [
+          "old-space",
+          "old-tab",
+          "old-pane",
+          {
+            "old-terminal": "old-pane",
+            "other-terminal": "other-pane"
+          }
+        ]
+      },
+      "expected": false
+    },
+    {
+      "function": "took_selection",
+      "input": {
+        "before": [
+          "old-space",
+          "old-tab",
+          "old-pane",
+          {
+            "old-terminal": "old-pane",
+            "other-terminal": "other-pane"
+          }
+        ],
+        "reply": [],
+        "after": [
+          "new-space",
+          "new-tab",
+          "new-pane",
+          {
+            "old-terminal": "old-pane",
+            "other-terminal": "other-pane",
+            "new-terminal": "new-pane",
+            "concurrent-terminal": "concurrent-pane"
+          }
+        ]
+      },
+      "expected": true
+    },
+    {
+      "function": "took_selection",
+      "input": {
+        "before": [
+          "old-space",
+          "old-tab",
+          "old-pane",
+          {
+            "old-terminal": "old-pane",
+            "other-terminal": "other-pane"
+          }
+        ],
+        "reply": [],
+        "after": [
+          "other-space",
+          "other-tab",
+          "other-pane",
+          {
+            "old-terminal": "old-pane",
+            "other-terminal": "other-pane",
+            "new-terminal": "new-pane"
+          }
+        ]
+      },
+      "expected": false
+    },
+    {
+      "function": "took_selection",
+      "input": {
+        "before": [
+          "old-space",
+          "old-tab",
+          "old-pane",
+          {
+            "old-terminal": "old-pane",
+            "other-terminal": "other-pane"
+          }
+        ],
+        "reply": [],
+        "after": [
+          "mod-space",
+          "mod-tab",
+          "mod-pane",
+          {
+            "old-terminal": "old-pane",
+            "other-terminal": "other-pane",
+            "new-terminal": "new-pane"
+          }
+        ]
+      },
+      "expected": false
+    },
+    {
+      "function": "took_selection",
+      "input": {
+        "before": [
+          "old-space",
+          "old-tab",
+          "old-pane",
+          {
+            "old-terminal": "old-pane",
+            "other-terminal": "other-pane"
+          }
+        ],
+        "reply": [],
+        "after": [
+          "other-space",
+          "concurrent-tab",
+          "concurrent-pane",
+          {
+            "old-terminal": "old-pane",
+            "other-terminal": "other-pane",
+            "concurrent-terminal": "concurrent-pane"
+          }
+        ]
+      },
+      "expected": true
+    },
+    {
+      "function": "took_selection",
+      "input": {
+        "before": [
+          "old-space",
+          "old-tab",
+          "old-pane",
+          {
+            "old-terminal": "old-pane",
+            "other-terminal": "other-pane"
+          }
+        ],
+        "reply": [],
+        "after": [
+          "new-space",
+          "new-tab",
+          "mod-pane",
+          {
+            "old-terminal": "old-pane",
+            "other-terminal": "other-pane",
+            "new-terminal": "new-pane"
+          }
+        ]
+      },
+      "expected": false
+    },
+    {
+      "function": "took_selection",
+      "input": {
+        "before": [
+          "old-space",
+          "old-tab",
+          "old-pane",
+          {
+            "old-terminal": "old-pane",
+            "other-terminal": "other-pane"
+          }
+        ],
+        "reply": [],
+        "after": [
+          "old-space",
+          "old-tab",
+          "old-pane",
+          {
+            "old-terminal": "old-pane",
+            "other-terminal": "other-pane"
+          }
+        ]
+      },
+      "expected": false
+    },
+    {
+      "function": "took_selection",
+      "input": {
+        "before": [
+          "old-space",
+          "old-tab",
+          "old-pane",
+          {
+            "old-terminal": "old-pane",
+            "other-terminal": "other-pane"
+          }
+        ],
+        "reply": {
+          "pane": "new-pane"
+        },
+        "after": [
+          "new-space",
+          "new-tab",
+          "new-pane",
+          {
+            "old-terminal": "old-pane",
+            "other-terminal": "other-pane",
+            "new-terminal": "new-pane",
+            "concurrent-terminal": "concurrent-pane"
+          }
+        ]
+      },
+      "expected": true
+    },
+    {
+      "function": "took_selection",
+      "input": {
+        "before": [
+          "old-space",
+          "old-tab",
+          "old-pane",
+          {
+            "old-terminal": "old-pane",
+            "other-terminal": "other-pane"
+          }
+        ],
+        "reply": {
+          "pane": "new-pane"
+        },
+        "after": [
+          "other-space",
+          "other-tab",
+          "other-pane",
+          {
+            "old-terminal": "old-pane",
+            "other-terminal": "other-pane",
+            "new-terminal": "new-pane"
+          }
+        ]
+      },
+      "expected": false
+    },
+    {
+      "function": "took_selection",
+      "input": {
+        "before": [
+          "old-space",
+          "old-tab",
+          "old-pane",
+          {
+            "old-terminal": "old-pane",
+            "other-terminal": "other-pane"
+          }
+        ],
+        "reply": {
+          "pane": "new-pane"
+        },
+        "after": [
+          "mod-space",
+          "mod-tab",
+          "mod-pane",
+          {
+            "old-terminal": "old-pane",
+            "other-terminal": "other-pane",
+            "new-terminal": "new-pane"
+          }
+        ]
+      },
+      "expected": false
+    },
+    {
+      "function": "took_selection",
+      "input": {
+        "before": [
+          "old-space",
+          "old-tab",
+          "old-pane",
+          {
+            "old-terminal": "old-pane",
+            "other-terminal": "other-pane"
+          }
+        ],
+        "reply": {
+          "pane": "new-pane"
+        },
+        "after": [
+          "other-space",
+          "concurrent-tab",
+          "concurrent-pane",
+          {
+            "old-terminal": "old-pane",
+            "other-terminal": "other-pane",
+            "concurrent-terminal": "concurrent-pane"
+          }
+        ]
+      },
+      "expected": false
+    },
+    {
+      "function": "took_selection",
+      "input": {
+        "before": [
+          "old-space",
+          "old-tab",
+          "old-pane",
+          {
+            "old-terminal": "old-pane",
+            "other-terminal": "other-pane"
+          }
+        ],
+        "reply": {
+          "pane": "new-pane"
+        },
+        "after": [
+          "new-space",
+          "new-tab",
+          "mod-pane",
+          {
+            "old-terminal": "old-pane",
+            "other-terminal": "other-pane",
+            "new-terminal": "new-pane"
+          }
+        ]
+      },
+      "expected": false
+    },
+    {
+      "function": "took_selection",
+      "input": {
+        "before": [
+          "old-space",
+          "old-tab",
+          "old-pane",
+          {
+            "old-terminal": "old-pane",
+            "other-terminal": "other-pane"
+          }
+        ],
+        "reply": {
+          "pane": "new-pane"
+        },
+        "after": [
+          "old-space",
+          "old-tab",
+          "old-pane",
+          {
+            "old-terminal": "old-pane",
+            "other-terminal": "other-pane"
+          }
+        ]
+      },
+      "expected": false
+    },
+    {
+      "function": "took_selection",
+      "input": {
+        "before": [
+          "old-space",
+          "old-tab",
+          "old-pane",
+          {
+            "old-terminal": "old-pane",
+            "other-terminal": "other-pane"
+          }
+        ],
+        "reply": {
+          "terminal": "new-terminal"
+        },
+        "after": [
+          "new-space",
+          "new-tab",
+          "new-pane",
+          {
+            "old-terminal": "old-pane",
+            "other-terminal": "other-pane",
+            "new-terminal": "new-pane",
+            "concurrent-terminal": "concurrent-pane"
+          }
+        ]
+      },
+      "expected": true
+    },
+    {
+      "function": "took_selection",
+      "input": {
+        "before": [
+          "old-space",
+          "old-tab",
+          "old-pane",
+          {
+            "old-terminal": "old-pane",
+            "other-terminal": "other-pane"
+          }
+        ],
+        "reply": {
+          "terminal": "new-terminal"
+        },
+        "after": [
+          "other-space",
+          "other-tab",
+          "other-pane",
+          {
+            "old-terminal": "old-pane",
+            "other-terminal": "other-pane",
+            "new-terminal": "new-pane"
+          }
+        ]
+      },
+      "expected": false
+    },
+    {
+      "function": "took_selection",
+      "input": {
+        "before": [
+          "old-space",
+          "old-tab",
+          "old-pane",
+          {
+            "old-terminal": "old-pane",
+            "other-terminal": "other-pane"
+          }
+        ],
+        "reply": {
+          "terminal": "new-terminal"
+        },
+        "after": [
+          "mod-space",
+          "mod-tab",
+          "mod-pane",
+          {
+            "old-terminal": "old-pane",
+            "other-terminal": "other-pane",
+            "new-terminal": "new-pane"
+          }
+        ]
+      },
+      "expected": false
+    },
+    {
+      "function": "took_selection",
+      "input": {
+        "before": [
+          "old-space",
+          "old-tab",
+          "old-pane",
+          {
+            "old-terminal": "old-pane",
+            "other-terminal": "other-pane"
+          }
+        ],
+        "reply": {
+          "terminal": "new-terminal"
+        },
+        "after": [
+          "other-space",
+          "concurrent-tab",
+          "concurrent-pane",
+          {
+            "old-terminal": "old-pane",
+            "other-terminal": "other-pane",
+            "concurrent-terminal": "concurrent-pane"
+          }
+        ]
+      },
+      "expected": false
+    },
+    {
+      "function": "took_selection",
+      "input": {
+        "before": [
+          "old-space",
+          "old-tab",
+          "old-pane",
+          {
+            "old-terminal": "old-pane",
+            "other-terminal": "other-pane"
+          }
+        ],
+        "reply": {
+          "terminal": "new-terminal"
+        },
+        "after": [
+          "new-space",
+          "new-tab",
+          "mod-pane",
+          {
+            "old-terminal": "old-pane",
+            "other-terminal": "other-pane",
+            "new-terminal": "new-pane"
+          }
+        ]
+      },
+      "expected": false
+    },
+    {
+      "function": "took_selection",
+      "input": {
+        "before": [
+          "old-space",
+          "old-tab",
+          "old-pane",
+          {
+            "old-terminal": "old-pane",
+            "other-terminal": "other-pane"
+          }
+        ],
+        "reply": {
+          "terminal": "new-terminal"
+        },
+        "after": [
+          "old-space",
+          "old-tab",
+          "old-pane",
+          {
+            "old-terminal": "old-pane",
+            "other-terminal": "other-pane"
+          }
+        ]
+      },
+      "expected": false
+    },
+    {
+      "function": "took_selection",
+      "input": {
+        "before": [
+          "old-space",
+          "old-tab",
+          "old-pane",
+          {
+            "old-terminal": "old-pane",
+            "other-terminal": "other-pane"
+          }
+        ],
+        "reply": {
+          "tab": "new-tab"
+        },
+        "after": [
+          "new-space",
+          "new-tab",
+          "new-pane",
+          {
+            "old-terminal": "old-pane",
+            "other-terminal": "other-pane",
+            "new-terminal": "new-pane",
+            "concurrent-terminal": "concurrent-pane"
+          }
+        ]
+      },
+      "expected": true
+    },
+    {
+      "function": "took_selection",
+      "input": {
+        "before": [
+          "old-space",
+          "old-tab",
+          "old-pane",
+          {
+            "old-terminal": "old-pane",
+            "other-terminal": "other-pane"
+          }
+        ],
+        "reply": {
+          "tab": "new-tab"
+        },
+        "after": [
+          "other-space",
+          "other-tab",
+          "other-pane",
+          {
+            "old-terminal": "old-pane",
+            "other-terminal": "other-pane",
+            "new-terminal": "new-pane"
+          }
+        ]
+      },
+      "expected": false
+    },
+    {
+      "function": "took_selection",
+      "input": {
+        "before": [
+          "old-space",
+          "old-tab",
+          "old-pane",
+          {
+            "old-terminal": "old-pane",
+            "other-terminal": "other-pane"
+          }
+        ],
+        "reply": {
+          "tab": "new-tab"
+        },
+        "after": [
+          "mod-space",
+          "mod-tab",
+          "mod-pane",
+          {
+            "old-terminal": "old-pane",
+            "other-terminal": "other-pane",
+            "new-terminal": "new-pane"
+          }
+        ]
+      },
+      "expected": false
+    },
+    {
+      "function": "took_selection",
+      "input": {
+        "before": [
+          "old-space",
+          "old-tab",
+          "old-pane",
+          {
+            "old-terminal": "old-pane",
+            "other-terminal": "other-pane"
+          }
+        ],
+        "reply": {
+          "tab": "new-tab"
+        },
+        "after": [
+          "other-space",
+          "concurrent-tab",
+          "concurrent-pane",
+          {
+            "old-terminal": "old-pane",
+            "other-terminal": "other-pane",
+            "concurrent-terminal": "concurrent-pane"
+          }
+        ]
+      },
+      "expected": false
+    },
+    {
+      "function": "took_selection",
+      "input": {
+        "before": [
+          "old-space",
+          "old-tab",
+          "old-pane",
+          {
+            "old-terminal": "old-pane",
+            "other-terminal": "other-pane"
+          }
+        ],
+        "reply": {
+          "tab": "new-tab"
+        },
+        "after": [
+          "new-space",
+          "new-tab",
+          "mod-pane",
+          {
+            "old-terminal": "old-pane",
+            "other-terminal": "other-pane",
+            "new-terminal": "new-pane"
+          }
+        ]
+      },
+      "expected": true
+    },
+    {
+      "function": "took_selection",
+      "input": {
+        "before": [
+          "old-space",
+          "old-tab",
+          "old-pane",
+          {
+            "old-terminal": "old-pane",
+            "other-terminal": "other-pane"
+          }
+        ],
+        "reply": {
+          "tab": "new-tab"
+        },
+        "after": [
+          "old-space",
+          "old-tab",
+          "old-pane",
+          {
+            "old-terminal": "old-pane",
+            "other-terminal": "other-pane"
+          }
+        ]
+      },
+      "expected": false
+    },
+    {
+      "function": "took_selection",
+      "input": {
+        "before": [
+          "old-space",
+          "old-tab",
+          "old-pane",
+          {
+            "old-terminal": "old-pane",
+            "other-terminal": "other-pane"
+          }
+        ],
+        "reply": {
+          "space": "new-space"
+        },
+        "after": [
+          "new-space",
+          "new-tab",
+          "new-pane",
+          {
+            "old-terminal": "old-pane",
+            "other-terminal": "other-pane",
+            "new-terminal": "new-pane",
+            "concurrent-terminal": "concurrent-pane"
+          }
+        ]
+      },
+      "expected": true
+    },
+    {
+      "function": "took_selection",
+      "input": {
+        "before": [
+          "old-space",
+          "old-tab",
+          "old-pane",
+          {
+            "old-terminal": "old-pane",
+            "other-terminal": "other-pane"
+          }
+        ],
+        "reply": {
+          "space": "new-space"
+        },
+        "after": [
+          "other-space",
+          "other-tab",
+          "other-pane",
+          {
+            "old-terminal": "old-pane",
+            "other-terminal": "other-pane",
+            "new-terminal": "new-pane"
+          }
+        ]
+      },
+      "expected": false
+    },
+    {
+      "function": "took_selection",
+      "input": {
+        "before": [
+          "old-space",
+          "old-tab",
+          "old-pane",
+          {
+            "old-terminal": "old-pane",
+            "other-terminal": "other-pane"
+          }
+        ],
+        "reply": {
+          "space": "new-space"
+        },
+        "after": [
+          "mod-space",
+          "mod-tab",
+          "mod-pane",
+          {
+            "old-terminal": "old-pane",
+            "other-terminal": "other-pane",
+            "new-terminal": "new-pane"
+          }
+        ]
+      },
+      "expected": false
+    },
+    {
+      "function": "took_selection",
+      "input": {
+        "before": [
+          "old-space",
+          "old-tab",
+          "old-pane",
+          {
+            "old-terminal": "old-pane",
+            "other-terminal": "other-pane"
+          }
+        ],
+        "reply": {
+          "space": "new-space"
+        },
+        "after": [
+          "other-space",
+          "concurrent-tab",
+          "concurrent-pane",
+          {
+            "old-terminal": "old-pane",
+            "other-terminal": "other-pane",
+            "concurrent-terminal": "concurrent-pane"
+          }
+        ]
+      },
+      "expected": true
+    },
+    {
+      "function": "took_selection",
+      "input": {
+        "before": [
+          "old-space",
+          "old-tab",
+          "old-pane",
+          {
+            "old-terminal": "old-pane",
+            "other-terminal": "other-pane"
+          }
+        ],
+        "reply": {
+          "space": "new-space"
+        },
+        "after": [
+          "new-space",
+          "new-tab",
+          "mod-pane",
+          {
+            "old-terminal": "old-pane",
+            "other-terminal": "other-pane",
+            "new-terminal": "new-pane"
+          }
+        ]
+      },
+      "expected": false
+    },
+    {
+      "function": "took_selection",
+      "input": {
+        "before": [
+          "old-space",
+          "old-tab",
+          "old-pane",
+          {
+            "old-terminal": "old-pane",
+            "other-terminal": "other-pane"
+          }
+        ],
+        "reply": {
+          "space": "new-space"
+        },
+        "after": [
+          "old-space",
+          "old-tab",
+          "old-pane",
+          {
+            "old-terminal": "old-pane",
+            "other-terminal": "other-pane"
+          }
+        ]
+      },
+      "expected": false
+    },
+    {
+      "function": "took_selection",
+      "input": {
+        "before": [
+          "old-space",
+          "old-tab",
+          "old-pane",
+          {
+            "old-terminal": "old-pane",
+            "other-terminal": "other-pane"
+          }
+        ],
+        "reply": {
+          "pane": "new-pane",
+          "terminal": "new-terminal",
+          "tab": "new-tab"
+        },
+        "after": [
+          "new-space",
+          "new-tab",
+          "new-pane",
+          {
+            "old-terminal": "old-pane",
+            "other-terminal": "other-pane",
+            "new-terminal": "new-pane",
+            "concurrent-terminal": "concurrent-pane"
+          }
+        ]
+      },
+      "expected": true
+    },
+    {
+      "function": "took_selection",
+      "input": {
+        "before": [
+          "old-space",
+          "old-tab",
+          "old-pane",
+          {
+            "old-terminal": "old-pane",
+            "other-terminal": "other-pane"
+          }
+        ],
+        "reply": {
+          "pane": "new-pane",
+          "terminal": "new-terminal",
+          "tab": "new-tab"
+        },
+        "after": [
+          "other-space",
+          "other-tab",
+          "other-pane",
+          {
+            "old-terminal": "old-pane",
+            "other-terminal": "other-pane",
+            "new-terminal": "new-pane"
+          }
+        ]
+      },
+      "expected": false
+    },
+    {
+      "function": "took_selection",
+      "input": {
+        "before": [
+          "old-space",
+          "old-tab",
+          "old-pane",
+          {
+            "old-terminal": "old-pane",
+            "other-terminal": "other-pane"
+          }
+        ],
+        "reply": {
+          "pane": "new-pane",
+          "terminal": "new-terminal",
+          "tab": "new-tab"
+        },
+        "after": [
+          "mod-space",
+          "mod-tab",
+          "mod-pane",
+          {
+            "old-terminal": "old-pane",
+            "other-terminal": "other-pane",
+            "new-terminal": "new-pane"
+          }
+        ]
+      },
+      "expected": false
+    },
+    {
+      "function": "took_selection",
+      "input": {
+        "before": [
+          "old-space",
+          "old-tab",
+          "old-pane",
+          {
+            "old-terminal": "old-pane",
+            "other-terminal": "other-pane"
+          }
+        ],
+        "reply": {
+          "pane": "new-pane",
+          "terminal": "new-terminal",
+          "tab": "new-tab"
+        },
+        "after": [
+          "other-space",
+          "concurrent-tab",
+          "concurrent-pane",
+          {
+            "old-terminal": "old-pane",
+            "other-terminal": "other-pane",
+            "concurrent-terminal": "concurrent-pane"
+          }
+        ]
+      },
+      "expected": false
+    },
+    {
+      "function": "took_selection",
+      "input": {
+        "before": [
+          "old-space",
+          "old-tab",
+          "old-pane",
+          {
+            "old-terminal": "old-pane",
+            "other-terminal": "other-pane"
+          }
+        ],
+        "reply": {
+          "pane": "new-pane",
+          "terminal": "new-terminal",
+          "tab": "new-tab"
+        },
+        "after": [
+          "new-space",
+          "new-tab",
+          "mod-pane",
+          {
+            "old-terminal": "old-pane",
+            "other-terminal": "other-pane",
+            "new-terminal": "new-pane"
+          }
+        ]
+      },
+      "expected": true
+    },
+    {
+      "function": "took_selection",
+      "input": {
+        "before": [
+          "old-space",
+          "old-tab",
+          "old-pane",
+          {
+            "old-terminal": "old-pane",
+            "other-terminal": "other-pane"
+          }
+        ],
+        "reply": {
+          "pane": "new-pane",
+          "terminal": "new-terminal",
+          "tab": "new-tab"
+        },
+        "after": [
+          "old-space",
+          "old-tab",
+          "old-pane",
+          {
+            "old-terminal": "old-pane",
+            "other-terminal": "other-pane"
+          }
+        ]
+      },
+      "expected": false
+    },
+    {
+      "function": "took_selection",
+      "input": {
+        "before": [
+          "old-space",
+          "old-tab",
+          "old-pane",
+          {
+            "old-terminal": "old-pane",
+            "other-terminal": "other-pane"
+          }
+        ],
+        "reply": {
+          "pane": "",
+          "terminal": "",
+          "tab": ""
+        },
+        "after": [
+          "new-space",
+          "new-tab",
+          "new-pane",
+          {
+            "old-terminal": "old-pane",
+            "other-terminal": "other-pane",
+            "new-terminal": "new-pane",
+            "concurrent-terminal": "concurrent-pane"
+          }
+        ]
+      },
+      "expected": true
+    },
+    {
+      "function": "took_selection",
+      "input": {
+        "before": [
+          "old-space",
+          "old-tab",
+          "old-pane",
+          {
+            "old-terminal": "old-pane",
+            "other-terminal": "other-pane"
+          }
+        ],
+        "reply": {
+          "pane": "",
+          "terminal": "",
+          "tab": ""
+        },
+        "after": [
+          "other-space",
+          "other-tab",
+          "other-pane",
+          {
+            "old-terminal": "old-pane",
+            "other-terminal": "other-pane",
+            "new-terminal": "new-pane"
+          }
+        ]
+      },
+      "expected": false
+    },
+    {
+      "function": "took_selection",
+      "input": {
+        "before": [
+          "old-space",
+          "old-tab",
+          "old-pane",
+          {
+            "old-terminal": "old-pane",
+            "other-terminal": "other-pane"
+          }
+        ],
+        "reply": {
+          "pane": "",
+          "terminal": "",
+          "tab": ""
+        },
+        "after": [
+          "mod-space",
+          "mod-tab",
+          "mod-pane",
+          {
+            "old-terminal": "old-pane",
+            "other-terminal": "other-pane",
+            "new-terminal": "new-pane"
+          }
+        ]
+      },
+      "expected": false
+    },
+    {
+      "function": "took_selection",
+      "input": {
+        "before": [
+          "old-space",
+          "old-tab",
+          "old-pane",
+          {
+            "old-terminal": "old-pane",
+            "other-terminal": "other-pane"
+          }
+        ],
+        "reply": {
+          "pane": "",
+          "terminal": "",
+          "tab": ""
+        },
+        "after": [
+          "other-space",
+          "concurrent-tab",
+          "concurrent-pane",
+          {
+            "old-terminal": "old-pane",
+            "other-terminal": "other-pane",
+            "concurrent-terminal": "concurrent-pane"
+          }
+        ]
+      },
+      "expected": true
+    },
+    {
+      "function": "took_selection",
+      "input": {
+        "before": [
+          "old-space",
+          "old-tab",
+          "old-pane",
+          {
+            "old-terminal": "old-pane",
+            "other-terminal": "other-pane"
+          }
+        ],
+        "reply": {
+          "pane": "",
+          "terminal": "",
+          "tab": ""
+        },
+        "after": [
+          "new-space",
+          "new-tab",
+          "mod-pane",
+          {
+            "old-terminal": "old-pane",
+            "other-terminal": "other-pane",
+            "new-terminal": "new-pane"
+          }
+        ]
+      },
+      "expected": false
+    },
+    {
+      "function": "took_selection",
+      "input": {
+        "before": [
+          "old-space",
+          "old-tab",
+          "old-pane",
+          {
+            "old-terminal": "old-pane",
+            "other-terminal": "other-pane"
+          }
+        ],
+        "reply": {
+          "pane": "",
+          "terminal": "",
+          "tab": ""
+        },
+        "after": [
+          "old-space",
+          "old-tab",
+          "old-pane",
+          {
+            "old-terminal": "old-pane",
+            "other-terminal": "other-pane"
+          }
+        ]
+      },
+      "expected": false
+    },
+    {
+      "function": "restore_view",
+      "name": "all-changed",
+      "input": {
+        "before": [
+          "old-space",
+          "old-tab",
+          "old-pane",
+          {
+            "old-terminal": "old-pane",
+            "other-terminal": "other-pane"
+          }
+        ],
+        "after": [
+          "new-space",
+          "new-tab",
+          "new-pane",
+          {
+            "old-terminal": "old-pane",
+            "other-terminal": "other-pane",
+            "new-terminal": "new-pane",
+            "concurrent-terminal": "concurrent-pane"
+          }
+        ],
+        "reply": {
+          "terminal": "new-terminal"
+        },
+        "errors": []
+      },
+      "expected": {
+        "calls": [
+          [
+            "space.select",
+            {
+              "id": "old-space"
+            }
+          ],
+          [
+            "tab.select",
+            {
+              "id": "old-tab"
+            }
+          ],
+          [
+            "pane.focus",
+            {
+              "pane": "old-pane"
+            }
+          ]
+        ],
+        "view_calls": 1
+      }
+    },
+    {
+      "function": "restore_view",
+      "name": "unchanged",
+      "input": {
+        "before": [
+          "old-space",
+          "old-tab",
+          "old-pane",
+          {
+            "old-terminal": "old-pane",
+            "other-terminal": "other-pane"
+          }
+        ],
+        "after": [
+          "old-space",
+          "old-tab",
+          "old-pane",
+          {
+            "old-terminal": "old-pane",
+            "other-terminal": "other-pane"
+          }
+        ],
+        "reply": {},
+        "errors": []
+      },
+      "expected": {
+        "calls": [],
+        "view_calls": 1
+      }
+    },
+    {
+      "function": "restore_view",
+      "name": "person-existing",
+      "input": {
+        "before": [
+          "old-space",
+          "old-tab",
+          "old-pane",
+          {
+            "old-terminal": "old-pane",
+            "other-terminal": "other-pane"
+          }
+        ],
+        "after": [
+          "other-space",
+          "other-tab",
+          "other-pane",
+          {
+            "old-terminal": "old-pane",
+            "other-terminal": "other-pane",
+            "new-terminal": "new-pane"
+          }
+        ],
+        "reply": {
+          "terminal": "new-terminal"
+        },
+        "errors": []
+      },
+      "expected": {
+        "calls": [],
+        "view_calls": 1
+      }
+    },
+    {
+      "function": "restore_view",
+      "name": "person-mod",
+      "input": {
+        "before": [
+          "old-space",
+          "old-tab",
+          "old-pane",
+          {
+            "old-terminal": "old-pane",
+            "other-terminal": "other-pane"
+          }
+        ],
+        "after": [
+          "mod-space",
+          "mod-tab",
+          "mod-pane",
+          {
+            "old-terminal": "old-pane",
+            "other-terminal": "other-pane",
+            "new-terminal": "new-pane"
+          }
+        ],
+        "reply": {
+          "terminal": "new-terminal"
+        },
+        "errors": []
+      },
+      "expected": {
+        "calls": [],
+        "view_calls": 1
+      }
+    },
+    {
+      "function": "restore_view",
+      "name": "named-reply-other-job",
+      "input": {
+        "before": [
+          "old-space",
+          "old-tab",
+          "old-pane",
+          {
+            "old-terminal": "old-pane",
+            "other-terminal": "other-pane"
+          }
+        ],
+        "after": [
+          "other-space",
+          "concurrent-tab",
+          "concurrent-pane",
+          {
+            "old-terminal": "old-pane",
+            "other-terminal": "other-pane",
+            "concurrent-terminal": "concurrent-pane"
+          }
+        ],
+        "reply": {
+          "terminal": "new-terminal"
+        },
+        "errors": []
+      },
+      "expected": {
+        "calls": [],
+        "view_calls": 1
+      }
+    },
+    {
+      "function": "restore_view",
+      "name": "known-limit-unknown-other-job",
+      "input": {
+        "before": [
+          "old-space",
+          "old-tab",
+          "old-pane",
+          {
+            "old-terminal": "old-pane",
+            "other-terminal": "other-pane"
+          }
+        ],
+        "after": [
+          "other-space",
+          "concurrent-tab",
+          "concurrent-pane",
+          {
+            "old-terminal": "old-pane",
+            "other-terminal": "other-pane",
+            "concurrent-terminal": "concurrent-pane"
+          }
+        ],
+        "reply": null,
+        "errors": []
+      },
+      "expected": {
+        "calls": [
+          [
+            "space.select",
+            {
+              "id": "old-space"
+            }
+          ],
+          [
+            "tab.select",
+            {
+              "id": "old-tab"
+            }
+          ],
+          [
+            "pane.focus",
+            {
+              "pane": "old-pane"
+            }
+          ]
+        ],
+        "view_calls": 1
+      }
+    },
+    {
+      "function": "restore_view",
+      "name": "read-before-failed",
+      "input": {
+        "before": null,
+        "after": [
+          "new-space",
+          "new-tab",
+          "new-pane",
+          {
+            "old-terminal": "old-pane",
+            "other-terminal": "other-pane",
+            "new-terminal": "new-pane",
+            "concurrent-terminal": "concurrent-pane"
+          }
+        ],
+        "reply": null,
+        "errors": []
+      },
+      "expected": {
+        "calls": [],
+        "view_calls": 1
+      }
+    },
+    {
+      "function": "restore_view",
+      "name": "read-after-failed",
+      "input": {
+        "before": [
+          "old-space",
+          "old-tab",
+          "old-pane",
+          {
+            "old-terminal": "old-pane",
+            "other-terminal": "other-pane"
+          }
+        ],
+        "after": null,
+        "reply": null,
+        "errors": []
+      },
+      "expected": {
+        "calls": [],
+        "view_calls": 1
+      }
+    },
+    {
+      "function": "restore_view",
+      "name": "empty-prior-ids",
+      "input": {
+        "before": [
+          "",
+          "",
+          "",
+          {
+            "old-terminal": "old-pane",
+            "other-terminal": "other-pane"
+          }
+        ],
+        "after": [
+          "new-space",
+          "new-tab",
+          "new-pane",
+          {
+            "old-terminal": "old-pane",
+            "other-terminal": "other-pane",
+            "new-terminal": "new-pane",
+            "concurrent-terminal": "concurrent-pane"
+          }
+        ],
+        "reply": {
+          "terminal": "new-terminal"
+        },
+        "errors": []
+      },
+      "expected": {
+        "calls": [],
+        "view_calls": 1
+      }
+    },
+    {
+      "function": "restore_view",
+      "name": "restore-errors-still-continue",
+      "input": {
+        "before": [
+          "old-space",
+          "old-tab",
+          "old-pane",
+          {
+            "old-terminal": "old-pane",
+            "other-terminal": "other-pane"
+          }
+        ],
+        "after": [
+          "new-space",
+          "new-tab",
+          "new-pane",
+          {
+            "old-terminal": "old-pane",
+            "other-terminal": "other-pane",
+            "new-terminal": "new-pane",
+            "concurrent-terminal": "concurrent-pane"
+          }
+        ],
+        "reply": {
+          "terminal": "new-terminal"
+        },
+        "errors": [
+          "space.select",
+          "tab.select",
+          "pane.focus"
+        ]
+      },
+      "expected": {
+        "calls": [
+          [
+            "space.select",
+            {
+              "id": "old-space"
+            }
+          ],
+          [
+            "tab.select",
+            {
+              "id": "old-tab"
+            }
+          ],
+          [
+            "pane.focus",
+            {
+              "pane": "old-pane"
+            }
+          ]
+        ],
+        "view_calls": 1
+      }
+    },
+    {
+      "function": "restore_view",
+      "name": "only-pane-changed",
+      "input": {
+        "before": [
+          "old-space",
+          "old-tab",
+          "old-pane",
+          {
+            "old-terminal": "old-pane",
+            "other-terminal": "other-pane"
+          }
+        ],
+        "after": [
+          "old-space",
+          "old-tab",
+          "new-pane",
+          {
+            "old-terminal": "old-pane",
+            "other-terminal": "other-pane",
+            "new-terminal": "new-pane",
+            "concurrent-terminal": "concurrent-pane"
+          }
+        ],
+        "reply": {
+          "pane": "new-pane"
+        },
+        "errors": []
+      },
+      "expected": {
+        "calls": [
+          [
+            "pane.focus",
+            {
+              "pane": "old-pane"
+            }
+          ]
+        ],
+        "view_calls": 1
+      }
+    },
+    {
+      "function": "view",
+      "name": "terminals-only-map",
+      "input": {
+        "status": {
+          "space": "s",
+          "tab": "t",
+          "focused_pane": "mod-pane"
+        },
+        "listing": {
+          "spaces": [
+            {
+              "tabs": [
+                {
+                  "terminals": [
+                    {
+                      "terminal": "a",
+                      "pane": "pane-a"
+                    },
+                    {
+                      "terminal": "b",
+                      "pane": "pane-b"
+                    }
+                  ]
+                },
+                {
+                  "id": "mod-tab"
+                }
+              ]
+            }
+          ]
+        },
+        "failure": null
+      },
+      "expected": {
+        "result": [
+          "s",
+          "t",
+          "mod-pane",
+          {
+            "a": "pane-a",
+            "b": "pane-b"
+          }
+        ],
+        "calls": [
+          [
+            "status"
+          ],
+          [
+            "ls"
+          ]
+        ]
+      }
+    },
+    {
+      "function": "view",
+      "name": "empty-listing",
+      "input": {
+        "status": {},
+        "listing": {
+          "spaces": []
+        },
+        "failure": null
+      },
+      "expected": {
+        "result": [
+          null,
+          null,
+          null,
+          {}
+        ],
+        "calls": [
+          [
+            "status"
+          ],
+          [
+            "ls"
+          ]
+        ]
+      }
+    },
+    {
+      "function": "view",
+      "name": "unreadable-status",
+      "input": {
+        "status": {},
+        "listing": {
+          "spaces": []
+        },
+        "failure": "status"
+      },
+      "expected": {
+        "result": null,
+        "calls": [
+          [
+            "status"
+          ]
+        ]
+      }
+    },
+    {
+      "function": "view",
+      "name": "unreadable-ls",
+      "input": {
+        "status": {},
+        "listing": {
+          "spaces": []
+        },
+        "failure": "ls"
+      },
+      "expected": {
+        "result": null,
+        "calls": [
+          [
+            "status"
+          ],
+          [
+            "ls"
+          ]
+        ]
+      }
+    },
+    {
+      "function": "view",
+      "name": "status-not-object",
+      "input": {
+        "status": [],
+        "listing": {
+          "spaces": []
+        },
+        "failure": null
+      },
+      "expected": {
+        "result": null,
+        "calls": [
+          [
+            "status"
+          ],
+          [
+            "ls"
+          ]
+        ]
+      }
+    },
+    {
+      "function": "view",
+      "name": "missing-spaces",
+      "input": {
+        "status": {},
+        "listing": {},
+        "failure": null
+      },
+      "expected": {
+        "result": null,
+        "calls": [
+          [
+            "status"
+          ],
+          [
+            "ls"
+          ]
+        ]
+      }
+    }
+  ],
+  "original_test_result": {
+    "run": 10,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "windows": [
+    {
+      "name": "test_the_new_space_does_not_take_the_selection",
+      "input": {
+        "before": [
+          "sp-main",
+          "tb-main",
+          "p-main",
+          {
+            "term-p-main": "p-main",
+            "term-p-other": "p-other"
+          }
+        ],
+        "reply": {
+          "terminal": "term-p-new",
+          "pane": "p-new",
+          "space": "sp-new",
+          "tab": "tb-new"
+        },
+        "after": [
+          "sp-new",
+          "tb-new",
+          "p-new",
+          {
+            "term-p-main": "p-main",
+            "term-p-other": "p-other",
+            "term-p-new": "p-new"
+          }
+        ],
+        "spaces": {
+          "sp-main": {
+            "tb-main": [
+              "p-main"
+            ]
+          },
+          "sp-other": {
+            "tb-other": [
+              "p-other"
+            ]
+          },
+          "sp-mod": {
+            "tb-mod": []
+          },
+          "sp-new": {
+            "tb-new": [
+              "p-new"
+            ]
+          }
+        }
+      },
+      "expected": {
+        "calls": [
+          [
+            "space.select",
+            {
+              "id": "sp-main"
+            }
+          ],
+          [
+            "tab.select",
+            {
+              "id": "tb-main"
+            }
+          ],
+          [
+            "pane.focus",
+            {
+              "pane": "p-main"
+            }
+          ]
+        ],
+        "selection": {
+          "space": "sp-main",
+          "tab": "tb-main",
+          "pane": "p-main"
+        },
+        "creation_error": null
+      }
+    },
+    {
+      "name": "test_a_selection_the_creation_did_not_move_stays",
+      "input": {
+        "before": [
+          "sp-main",
+          "tb-main",
+          "p-main",
+          {
+            "term-p-main": "p-main",
+            "term-p-other": "p-other"
+          }
+        ],
+        "reply": {
+          "terminal": "term-p-new",
+          "pane": "p-new",
+          "space": "sp-new",
+          "tab": "tb-new"
+        },
+        "after": [
+          "sp-main",
+          "tb-main",
+          "p-main",
+          {
+            "term-p-main": "p-main",
+            "term-p-other": "p-other",
+            "term-p-new": "p-new"
+          }
+        ],
+        "spaces": {
+          "sp-main": {
+            "tb-main": [
+              "p-main"
+            ]
+          },
+          "sp-other": {
+            "tb-other": [
+              "p-other"
+            ]
+          },
+          "sp-mod": {
+            "tb-mod": []
+          },
+          "sp-new": {
+            "tb-new": [
+              "p-new"
+            ]
+          }
+        }
+      },
+      "expected": {
+        "calls": [],
+        "selection": {
+          "space": "sp-main",
+          "tab": "tb-main",
+          "pane": "p-main"
+        },
+        "creation_error": null
+      }
+    },
+    {
+      "name": "test_a_person_choosing_another_existing_space_meanwhile_is_not_overridden",
+      "input": {
+        "before": [
+          "sp-main",
+          "tb-main",
+          "p-main",
+          {
+            "term-p-main": "p-main",
+            "term-p-other": "p-other"
+          }
+        ],
+        "reply": {
+          "terminal": "term-p-new",
+          "pane": "p-new",
+          "space": "sp-new",
+          "tab": "tb-new"
+        },
+        "after": [
+          "sp-other",
+          "tb-other",
+          "p-other",
+          {
+            "term-p-main": "p-main",
+            "term-p-other": "p-other",
+            "term-p-new": "p-new"
+          }
+        ],
+        "spaces": {
+          "sp-main": {
+            "tb-main": [
+              "p-main"
+            ]
+          },
+          "sp-other": {
+            "tb-other": [
+              "p-other"
+            ]
+          },
+          "sp-mod": {
+            "tb-mod": []
+          },
+          "sp-new": {
+            "tb-new": [
+              "p-new"
+            ]
+          }
+        }
+      },
+      "expected": {
+        "calls": [],
+        "selection": {
+          "space": "sp-other",
+          "tab": "tb-other",
+          "pane": "p-other"
+        },
+        "creation_error": null
+      }
+    },
+    {
+      "name": "test_a_failure_before_the_terminal_shows_still_undoes_what_the_creation_moved",
+      "input": {
+        "before": [
+          "sp-main",
+          "tb-main",
+          "p-main",
+          {
+            "term-p-main": "p-main",
+            "term-p-other": "p-other"
+          }
+        ],
+        "reply": {
+          "terminal": "term-p-new",
+          "pane": "p-new",
+          "space": "sp-new",
+          "tab": "tb-new"
+        },
+        "after": [
+          "sp-new",
+          "tb-new",
+          "p-new",
+          {
+            "term-p-main": "p-main",
+            "term-p-other": "p-other"
+          }
+        ],
+        "spaces": {
+          "sp-main": {
+            "tb-main": [
+              "p-main"
+            ]
+          },
+          "sp-other": {
+            "tb-other": [
+              "p-other"
+            ]
+          },
+          "sp-mod": {
+            "tb-mod": []
+          },
+          "sp-new": {
+            "tb-new": [
+              "p-new"
+            ]
+          }
+        }
+      },
+      "expected": {
+        "calls": [
+          [
+            "space.select",
+            {
+              "id": "sp-main"
+            }
+          ],
+          [
+            "tab.select",
+            {
+              "id": "tb-main"
+            }
+          ],
+          [
+            "pane.focus",
+            {
+              "pane": "p-main"
+            }
+          ]
+        ],
+        "selection": {
+          "space": "sp-main",
+          "tab": "tb-main",
+          "pane": "p-main"
+        },
+        "creation_error": "SystemExit"
+      }
+    },
+    {
+      "name": "test_a_failure_that_moved_nothing_leaves_a_persons_choice_alone",
+      "input": {
+        "before": [
+          "sp-main",
+          "tb-main",
+          "p-main",
+          {
+            "term-p-main": "p-main",
+            "term-p-other": "p-other"
+          }
+        ],
+        "reply": {
+          "terminal": "term-p-new",
+          "pane": "p-new",
+          "space": "sp-new",
+          "tab": "tb-new"
+        },
+        "after": [
+          "sp-other",
+          "tb-other",
+          "p-other",
+          {
+            "term-p-main": "p-main",
+            "term-p-other": "p-other"
+          }
+        ],
+        "spaces": {
+          "sp-main": {
+            "tb-main": [
+              "p-main"
+            ]
+          },
+          "sp-other": {
+            "tb-other": [
+              "p-other"
+            ]
+          },
+          "sp-mod": {
+            "tb-mod": []
+          },
+          "sp-new": {
+            "tb-new": [
+              "p-new"
+            ]
+          }
+        }
+      },
+      "expected": {
+        "calls": [],
+        "selection": {
+          "space": "sp-other",
+          "tab": "tb-other",
+          "pane": "p-other"
+        },
+        "creation_error": "SystemExit"
+      }
+    },
+    {
+      "name": "test_a_person_choosing_a_mod_pane_meanwhile_is_not_overridden",
+      "input": {
+        "before": [
+          "sp-main",
+          "tb-main",
+          "p-main",
+          {
+            "term-p-main": "p-main",
+            "term-p-other": "p-other"
+          }
+        ],
+        "reply": {
+          "terminal": "term-p-new",
+          "pane": "p-new",
+          "space": "sp-new",
+          "tab": "tb-new"
+        },
+        "after": [
+          "sp-mod",
+          "tb-mod",
+          "p-mod",
+          {
+            "term-p-main": "p-main",
+            "term-p-other": "p-other",
+            "term-p-new": "p-new"
+          }
+        ],
+        "spaces": {
+          "sp-main": {
+            "tb-main": [
+              "p-main"
+            ]
+          },
+          "sp-other": {
+            "tb-other": [
+              "p-other"
+            ]
+          },
+          "sp-mod": {
+            "tb-mod": []
+          },
+          "sp-new": {
+            "tb-new": [
+              "p-new"
+            ]
+          }
+        }
+      },
+      "expected": {
+        "calls": [],
+        "selection": {
+          "space": "sp-mod",
+          "tab": "tb-mod",
+          "pane": "p-mod"
+        },
+        "creation_error": null
+      }
+    },
+    {
+      "name": "test_a_failure_leaves_a_persons_mod_pane_choice_alone",
+      "input": {
+        "before": [
+          "sp-main",
+          "tb-main",
+          "p-main",
+          {
+            "term-p-main": "p-main",
+            "term-p-other": "p-other"
+          }
+        ],
+        "reply": {
+          "terminal": "term-p-new",
+          "pane": "p-new",
+          "space": "sp-new",
+          "tab": "tb-new"
+        },
+        "after": [
+          "sp-mod",
+          "tb-mod",
+          "p-mod",
+          {
+            "term-p-main": "p-main",
+            "term-p-other": "p-other"
+          }
+        ],
+        "spaces": {
+          "sp-main": {
+            "tb-main": [
+              "p-main"
+            ]
+          },
+          "sp-other": {
+            "tb-other": [
+              "p-other"
+            ]
+          },
+          "sp-mod": {
+            "tb-mod": []
+          },
+          "sp-new": {
+            "tb-new": [
+              "p-new"
+            ]
+          }
+        }
+      },
+      "expected": {
+        "calls": [],
+        "selection": {
+          "space": "sp-mod",
+          "tab": "tb-mod",
+          "pane": "p-mod"
+        },
+        "creation_error": "SystemExit"
+      }
+    },
+    {
+      "name": "test_the_new_space_taking_over_from_a_mod_pane_is_undone",
+      "input": {
+        "before": [
+          "sp-mod",
+          "tb-mod",
+          "p-mod",
+          {
+            "term-p-main": "p-main",
+            "term-p-other": "p-other"
+          }
+        ],
+        "reply": {
+          "terminal": "term-p-new",
+          "pane": "p-new",
+          "space": "sp-new",
+          "tab": "tb-new"
+        },
+        "after": [
+          "sp-new",
+          "tb-new",
+          "p-new",
+          {
+            "term-p-main": "p-main",
+            "term-p-other": "p-other",
+            "term-p-new": "p-new"
+          }
+        ],
+        "spaces": {
+          "sp-main": {
+            "tb-main": [
+              "p-main"
+            ]
+          },
+          "sp-other": {
+            "tb-other": [
+              "p-other"
+            ]
+          },
+          "sp-mod": {
+            "tb-mod": []
+          },
+          "sp-new": {
+            "tb-new": [
+              "p-new"
+            ]
+          }
+        }
+      },
+      "expected": {
+        "calls": [
+          [
+            "space.select",
+            {
+              "id": "sp-mod"
+            }
+          ],
+          [
+            "tab.select",
+            {
+              "id": "tb-mod"
+            }
+          ],
+          [
+            "pane.focus",
+            {
+              "pane": "p-mod"
+            }
+          ]
+        ],
+        "selection": {
+          "space": "sp-mod",
+          "tab": "tb-mod",
+          "pane": "p-mod"
+        },
+        "creation_error": null
+      }
+    },
+    {
+      "name": "test_another_jobs_new_pane_chosen_meanwhile_is_not_overridden",
+      "input": {
+        "before": [
+          "sp-main",
+          "tb-main",
+          "p-main",
+          {
+            "term-p-main": "p-main",
+            "term-p-other": "p-other"
+          }
+        ],
+        "reply": {
+          "terminal": "term-p-new",
+          "pane": "p-new",
+          "space": "sp-new",
+          "tab": "tb-new"
+        },
+        "after": [
+          "sp-other",
+          "tb-unrelated",
+          "p-unrelated",
+          {
+            "term-p-main": "p-main",
+            "term-p-other": "p-other",
+            "term-p-unrelated": "p-unrelated",
+            "term-p-new": "p-new"
+          }
+        ],
+        "spaces": {
+          "sp-main": {
+            "tb-main": [
+              "p-main"
+            ]
+          },
+          "sp-other": {
+            "tb-other": [
+              "p-other"
+            ],
+            "tb-unrelated": [
+              "p-unrelated"
+            ]
+          },
+          "sp-mod": {
+            "tb-mod": []
+          },
+          "sp-new": {
+            "tb-new": [
+              "p-new"
+            ]
+          }
+        }
+      },
+      "expected": {
+        "calls": [],
+        "selection": {
+          "space": "sp-other",
+          "tab": "tb-unrelated",
+          "pane": "p-unrelated"
+        },
+        "creation_error": null
+      }
+    },
+    {
+      "name": "test_known_limit_a_failed_creation_cannot_tell_a_concurrent_pane_from_its_own",
+      "input": {
+        "before": [
+          "sp-main",
+          "tb-main",
+          "p-main",
+          {
+            "term-p-main": "p-main",
+            "term-p-other": "p-other"
+          }
+        ],
+        "reply": null,
+        "after": [
+          "sp-other",
+          "tb-unrelated",
+          "p-unrelated",
+          {
+            "term-p-main": "p-main",
+            "term-p-other": "p-other",
+            "term-p-unrelated": "p-unrelated"
+          }
+        ],
+        "spaces": {
+          "sp-main": {
+            "tb-main": [
+              "p-main"
+            ]
+          },
+          "sp-other": {
+            "tb-other": [
+              "p-other"
+            ],
+            "tb-unrelated": [
+              "p-unrelated"
+            ]
+          },
+          "sp-mod": {
+            "tb-mod": []
+          }
+        }
+      },
+      "expected": {
+        "calls": [
+          [
+            "space.select",
+            {
+              "id": "sp-main"
+            }
+          ],
+          [
+            "tab.select",
+            {
+              "id": "tb-main"
+            }
+          ],
+          [
+            "pane.focus",
+            {
+              "pane": "p-main"
+            }
+          ]
+        ],
+        "selection": {
+          "space": "sp-main",
+          "tab": "tb-main",
+          "pane": "p-main"
+        },
+        "creation_error": "CalledProcessError"
+      }
+    }
+  ]
+}

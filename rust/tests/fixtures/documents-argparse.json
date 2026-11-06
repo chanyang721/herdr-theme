@@ -1,0 +1,2536 @@
+{
+  "baseline": "8c5b71d2f1074bb5d1d831fa395617bf4ae2abc8",
+  "cases": [
+    {
+      "command": "collect_docs",
+      "args": [
+        "--help"
+      ],
+      "expected": {
+        "kind": "help",
+        "exit": 0,
+        "stdout": "usage: herdr-theme collect_docs [-h] [--config CONFIG] [--output OUTPUT] [--pins PINS]\n\nIndex configured project documents and maintain only explicitly owned\nsymlinks.\n\noptions:\n  -h, --help       show this help message and exit\n  --config CONFIG\n  --output OUTPUT\n  --pins PINS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "command": "collect_docs",
+      "args": [
+        "--unknown",
+        "--help"
+      ],
+      "expected": {
+        "kind": "help",
+        "exit": 0,
+        "stdout": "usage: herdr-theme collect_docs [-h] [--config CONFIG] [--output OUTPUT] [--pins PINS]\n\nIndex configured project documents and maintain only explicitly owned\nsymlinks.\n\noptions:\n  -h, --help       show this help message and exit\n  --config CONFIG\n  --output OUTPUT\n  --pins PINS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "command": "collect_docs",
+      "args": [
+        "--help",
+        "--unknown"
+      ],
+      "expected": {
+        "kind": "help",
+        "exit": 0,
+        "stdout": "usage: herdr-theme collect_docs [-h] [--config CONFIG] [--output OUTPUT] [--pins PINS]\n\nIndex configured project documents and maintain only explicitly owned\nsymlinks.\n\noptions:\n  -h, --help       show this help message and exit\n  --config CONFIG\n  --output OUTPUT\n  --pins PINS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "command": "collect_docs",
+      "args": [
+        "--h"
+      ],
+      "expected": {
+        "kind": "help",
+        "exit": 0,
+        "stdout": "usage: herdr-theme collect_docs [-h] [--config CONFIG] [--output OUTPUT] [--pins PINS]\n\nIndex configured project documents and maintain only explicitly owned\nsymlinks.\n\noptions:\n  -h, --help       show this help message and exit\n  --config CONFIG\n  --output OUTPUT\n  --pins PINS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "command": "collect_docs",
+      "args": [
+        "--he"
+      ],
+      "expected": {
+        "kind": "help",
+        "exit": 0,
+        "stdout": "usage: herdr-theme collect_docs [-h] [--config CONFIG] [--output OUTPUT] [--pins PINS]\n\nIndex configured project documents and maintain only explicitly owned\nsymlinks.\n\noptions:\n  -h, --help       show this help message and exit\n  --config CONFIG\n  --output OUTPUT\n  --pins PINS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "command": "collect_docs",
+      "args": [
+        "-hh"
+      ],
+      "expected": {
+        "kind": "help",
+        "exit": 0,
+        "stdout": "usage: herdr-theme collect_docs [-h] [--config CONFIG] [--output OUTPUT] [--pins PINS]\n\nIndex configured project documents and maintain only explicitly owned\nsymlinks.\n\noptions:\n  -h, --help       show this help message and exit\n  --config CONFIG\n  --output OUTPUT\n  --pins PINS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "command": "collect_docs",
+      "args": [
+        "-hfoo"
+      ],
+      "expected": {
+        "kind": "help",
+        "exit": 0,
+        "stdout": "usage: herdr-theme collect_docs [-h] [--config CONFIG] [--output OUTPUT] [--pins PINS]\n\nIndex configured project documents and maintain only explicitly owned\nsymlinks.\n\noptions:\n  -h, --help       show this help message and exit\n  --config CONFIG\n  --output OUTPUT\n  --pins PINS\n",
+        "stderr": ""
+      }
+    },
+    {
+      "command": "collect_docs",
+      "args": [
+        "--help=x"
+      ],
+      "expected": {
+        "kind": "error",
+        "exit": 2,
+        "stdout": "",
+        "stderr": "usage: herdr-theme collect_docs [-h] [--config CONFIG] [--output OUTPUT] [--pins PINS]\nherdr-theme collect_docs: error: argument -h/--help: ignored explicit argument 'x'\n"
+      }
+    },
+    {
+      "command": "collect_docs",
+      "args": [
+        "--unknown"
+      ],
+      "expected": {
+        "kind": "error",
+        "exit": 2,
+        "stdout": "",
+        "stderr": "usage: herdr-theme collect_docs [-h] [--config CONFIG] [--output OUTPUT] [--pins PINS]\nherdr-theme collect_docs: error: unrecognized arguments: --unknown\n"
+      }
+    },
+    {
+      "command": "collect_docs",
+      "args": [],
+      "expected": {
+        "kind": "accepted",
+        "exit": 0,
+        "stdout": "",
+        "stderr": ""
+      }
+    },
+    {
+      "command": "doc_routing",
+      "args": [
+        "--help"
+      ],
+      "expected": {
+        "kind": "help",
+        "exit": 0,
+        "stdout": "usage: herdr-theme doc_routing [-h] [--routing ROUTING]\n\nPrint where each routed document goes.\n\noptions:\n  -h, --help         show this help message and exit\n  --routing ROUTING\n",
+        "stderr": ""
+      }
+    },
+    {
+      "command": "doc_routing",
+      "args": [
+        "--unknown",
+        "--help"
+      ],
+      "expected": {
+        "kind": "help",
+        "exit": 0,
+        "stdout": "usage: herdr-theme doc_routing [-h] [--routing ROUTING]\n\nPrint where each routed document goes.\n\noptions:\n  -h, --help         show this help message and exit\n  --routing ROUTING\n",
+        "stderr": ""
+      }
+    },
+    {
+      "command": "doc_routing",
+      "args": [
+        "--help",
+        "--unknown"
+      ],
+      "expected": {
+        "kind": "help",
+        "exit": 0,
+        "stdout": "usage: herdr-theme doc_routing [-h] [--routing ROUTING]\n\nPrint where each routed document goes.\n\noptions:\n  -h, --help         show this help message and exit\n  --routing ROUTING\n",
+        "stderr": ""
+      }
+    },
+    {
+      "command": "doc_routing",
+      "args": [
+        "--h"
+      ],
+      "expected": {
+        "kind": "help",
+        "exit": 0,
+        "stdout": "usage: herdr-theme doc_routing [-h] [--routing ROUTING]\n\nPrint where each routed document goes.\n\noptions:\n  -h, --help         show this help message and exit\n  --routing ROUTING\n",
+        "stderr": ""
+      }
+    },
+    {
+      "command": "doc_routing",
+      "args": [
+        "--he"
+      ],
+      "expected": {
+        "kind": "help",
+        "exit": 0,
+        "stdout": "usage: herdr-theme doc_routing [-h] [--routing ROUTING]\n\nPrint where each routed document goes.\n\noptions:\n  -h, --help         show this help message and exit\n  --routing ROUTING\n",
+        "stderr": ""
+      }
+    },
+    {
+      "command": "doc_routing",
+      "args": [
+        "-hh"
+      ],
+      "expected": {
+        "kind": "help",
+        "exit": 0,
+        "stdout": "usage: herdr-theme doc_routing [-h] [--routing ROUTING]\n\nPrint where each routed document goes.\n\noptions:\n  -h, --help         show this help message and exit\n  --routing ROUTING\n",
+        "stderr": ""
+      }
+    },
+    {
+      "command": "doc_routing",
+      "args": [
+        "-hfoo"
+      ],
+      "expected": {
+        "kind": "help",
+        "exit": 0,
+        "stdout": "usage: herdr-theme doc_routing [-h] [--routing ROUTING]\n\nPrint where each routed document goes.\n\noptions:\n  -h, --help         show this help message and exit\n  --routing ROUTING\n",
+        "stderr": ""
+      }
+    },
+    {
+      "command": "doc_routing",
+      "args": [
+        "--help=x"
+      ],
+      "expected": {
+        "kind": "error",
+        "exit": 2,
+        "stdout": "",
+        "stderr": "usage: herdr-theme doc_routing [-h] [--routing ROUTING]\nherdr-theme doc_routing: error: argument -h/--help: ignored explicit argument 'x'\n"
+      }
+    },
+    {
+      "command": "doc_routing",
+      "args": [
+        "--unknown"
+      ],
+      "expected": {
+        "kind": "error",
+        "exit": 2,
+        "stdout": "",
+        "stderr": "usage: herdr-theme doc_routing [-h] [--routing ROUTING]\nherdr-theme doc_routing: error: unrecognized arguments: --unknown\n"
+      }
+    },
+    {
+      "command": "doc_routing",
+      "args": [],
+      "expected": {
+        "kind": "accepted",
+        "exit": 0,
+        "stdout": "",
+        "stderr": ""
+      }
+    },
+    {
+      "command": "resolve_doc_pins",
+      "args": [
+        "--help"
+      ],
+      "expected": {
+        "kind": "help",
+        "exit": 0,
+        "stdout": "usage: herdr-theme resolve_doc_pins [-h] [--config CONFIG] --space SPACE\n                           [--routing ROUTING]\n                           [--pin PIN | --pin-id PIN_ID | --unpin UNPIN]\n\nRead-only project document selection; only explicit pin commands write pin\nrules. The CLI prints ``catalog()``: pins first, then every document in the\nspace's folders with its kind, version family and state, then the harness\nview. ``resolve()`` is the older pins-plus-recent selection that pin commands\nstill validate against.\n\noptions:\n  -h, --help         show this help message and exit\n  --config CONFIG\n  --space SPACE\n  --routing ROUTING  routing file (default: project-docs-routing.local.json\n                     beside --config)\n  --pin PIN\n  --pin-id PIN_ID\n  --unpin UNPIN\n",
+        "stderr": ""
+      }
+    },
+    {
+      "command": "resolve_doc_pins",
+      "args": [
+        "--unknown",
+        "--help"
+      ],
+      "expected": {
+        "kind": "help",
+        "exit": 0,
+        "stdout": "usage: herdr-theme resolve_doc_pins [-h] [--config CONFIG] --space SPACE\n                           [--routing ROUTING]\n                           [--pin PIN | --pin-id PIN_ID | --unpin UNPIN]\n\nRead-only project document selection; only explicit pin commands write pin\nrules. The CLI prints ``catalog()``: pins first, then every document in the\nspace's folders with its kind, version family and state, then the harness\nview. ``resolve()`` is the older pins-plus-recent selection that pin commands\nstill validate against.\n\noptions:\n  -h, --help         show this help message and exit\n  --config CONFIG\n  --space SPACE\n  --routing ROUTING  routing file (default: project-docs-routing.local.json\n                     beside --config)\n  --pin PIN\n  --pin-id PIN_ID\n  --unpin UNPIN\n",
+        "stderr": ""
+      }
+    },
+    {
+      "command": "resolve_doc_pins",
+      "args": [
+        "--help",
+        "--unknown"
+      ],
+      "expected": {
+        "kind": "help",
+        "exit": 0,
+        "stdout": "usage: herdr-theme resolve_doc_pins [-h] [--config CONFIG] --space SPACE\n                           [--routing ROUTING]\n                           [--pin PIN | --pin-id PIN_ID | --unpin UNPIN]\n\nRead-only project document selection; only explicit pin commands write pin\nrules. The CLI prints ``catalog()``: pins first, then every document in the\nspace's folders with its kind, version family and state, then the harness\nview. ``resolve()`` is the older pins-plus-recent selection that pin commands\nstill validate against.\n\noptions:\n  -h, --help         show this help message and exit\n  --config CONFIG\n  --space SPACE\n  --routing ROUTING  routing file (default: project-docs-routing.local.json\n                     beside --config)\n  --pin PIN\n  --pin-id PIN_ID\n  --unpin UNPIN\n",
+        "stderr": ""
+      }
+    },
+    {
+      "command": "resolve_doc_pins",
+      "args": [
+        "--h"
+      ],
+      "expected": {
+        "kind": "help",
+        "exit": 0,
+        "stdout": "usage: herdr-theme resolve_doc_pins [-h] [--config CONFIG] --space SPACE\n                           [--routing ROUTING]\n                           [--pin PIN | --pin-id PIN_ID | --unpin UNPIN]\n\nRead-only project document selection; only explicit pin commands write pin\nrules. The CLI prints ``catalog()``: pins first, then every document in the\nspace's folders with its kind, version family and state, then the harness\nview. ``resolve()`` is the older pins-plus-recent selection that pin commands\nstill validate against.\n\noptions:\n  -h, --help         show this help message and exit\n  --config CONFIG\n  --space SPACE\n  --routing ROUTING  routing file (default: project-docs-routing.local.json\n                     beside --config)\n  --pin PIN\n  --pin-id PIN_ID\n  --unpin UNPIN\n",
+        "stderr": ""
+      }
+    },
+    {
+      "command": "resolve_doc_pins",
+      "args": [
+        "--he"
+      ],
+      "expected": {
+        "kind": "help",
+        "exit": 0,
+        "stdout": "usage: herdr-theme resolve_doc_pins [-h] [--config CONFIG] --space SPACE\n                           [--routing ROUTING]\n                           [--pin PIN | --pin-id PIN_ID | --unpin UNPIN]\n\nRead-only project document selection; only explicit pin commands write pin\nrules. The CLI prints ``catalog()``: pins first, then every document in the\nspace's folders with its kind, version family and state, then the harness\nview. ``resolve()`` is the older pins-plus-recent selection that pin commands\nstill validate against.\n\noptions:\n  -h, --help         show this help message and exit\n  --config CONFIG\n  --space SPACE\n  --routing ROUTING  routing file (default: project-docs-routing.local.json\n                     beside --config)\n  --pin PIN\n  --pin-id PIN_ID\n  --unpin UNPIN\n",
+        "stderr": ""
+      }
+    },
+    {
+      "command": "resolve_doc_pins",
+      "args": [
+        "-hh"
+      ],
+      "expected": {
+        "kind": "help",
+        "exit": 0,
+        "stdout": "usage: herdr-theme resolve_doc_pins [-h] [--config CONFIG] --space SPACE\n                           [--routing ROUTING]\n                           [--pin PIN | --pin-id PIN_ID | --unpin UNPIN]\n\nRead-only project document selection; only explicit pin commands write pin\nrules. The CLI prints ``catalog()``: pins first, then every document in the\nspace's folders with its kind, version family and state, then the harness\nview. ``resolve()`` is the older pins-plus-recent selection that pin commands\nstill validate against.\n\noptions:\n  -h, --help         show this help message and exit\n  --config CONFIG\n  --space SPACE\n  --routing ROUTING  routing file (default: project-docs-routing.local.json\n                     beside --config)\n  --pin PIN\n  --pin-id PIN_ID\n  --unpin UNPIN\n",
+        "stderr": ""
+      }
+    },
+    {
+      "command": "resolve_doc_pins",
+      "args": [
+        "-hfoo"
+      ],
+      "expected": {
+        "kind": "help",
+        "exit": 0,
+        "stdout": "usage: herdr-theme resolve_doc_pins [-h] [--config CONFIG] --space SPACE\n                           [--routing ROUTING]\n                           [--pin PIN | --pin-id PIN_ID | --unpin UNPIN]\n\nRead-only project document selection; only explicit pin commands write pin\nrules. The CLI prints ``catalog()``: pins first, then every document in the\nspace's folders with its kind, version family and state, then the harness\nview. ``resolve()`` is the older pins-plus-recent selection that pin commands\nstill validate against.\n\noptions:\n  -h, --help         show this help message and exit\n  --config CONFIG\n  --space SPACE\n  --routing ROUTING  routing file (default: project-docs-routing.local.json\n                     beside --config)\n  --pin PIN\n  --pin-id PIN_ID\n  --unpin UNPIN\n",
+        "stderr": ""
+      }
+    },
+    {
+      "command": "resolve_doc_pins",
+      "args": [
+        "--help=x"
+      ],
+      "expected": {
+        "kind": "error",
+        "exit": 2,
+        "stdout": "",
+        "stderr": "usage: herdr-theme resolve_doc_pins [-h] [--config CONFIG] --space SPACE\n                           [--routing ROUTING]\n                           [--pin PIN | --pin-id PIN_ID | --unpin UNPIN]\nherdr-theme resolve_doc_pins: error: argument -h/--help: ignored explicit argument 'x'\n"
+      }
+    },
+    {
+      "command": "resolve_doc_pins",
+      "args": [
+        "--unknown"
+      ],
+      "expected": {
+        "kind": "error",
+        "exit": 2,
+        "stdout": "",
+        "stderr": "usage: herdr-theme resolve_doc_pins [-h] [--config CONFIG] --space SPACE\n                           [--routing ROUTING]\n                           [--pin PIN | --pin-id PIN_ID | --unpin UNPIN]\nherdr-theme resolve_doc_pins: error: the following arguments are required: --space\n"
+      }
+    },
+    {
+      "command": "resolve_doc_pins",
+      "args": [],
+      "expected": {
+        "kind": "error",
+        "exit": 2,
+        "stdout": "",
+        "stderr": "usage: herdr-theme resolve_doc_pins [-h] [--config CONFIG] --space SPACE\n                           [--routing ROUTING]\n                           [--pin PIN | --pin-id PIN_ID | --unpin UNPIN]\nherdr-theme resolve_doc_pins: error: the following arguments are required: --space\n"
+      }
+    },
+    {
+      "command": "resolve_doc_pins",
+      "args": [
+        "--space=x",
+        "--pin="
+      ],
+      "expected": {
+        "kind": "accepted",
+        "exit": 0,
+        "stdout": "",
+        "stderr": ""
+      }
+    },
+    {
+      "command": "resolve_doc_pins",
+      "args": [
+        "--space",
+        "x",
+        "--pin=abc",
+        "--unpin=def"
+      ],
+      "expected": {
+        "kind": "error",
+        "exit": 2,
+        "stdout": "",
+        "stderr": "usage: herdr-theme resolve_doc_pins [-h] [--config CONFIG] --space SPACE\n                           [--routing ROUTING]\n                           [--pin PIN | --pin-id PIN_ID | --unpin UNPIN]\nherdr-theme resolve_doc_pins: error: argument --unpin: not allowed with argument --pin\n"
+      }
+    },
+    {
+      "command": "resolve_doc_pins",
+      "args": [
+        "--pin",
+        "x",
+        "--unpin",
+        "y",
+        "--help"
+      ],
+      "expected": {
+        "kind": "error",
+        "exit": 2,
+        "stdout": "",
+        "stderr": "usage: herdr-theme resolve_doc_pins [-h] [--config CONFIG] --space SPACE\n                           [--routing ROUTING]\n                           [--pin PIN | --pin-id PIN_ID | --unpin UNPIN]\nherdr-theme resolve_doc_pins: error: argument --unpin: not allowed with argument --pin\n"
+      }
+    },
+    {
+      "command": "resolve_doc_pins",
+      "args": [
+        "--space",
+        "x",
+        "--p",
+        "value"
+      ],
+      "expected": {
+        "kind": "error",
+        "exit": 2,
+        "stdout": "",
+        "stderr": "usage: herdr-theme resolve_doc_pins [-h] [--config CONFIG] --space SPACE\n                           [--routing ROUTING]\n                           [--pin PIN | --pin-id PIN_ID | --unpin UNPIN]\nherdr-theme resolve_doc_pins: error: ambiguous option: --p could match --pin, --pin-id\n"
+      }
+    },
+    {
+      "command": "open_doc_tab",
+      "args": [
+        "--help"
+      ],
+      "expected": {
+        "kind": "help",
+        "exit": 0,
+        "stdout": "usage: herdr-theme open_doc_tab [-h] [--space SPACE] [--no-show] file\n\nOpen a local document in its project's 문서 tab instead of an external editor.\n\npositional arguments:\n  file\n\noptions:\n  -h, --help     show this help message and exit\n  --space SPACE  space name or id (default: the space whose document folders\n                 contain the file)\n  --no-show      load it in the tab without switching to it\n",
+        "stderr": ""
+      }
+    },
+    {
+      "command": "open_doc_tab",
+      "args": [
+        "--unknown",
+        "--help"
+      ],
+      "expected": {
+        "kind": "help",
+        "exit": 0,
+        "stdout": "usage: herdr-theme open_doc_tab [-h] [--space SPACE] [--no-show] file\n\nOpen a local document in its project's 문서 tab instead of an external editor.\n\npositional arguments:\n  file\n\noptions:\n  -h, --help     show this help message and exit\n  --space SPACE  space name or id (default: the space whose document folders\n                 contain the file)\n  --no-show      load it in the tab without switching to it\n",
+        "stderr": ""
+      }
+    },
+    {
+      "command": "open_doc_tab",
+      "args": [
+        "--help",
+        "--unknown"
+      ],
+      "expected": {
+        "kind": "help",
+        "exit": 0,
+        "stdout": "usage: herdr-theme open_doc_tab [-h] [--space SPACE] [--no-show] file\n\nOpen a local document in its project's 문서 tab instead of an external editor.\n\npositional arguments:\n  file\n\noptions:\n  -h, --help     show this help message and exit\n  --space SPACE  space name or id (default: the space whose document folders\n                 contain the file)\n  --no-show      load it in the tab without switching to it\n",
+        "stderr": ""
+      }
+    },
+    {
+      "command": "open_doc_tab",
+      "args": [
+        "--h"
+      ],
+      "expected": {
+        "kind": "help",
+        "exit": 0,
+        "stdout": "usage: herdr-theme open_doc_tab [-h] [--space SPACE] [--no-show] file\n\nOpen a local document in its project's 문서 tab instead of an external editor.\n\npositional arguments:\n  file\n\noptions:\n  -h, --help     show this help message and exit\n  --space SPACE  space name or id (default: the space whose document folders\n                 contain the file)\n  --no-show      load it in the tab without switching to it\n",
+        "stderr": ""
+      }
+    },
+    {
+      "command": "open_doc_tab",
+      "args": [
+        "--he"
+      ],
+      "expected": {
+        "kind": "help",
+        "exit": 0,
+        "stdout": "usage: herdr-theme open_doc_tab [-h] [--space SPACE] [--no-show] file\n\nOpen a local document in its project's 문서 tab instead of an external editor.\n\npositional arguments:\n  file\n\noptions:\n  -h, --help     show this help message and exit\n  --space SPACE  space name or id (default: the space whose document folders\n                 contain the file)\n  --no-show      load it in the tab without switching to it\n",
+        "stderr": ""
+      }
+    },
+    {
+      "command": "open_doc_tab",
+      "args": [
+        "-hh"
+      ],
+      "expected": {
+        "kind": "help",
+        "exit": 0,
+        "stdout": "usage: herdr-theme open_doc_tab [-h] [--space SPACE] [--no-show] file\n\nOpen a local document in its project's 문서 tab instead of an external editor.\n\npositional arguments:\n  file\n\noptions:\n  -h, --help     show this help message and exit\n  --space SPACE  space name or id (default: the space whose document folders\n                 contain the file)\n  --no-show      load it in the tab without switching to it\n",
+        "stderr": ""
+      }
+    },
+    {
+      "command": "open_doc_tab",
+      "args": [
+        "-hfoo"
+      ],
+      "expected": {
+        "kind": "help",
+        "exit": 0,
+        "stdout": "usage: herdr-theme open_doc_tab [-h] [--space SPACE] [--no-show] file\n\nOpen a local document in its project's 문서 tab instead of an external editor.\n\npositional arguments:\n  file\n\noptions:\n  -h, --help     show this help message and exit\n  --space SPACE  space name or id (default: the space whose document folders\n                 contain the file)\n  --no-show      load it in the tab without switching to it\n",
+        "stderr": ""
+      }
+    },
+    {
+      "command": "open_doc_tab",
+      "args": [
+        "--help=x"
+      ],
+      "expected": {
+        "kind": "error",
+        "exit": 2,
+        "stdout": "",
+        "stderr": "usage: herdr-theme open_doc_tab [-h] [--space SPACE] [--no-show] file\nherdr-theme open_doc_tab: error: argument -h/--help: ignored explicit argument 'x'\n"
+      }
+    },
+    {
+      "command": "open_doc_tab",
+      "args": [
+        "--unknown"
+      ],
+      "expected": {
+        "kind": "error",
+        "exit": 2,
+        "stdout": "",
+        "stderr": "usage: herdr-theme open_doc_tab [-h] [--space SPACE] [--no-show] file\nherdr-theme open_doc_tab: error: the following arguments are required: file\n"
+      }
+    },
+    {
+      "command": "open_doc_tab",
+      "args": [],
+      "expected": {
+        "kind": "error",
+        "exit": 2,
+        "stdout": "",
+        "stderr": "usage: herdr-theme open_doc_tab [-h] [--space SPACE] [--no-show] file\nherdr-theme open_doc_tab: error: the following arguments are required: file\n"
+      }
+    },
+    {
+      "command": "open_doc_tab",
+      "args": [
+        "file.md",
+        "--space=--custom"
+      ],
+      "expected": {
+        "kind": "accepted",
+        "exit": 0,
+        "stdout": "",
+        "stderr": ""
+      }
+    },
+    {
+      "command": "open_doc_tab",
+      "args": [
+        "--space",
+        "x",
+        "file.md"
+      ],
+      "expected": {
+        "kind": "accepted",
+        "exit": 0,
+        "stdout": "",
+        "stderr": ""
+      }
+    },
+    {
+      "command": "open_doc_tab",
+      "args": [
+        "first.md",
+        "--space",
+        "x",
+        "extra.md"
+      ],
+      "expected": {
+        "kind": "error",
+        "exit": 2,
+        "stdout": "",
+        "stderr": "usage: herdr-theme open_doc_tab [-h] [--space SPACE] [--no-show] file\nherdr-theme open_doc_tab: error: unrecognized arguments: extra.md\n"
+      }
+    },
+    {
+      "command": "open_doc_tab",
+      "args": [
+        "--",
+        "--help"
+      ],
+      "expected": {
+        "kind": "accepted",
+        "exit": 0,
+        "stdout": "",
+        "stderr": ""
+      }
+    },
+    {
+      "command": "open_document",
+      "args": [
+        "--help"
+      ],
+      "expected": {
+        "kind": "help",
+        "exit": 0,
+        "stdout": "usage: herdr-theme open_document [-h] file\n\nOpen an existing local document in the theme's side panel without moving pane\nfocus.\n\npositional arguments:\n  file\n\noptions:\n  -h, --help  show this help message and exit\n",
+        "stderr": ""
+      }
+    },
+    {
+      "command": "open_document",
+      "args": [
+        "--unknown",
+        "--help"
+      ],
+      "expected": {
+        "kind": "help",
+        "exit": 0,
+        "stdout": "usage: herdr-theme open_document [-h] file\n\nOpen an existing local document in the theme's side panel without moving pane\nfocus.\n\npositional arguments:\n  file\n\noptions:\n  -h, --help  show this help message and exit\n",
+        "stderr": ""
+      }
+    },
+    {
+      "command": "open_document",
+      "args": [
+        "--help",
+        "--unknown"
+      ],
+      "expected": {
+        "kind": "help",
+        "exit": 0,
+        "stdout": "usage: herdr-theme open_document [-h] file\n\nOpen an existing local document in the theme's side panel without moving pane\nfocus.\n\npositional arguments:\n  file\n\noptions:\n  -h, --help  show this help message and exit\n",
+        "stderr": ""
+      }
+    },
+    {
+      "command": "open_document",
+      "args": [
+        "--h"
+      ],
+      "expected": {
+        "kind": "help",
+        "exit": 0,
+        "stdout": "usage: herdr-theme open_document [-h] file\n\nOpen an existing local document in the theme's side panel without moving pane\nfocus.\n\npositional arguments:\n  file\n\noptions:\n  -h, --help  show this help message and exit\n",
+        "stderr": ""
+      }
+    },
+    {
+      "command": "open_document",
+      "args": [
+        "--he"
+      ],
+      "expected": {
+        "kind": "help",
+        "exit": 0,
+        "stdout": "usage: herdr-theme open_document [-h] file\n\nOpen an existing local document in the theme's side panel without moving pane\nfocus.\n\npositional arguments:\n  file\n\noptions:\n  -h, --help  show this help message and exit\n",
+        "stderr": ""
+      }
+    },
+    {
+      "command": "open_document",
+      "args": [
+        "-hh"
+      ],
+      "expected": {
+        "kind": "help",
+        "exit": 0,
+        "stdout": "usage: herdr-theme open_document [-h] file\n\nOpen an existing local document in the theme's side panel without moving pane\nfocus.\n\npositional arguments:\n  file\n\noptions:\n  -h, --help  show this help message and exit\n",
+        "stderr": ""
+      }
+    },
+    {
+      "command": "open_document",
+      "args": [
+        "-hfoo"
+      ],
+      "expected": {
+        "kind": "help",
+        "exit": 0,
+        "stdout": "usage: herdr-theme open_document [-h] file\n\nOpen an existing local document in the theme's side panel without moving pane\nfocus.\n\npositional arguments:\n  file\n\noptions:\n  -h, --help  show this help message and exit\n",
+        "stderr": ""
+      }
+    },
+    {
+      "command": "open_document",
+      "args": [
+        "--help=x"
+      ],
+      "expected": {
+        "kind": "error",
+        "exit": 2,
+        "stdout": "",
+        "stderr": "usage: herdr-theme open_document [-h] file\nherdr-theme open_document: error: argument -h/--help: ignored explicit argument 'x'\n"
+      }
+    },
+    {
+      "command": "open_document",
+      "args": [
+        "--unknown"
+      ],
+      "expected": {
+        "kind": "error",
+        "exit": 2,
+        "stdout": "",
+        "stderr": "usage: herdr-theme open_document [-h] file\nherdr-theme open_document: error: the following arguments are required: file\n"
+      }
+    },
+    {
+      "command": "open_document",
+      "args": [],
+      "expected": {
+        "kind": "error",
+        "exit": 2,
+        "stdout": "",
+        "stderr": "usage: herdr-theme open_document [-h] file\nherdr-theme open_document: error: the following arguments are required: file\n"
+      }
+    },
+    {
+      "command": "seed_workspace_pins",
+      "args": [
+        "--help"
+      ],
+      "expected": {
+        "kind": "help",
+        "exit": 0,
+        "stdout": "usage: herdr-theme seed_workspace_pins [-h] [--home HOME] [--ensure-spaces]\n\nSeed local workspace pins once, resolving IDs from this computer's Herdr app.\n\noptions:\n  -h, --help       show this help message and exit\n  --home HOME\n  --ensure-spaces\n",
+        "stderr": ""
+      }
+    },
+    {
+      "command": "seed_workspace_pins",
+      "args": [
+        "--unknown",
+        "--help"
+      ],
+      "expected": {
+        "kind": "help",
+        "exit": 0,
+        "stdout": "usage: herdr-theme seed_workspace_pins [-h] [--home HOME] [--ensure-spaces]\n\nSeed local workspace pins once, resolving IDs from this computer's Herdr app.\n\noptions:\n  -h, --help       show this help message and exit\n  --home HOME\n  --ensure-spaces\n",
+        "stderr": ""
+      }
+    },
+    {
+      "command": "seed_workspace_pins",
+      "args": [
+        "--help",
+        "--unknown"
+      ],
+      "expected": {
+        "kind": "help",
+        "exit": 0,
+        "stdout": "usage: herdr-theme seed_workspace_pins [-h] [--home HOME] [--ensure-spaces]\n\nSeed local workspace pins once, resolving IDs from this computer's Herdr app.\n\noptions:\n  -h, --help       show this help message and exit\n  --home HOME\n  --ensure-spaces\n",
+        "stderr": ""
+      }
+    },
+    {
+      "command": "seed_workspace_pins",
+      "args": [
+        "--h"
+      ],
+      "expected": {
+        "kind": "error",
+        "exit": 2,
+        "stdout": "",
+        "stderr": "usage: herdr-theme seed_workspace_pins [-h] [--home HOME] [--ensure-spaces]\nherdr-theme seed_workspace_pins: error: ambiguous option: --h could match --help, --home\n"
+      }
+    },
+    {
+      "command": "seed_workspace_pins",
+      "args": [
+        "--he"
+      ],
+      "expected": {
+        "kind": "help",
+        "exit": 0,
+        "stdout": "usage: herdr-theme seed_workspace_pins [-h] [--home HOME] [--ensure-spaces]\n\nSeed local workspace pins once, resolving IDs from this computer's Herdr app.\n\noptions:\n  -h, --help       show this help message and exit\n  --home HOME\n  --ensure-spaces\n",
+        "stderr": ""
+      }
+    },
+    {
+      "command": "seed_workspace_pins",
+      "args": [
+        "-hh"
+      ],
+      "expected": {
+        "kind": "help",
+        "exit": 0,
+        "stdout": "usage: herdr-theme seed_workspace_pins [-h] [--home HOME] [--ensure-spaces]\n\nSeed local workspace pins once, resolving IDs from this computer's Herdr app.\n\noptions:\n  -h, --help       show this help message and exit\n  --home HOME\n  --ensure-spaces\n",
+        "stderr": ""
+      }
+    },
+    {
+      "command": "seed_workspace_pins",
+      "args": [
+        "-hfoo"
+      ],
+      "expected": {
+        "kind": "help",
+        "exit": 0,
+        "stdout": "usage: herdr-theme seed_workspace_pins [-h] [--home HOME] [--ensure-spaces]\n\nSeed local workspace pins once, resolving IDs from this computer's Herdr app.\n\noptions:\n  -h, --help       show this help message and exit\n  --home HOME\n  --ensure-spaces\n",
+        "stderr": ""
+      }
+    },
+    {
+      "command": "seed_workspace_pins",
+      "args": [
+        "--help=x"
+      ],
+      "expected": {
+        "kind": "error",
+        "exit": 2,
+        "stdout": "",
+        "stderr": "usage: herdr-theme seed_workspace_pins [-h] [--home HOME] [--ensure-spaces]\nherdr-theme seed_workspace_pins: error: argument -h/--help: ignored explicit argument 'x'\n"
+      }
+    },
+    {
+      "command": "seed_workspace_pins",
+      "args": [
+        "--unknown"
+      ],
+      "expected": {
+        "kind": "error",
+        "exit": 2,
+        "stdout": "",
+        "stderr": "usage: herdr-theme seed_workspace_pins [-h] [--home HOME] [--ensure-spaces]\nherdr-theme seed_workspace_pins: error: unrecognized arguments: --unknown\n"
+      }
+    },
+    {
+      "command": "seed_workspace_pins",
+      "args": [],
+      "expected": {
+        "kind": "accepted",
+        "exit": 0,
+        "stdout": "",
+        "stderr": ""
+      }
+    },
+    {
+      "command": "set_workspace_icon",
+      "args": [
+        "--help"
+      ],
+      "expected": {
+        "kind": "help",
+        "exit": 0,
+        "stdout": "usage: herdr-theme set_workspace_icon [-h] [--background BACKGROUND] [--tint]\n                             workspace image\n\nSet a local workspace icon without committing customer assets to the theme.\n\npositional arguments:\n  workspace             workspace id or exact name\n  image\n\noptions:\n  -h, --help            show this help message and exit\n  --background BACKGROUND\n                        optional badge background, e.g. #ffffff\n  --tint                tint a monochrome SVG with the workspace color\n",
+        "stderr": ""
+      }
+    },
+    {
+      "command": "set_workspace_icon",
+      "args": [
+        "--unknown",
+        "--help"
+      ],
+      "expected": {
+        "kind": "help",
+        "exit": 0,
+        "stdout": "usage: herdr-theme set_workspace_icon [-h] [--background BACKGROUND] [--tint]\n                             workspace image\n\nSet a local workspace icon without committing customer assets to the theme.\n\npositional arguments:\n  workspace             workspace id or exact name\n  image\n\noptions:\n  -h, --help            show this help message and exit\n  --background BACKGROUND\n                        optional badge background, e.g. #ffffff\n  --tint                tint a monochrome SVG with the workspace color\n",
+        "stderr": ""
+      }
+    },
+    {
+      "command": "set_workspace_icon",
+      "args": [
+        "--help",
+        "--unknown"
+      ],
+      "expected": {
+        "kind": "help",
+        "exit": 0,
+        "stdout": "usage: herdr-theme set_workspace_icon [-h] [--background BACKGROUND] [--tint]\n                             workspace image\n\nSet a local workspace icon without committing customer assets to the theme.\n\npositional arguments:\n  workspace             workspace id or exact name\n  image\n\noptions:\n  -h, --help            show this help message and exit\n  --background BACKGROUND\n                        optional badge background, e.g. #ffffff\n  --tint                tint a monochrome SVG with the workspace color\n",
+        "stderr": ""
+      }
+    },
+    {
+      "command": "set_workspace_icon",
+      "args": [
+        "--h"
+      ],
+      "expected": {
+        "kind": "help",
+        "exit": 0,
+        "stdout": "usage: herdr-theme set_workspace_icon [-h] [--background BACKGROUND] [--tint]\n                             workspace image\n\nSet a local workspace icon without committing customer assets to the theme.\n\npositional arguments:\n  workspace             workspace id or exact name\n  image\n\noptions:\n  -h, --help            show this help message and exit\n  --background BACKGROUND\n                        optional badge background, e.g. #ffffff\n  --tint                tint a monochrome SVG with the workspace color\n",
+        "stderr": ""
+      }
+    },
+    {
+      "command": "set_workspace_icon",
+      "args": [
+        "--he"
+      ],
+      "expected": {
+        "kind": "help",
+        "exit": 0,
+        "stdout": "usage: herdr-theme set_workspace_icon [-h] [--background BACKGROUND] [--tint]\n                             workspace image\n\nSet a local workspace icon without committing customer assets to the theme.\n\npositional arguments:\n  workspace             workspace id or exact name\n  image\n\noptions:\n  -h, --help            show this help message and exit\n  --background BACKGROUND\n                        optional badge background, e.g. #ffffff\n  --tint                tint a monochrome SVG with the workspace color\n",
+        "stderr": ""
+      }
+    },
+    {
+      "command": "set_workspace_icon",
+      "args": [
+        "-hh"
+      ],
+      "expected": {
+        "kind": "help",
+        "exit": 0,
+        "stdout": "usage: herdr-theme set_workspace_icon [-h] [--background BACKGROUND] [--tint]\n                             workspace image\n\nSet a local workspace icon without committing customer assets to the theme.\n\npositional arguments:\n  workspace             workspace id or exact name\n  image\n\noptions:\n  -h, --help            show this help message and exit\n  --background BACKGROUND\n                        optional badge background, e.g. #ffffff\n  --tint                tint a monochrome SVG with the workspace color\n",
+        "stderr": ""
+      }
+    },
+    {
+      "command": "set_workspace_icon",
+      "args": [
+        "-hfoo"
+      ],
+      "expected": {
+        "kind": "help",
+        "exit": 0,
+        "stdout": "usage: herdr-theme set_workspace_icon [-h] [--background BACKGROUND] [--tint]\n                             workspace image\n\nSet a local workspace icon without committing customer assets to the theme.\n\npositional arguments:\n  workspace             workspace id or exact name\n  image\n\noptions:\n  -h, --help            show this help message and exit\n  --background BACKGROUND\n                        optional badge background, e.g. #ffffff\n  --tint                tint a monochrome SVG with the workspace color\n",
+        "stderr": ""
+      }
+    },
+    {
+      "command": "set_workspace_icon",
+      "args": [
+        "--help=x"
+      ],
+      "expected": {
+        "kind": "error",
+        "exit": 2,
+        "stdout": "",
+        "stderr": "usage: herdr-theme set_workspace_icon [-h] [--background BACKGROUND] [--tint]\n                             workspace image\nherdr-theme set_workspace_icon: error: argument -h/--help: ignored explicit argument 'x'\n"
+      }
+    },
+    {
+      "command": "set_workspace_icon",
+      "args": [
+        "--unknown"
+      ],
+      "expected": {
+        "kind": "error",
+        "exit": 2,
+        "stdout": "",
+        "stderr": "usage: herdr-theme set_workspace_icon [-h] [--background BACKGROUND] [--tint]\n                             workspace image\nherdr-theme set_workspace_icon: error: the following arguments are required: workspace, image\n"
+      }
+    },
+    {
+      "command": "set_workspace_icon",
+      "args": [],
+      "expected": {
+        "kind": "error",
+        "exit": 2,
+        "stdout": "",
+        "stderr": "usage: herdr-theme set_workspace_icon [-h] [--background BACKGROUND] [--tint]\n                             workspace image\nherdr-theme set_workspace_icon: error: the following arguments are required: workspace, image\n"
+      }
+    },
+    {
+      "command": "set_workspace_icon",
+      "args": [
+        "-1",
+        "image.svg"
+      ],
+      "expected": {
+        "kind": "accepted",
+        "exit": 0,
+        "stdout": "",
+        "stderr": ""
+      }
+    },
+    {
+      "command": "set_workspace_icon",
+      "args": [
+        "name",
+        "image.svg",
+        "--background=-custom"
+      ],
+      "expected": {
+        "kind": "accepted",
+        "exit": 0,
+        "stdout": "",
+        "stderr": ""
+      }
+    },
+    {
+      "command": "set_workspace_icon",
+      "args": [
+        "name",
+        "image.svg",
+        "--background",
+        "-1.0"
+      ],
+      "expected": {
+        "kind": "accepted",
+        "exit": 0,
+        "stdout": "",
+        "stderr": ""
+      }
+    },
+    {
+      "command": "set_workspace_icon",
+      "args": [
+        "name",
+        "image.svg",
+        "--background",
+        "-1e2"
+      ],
+      "expected": {
+        "kind": "error",
+        "exit": 2,
+        "stdout": "",
+        "stderr": "usage: herdr-theme set_workspace_icon [-h] [--background BACKGROUND] [--tint]\n                             workspace image\nherdr-theme set_workspace_icon: error: argument --background: expected one argument\n"
+      }
+    },
+    {
+      "command": "set_workspace_icon",
+      "args": [
+        "name",
+        "--tint",
+        "image.svg"
+      ],
+      "expected": {
+        "kind": "accepted",
+        "exit": 0,
+        "stdout": "",
+        "stderr": ""
+      }
+    },
+    {
+      "command": "set_workspace_icon",
+      "args": [
+        "name",
+        "image.svg",
+        "--background",
+        "red",
+        "--background",
+        "blue"
+      ],
+      "expected": {
+        "kind": "accepted",
+        "exit": 0,
+        "stdout": "",
+        "stderr": ""
+      }
+    },
+    {
+      "command": "set_workspace_icon",
+      "args": [
+        "--",
+        "--workspace",
+        "--image"
+      ],
+      "expected": {
+        "kind": "accepted",
+        "exit": 0,
+        "stdout": "",
+        "stderr": ""
+      }
+    },
+    {
+      "command": "render_html",
+      "args": [
+        "--help"
+      ],
+      "expected": {
+        "kind": "help",
+        "exit": 0,
+        "stdout": "usage: herdr-theme render_html [-h] --doc DOC [--theme {dark,light}] [--width WIDTH]\n\nRender one HTML report to cached PNG tiles for the 문서 tab.\n\noptions:\n  -h, --help            show this help message and exit\n  --doc DOC\n  --theme {dark,light}\n  --width WIDTH\n",
+        "stderr": ""
+      }
+    },
+    {
+      "command": "render_html",
+      "args": [
+        "--unknown",
+        "--help"
+      ],
+      "expected": {
+        "kind": "help",
+        "exit": 0,
+        "stdout": "usage: herdr-theme render_html [-h] --doc DOC [--theme {dark,light}] [--width WIDTH]\n\nRender one HTML report to cached PNG tiles for the 문서 tab.\n\noptions:\n  -h, --help            show this help message and exit\n  --doc DOC\n  --theme {dark,light}\n  --width WIDTH\n",
+        "stderr": ""
+      }
+    },
+    {
+      "command": "render_html",
+      "args": [
+        "--help",
+        "--unknown"
+      ],
+      "expected": {
+        "kind": "help",
+        "exit": 0,
+        "stdout": "usage: herdr-theme render_html [-h] --doc DOC [--theme {dark,light}] [--width WIDTH]\n\nRender one HTML report to cached PNG tiles for the 문서 tab.\n\noptions:\n  -h, --help            show this help message and exit\n  --doc DOC\n  --theme {dark,light}\n  --width WIDTH\n",
+        "stderr": ""
+      }
+    },
+    {
+      "command": "render_html",
+      "args": [
+        "--h"
+      ],
+      "expected": {
+        "kind": "help",
+        "exit": 0,
+        "stdout": "usage: herdr-theme render_html [-h] --doc DOC [--theme {dark,light}] [--width WIDTH]\n\nRender one HTML report to cached PNG tiles for the 문서 tab.\n\noptions:\n  -h, --help            show this help message and exit\n  --doc DOC\n  --theme {dark,light}\n  --width WIDTH\n",
+        "stderr": ""
+      }
+    },
+    {
+      "command": "render_html",
+      "args": [
+        "--he"
+      ],
+      "expected": {
+        "kind": "help",
+        "exit": 0,
+        "stdout": "usage: herdr-theme render_html [-h] --doc DOC [--theme {dark,light}] [--width WIDTH]\n\nRender one HTML report to cached PNG tiles for the 문서 tab.\n\noptions:\n  -h, --help            show this help message and exit\n  --doc DOC\n  --theme {dark,light}\n  --width WIDTH\n",
+        "stderr": ""
+      }
+    },
+    {
+      "command": "render_html",
+      "args": [
+        "-hh"
+      ],
+      "expected": {
+        "kind": "help",
+        "exit": 0,
+        "stdout": "usage: herdr-theme render_html [-h] --doc DOC [--theme {dark,light}] [--width WIDTH]\n\nRender one HTML report to cached PNG tiles for the 문서 tab.\n\noptions:\n  -h, --help            show this help message and exit\n  --doc DOC\n  --theme {dark,light}\n  --width WIDTH\n",
+        "stderr": ""
+      }
+    },
+    {
+      "command": "render_html",
+      "args": [
+        "-hfoo"
+      ],
+      "expected": {
+        "kind": "help",
+        "exit": 0,
+        "stdout": "usage: herdr-theme render_html [-h] --doc DOC [--theme {dark,light}] [--width WIDTH]\n\nRender one HTML report to cached PNG tiles for the 문서 tab.\n\noptions:\n  -h, --help            show this help message and exit\n  --doc DOC\n  --theme {dark,light}\n  --width WIDTH\n",
+        "stderr": ""
+      }
+    },
+    {
+      "command": "render_html",
+      "args": [
+        "--help=x"
+      ],
+      "expected": {
+        "kind": "error",
+        "exit": 2,
+        "stdout": "",
+        "stderr": "usage: herdr-theme render_html [-h] --doc DOC [--theme {dark,light}] [--width WIDTH]\nherdr-theme render_html: error: argument -h/--help: ignored explicit argument 'x'\n"
+      }
+    },
+    {
+      "command": "render_html",
+      "args": [
+        "--unknown"
+      ],
+      "expected": {
+        "kind": "error",
+        "exit": 2,
+        "stdout": "",
+        "stderr": "usage: herdr-theme render_html [-h] --doc DOC [--theme {dark,light}] [--width WIDTH]\nherdr-theme render_html: error: the following arguments are required: --doc\n"
+      }
+    },
+    {
+      "command": "render_html",
+      "args": [],
+      "expected": {
+        "kind": "error",
+        "exit": 2,
+        "stdout": "",
+        "stderr": "usage: herdr-theme render_html [-h] --doc DOC [--theme {dark,light}] [--width WIDTH]\nherdr-theme render_html: error: the following arguments are required: --doc\n"
+      }
+    },
+    {
+      "command": "render_html",
+      "args": [
+        "--width",
+        "bad",
+        "--help"
+      ],
+      "expected": {
+        "kind": "error",
+        "exit": 2,
+        "stdout": "",
+        "stderr": "usage: herdr-theme render_html [-h] --doc DOC [--theme {dark,light}] [--width WIDTH]\nherdr-theme render_html: error: argument --width: invalid int value: 'bad'\n"
+      }
+    },
+    {
+      "command": "render_html",
+      "args": [
+        "--theme",
+        "wrong",
+        "--help"
+      ],
+      "expected": {
+        "kind": "error",
+        "exit": 2,
+        "stdout": "",
+        "stderr": "usage: herdr-theme render_html [-h] --doc DOC [--theme {dark,light}] [--width WIDTH]\nherdr-theme render_html: error: argument --theme: invalid choice: 'wrong' (choose from dark, light)\n"
+      }
+    },
+    {
+      "command": "render_html",
+      "args": [
+        "--unknown",
+        "--width",
+        "bad"
+      ],
+      "expected": {
+        "kind": "error",
+        "exit": 2,
+        "stdout": "",
+        "stderr": "usage: herdr-theme render_html [-h] --doc DOC [--theme {dark,light}] [--width WIDTH]\nherdr-theme render_html: error: argument --width: invalid int value: 'bad'\n"
+      }
+    },
+    {
+      "command": "render_html",
+      "args": [
+        "--width",
+        "bad"
+      ],
+      "expected": {
+        "kind": "error",
+        "exit": 2,
+        "stdout": "",
+        "stderr": "usage: herdr-theme render_html [-h] --doc DOC [--theme {dark,light}] [--width WIDTH]\nherdr-theme render_html: error: argument --width: invalid int value: 'bad'\n"
+      }
+    },
+    {
+      "command": "render_html",
+      "args": [
+        "--doc",
+        "x",
+        "--theme",
+        "wrong",
+        "--theme",
+        "light"
+      ],
+      "expected": {
+        "kind": "error",
+        "exit": 2,
+        "stdout": "",
+        "stderr": "usage: herdr-theme render_html [-h] --doc DOC [--theme {dark,light}] [--width WIDTH]\nherdr-theme render_html: error: argument --theme: invalid choice: 'wrong' (choose from dark, light)\n"
+      }
+    },
+    {
+      "command": "render_html",
+      "args": [
+        "--doc=x",
+        "--width=-1"
+      ],
+      "expected": {
+        "kind": "accepted",
+        "exit": 0,
+        "stdout": "",
+        "stderr": ""
+      }
+    },
+    {
+      "command": "render_html",
+      "args": [
+        "--doc",
+        "x",
+        "--width",
+        "-1e2"
+      ],
+      "expected": {
+        "kind": "error",
+        "exit": 2,
+        "stdout": "",
+        "stderr": "usage: herdr-theme render_html [-h] --doc DOC [--theme {dark,light}] [--width WIDTH]\nherdr-theme render_html: error: argument --width: expected one argument\n"
+      }
+    },
+    {
+      "command": "render_html",
+      "args": [
+        "--doc",
+        "x",
+        "--width",
+        "-1.0"
+      ],
+      "expected": {
+        "kind": "error",
+        "exit": 2,
+        "stdout": "",
+        "stderr": "usage: herdr-theme render_html [-h] --doc DOC [--theme {dark,light}] [--width WIDTH]\nherdr-theme render_html: error: argument --width: invalid int value: '-1.0'\n"
+      }
+    },
+    {
+      "command": "render_html",
+      "args": [
+        "--doc",
+        "x",
+        "--width",
+        "١_٢"
+      ],
+      "expected": {
+        "kind": "accepted",
+        "exit": 0,
+        "stdout": "",
+        "stderr": ""
+      }
+    },
+    {
+      "command": "render_html",
+      "args": [
+        "--doc",
+        "x",
+        "--width",
+        "1__2"
+      ],
+      "expected": {
+        "kind": "error",
+        "exit": 2,
+        "stdout": "",
+        "stderr": "usage: herdr-theme render_html [-h] --doc DOC [--theme {dark,light}] [--width WIDTH]\nherdr-theme render_html: error: argument --width: invalid int value: '1__2'\n"
+      }
+    },
+    {
+      "command": "render_html",
+      "args": [
+        "--doc",
+        "--help"
+      ],
+      "expected": {
+        "kind": "error",
+        "exit": 2,
+        "stdout": "",
+        "stderr": "usage: herdr-theme render_html [-h] --doc DOC [--theme {dark,light}] [--width WIDTH]\nherdr-theme render_html: error: argument --doc: expected one argument\n"
+      }
+    },
+    {
+      "command": "render_mermaid",
+      "args": [
+        "--help"
+      ],
+      "expected": {
+        "kind": "help",
+        "exit": 0,
+        "stdout": "usage: herdr-theme render_mermaid [-h] --doc DOC [--theme {dark,light}]\n                         [--background BACKGROUND]\n\nRender the Mermaid blocks of one Markdown file to cached PNGs for the 문서 tab.\n\noptions:\n  -h, --help            show this help message and exit\n  --doc DOC\n  --theme {dark,light}\n  --background BACKGROUND\n",
+        "stderr": ""
+      }
+    },
+    {
+      "command": "render_mermaid",
+      "args": [
+        "--unknown",
+        "--help"
+      ],
+      "expected": {
+        "kind": "help",
+        "exit": 0,
+        "stdout": "usage: herdr-theme render_mermaid [-h] --doc DOC [--theme {dark,light}]\n                         [--background BACKGROUND]\n\nRender the Mermaid blocks of one Markdown file to cached PNGs for the 문서 tab.\n\noptions:\n  -h, --help            show this help message and exit\n  --doc DOC\n  --theme {dark,light}\n  --background BACKGROUND\n",
+        "stderr": ""
+      }
+    },
+    {
+      "command": "render_mermaid",
+      "args": [
+        "--help",
+        "--unknown"
+      ],
+      "expected": {
+        "kind": "help",
+        "exit": 0,
+        "stdout": "usage: herdr-theme render_mermaid [-h] --doc DOC [--theme {dark,light}]\n                         [--background BACKGROUND]\n\nRender the Mermaid blocks of one Markdown file to cached PNGs for the 문서 tab.\n\noptions:\n  -h, --help            show this help message and exit\n  --doc DOC\n  --theme {dark,light}\n  --background BACKGROUND\n",
+        "stderr": ""
+      }
+    },
+    {
+      "command": "render_mermaid",
+      "args": [
+        "--h"
+      ],
+      "expected": {
+        "kind": "help",
+        "exit": 0,
+        "stdout": "usage: herdr-theme render_mermaid [-h] --doc DOC [--theme {dark,light}]\n                         [--background BACKGROUND]\n\nRender the Mermaid blocks of one Markdown file to cached PNGs for the 문서 tab.\n\noptions:\n  -h, --help            show this help message and exit\n  --doc DOC\n  --theme {dark,light}\n  --background BACKGROUND\n",
+        "stderr": ""
+      }
+    },
+    {
+      "command": "render_mermaid",
+      "args": [
+        "--he"
+      ],
+      "expected": {
+        "kind": "help",
+        "exit": 0,
+        "stdout": "usage: herdr-theme render_mermaid [-h] --doc DOC [--theme {dark,light}]\n                         [--background BACKGROUND]\n\nRender the Mermaid blocks of one Markdown file to cached PNGs for the 문서 tab.\n\noptions:\n  -h, --help            show this help message and exit\n  --doc DOC\n  --theme {dark,light}\n  --background BACKGROUND\n",
+        "stderr": ""
+      }
+    },
+    {
+      "command": "render_mermaid",
+      "args": [
+        "-hh"
+      ],
+      "expected": {
+        "kind": "help",
+        "exit": 0,
+        "stdout": "usage: herdr-theme render_mermaid [-h] --doc DOC [--theme {dark,light}]\n                         [--background BACKGROUND]\n\nRender the Mermaid blocks of one Markdown file to cached PNGs for the 문서 tab.\n\noptions:\n  -h, --help            show this help message and exit\n  --doc DOC\n  --theme {dark,light}\n  --background BACKGROUND\n",
+        "stderr": ""
+      }
+    },
+    {
+      "command": "render_mermaid",
+      "args": [
+        "-hfoo"
+      ],
+      "expected": {
+        "kind": "help",
+        "exit": 0,
+        "stdout": "usage: herdr-theme render_mermaid [-h] --doc DOC [--theme {dark,light}]\n                         [--background BACKGROUND]\n\nRender the Mermaid blocks of one Markdown file to cached PNGs for the 문서 tab.\n\noptions:\n  -h, --help            show this help message and exit\n  --doc DOC\n  --theme {dark,light}\n  --background BACKGROUND\n",
+        "stderr": ""
+      }
+    },
+    {
+      "command": "render_mermaid",
+      "args": [
+        "--help=x"
+      ],
+      "expected": {
+        "kind": "error",
+        "exit": 2,
+        "stdout": "",
+        "stderr": "usage: herdr-theme render_mermaid [-h] --doc DOC [--theme {dark,light}]\n                         [--background BACKGROUND]\nherdr-theme render_mermaid: error: argument -h/--help: ignored explicit argument 'x'\n"
+      }
+    },
+    {
+      "command": "render_mermaid",
+      "args": [
+        "--unknown"
+      ],
+      "expected": {
+        "kind": "error",
+        "exit": 2,
+        "stdout": "",
+        "stderr": "usage: herdr-theme render_mermaid [-h] --doc DOC [--theme {dark,light}]\n                         [--background BACKGROUND]\nherdr-theme render_mermaid: error: the following arguments are required: --doc\n"
+      }
+    },
+    {
+      "command": "render_mermaid",
+      "args": [],
+      "expected": {
+        "kind": "error",
+        "exit": 2,
+        "stdout": "",
+        "stderr": "usage: herdr-theme render_mermaid [-h] --doc DOC [--theme {dark,light}]\n                         [--background BACKGROUND]\nherdr-theme render_mermaid: error: the following arguments are required: --doc\n"
+      }
+    },
+    {
+      "command": "render_mermaid",
+      "args": [
+        "--doc=x",
+        "--background=--dash"
+      ],
+      "expected": {
+        "kind": "accepted",
+        "exit": 0,
+        "stdout": "",
+        "stderr": ""
+      }
+    },
+    {
+      "command": "render_mermaid",
+      "args": [
+        "--doc",
+        "x",
+        "--background",
+        "-1e2"
+      ],
+      "expected": {
+        "kind": "error",
+        "exit": 2,
+        "stdout": "",
+        "stderr": "usage: herdr-theme render_mermaid [-h] --doc DOC [--theme {dark,light}]\n                         [--background BACKGROUND]\nherdr-theme render_mermaid: error: argument --background: expected one argument\n"
+      }
+    },
+    {
+      "command": "render_mermaid",
+      "args": [
+        "--doc",
+        "x",
+        "--theme",
+        "wrong",
+        "--theme",
+        "dark"
+      ],
+      "expected": {
+        "kind": "error",
+        "exit": 2,
+        "stdout": "",
+        "stderr": "usage: herdr-theme render_mermaid [-h] --doc DOC [--theme {dark,light}]\n                         [--background BACKGROUND]\nherdr-theme render_mermaid: error: argument --theme: invalid choice: 'wrong' (choose from dark, light)\n"
+      }
+    },
+    {
+      "command": "desktop",
+      "args": [
+        "--help"
+      ],
+      "expected": {
+        "kind": "help",
+        "exit": 0,
+        "stdout": "usage: herdr-theme desktop [-h] {open,browser,editor,copy-file,copy-text} path\n\nOpen or copy a local document through the current computer's desktop tools.\n\npositional arguments:\n  {open,browser,editor,copy-file,copy-text}\n  path\n\noptions:\n  -h, --help            show this help message and exit\n",
+        "stderr": ""
+      }
+    },
+    {
+      "command": "desktop",
+      "args": [
+        "--unknown",
+        "--help"
+      ],
+      "expected": {
+        "kind": "help",
+        "exit": 0,
+        "stdout": "usage: herdr-theme desktop [-h] {open,browser,editor,copy-file,copy-text} path\n\nOpen or copy a local document through the current computer's desktop tools.\n\npositional arguments:\n  {open,browser,editor,copy-file,copy-text}\n  path\n\noptions:\n  -h, --help            show this help message and exit\n",
+        "stderr": ""
+      }
+    },
+    {
+      "command": "desktop",
+      "args": [
+        "--help",
+        "--unknown"
+      ],
+      "expected": {
+        "kind": "help",
+        "exit": 0,
+        "stdout": "usage: herdr-theme desktop [-h] {open,browser,editor,copy-file,copy-text} path\n\nOpen or copy a local document through the current computer's desktop tools.\n\npositional arguments:\n  {open,browser,editor,copy-file,copy-text}\n  path\n\noptions:\n  -h, --help            show this help message and exit\n",
+        "stderr": ""
+      }
+    },
+    {
+      "command": "desktop",
+      "args": [
+        "--h"
+      ],
+      "expected": {
+        "kind": "help",
+        "exit": 0,
+        "stdout": "usage: herdr-theme desktop [-h] {open,browser,editor,copy-file,copy-text} path\n\nOpen or copy a local document through the current computer's desktop tools.\n\npositional arguments:\n  {open,browser,editor,copy-file,copy-text}\n  path\n\noptions:\n  -h, --help            show this help message and exit\n",
+        "stderr": ""
+      }
+    },
+    {
+      "command": "desktop",
+      "args": [
+        "--he"
+      ],
+      "expected": {
+        "kind": "help",
+        "exit": 0,
+        "stdout": "usage: herdr-theme desktop [-h] {open,browser,editor,copy-file,copy-text} path\n\nOpen or copy a local document through the current computer's desktop tools.\n\npositional arguments:\n  {open,browser,editor,copy-file,copy-text}\n  path\n\noptions:\n  -h, --help            show this help message and exit\n",
+        "stderr": ""
+      }
+    },
+    {
+      "command": "desktop",
+      "args": [
+        "-hh"
+      ],
+      "expected": {
+        "kind": "help",
+        "exit": 0,
+        "stdout": "usage: herdr-theme desktop [-h] {open,browser,editor,copy-file,copy-text} path\n\nOpen or copy a local document through the current computer's desktop tools.\n\npositional arguments:\n  {open,browser,editor,copy-file,copy-text}\n  path\n\noptions:\n  -h, --help            show this help message and exit\n",
+        "stderr": ""
+      }
+    },
+    {
+      "command": "desktop",
+      "args": [
+        "-hfoo"
+      ],
+      "expected": {
+        "kind": "help",
+        "exit": 0,
+        "stdout": "usage: herdr-theme desktop [-h] {open,browser,editor,copy-file,copy-text} path\n\nOpen or copy a local document through the current computer's desktop tools.\n\npositional arguments:\n  {open,browser,editor,copy-file,copy-text}\n  path\n\noptions:\n  -h, --help            show this help message and exit\n",
+        "stderr": ""
+      }
+    },
+    {
+      "command": "desktop",
+      "args": [
+        "--help=x"
+      ],
+      "expected": {
+        "kind": "error",
+        "exit": 2,
+        "stdout": "",
+        "stderr": "usage: herdr-theme desktop [-h] {open,browser,editor,copy-file,copy-text} path\nherdr-theme desktop: error: argument -h/--help: ignored explicit argument 'x'\n"
+      }
+    },
+    {
+      "command": "desktop",
+      "args": [
+        "--unknown"
+      ],
+      "expected": {
+        "kind": "error",
+        "exit": 2,
+        "stdout": "",
+        "stderr": "usage: herdr-theme desktop [-h] {open,browser,editor,copy-file,copy-text} path\nherdr-theme desktop: error: the following arguments are required: action, path\n"
+      }
+    },
+    {
+      "command": "desktop",
+      "args": [],
+      "expected": {
+        "kind": "error",
+        "exit": 2,
+        "stdout": "",
+        "stderr": "usage: herdr-theme desktop [-h] {open,browser,editor,copy-file,copy-text} path\nherdr-theme desktop: error: the following arguments are required: action, path\n"
+      }
+    },
+    {
+      "command": "desktop",
+      "args": [
+        "invalid",
+        "file"
+      ],
+      "expected": {
+        "kind": "error",
+        "exit": 2,
+        "stdout": "",
+        "stderr": "usage: herdr-theme desktop [-h] {open,browser,editor,copy-file,copy-text} path\nherdr-theme desktop: error: argument action: invalid choice: 'invalid' (choose from open, browser, editor, copy-file, copy-text)\n"
+      }
+    },
+    {
+      "command": "desktop",
+      "args": [
+        "invalid",
+        "--help"
+      ],
+      "expected": {
+        "kind": "error",
+        "exit": 2,
+        "stdout": "",
+        "stderr": "usage: herdr-theme desktop [-h] {open,browser,editor,copy-file,copy-text} path\nherdr-theme desktop: error: argument action: invalid choice: 'invalid' (choose from open, browser, editor, copy-file, copy-text)\n"
+      }
+    },
+    {
+      "command": "desktop",
+      "args": [
+        "open",
+        "--",
+        "--file"
+      ],
+      "expected": {
+        "kind": "accepted",
+        "exit": 0,
+        "stdout": "",
+        "stderr": ""
+      }
+    },
+    {
+      "command": "desktop",
+      "args": [
+        "open",
+        "file",
+        "extra"
+      ],
+      "expected": {
+        "kind": "error",
+        "exit": 2,
+        "stdout": "",
+        "stderr": "usage: herdr-theme desktop [-h] {open,browser,editor,copy-file,copy-text} path\nherdr-theme desktop: error: unrecognized arguments: extra\n"
+      }
+    },
+    {
+      "command": "install",
+      "args": [
+        "--help"
+      ],
+      "expected": {
+        "kind": "help",
+        "exit": 0,
+        "stdout": "usage: herdr-theme install [-h] [--home HOME] [--update] [--without-workspace-mods]\n                  [--workspace-mods-source WORKSPACE_MODS_SOURCE]\n\nInstall or update managed Herdr Theme files while preserving personal\nsettings.\n\noptions:\n  -h, --help            show this help message and exit\n  --home HOME\n  --update              Update managed mods; preserve personal keys/settings\n                        and modified layouts/colors\n  --without-workspace-mods\n                        Do not install the pinned Herdr Workspace Mods (the\n                        sixfold monitor strip then needs them installed\n                        separately)\n  --workspace-mods-source WORKSPACE_MODS_SOURCE\n                        A local Herdr Workspace Mods checkout already at the\n                        pinned commit (default: fetch it)\n",
+        "stderr": ""
+      }
+    },
+    {
+      "command": "install",
+      "args": [
+        "--unknown",
+        "--help"
+      ],
+      "expected": {
+        "kind": "help",
+        "exit": 0,
+        "stdout": "usage: herdr-theme install [-h] [--home HOME] [--update] [--without-workspace-mods]\n                  [--workspace-mods-source WORKSPACE_MODS_SOURCE]\n\nInstall or update managed Herdr Theme files while preserving personal\nsettings.\n\noptions:\n  -h, --help            show this help message and exit\n  --home HOME\n  --update              Update managed mods; preserve personal keys/settings\n                        and modified layouts/colors\n  --without-workspace-mods\n                        Do not install the pinned Herdr Workspace Mods (the\n                        sixfold monitor strip then needs them installed\n                        separately)\n  --workspace-mods-source WORKSPACE_MODS_SOURCE\n                        A local Herdr Workspace Mods checkout already at the\n                        pinned commit (default: fetch it)\n",
+        "stderr": ""
+      }
+    },
+    {
+      "command": "install",
+      "args": [
+        "--help",
+        "--unknown"
+      ],
+      "expected": {
+        "kind": "help",
+        "exit": 0,
+        "stdout": "usage: herdr-theme install [-h] [--home HOME] [--update] [--without-workspace-mods]\n                  [--workspace-mods-source WORKSPACE_MODS_SOURCE]\n\nInstall or update managed Herdr Theme files while preserving personal\nsettings.\n\noptions:\n  -h, --help            show this help message and exit\n  --home HOME\n  --update              Update managed mods; preserve personal keys/settings\n                        and modified layouts/colors\n  --without-workspace-mods\n                        Do not install the pinned Herdr Workspace Mods (the\n                        sixfold monitor strip then needs them installed\n                        separately)\n  --workspace-mods-source WORKSPACE_MODS_SOURCE\n                        A local Herdr Workspace Mods checkout already at the\n                        pinned commit (default: fetch it)\n",
+        "stderr": ""
+      }
+    },
+    {
+      "command": "install",
+      "args": [
+        "--h"
+      ],
+      "expected": {
+        "kind": "error",
+        "exit": 2,
+        "stdout": "",
+        "stderr": "usage: herdr-theme install [-h] [--home HOME] [--update] [--without-workspace-mods]\n                  [--workspace-mods-source WORKSPACE_MODS_SOURCE]\nherdr-theme install: error: ambiguous option: --h could match --help, --home\n"
+      }
+    },
+    {
+      "command": "install",
+      "args": [
+        "--he"
+      ],
+      "expected": {
+        "kind": "help",
+        "exit": 0,
+        "stdout": "usage: herdr-theme install [-h] [--home HOME] [--update] [--without-workspace-mods]\n                  [--workspace-mods-source WORKSPACE_MODS_SOURCE]\n\nInstall or update managed Herdr Theme files while preserving personal\nsettings.\n\noptions:\n  -h, --help            show this help message and exit\n  --home HOME\n  --update              Update managed mods; preserve personal keys/settings\n                        and modified layouts/colors\n  --without-workspace-mods\n                        Do not install the pinned Herdr Workspace Mods (the\n                        sixfold monitor strip then needs them installed\n                        separately)\n  --workspace-mods-source WORKSPACE_MODS_SOURCE\n                        A local Herdr Workspace Mods checkout already at the\n                        pinned commit (default: fetch it)\n",
+        "stderr": ""
+      }
+    },
+    {
+      "command": "install",
+      "args": [
+        "-hh"
+      ],
+      "expected": {
+        "kind": "help",
+        "exit": 0,
+        "stdout": "usage: herdr-theme install [-h] [--home HOME] [--update] [--without-workspace-mods]\n                  [--workspace-mods-source WORKSPACE_MODS_SOURCE]\n\nInstall or update managed Herdr Theme files while preserving personal\nsettings.\n\noptions:\n  -h, --help            show this help message and exit\n  --home HOME\n  --update              Update managed mods; preserve personal keys/settings\n                        and modified layouts/colors\n  --without-workspace-mods\n                        Do not install the pinned Herdr Workspace Mods (the\n                        sixfold monitor strip then needs them installed\n                        separately)\n  --workspace-mods-source WORKSPACE_MODS_SOURCE\n                        A local Herdr Workspace Mods checkout already at the\n                        pinned commit (default: fetch it)\n",
+        "stderr": ""
+      }
+    },
+    {
+      "command": "install",
+      "args": [
+        "-hfoo"
+      ],
+      "expected": {
+        "kind": "help",
+        "exit": 0,
+        "stdout": "usage: herdr-theme install [-h] [--home HOME] [--update] [--without-workspace-mods]\n                  [--workspace-mods-source WORKSPACE_MODS_SOURCE]\n\nInstall or update managed Herdr Theme files while preserving personal\nsettings.\n\noptions:\n  -h, --help            show this help message and exit\n  --home HOME\n  --update              Update managed mods; preserve personal keys/settings\n                        and modified layouts/colors\n  --without-workspace-mods\n                        Do not install the pinned Herdr Workspace Mods (the\n                        sixfold monitor strip then needs them installed\n                        separately)\n  --workspace-mods-source WORKSPACE_MODS_SOURCE\n                        A local Herdr Workspace Mods checkout already at the\n                        pinned commit (default: fetch it)\n",
+        "stderr": ""
+      }
+    },
+    {
+      "command": "install",
+      "args": [
+        "--help=x"
+      ],
+      "expected": {
+        "kind": "error",
+        "exit": 2,
+        "stdout": "",
+        "stderr": "usage: herdr-theme install [-h] [--home HOME] [--update] [--without-workspace-mods]\n                  [--workspace-mods-source WORKSPACE_MODS_SOURCE]\nherdr-theme install: error: argument -h/--help: ignored explicit argument 'x'\n"
+      }
+    },
+    {
+      "command": "install",
+      "args": [
+        "--unknown"
+      ],
+      "expected": {
+        "kind": "error",
+        "exit": 2,
+        "stdout": "",
+        "stderr": "usage: herdr-theme install [-h] [--home HOME] [--update] [--without-workspace-mods]\n                  [--workspace-mods-source WORKSPACE_MODS_SOURCE]\nherdr-theme install: error: unrecognized arguments: --unknown\n"
+      }
+    },
+    {
+      "command": "install",
+      "args": [],
+      "expected": {
+        "kind": "accepted",
+        "exit": 0,
+        "stdout": "",
+        "stderr": ""
+      }
+    },
+    {
+      "command": "install_doc_tabs",
+      "args": [
+        "--help"
+      ],
+      "expected": {
+        "kind": "help",
+        "exit": 0,
+        "stdout": "usage: herdr-theme install_doc_tabs [-h] [--install | --ensure-tabs] [--home HOME]\n                           [--repo REPO] [--mermaid MERMAID]\n\nInstall persistent document-only tabs without selecting a space, tab or pane.\nRun without flags for a read-only plan. --install checks then copies only this\nfeature; --ensure-tabs recreates missing tabs using the already installed mod.\n\noptions:\n  -h, --help         show this help message and exit\n  --install\n  --ensure-tabs\n  --home HOME\n  --repo REPO\n  --mermaid MERMAID  local mermaid.min.js (npm package mermaid, dist/) for\n                     diagram images\n",
+        "stderr": ""
+      }
+    },
+    {
+      "command": "install_doc_tabs",
+      "args": [
+        "--unknown",
+        "--help"
+      ],
+      "expected": {
+        "kind": "help",
+        "exit": 0,
+        "stdout": "usage: herdr-theme install_doc_tabs [-h] [--install | --ensure-tabs] [--home HOME]\n                           [--repo REPO] [--mermaid MERMAID]\n\nInstall persistent document-only tabs without selecting a space, tab or pane.\nRun without flags for a read-only plan. --install checks then copies only this\nfeature; --ensure-tabs recreates missing tabs using the already installed mod.\n\noptions:\n  -h, --help         show this help message and exit\n  --install\n  --ensure-tabs\n  --home HOME\n  --repo REPO\n  --mermaid MERMAID  local mermaid.min.js (npm package mermaid, dist/) for\n                     diagram images\n",
+        "stderr": ""
+      }
+    },
+    {
+      "command": "install_doc_tabs",
+      "args": [
+        "--help",
+        "--unknown"
+      ],
+      "expected": {
+        "kind": "help",
+        "exit": 0,
+        "stdout": "usage: herdr-theme install_doc_tabs [-h] [--install | --ensure-tabs] [--home HOME]\n                           [--repo REPO] [--mermaid MERMAID]\n\nInstall persistent document-only tabs without selecting a space, tab or pane.\nRun without flags for a read-only plan. --install checks then copies only this\nfeature; --ensure-tabs recreates missing tabs using the already installed mod.\n\noptions:\n  -h, --help         show this help message and exit\n  --install\n  --ensure-tabs\n  --home HOME\n  --repo REPO\n  --mermaid MERMAID  local mermaid.min.js (npm package mermaid, dist/) for\n                     diagram images\n",
+        "stderr": ""
+      }
+    },
+    {
+      "command": "install_doc_tabs",
+      "args": [
+        "--h"
+      ],
+      "expected": {
+        "kind": "error",
+        "exit": 2,
+        "stdout": "",
+        "stderr": "usage: herdr-theme install_doc_tabs [-h] [--install | --ensure-tabs] [--home HOME]\n                           [--repo REPO] [--mermaid MERMAID]\nherdr-theme install_doc_tabs: error: ambiguous option: --h could match --help, --home\n"
+      }
+    },
+    {
+      "command": "install_doc_tabs",
+      "args": [
+        "--he"
+      ],
+      "expected": {
+        "kind": "help",
+        "exit": 0,
+        "stdout": "usage: herdr-theme install_doc_tabs [-h] [--install | --ensure-tabs] [--home HOME]\n                           [--repo REPO] [--mermaid MERMAID]\n\nInstall persistent document-only tabs without selecting a space, tab or pane.\nRun without flags for a read-only plan. --install checks then copies only this\nfeature; --ensure-tabs recreates missing tabs using the already installed mod.\n\noptions:\n  -h, --help         show this help message and exit\n  --install\n  --ensure-tabs\n  --home HOME\n  --repo REPO\n  --mermaid MERMAID  local mermaid.min.js (npm package mermaid, dist/) for\n                     diagram images\n",
+        "stderr": ""
+      }
+    },
+    {
+      "command": "install_doc_tabs",
+      "args": [
+        "-hh"
+      ],
+      "expected": {
+        "kind": "help",
+        "exit": 0,
+        "stdout": "usage: herdr-theme install_doc_tabs [-h] [--install | --ensure-tabs] [--home HOME]\n                           [--repo REPO] [--mermaid MERMAID]\n\nInstall persistent document-only tabs without selecting a space, tab or pane.\nRun without flags for a read-only plan. --install checks then copies only this\nfeature; --ensure-tabs recreates missing tabs using the already installed mod.\n\noptions:\n  -h, --help         show this help message and exit\n  --install\n  --ensure-tabs\n  --home HOME\n  --repo REPO\n  --mermaid MERMAID  local mermaid.min.js (npm package mermaid, dist/) for\n                     diagram images\n",
+        "stderr": ""
+      }
+    },
+    {
+      "command": "install_doc_tabs",
+      "args": [
+        "-hfoo"
+      ],
+      "expected": {
+        "kind": "help",
+        "exit": 0,
+        "stdout": "usage: herdr-theme install_doc_tabs [-h] [--install | --ensure-tabs] [--home HOME]\n                           [--repo REPO] [--mermaid MERMAID]\n\nInstall persistent document-only tabs without selecting a space, tab or pane.\nRun without flags for a read-only plan. --install checks then copies only this\nfeature; --ensure-tabs recreates missing tabs using the already installed mod.\n\noptions:\n  -h, --help         show this help message and exit\n  --install\n  --ensure-tabs\n  --home HOME\n  --repo REPO\n  --mermaid MERMAID  local mermaid.min.js (npm package mermaid, dist/) for\n                     diagram images\n",
+        "stderr": ""
+      }
+    },
+    {
+      "command": "install_doc_tabs",
+      "args": [
+        "--help=x"
+      ],
+      "expected": {
+        "kind": "error",
+        "exit": 2,
+        "stdout": "",
+        "stderr": "usage: herdr-theme install_doc_tabs [-h] [--install | --ensure-tabs] [--home HOME]\n                           [--repo REPO] [--mermaid MERMAID]\nherdr-theme install_doc_tabs: error: argument -h/--help: ignored explicit argument 'x'\n"
+      }
+    },
+    {
+      "command": "install_doc_tabs",
+      "args": [
+        "--unknown"
+      ],
+      "expected": {
+        "kind": "error",
+        "exit": 2,
+        "stdout": "",
+        "stderr": "usage: herdr-theme install_doc_tabs [-h] [--install | --ensure-tabs] [--home HOME]\n                           [--repo REPO] [--mermaid MERMAID]\nherdr-theme install_doc_tabs: error: unrecognized arguments: --unknown\n"
+      }
+    },
+    {
+      "command": "install_doc_tabs",
+      "args": [],
+      "expected": {
+        "kind": "accepted",
+        "exit": 0,
+        "stdout": "",
+        "stderr": ""
+      }
+    },
+    {
+      "command": "install_doc_tabs",
+      "args": [
+        "--install",
+        "--ensure-tabs",
+        "--help"
+      ],
+      "expected": {
+        "kind": "error",
+        "exit": 2,
+        "stdout": "",
+        "stderr": "usage: herdr-theme install_doc_tabs [-h] [--install | --ensure-tabs] [--home HOME]\n                           [--repo REPO] [--mermaid MERMAID]\nherdr-theme install_doc_tabs: error: argument --ensure-tabs: not allowed with argument --install\n"
+      }
+    },
+    {
+      "command": "install_doc_tabs",
+      "args": [
+        "--ensure-tabs",
+        "--install"
+      ],
+      "expected": {
+        "kind": "error",
+        "exit": 2,
+        "stdout": "",
+        "stderr": "usage: herdr-theme install_doc_tabs [-h] [--install | --ensure-tabs] [--home HOME]\n                           [--repo REPO] [--mermaid MERMAID]\nherdr-theme install_doc_tabs: error: argument --install: not allowed with argument --ensure-tabs\n"
+      }
+    },
+    {
+      "command": "install_doc_tabs",
+      "args": [
+        "--install",
+        "--install"
+      ],
+      "expected": {
+        "kind": "accepted",
+        "exit": 0,
+        "stdout": "",
+        "stderr": ""
+      }
+    },
+    {
+      "command": "install_doc_tabs",
+      "args": [
+        "--repo",
+        "x",
+        "--mer",
+        "lib.js"
+      ],
+      "expected": {
+        "kind": "accepted",
+        "exit": 0,
+        "stdout": "",
+        "stderr": ""
+      }
+    },
+    {
+      "command": "install_preview",
+      "args": [
+        "--help"
+      ],
+      "expected": {
+        "kind": "help",
+        "exit": 0,
+        "stdout": "usage: herdr-theme install_preview [-h] [--source SOURCE] [--markdown-only]\n                          [--layout LAYOUT]\n\nInstall optional upstream viewers plus the theme's local HTML adapter.\n\noptions:\n  -h, --help       show this help message and exit\n  --source SOURCE  a clean checkout of the exact reviewed upstream commit\n  --markdown-only\n  --layout LAYOUT  personal layout filename, without .json\n",
+        "stderr": ""
+      }
+    },
+    {
+      "command": "install_preview",
+      "args": [
+        "--unknown",
+        "--help"
+      ],
+      "expected": {
+        "kind": "help",
+        "exit": 0,
+        "stdout": "usage: herdr-theme install_preview [-h] [--source SOURCE] [--markdown-only]\n                          [--layout LAYOUT]\n\nInstall optional upstream viewers plus the theme's local HTML adapter.\n\noptions:\n  -h, --help       show this help message and exit\n  --source SOURCE  a clean checkout of the exact reviewed upstream commit\n  --markdown-only\n  --layout LAYOUT  personal layout filename, without .json\n",
+        "stderr": ""
+      }
+    },
+    {
+      "command": "install_preview",
+      "args": [
+        "--help",
+        "--unknown"
+      ],
+      "expected": {
+        "kind": "help",
+        "exit": 0,
+        "stdout": "usage: herdr-theme install_preview [-h] [--source SOURCE] [--markdown-only]\n                          [--layout LAYOUT]\n\nInstall optional upstream viewers plus the theme's local HTML adapter.\n\noptions:\n  -h, --help       show this help message and exit\n  --source SOURCE  a clean checkout of the exact reviewed upstream commit\n  --markdown-only\n  --layout LAYOUT  personal layout filename, without .json\n",
+        "stderr": ""
+      }
+    },
+    {
+      "command": "install_preview",
+      "args": [
+        "--h"
+      ],
+      "expected": {
+        "kind": "help",
+        "exit": 0,
+        "stdout": "usage: herdr-theme install_preview [-h] [--source SOURCE] [--markdown-only]\n                          [--layout LAYOUT]\n\nInstall optional upstream viewers plus the theme's local HTML adapter.\n\noptions:\n  -h, --help       show this help message and exit\n  --source SOURCE  a clean checkout of the exact reviewed upstream commit\n  --markdown-only\n  --layout LAYOUT  personal layout filename, without .json\n",
+        "stderr": ""
+      }
+    },
+    {
+      "command": "install_preview",
+      "args": [
+        "--he"
+      ],
+      "expected": {
+        "kind": "help",
+        "exit": 0,
+        "stdout": "usage: herdr-theme install_preview [-h] [--source SOURCE] [--markdown-only]\n                          [--layout LAYOUT]\n\nInstall optional upstream viewers plus the theme's local HTML adapter.\n\noptions:\n  -h, --help       show this help message and exit\n  --source SOURCE  a clean checkout of the exact reviewed upstream commit\n  --markdown-only\n  --layout LAYOUT  personal layout filename, without .json\n",
+        "stderr": ""
+      }
+    },
+    {
+      "command": "install_preview",
+      "args": [
+        "-hh"
+      ],
+      "expected": {
+        "kind": "help",
+        "exit": 0,
+        "stdout": "usage: herdr-theme install_preview [-h] [--source SOURCE] [--markdown-only]\n                          [--layout LAYOUT]\n\nInstall optional upstream viewers plus the theme's local HTML adapter.\n\noptions:\n  -h, --help       show this help message and exit\n  --source SOURCE  a clean checkout of the exact reviewed upstream commit\n  --markdown-only\n  --layout LAYOUT  personal layout filename, without .json\n",
+        "stderr": ""
+      }
+    },
+    {
+      "command": "install_preview",
+      "args": [
+        "-hfoo"
+      ],
+      "expected": {
+        "kind": "help",
+        "exit": 0,
+        "stdout": "usage: herdr-theme install_preview [-h] [--source SOURCE] [--markdown-only]\n                          [--layout LAYOUT]\n\nInstall optional upstream viewers plus the theme's local HTML adapter.\n\noptions:\n  -h, --help       show this help message and exit\n  --source SOURCE  a clean checkout of the exact reviewed upstream commit\n  --markdown-only\n  --layout LAYOUT  personal layout filename, without .json\n",
+        "stderr": ""
+      }
+    },
+    {
+      "command": "install_preview",
+      "args": [
+        "--help=x"
+      ],
+      "expected": {
+        "kind": "error",
+        "exit": 2,
+        "stdout": "",
+        "stderr": "usage: herdr-theme install_preview [-h] [--source SOURCE] [--markdown-only]\n                          [--layout LAYOUT]\nherdr-theme install_preview: error: argument -h/--help: ignored explicit argument 'x'\n"
+      }
+    },
+    {
+      "command": "install_preview",
+      "args": [
+        "--unknown"
+      ],
+      "expected": {
+        "kind": "error",
+        "exit": 2,
+        "stdout": "",
+        "stderr": "usage: herdr-theme install_preview [-h] [--source SOURCE] [--markdown-only]\n                          [--layout LAYOUT]\nherdr-theme install_preview: error: unrecognized arguments: --unknown\n"
+      }
+    },
+    {
+      "command": "install_preview",
+      "args": [],
+      "expected": {
+        "kind": "accepted",
+        "exit": 0,
+        "stdout": "",
+        "stderr": ""
+      }
+    },
+    {
+      "command": "update_install",
+      "args": [
+        "--help"
+      ],
+      "expected": {
+        "kind": "help",
+        "exit": 0,
+        "stdout": "usage: herdr-theme update_install [-h] [--without-workspace-mods]\n                         [--workspace-mods-source WORKSPACE_MODS_SOURCE]\n                         [--home HOME] [--repo REPO] [--cli CLI]\n                         [--verify-timeout VERIFY_TIMEOUT]\n                         [--allow-unhealthy-before]\n                         [--observer-home OBSERVER_HOME]\n                         [files ...]\n\nUpdate explicitly selected Herdr files under one lock, or roll them back.\n\npositional arguments:\n  files                 Explicit repository-relative files; existing unlisted\n                        files are preserved. \"voice\" (or any voice/... file)\n                        installs the voice plugin as one unit with\n                        voice/install.py\n\noptions:\n  -h, --help            show this help message and exit\n  --without-workspace-mods\n                        Leave Herdr Workspace Mods as installed (default:\n                        bring them to the version pinned in workspace-\n                        mods.lock.json)\n  --workspace-mods-source WORKSPACE_MODS_SOURCE\n                        A local Herdr Workspace Mods checkout already at the\n                        pinned commit (default: fetch it)\n  --home HOME\n  --repo REPO           Reviewed source worktree (required when running an\n                        installed copy)\n  --cli CLI\n  --verify-timeout VERIFY_TIMEOUT\n  --allow-unhealthy-before\n                        Authorized repair only; post-install status must still\n                        become error-free\n  --observer-home OBSERVER_HOME\n                        Home whose registered cleanup/sleep observer copies\n                        follow an install of their scripts\n",
+        "stderr": ""
+      }
+    },
+    {
+      "command": "update_install",
+      "args": [
+        "--unknown",
+        "--help"
+      ],
+      "expected": {
+        "kind": "help",
+        "exit": 0,
+        "stdout": "usage: herdr-theme update_install [-h] [--without-workspace-mods]\n                         [--workspace-mods-source WORKSPACE_MODS_SOURCE]\n                         [--home HOME] [--repo REPO] [--cli CLI]\n                         [--verify-timeout VERIFY_TIMEOUT]\n                         [--allow-unhealthy-before]\n                         [--observer-home OBSERVER_HOME]\n                         [files ...]\n\nUpdate explicitly selected Herdr files under one lock, or roll them back.\n\npositional arguments:\n  files                 Explicit repository-relative files; existing unlisted\n                        files are preserved. \"voice\" (or any voice/... file)\n                        installs the voice plugin as one unit with\n                        voice/install.py\n\noptions:\n  -h, --help            show this help message and exit\n  --without-workspace-mods\n                        Leave Herdr Workspace Mods as installed (default:\n                        bring them to the version pinned in workspace-\n                        mods.lock.json)\n  --workspace-mods-source WORKSPACE_MODS_SOURCE\n                        A local Herdr Workspace Mods checkout already at the\n                        pinned commit (default: fetch it)\n  --home HOME\n  --repo REPO           Reviewed source worktree (required when running an\n                        installed copy)\n  --cli CLI\n  --verify-timeout VERIFY_TIMEOUT\n  --allow-unhealthy-before\n                        Authorized repair only; post-install status must still\n                        become error-free\n  --observer-home OBSERVER_HOME\n                        Home whose registered cleanup/sleep observer copies\n                        follow an install of their scripts\n",
+        "stderr": ""
+      }
+    },
+    {
+      "command": "update_install",
+      "args": [
+        "--help",
+        "--unknown"
+      ],
+      "expected": {
+        "kind": "help",
+        "exit": 0,
+        "stdout": "usage: herdr-theme update_install [-h] [--without-workspace-mods]\n                         [--workspace-mods-source WORKSPACE_MODS_SOURCE]\n                         [--home HOME] [--repo REPO] [--cli CLI]\n                         [--verify-timeout VERIFY_TIMEOUT]\n                         [--allow-unhealthy-before]\n                         [--observer-home OBSERVER_HOME]\n                         [files ...]\n\nUpdate explicitly selected Herdr files under one lock, or roll them back.\n\npositional arguments:\n  files                 Explicit repository-relative files; existing unlisted\n                        files are preserved. \"voice\" (or any voice/... file)\n                        installs the voice plugin as one unit with\n                        voice/install.py\n\noptions:\n  -h, --help            show this help message and exit\n  --without-workspace-mods\n                        Leave Herdr Workspace Mods as installed (default:\n                        bring them to the version pinned in workspace-\n                        mods.lock.json)\n  --workspace-mods-source WORKSPACE_MODS_SOURCE\n                        A local Herdr Workspace Mods checkout already at the\n                        pinned commit (default: fetch it)\n  --home HOME\n  --repo REPO           Reviewed source worktree (required when running an\n                        installed copy)\n  --cli CLI\n  --verify-timeout VERIFY_TIMEOUT\n  --allow-unhealthy-before\n                        Authorized repair only; post-install status must still\n                        become error-free\n  --observer-home OBSERVER_HOME\n                        Home whose registered cleanup/sleep observer copies\n                        follow an install of their scripts\n",
+        "stderr": ""
+      }
+    },
+    {
+      "command": "update_install",
+      "args": [
+        "--h"
+      ],
+      "expected": {
+        "kind": "error",
+        "exit": 2,
+        "stdout": "",
+        "stderr": "usage: herdr-theme update_install [-h] [--without-workspace-mods]\n                         [--workspace-mods-source WORKSPACE_MODS_SOURCE]\n                         [--home HOME] [--repo REPO] [--cli CLI]\n                         [--verify-timeout VERIFY_TIMEOUT]\n                         [--allow-unhealthy-before]\n                         [--observer-home OBSERVER_HOME]\n                         [files ...]\nherdr-theme update_install: error: ambiguous option: --h could match --help, --home\n"
+      }
+    },
+    {
+      "command": "update_install",
+      "args": [
+        "--he"
+      ],
+      "expected": {
+        "kind": "help",
+        "exit": 0,
+        "stdout": "usage: herdr-theme update_install [-h] [--without-workspace-mods]\n                         [--workspace-mods-source WORKSPACE_MODS_SOURCE]\n                         [--home HOME] [--repo REPO] [--cli CLI]\n                         [--verify-timeout VERIFY_TIMEOUT]\n                         [--allow-unhealthy-before]\n                         [--observer-home OBSERVER_HOME]\n                         [files ...]\n\nUpdate explicitly selected Herdr files under one lock, or roll them back.\n\npositional arguments:\n  files                 Explicit repository-relative files; existing unlisted\n                        files are preserved. \"voice\" (or any voice/... file)\n                        installs the voice plugin as one unit with\n                        voice/install.py\n\noptions:\n  -h, --help            show this help message and exit\n  --without-workspace-mods\n                        Leave Herdr Workspace Mods as installed (default:\n                        bring them to the version pinned in workspace-\n                        mods.lock.json)\n  --workspace-mods-source WORKSPACE_MODS_SOURCE\n                        A local Herdr Workspace Mods checkout already at the\n                        pinned commit (default: fetch it)\n  --home HOME\n  --repo REPO           Reviewed source worktree (required when running an\n                        installed copy)\n  --cli CLI\n  --verify-timeout VERIFY_TIMEOUT\n  --allow-unhealthy-before\n                        Authorized repair only; post-install status must still\n                        become error-free\n  --observer-home OBSERVER_HOME\n                        Home whose registered cleanup/sleep observer copies\n                        follow an install of their scripts\n",
+        "stderr": ""
+      }
+    },
+    {
+      "command": "update_install",
+      "args": [
+        "-hh"
+      ],
+      "expected": {
+        "kind": "help",
+        "exit": 0,
+        "stdout": "usage: herdr-theme update_install [-h] [--without-workspace-mods]\n                         [--workspace-mods-source WORKSPACE_MODS_SOURCE]\n                         [--home HOME] [--repo REPO] [--cli CLI]\n                         [--verify-timeout VERIFY_TIMEOUT]\n                         [--allow-unhealthy-before]\n                         [--observer-home OBSERVER_HOME]\n                         [files ...]\n\nUpdate explicitly selected Herdr files under one lock, or roll them back.\n\npositional arguments:\n  files                 Explicit repository-relative files; existing unlisted\n                        files are preserved. \"voice\" (or any voice/... file)\n                        installs the voice plugin as one unit with\n                        voice/install.py\n\noptions:\n  -h, --help            show this help message and exit\n  --without-workspace-mods\n                        Leave Herdr Workspace Mods as installed (default:\n                        bring them to the version pinned in workspace-\n                        mods.lock.json)\n  --workspace-mods-source WORKSPACE_MODS_SOURCE\n                        A local Herdr Workspace Mods checkout already at the\n                        pinned commit (default: fetch it)\n  --home HOME\n  --repo REPO           Reviewed source worktree (required when running an\n                        installed copy)\n  --cli CLI\n  --verify-timeout VERIFY_TIMEOUT\n  --allow-unhealthy-before\n                        Authorized repair only; post-install status must still\n                        become error-free\n  --observer-home OBSERVER_HOME\n                        Home whose registered cleanup/sleep observer copies\n                        follow an install of their scripts\n",
+        "stderr": ""
+      }
+    },
+    {
+      "command": "update_install",
+      "args": [
+        "-hfoo"
+      ],
+      "expected": {
+        "kind": "help",
+        "exit": 0,
+        "stdout": "usage: herdr-theme update_install [-h] [--without-workspace-mods]\n                         [--workspace-mods-source WORKSPACE_MODS_SOURCE]\n                         [--home HOME] [--repo REPO] [--cli CLI]\n                         [--verify-timeout VERIFY_TIMEOUT]\n                         [--allow-unhealthy-before]\n                         [--observer-home OBSERVER_HOME]\n                         [files ...]\n\nUpdate explicitly selected Herdr files under one lock, or roll them back.\n\npositional arguments:\n  files                 Explicit repository-relative files; existing unlisted\n                        files are preserved. \"voice\" (or any voice/... file)\n                        installs the voice plugin as one unit with\n                        voice/install.py\n\noptions:\n  -h, --help            show this help message and exit\n  --without-workspace-mods\n                        Leave Herdr Workspace Mods as installed (default:\n                        bring them to the version pinned in workspace-\n                        mods.lock.json)\n  --workspace-mods-source WORKSPACE_MODS_SOURCE\n                        A local Herdr Workspace Mods checkout already at the\n                        pinned commit (default: fetch it)\n  --home HOME\n  --repo REPO           Reviewed source worktree (required when running an\n                        installed copy)\n  --cli CLI\n  --verify-timeout VERIFY_TIMEOUT\n  --allow-unhealthy-before\n                        Authorized repair only; post-install status must still\n                        become error-free\n  --observer-home OBSERVER_HOME\n                        Home whose registered cleanup/sleep observer copies\n                        follow an install of their scripts\n",
+        "stderr": ""
+      }
+    },
+    {
+      "command": "update_install",
+      "args": [
+        "--help=x"
+      ],
+      "expected": {
+        "kind": "error",
+        "exit": 2,
+        "stdout": "",
+        "stderr": "usage: herdr-theme update_install [-h] [--without-workspace-mods]\n                         [--workspace-mods-source WORKSPACE_MODS_SOURCE]\n                         [--home HOME] [--repo REPO] [--cli CLI]\n                         [--verify-timeout VERIFY_TIMEOUT]\n                         [--allow-unhealthy-before]\n                         [--observer-home OBSERVER_HOME]\n                         [files ...]\nherdr-theme update_install: error: argument -h/--help: ignored explicit argument 'x'\n"
+      }
+    },
+    {
+      "command": "update_install",
+      "args": [
+        "--unknown"
+      ],
+      "expected": {
+        "kind": "error",
+        "exit": 2,
+        "stdout": "",
+        "stderr": "usage: herdr-theme update_install [-h] [--without-workspace-mods]\n                         [--workspace-mods-source WORKSPACE_MODS_SOURCE]\n                         [--home HOME] [--repo REPO] [--cli CLI]\n                         [--verify-timeout VERIFY_TIMEOUT]\n                         [--allow-unhealthy-before]\n                         [--observer-home OBSERVER_HOME]\n                         [files ...]\nherdr-theme update_install: error: unrecognized arguments: --unknown\n"
+      }
+    },
+    {
+      "command": "update_install",
+      "args": [],
+      "expected": {
+        "kind": "accepted",
+        "exit": 0,
+        "stdout": "",
+        "stderr": ""
+      }
+    },
+    {
+      "command": "update_install",
+      "args": [
+        "one.js",
+        "--cli",
+        "app",
+        "two.js"
+      ],
+      "expected": {
+        "kind": "error",
+        "exit": 2,
+        "stdout": "",
+        "stderr": "usage: herdr-theme update_install [-h] [--without-workspace-mods]\n                         [--workspace-mods-source WORKSPACE_MODS_SOURCE]\n                         [--home HOME] [--repo REPO] [--cli CLI]\n                         [--verify-timeout VERIFY_TIMEOUT]\n                         [--allow-unhealthy-before]\n                         [--observer-home OBSERVER_HOME]\n                         [files ...]\nherdr-theme update_install: error: unrecognized arguments: two.js\n"
+      }
+    },
+    {
+      "command": "update_install",
+      "args": [
+        "--cli",
+        "app",
+        "one.js",
+        "two.js"
+      ],
+      "expected": {
+        "kind": "accepted",
+        "exit": 0,
+        "stdout": "",
+        "stderr": ""
+      }
+    },
+    {
+      "command": "update_install",
+      "args": [
+        "--verify-timeout",
+        "bad",
+        "--help"
+      ],
+      "expected": {
+        "kind": "error",
+        "exit": 2,
+        "stdout": "",
+        "stderr": "usage: herdr-theme update_install [-h] [--without-workspace-mods]\n                         [--workspace-mods-source WORKSPACE_MODS_SOURCE]\n                         [--home HOME] [--repo REPO] [--cli CLI]\n                         [--verify-timeout VERIFY_TIMEOUT]\n                         [--allow-unhealthy-before]\n                         [--observer-home OBSERVER_HOME]\n                         [files ...]\nherdr-theme update_install: error: argument --verify-timeout: invalid float value: 'bad'\n"
+      }
+    },
+    {
+      "command": "update_install",
+      "args": [
+        "--verify-timeout",
+        "1_0",
+        "--without-workspace-mods"
+      ],
+      "expected": {
+        "kind": "accepted",
+        "exit": 0,
+        "stdout": "",
+        "stderr": ""
+      }
+    },
+    {
+      "command": "update_install",
+      "args": [
+        "--verify-timeout=-1e2"
+      ],
+      "expected": {
+        "kind": "accepted",
+        "exit": 0,
+        "stdout": "",
+        "stderr": ""
+      }
+    },
+    {
+      "command": "update_install",
+      "args": [
+        "--verify-timeout",
+        "-1e2"
+      ],
+      "expected": {
+        "kind": "error",
+        "exit": 2,
+        "stdout": "",
+        "stderr": "usage: herdr-theme update_install [-h] [--without-workspace-mods]\n                         [--workspace-mods-source WORKSPACE_MODS_SOURCE]\n                         [--home HOME] [--repo REPO] [--cli CLI]\n                         [--verify-timeout VERIFY_TIMEOUT]\n                         [--allow-unhealthy-before]\n                         [--observer-home OBSERVER_HOME]\n                         [files ...]\nherdr-theme update_install: error: argument --verify-timeout: expected one argument\n"
+      }
+    },
+    {
+      "command": "install_session_sleep",
+      "args": [
+        "--help"
+      ],
+      "expected": {
+        "kind": "help",
+        "exit": 0,
+        "stdout": "usage: herdr-theme install_session_sleep [-h] [--home HOME] [--source SOURCE]\n                                [--install] [--enable-apply] [--refresh]\n                                [--user-approved]\n\nRegister the 5-minute space-cleanup observer in dry-run mode; enable apply\nonly after a reviewed live trial, or after the person approved apply and one\ndry-run of this code ran.\n\noptions:\n  -h, --help       show this help message and exit\n  --home HOME\n  --source SOURCE\n  --install        write files and register launchd; default is a plan\n  --enable-apply   review the saved trial and switch to real actions\n  --refresh        only replace the registered observer copies with this\n                   source (no plist, no launchctl)\n  --user-approved  with --enable-apply: the person approved apply; one\n                   recorded dry-run of this code suffices\n",
+        "stderr": ""
+      }
+    },
+    {
+      "command": "install_session_sleep",
+      "args": [
+        "--unknown",
+        "--help"
+      ],
+      "expected": {
+        "kind": "help",
+        "exit": 0,
+        "stdout": "usage: herdr-theme install_session_sleep [-h] [--home HOME] [--source SOURCE]\n                                [--install] [--enable-apply] [--refresh]\n                                [--user-approved]\n\nRegister the 5-minute space-cleanup observer in dry-run mode; enable apply\nonly after a reviewed live trial, or after the person approved apply and one\ndry-run of this code ran.\n\noptions:\n  -h, --help       show this help message and exit\n  --home HOME\n  --source SOURCE\n  --install        write files and register launchd; default is a plan\n  --enable-apply   review the saved trial and switch to real actions\n  --refresh        only replace the registered observer copies with this\n                   source (no plist, no launchctl)\n  --user-approved  with --enable-apply: the person approved apply; one\n                   recorded dry-run of this code suffices\n",
+        "stderr": ""
+      }
+    },
+    {
+      "command": "install_session_sleep",
+      "args": [
+        "--help",
+        "--unknown"
+      ],
+      "expected": {
+        "kind": "help",
+        "exit": 0,
+        "stdout": "usage: herdr-theme install_session_sleep [-h] [--home HOME] [--source SOURCE]\n                                [--install] [--enable-apply] [--refresh]\n                                [--user-approved]\n\nRegister the 5-minute space-cleanup observer in dry-run mode; enable apply\nonly after a reviewed live trial, or after the person approved apply and one\ndry-run of this code ran.\n\noptions:\n  -h, --help       show this help message and exit\n  --home HOME\n  --source SOURCE\n  --install        write files and register launchd; default is a plan\n  --enable-apply   review the saved trial and switch to real actions\n  --refresh        only replace the registered observer copies with this\n                   source (no plist, no launchctl)\n  --user-approved  with --enable-apply: the person approved apply; one\n                   recorded dry-run of this code suffices\n",
+        "stderr": ""
+      }
+    },
+    {
+      "command": "install_session_sleep",
+      "args": [
+        "--h"
+      ],
+      "expected": {
+        "kind": "error",
+        "exit": 2,
+        "stdout": "",
+        "stderr": "usage: herdr-theme install_session_sleep [-h] [--home HOME] [--source SOURCE]\n                                [--install] [--enable-apply] [--refresh]\n                                [--user-approved]\nherdr-theme install_session_sleep: error: ambiguous option: --h could match --help, --home\n"
+      }
+    },
+    {
+      "command": "install_session_sleep",
+      "args": [
+        "--he"
+      ],
+      "expected": {
+        "kind": "help",
+        "exit": 0,
+        "stdout": "usage: herdr-theme install_session_sleep [-h] [--home HOME] [--source SOURCE]\n                                [--install] [--enable-apply] [--refresh]\n                                [--user-approved]\n\nRegister the 5-minute space-cleanup observer in dry-run mode; enable apply\nonly after a reviewed live trial, or after the person approved apply and one\ndry-run of this code ran.\n\noptions:\n  -h, --help       show this help message and exit\n  --home HOME\n  --source SOURCE\n  --install        write files and register launchd; default is a plan\n  --enable-apply   review the saved trial and switch to real actions\n  --refresh        only replace the registered observer copies with this\n                   source (no plist, no launchctl)\n  --user-approved  with --enable-apply: the person approved apply; one\n                   recorded dry-run of this code suffices\n",
+        "stderr": ""
+      }
+    },
+    {
+      "command": "install_session_sleep",
+      "args": [
+        "-hh"
+      ],
+      "expected": {
+        "kind": "help",
+        "exit": 0,
+        "stdout": "usage: herdr-theme install_session_sleep [-h] [--home HOME] [--source SOURCE]\n                                [--install] [--enable-apply] [--refresh]\n                                [--user-approved]\n\nRegister the 5-minute space-cleanup observer in dry-run mode; enable apply\nonly after a reviewed live trial, or after the person approved apply and one\ndry-run of this code ran.\n\noptions:\n  -h, --help       show this help message and exit\n  --home HOME\n  --source SOURCE\n  --install        write files and register launchd; default is a plan\n  --enable-apply   review the saved trial and switch to real actions\n  --refresh        only replace the registered observer copies with this\n                   source (no plist, no launchctl)\n  --user-approved  with --enable-apply: the person approved apply; one\n                   recorded dry-run of this code suffices\n",
+        "stderr": ""
+      }
+    },
+    {
+      "command": "install_session_sleep",
+      "args": [
+        "-hfoo"
+      ],
+      "expected": {
+        "kind": "help",
+        "exit": 0,
+        "stdout": "usage: herdr-theme install_session_sleep [-h] [--home HOME] [--source SOURCE]\n                                [--install] [--enable-apply] [--refresh]\n                                [--user-approved]\n\nRegister the 5-minute space-cleanup observer in dry-run mode; enable apply\nonly after a reviewed live trial, or after the person approved apply and one\ndry-run of this code ran.\n\noptions:\n  -h, --help       show this help message and exit\n  --home HOME\n  --source SOURCE\n  --install        write files and register launchd; default is a plan\n  --enable-apply   review the saved trial and switch to real actions\n  --refresh        only replace the registered observer copies with this\n                   source (no plist, no launchctl)\n  --user-approved  with --enable-apply: the person approved apply; one\n                   recorded dry-run of this code suffices\n",
+        "stderr": ""
+      }
+    },
+    {
+      "command": "install_session_sleep",
+      "args": [
+        "--help=x"
+      ],
+      "expected": {
+        "kind": "error",
+        "exit": 2,
+        "stdout": "",
+        "stderr": "usage: herdr-theme install_session_sleep [-h] [--home HOME] [--source SOURCE]\n                                [--install] [--enable-apply] [--refresh]\n                                [--user-approved]\nherdr-theme install_session_sleep: error: argument -h/--help: ignored explicit argument 'x'\n"
+      }
+    },
+    {
+      "command": "install_session_sleep",
+      "args": [
+        "--unknown"
+      ],
+      "expected": {
+        "kind": "error",
+        "exit": 2,
+        "stdout": "",
+        "stderr": "usage: herdr-theme install_session_sleep [-h] [--home HOME] [--source SOURCE]\n                                [--install] [--enable-apply] [--refresh]\n                                [--user-approved]\nherdr-theme install_session_sleep: error: unrecognized arguments: --unknown\n"
+      }
+    },
+    {
+      "command": "install_session_sleep",
+      "args": [],
+      "expected": {
+        "kind": "accepted",
+        "exit": 0,
+        "stdout": "",
+        "stderr": ""
+      }
+    },
+    {
+      "command": "install_space_cleanup",
+      "args": [
+        "--help"
+      ],
+      "expected": {
+        "kind": "help",
+        "exit": 0,
+        "stdout": "usage: herdr-theme install_space_cleanup [-h] [--home HOME] [--source SOURCE]\n                                [--install] [--enable-apply] [--refresh]\n                                [--user-approved]\n\nRegister the 5-minute space-cleanup observer in dry-run mode; enable apply\nonly after a reviewed live trial, or after the person approved apply and one\ndry-run of this code ran.\n\noptions:\n  -h, --help       show this help message and exit\n  --home HOME\n  --source SOURCE\n  --install        write files and register launchd; default is a plan\n  --enable-apply   review the saved trial and switch to real actions\n  --refresh        only replace the registered observer copies with this\n                   source (no plist, no launchctl)\n  --user-approved  with --enable-apply: the person approved apply; one\n                   recorded dry-run of this code suffices\n",
+        "stderr": ""
+      }
+    },
+    {
+      "command": "install_space_cleanup",
+      "args": [
+        "--unknown",
+        "--help"
+      ],
+      "expected": {
+        "kind": "help",
+        "exit": 0,
+        "stdout": "usage: herdr-theme install_space_cleanup [-h] [--home HOME] [--source SOURCE]\n                                [--install] [--enable-apply] [--refresh]\n                                [--user-approved]\n\nRegister the 5-minute space-cleanup observer in dry-run mode; enable apply\nonly after a reviewed live trial, or after the person approved apply and one\ndry-run of this code ran.\n\noptions:\n  -h, --help       show this help message and exit\n  --home HOME\n  --source SOURCE\n  --install        write files and register launchd; default is a plan\n  --enable-apply   review the saved trial and switch to real actions\n  --refresh        only replace the registered observer copies with this\n                   source (no plist, no launchctl)\n  --user-approved  with --enable-apply: the person approved apply; one\n                   recorded dry-run of this code suffices\n",
+        "stderr": ""
+      }
+    },
+    {
+      "command": "install_space_cleanup",
+      "args": [
+        "--help",
+        "--unknown"
+      ],
+      "expected": {
+        "kind": "help",
+        "exit": 0,
+        "stdout": "usage: herdr-theme install_space_cleanup [-h] [--home HOME] [--source SOURCE]\n                                [--install] [--enable-apply] [--refresh]\n                                [--user-approved]\n\nRegister the 5-minute space-cleanup observer in dry-run mode; enable apply\nonly after a reviewed live trial, or after the person approved apply and one\ndry-run of this code ran.\n\noptions:\n  -h, --help       show this help message and exit\n  --home HOME\n  --source SOURCE\n  --install        write files and register launchd; default is a plan\n  --enable-apply   review the saved trial and switch to real actions\n  --refresh        only replace the registered observer copies with this\n                   source (no plist, no launchctl)\n  --user-approved  with --enable-apply: the person approved apply; one\n                   recorded dry-run of this code suffices\n",
+        "stderr": ""
+      }
+    },
+    {
+      "command": "install_space_cleanup",
+      "args": [
+        "--h"
+      ],
+      "expected": {
+        "kind": "error",
+        "exit": 2,
+        "stdout": "",
+        "stderr": "usage: herdr-theme install_space_cleanup [-h] [--home HOME] [--source SOURCE]\n                                [--install] [--enable-apply] [--refresh]\n                                [--user-approved]\nherdr-theme install_space_cleanup: error: ambiguous option: --h could match --help, --home\n"
+      }
+    },
+    {
+      "command": "install_space_cleanup",
+      "args": [
+        "--he"
+      ],
+      "expected": {
+        "kind": "help",
+        "exit": 0,
+        "stdout": "usage: herdr-theme install_space_cleanup [-h] [--home HOME] [--source SOURCE]\n                                [--install] [--enable-apply] [--refresh]\n                                [--user-approved]\n\nRegister the 5-minute space-cleanup observer in dry-run mode; enable apply\nonly after a reviewed live trial, or after the person approved apply and one\ndry-run of this code ran.\n\noptions:\n  -h, --help       show this help message and exit\n  --home HOME\n  --source SOURCE\n  --install        write files and register launchd; default is a plan\n  --enable-apply   review the saved trial and switch to real actions\n  --refresh        only replace the registered observer copies with this\n                   source (no plist, no launchctl)\n  --user-approved  with --enable-apply: the person approved apply; one\n                   recorded dry-run of this code suffices\n",
+        "stderr": ""
+      }
+    },
+    {
+      "command": "install_space_cleanup",
+      "args": [
+        "-hh"
+      ],
+      "expected": {
+        "kind": "help",
+        "exit": 0,
+        "stdout": "usage: herdr-theme install_space_cleanup [-h] [--home HOME] [--source SOURCE]\n                                [--install] [--enable-apply] [--refresh]\n                                [--user-approved]\n\nRegister the 5-minute space-cleanup observer in dry-run mode; enable apply\nonly after a reviewed live trial, or after the person approved apply and one\ndry-run of this code ran.\n\noptions:\n  -h, --help       show this help message and exit\n  --home HOME\n  --source SOURCE\n  --install        write files and register launchd; default is a plan\n  --enable-apply   review the saved trial and switch to real actions\n  --refresh        only replace the registered observer copies with this\n                   source (no plist, no launchctl)\n  --user-approved  with --enable-apply: the person approved apply; one\n                   recorded dry-run of this code suffices\n",
+        "stderr": ""
+      }
+    },
+    {
+      "command": "install_space_cleanup",
+      "args": [
+        "-hfoo"
+      ],
+      "expected": {
+        "kind": "help",
+        "exit": 0,
+        "stdout": "usage: herdr-theme install_space_cleanup [-h] [--home HOME] [--source SOURCE]\n                                [--install] [--enable-apply] [--refresh]\n                                [--user-approved]\n\nRegister the 5-minute space-cleanup observer in dry-run mode; enable apply\nonly after a reviewed live trial, or after the person approved apply and one\ndry-run of this code ran.\n\noptions:\n  -h, --help       show this help message and exit\n  --home HOME\n  --source SOURCE\n  --install        write files and register launchd; default is a plan\n  --enable-apply   review the saved trial and switch to real actions\n  --refresh        only replace the registered observer copies with this\n                   source (no plist, no launchctl)\n  --user-approved  with --enable-apply: the person approved apply; one\n                   recorded dry-run of this code suffices\n",
+        "stderr": ""
+      }
+    },
+    {
+      "command": "install_space_cleanup",
+      "args": [
+        "--help=x"
+      ],
+      "expected": {
+        "kind": "error",
+        "exit": 2,
+        "stdout": "",
+        "stderr": "usage: herdr-theme install_space_cleanup [-h] [--home HOME] [--source SOURCE]\n                                [--install] [--enable-apply] [--refresh]\n                                [--user-approved]\nherdr-theme install_space_cleanup: error: argument -h/--help: ignored explicit argument 'x'\n"
+      }
+    },
+    {
+      "command": "install_space_cleanup",
+      "args": [
+        "--unknown"
+      ],
+      "expected": {
+        "kind": "error",
+        "exit": 2,
+        "stdout": "",
+        "stderr": "usage: herdr-theme install_space_cleanup [-h] [--home HOME] [--source SOURCE]\n                                [--install] [--enable-apply] [--refresh]\n                                [--user-approved]\nherdr-theme install_space_cleanup: error: unrecognized arguments: --unknown\n"
+      }
+    },
+    {
+      "command": "install_space_cleanup",
+      "args": [],
+      "expected": {
+        "kind": "accepted",
+        "exit": 0,
+        "stdout": "",
+        "stderr": ""
+      }
+    }
+  ]
+}

@@ -1,0 +1,68 @@
+{
+  "schema": 1,
+  "status": "fail",
+  "platform": "win32-x64",
+  "baseline_commit": "8c5b71d2f1074bb5d1d831fa395617bf4ae2abc8",
+  "native_binary_sha256": "36d34b87977f2a834a88fc4bad4bf095091204d45d6acba9002e5bba78bc22e6",
+  "dataset_sha256": "68795d6bc757b148189832b94db5711ae6ae03e48dc5f8dcf9f60333caa312c8",
+  "declared_absolute_tolerance": 1e-12,
+  "unchanged_metrics": "All other model evaluation fields except independently measured timing/RSS matched exactly.",
+  "differences": [
+    {
+      "length": "1.0",
+      "metric": "far_other_p99",
+      "baseline": 0.5304910818364809,
+      "native": 0.5304909900895459,
+      "absolute_difference": 9.174693493818609e-8
+    },
+    {
+      "length": "1.0",
+      "metric": "far_other_max",
+      "baseline": 0.5385492486868306,
+      "native": 0.5385490623612597,
+      "absolute_difference": 1.8632557097220115e-7
+    },
+    {
+      "length": "1.5",
+      "metric": "far_other_p99",
+      "baseline": 0.5569306002637536,
+      "native": 0.5569304969975547,
+      "absolute_difference": 1.0326619892531141e-7
+    },
+    {
+      "length": "1.5",
+      "metric": "far_other_max",
+      "baseline": 0.5587314704312392,
+      "native": 0.558731404767548,
+      "absolute_difference": 6.566369115112991e-8
+    },
+    {
+      "length": "2.0",
+      "metric": "far_other_p99",
+      "baseline": 0.5960245884250568,
+      "native": 0.5960245996705336,
+      "absolute_difference": 1.1245476772003826e-8
+    },
+    {
+      "length": "2.0",
+      "metric": "far_other_max",
+      "baseline": 0.6046193220930599,
+      "native": 0.6046193941076069,
+      "absolute_difference": 7.201454699234944e-8
+    },
+    {
+      "length": "3.0",
+      "metric": "far_other_p99",
+      "baseline": 0.639766769977623,
+      "native": 0.6397666774923079,
+      "absolute_difference": 9.248531518402103e-8
+    },
+    {
+      "length": "3.0",
+      "metric": "far_other_max",
+      "baseline": 0.6487577223630376,
+      "native": 0.648757619090943,
+      "absolute_difference": 1.0327209465366138e-7
+    }
+  ]
+}

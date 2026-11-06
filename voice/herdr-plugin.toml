@@ -8,8 +8,8 @@ platforms = ["macos"]
 # Runtime commands run with the plugin directory as their working directory.
 [[events]]
 on = "pane.agent_status_changed"
-command = ["/usr/bin/python3", "focus_queue.py"]
+command = ["./herdr-theme", "focus_queue"]
 
 [[events]]
 on = "pane.focused"
-command = ["/usr/bin/python3", "focus_queue.py"]
+command = ["./herdr-theme", "focus_queue"]

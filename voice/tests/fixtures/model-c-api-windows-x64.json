@@ -1,0 +1,131 @@
+{
+  "schema": 1,
+  "at": "2026-11-05T16:21:50.353Z",
+  "baseline_commit": "8c5b71d2f1074bb5d1d831fa395617bf4ae2abc8",
+  "platform": "win32-x64",
+  "python_wheels": [
+    {
+      "package": "sherpa-onnx",
+      "filename": "sherpa_onnx-2.0.1-cp312-cp312-win_amd64.whl",
+      "sha256": "9f25448a1af23a013064264b9e2241e0c5d0e1941aeb82dafa969520c694efb9"
+    },
+    {
+      "package": "sherpa-onnx-core",
+      "filename": "sherpa_onnx_core-2.0.1-py3-none-win_amd64.whl",
+      "sha256": "08890e9ea23ed2f59f81d5840c63b6b5cc8674d0f6e48d9069126a848aa0e022"
+    },
+    {
+      "package": "numpy",
+      "filename": "numpy-2.3.0-cp312-cp312-win_amd64.whl",
+      "sha256": "0898c67a58cdaaf29994bc0e2c65230fd4de0ac40afaf1584ed0b02cd74c6fdd"
+    }
+  ],
+  "inputs": {
+    "embedding": {
+      "filename": "3dspeaker_speech_eres2net_base_sv_zh-cn_3dspeaker_16k.onnx",
+      "sha256": "1a331345f04805badbb495c775a6ddffcdd1a732567d5ec8b3d5749e3c7a5e4b",
+      "bytes": 39593761
+    },
+    "vad": {
+      "filename": "silero_vad.onnx",
+      "sha256": "9e2449e1087496d8d4caba907f23e0bd3f78d91fa552479bb9c23ac09cbb1fd6",
+      "bytes": 643854
+    },
+    "audio": {
+      "filename": "speech.wav",
+      "sha256": "9175e523081bf6a630ce72a55b05f92148eaafaf58cbbbe743686cd81c50848e",
+      "bytes": 178374
+    },
+    "header": {
+      "filename": "sherpa-c-api.h",
+      "sha256": "5698f38ba09ad2bdf085c56a6cbbd7741acf15e25f4ce5c7097b9702cadf437f",
+      "bytes": 174196
+    },
+    "source": {
+      "filename": "baseline-voicegate.txt",
+      "sha256": "d04612e66475a7726dda389c0f7f5581ce16a96592f65f37a8f3718dab970a00",
+      "bytes": 23052
+    },
+    "library": {
+      "filename": "sherpa-onnx-c-api.dll",
+      "sha256": "71728fb12b3a15a9ab7c4961fceafc6dd802f7fc038f461f5ea59e07d7104bec",
+      "bytes": 3301376
+    }
+  },
+  "tolerances": {
+    "embedding_max_absolute": 1e-12,
+    "embedding_min_cosine": 0.999999999999,
+    "vad_start": 0,
+    "vad_sample_count": 0,
+    "vad_waveform_float32_bits": 0
+  },
+  "cases": [
+    {
+      "label": "threshold-0.35-gain-10",
+      "c_api_status": "pass",
+      "c_api_comparison": {
+        "embedding": {
+          "max_absolute_difference": 0,
+          "cosine": 1
+        },
+        "segments": [
+          {
+            "start": 3168,
+            "sample_count": 28384,
+            "embedding": {
+              "max_absolute_difference": 0,
+              "cosine": 1
+            }
+          },
+          {
+            "start": 42592,
+            "sample_count": 46496,
+            "embedding": {
+              "max_absolute_difference": 0,
+              "cosine": 1
+            }
+          }
+        ],
+        "exact_vad_waveforms": true,
+        "exact_boundary_decisions": 12
+      },
+      "reference_embedding_dimensions": 512,
+      "reference_vad_segments": 2,
+      "status": "native-not-run"
+    },
+    {
+      "label": "threshold-0.5-gain-1",
+      "c_api_status": "pass",
+      "c_api_comparison": {
+        "embedding": {
+          "max_absolute_difference": 0,
+          "cosine": 1
+        },
+        "segments": [
+          {
+            "start": 3680,
+            "sample_count": 16608,
+            "embedding": {
+              "max_absolute_difference": 0,
+              "cosine": 1
+            }
+          },
+          {
+            "start": 42592,
+            "sample_count": 41184,
+            "embedding": {
+              "max_absolute_difference": 0,
+              "cosine": 1
+            }
+          }
+        ],
+        "exact_vad_waveforms": true,
+        "exact_boundary_decisions": 12
+      },
+      "reference_embedding_dimensions": 512,
+      "reference_vad_segments": 2,
+      "status": "native-not-run"
+    }
+  ],
+  "status": "reference-only-incomplete"
+}

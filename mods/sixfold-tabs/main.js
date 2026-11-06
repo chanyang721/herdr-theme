@@ -22,7 +22,7 @@ export default class Tabs extends View {
       if (this.ensuring) return;
       this.ensuring = true;
       cx.spawn(async () => {
-        try { await exec("python3", [`${appHome()}/scripts/sixfold/install_doc_tabs.py`, "--ensure-tabs", "--home", appHome()]); }
+        try { await exec(`${appHome()}/scripts/sixfold/herdr-theme${window()?.platform==='windows' || /^(?:[A-Za-z]:[\\/]|\\\\)/.test(appHome())?'.exe':''}`, ["install_doc_tabs", "--ensure-tabs", "--home", appHome()]); }
         catch { /* Installation may not have enabled document tabs. */ }
         finally { this.ensuring = false; }
       });
