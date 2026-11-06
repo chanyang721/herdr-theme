@@ -1357,7 +1357,7 @@ class TrimFixedTests(unittest.TestCase):
                 self.assertNotIn(('pane.close', 'p3'), self.live.calls, name)
                 self.assertNotEqual(got['t3']['action'], 'closed', name)
 
-    def make_shell(self, address, text='lukuku@mac ~ % '):
+    def make_shell(self, address, text='user@host ~ % '):
         t = self.live.data['terminals'][address]
         t.update(status={'app': None, 'state': None}, foreground={'pid': t['pid'], 'argv': ['-zsh'], 'name': 'zsh'})
         self.live.data['processes'] = {p: i for p, i in self.live.data['processes'].items() if i['parent'] != t['pid']}
@@ -1365,7 +1365,7 @@ class TrimFixedTests(unittest.TestCase):
 
     def test_an_agentless_shell_pane_is_kept_because_unsent_input_cannot_be_read(self):
         # 3rd review: 'echo #' ends like a prompt; what cannot be judged is never closed.
-        for text in ('lukuku@mac ~ % ', 'lukuku@mac ~ % echo #', 'lukuku@mac ~ % echo 중요한말 >'):
+        for text in ('user@host ~ % ', 'user@host ~ % echo #', 'user@host ~ % echo 중요한말 >'):
             with self.subTest(text):
                 self.setUp()
                 self.make_shell('t3', text)
@@ -1374,7 +1374,7 @@ class TrimFixedTests(unittest.TestCase):
                 self.assertIn('shell pane: unsent input cannot be verified', got['t3']['reasons'])
 
     def test_a_shell_with_typed_text_or_a_running_command_stays(self):
-        self.make_shell('t3', 'lukuku@mac ~ % git push')
+        self.make_shell('t3', 'user@host ~ % git push')
         self.assertNotIn(('pane.close', 'p3'), self.live.calls, self.run_cycle(self.seeded()))
         self.setUp()
         self.make_shell('t3')

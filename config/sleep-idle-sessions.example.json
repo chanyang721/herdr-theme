@@ -6,7 +6,7 @@
   "close_report": {"enabled": true, "timeout_seconds": 900, "retry_seconds": 3600, "settle_seconds": 120, "turns": 1, "collect_after_seconds": 1200},
   "close_finished_panes": true,
   "user_controlled_names": ["Share"],
-  "trim_fixed": {"names": ["PeaceMinusOne", "Medihomes"], "keep_addresses": []},
+  "trim_fixed": {"names": ["ProjectA", "ProjectB"], "keep_addresses": []},
   "user_approved_apply": false,
   "reviewed_observer_sha256": null
 }
