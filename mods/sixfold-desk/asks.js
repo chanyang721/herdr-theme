@@ -1,6 +1,7 @@
 import { div } from 'gpui-kit';
 import { h_flex, v_flex } from 'gpui-base';
-import { run, exec, readTextFile, appHome, watchFolder } from 'herdr';
+import { run, exec, readTextFile, appHome } from 'herdr';
+import {subscribeJsonFile,subscribeFileChanges} from './panel-io.js';
 import { KIND_WORDS, bridgeFrom, parseAsks, questionsOf, choose, complete, answerArgs, detailOf, touchesCards, tokenPath } from './ask-model.js';
 
 // Cards for prompts an agent is waiting on (permission, question, plan), from the optional
@@ -9,24 +10,47 @@ const CONFIG = '/data/sixfold/harness-local/config.json';
 const SAFETY_MS = 5000;     // a card the bridge closed on its own (time-out, answered in the terminal)
 
 export function watchAsks(view, cx) {
+  view.stopAsks?.();
   view.asks = null;          // null: no bridge → nothing shown
   view.askChoices = {};
   view.askBusy = {};
   view.askErrors = {};
   view.askDir = null;
-  let loading = false, previous;
-  const refresh = cx => {
-    if (loading) return;
+  view.askWatchOutsideAppHome = false;
+  view.askExternalWatchActive = false;
+  let loading=false,previous,disposed=false,scheduled=null,safety=null,stopDirectory=null,bridgeKey,configHash,configLoaded=false,generation=0,dirty=false;
+  const allowed=()=>!disposed&&!view.panelTrackingActive;
+  const cancelSafety=()=>{safety?.cancel?.();safety=null;};
+  const scheduleSafety=()=>{
+    cancelSafety();
+    if(allowed()&&view.askBridge&&view.asks?.length)safety=cx.timer.after(SAFETY_MS,()=>{safety=null;refresh(cx);});
+  };
+  const observeDirectory=dir=>{
+    if(view.askDir===dir)return;
+    stopDirectory?.();stopDirectory=null;view.askDir=dir;view.askExternalWatchActive=false;
+    const normalized=value=>String(value??'').replace(/\\/g,'/').replace(/\/+$/,'');
+    const home=normalized(appHome()),folder=normalized(dir);
+    const windows=/^(?:[A-Za-z]:\/|\/\/)/.test(home);
+    const root=windows?home.toLowerCase():home,path=windows?folder.toLowerCase():folder;
+    view.askWatchOutsideAppHome=Boolean(dir&&path!==root&&!path.startsWith(root+'/'));
+    // The shared service multiplexes explicitly configured external roots;
+    // sidebar copies reuse the same root watcher and receive owned delivery.
+    if(dir){stopDirectory=subscribeFileChanges(cx,dir,paths=>{if(!disposed&&touchesCards(paths,dir))refresh(cx);});view.askExternalWatchActive=view.askWatchOutsideAppHome;}
+  };
+  const refreshNow = context => {
+    if(!allowed()){dirty=true;return;}
+    if(!view.askBridge)return;
+    if(loading){dirty=true;return;}
+    dirty=false;cancelSafety();
     loading = true;
-    cx.spawn(async cx => {
+    const bridge=view.askBridge,version=generation;
+    (context??cx).spawn(async cx => {
       try {
-        const bridge = bridgeFrom(await readTextFile(`${appHome()}${CONFIG}`).catch(() => null));
-        view.askBridge = bridge;
-        if (!bridge) { if (view.asks !== null) { view.asks = null; cx.notify(); } return; }
         const result = await exec(bridge.python, [bridge.script, 'asks', '--json']);
+        if(version!==generation||!allowed()){dirty=true;return;}
         const parsed = result.code === 0 ? parseAsks(result.stdout) : null;
         if (!parsed) return;                       // keep what is shown; retried on the next change
-        view.askDir = parsed.dir;
+        observeDirectory(parsed.dir);
         view.askTokenDir = parsed.tokenDir;
         const text = JSON.stringify(parsed.asks);
         if (text === previous) return;
@@ -37,21 +61,37 @@ export function watchAsks(view, cx) {
         }
         view.asks = parsed.asks;
         cx.notify();
-      } catch { /* bridge missing or busy: the next tick tries again */ }
-      finally { loading = false; }
+      } catch { /* A file change or live-card safety refresh retries a busy bridge. */ }
+      finally { loading=false;scheduleSafety();if(dirty&&allowed())refresh(cx); }
     });
   };
-  refresh(cx);
-  cx.timer.every(SAFETY_MS, refresh);
-  cx.spawn(async cx => {
-    for (;;) {
-      if (!view.askDir) { await cx.sleep(2000); continue; }
-      const dir = view.askDir;
-      try { if (touchesCards(await watchFolder(dir), dir)) refresh(cx); }
-      catch { await cx.sleep(2000); }
+  const refresh=context=>{
+    dirty=true;
+    if(!allowed()||!view.askBridge||loading||scheduled)return;
+    scheduled=cx.timer.after(20,()=>{scheduled=null;refreshNow(context??cx);});
+  };
+  const stopConfig=subscribeJsonFile(cx,`${appHome()}${CONFIG}`,snapshot=>{
+    if(disposed||snapshot.status==='invalid')return;
+    if(snapshot.status==='ready'){
+      if(configLoaded&&snapshot.hash===configHash)return;
+      configLoaded=true;configHash=snapshot.hash;view.askConfig=snapshot.value;
+    }else if(snapshot.status==='missing'){configLoaded=false;configHash=undefined;view.askConfig=null;}
+    else return;
+    const bridge=snapshot.status==='ready'?bridgeFrom(snapshot.value):null;
+    const key=bridge?JSON.stringify([bridge.python,bridge.script]):null;
+    if(key===bridgeKey)return;
+    bridgeKey=key;generation++;previous=undefined;view.askBridge=bridge;
+    if(!bridge){
+      scheduled?.cancel?.();scheduled=null;cancelSafety();observeDirectory(null);view.askTokenDir=null;
+      if(view.asks!==null){view.asks=null;if(!view.panelTrackingActive)cx.notify();}
+      return;
     }
+    refresh(cx);
   });
+  const stop=()=>{if(disposed)return;disposed=true;generation++;scheduled?.cancel?.();scheduled=null;cancelSafety();stopConfig();stopDirectory?.();stopDirectory=null;view.askExternalWatchActive=false;};
+  view.stopAsks=stop;(view.fileSubscriptions??=[]).push(stop);
   view.refreshAsks = refresh;
+  return stop;
 }
 
 function answer(view, ask, decision, cx) {

@@ -1,0 +1,201 @@
+{
+    "source_sha":  "d6765bba07060e2852984d759e3898801c4f3b88",
+    "host":  "current SDK compatibility; backgroundJson:false",
+    "selection":  [
+                      {
+                          "file":  "matrix-none-none-no-slack.png",
+                          "bytes":  23889,
+                          "sha256":  "ac7a1b4df74323e983bd8ebc9cb63d0d69400aa19b7773860cd26ddf0c1cd22d"
+                      },
+                      {
+                          "file":  "matrix-none-none-slack.png",
+                          "bytes":  24338,
+                          "sha256":  "6d365c2054b70fcd5c876429e7552eb50d80b16ad5f809dcaea8f0fae2fa078a"
+                      },
+                      {
+                          "file":  "matrix-none-linear-no-slack.png",
+                          "bytes":  31008,
+                          "sha256":  "7fff8688ec0515caecea5055e993cd2b2ea8d63a86894ca40a444bc995a024ee"
+                      },
+                      {
+                          "file":  "matrix-none-linear-slack.png",
+                          "bytes":  30815,
+                          "sha256":  "59d585d7f929caf2c9e5c3ebf839b5609b45f03bdb95951673592f8c58b2d0be"
+                      },
+                      {
+                          "file":  "matrix-none-jira-no-slack.png",
+                          "bytes":  30516,
+                          "sha256":  "81243a84999631e91ad611941e2a687750ef1d966b888bf9038a8b0718b4a91d"
+                      },
+                      {
+                          "file":  "matrix-none-jira-slack.png",
+                          "bytes":  30332,
+                          "sha256":  "dee28251cc86f9bdf8dc363143ad421f50a20511ae2b42af4d71b0dd630ac901"
+                      },
+                      {
+                          "file":  "matrix-space-none-no-slack.png",
+                          "bytes":  25233,
+                          "sha256":  "492d3b3f6cb4aade7f2b8b0da63a59afa1bd0629da5f1c21dec45cd79af10a3a"
+                      },
+                      {
+                          "file":  "matrix-space-none-slack.png",
+                          "bytes":  25690,
+                          "sha256":  "678e563669832a1c07dd583375fbed80e8da431ce172d744101979a9aa75062c"
+                      },
+                      {
+                          "file":  "matrix-space-linear-no-slack.png",
+                          "bytes":  32471,
+                          "sha256":  "262ba0a9bc456b95306d16d0284480fb5ad702ffe3ac38314785d9aae9b5c3a3"
+                      },
+                      {
+                          "file":  "matrix-space-linear-slack.png",
+                          "bytes":  32184,
+                          "sha256":  "488f3b681e003fea09f64cef0e54b8efcdbb09076401c91b7f9314141b773ce2"
+                      },
+                      {
+                          "file":  "matrix-space-jira-no-slack.png",
+                          "bytes":  31882,
+                          "sha256":  "a73d151cef33d2a18370e8d2f6ad8685fb52830b6d71ca59c7079f213ae8eae1"
+                      },
+                      {
+                          "file":  "matrix-space-jira-slack.png",
+                          "bytes":  31645,
+                          "sha256":  "6867870f6d3ad3cce1fd9faa8bf7dcd3ff5d96908cfb06d4c1cdd0a67ba234a5"
+                      },
+                      {
+                          "file":  "matrix-agent-none-no-slack.png",
+                          "bytes":  25244,
+                          "sha256":  "44f9a694c14872eb5567c218430a528f9ad64802031124263019cd4fad1bc1c2"
+                      },
+                      {
+                          "file":  "matrix-agent-none-slack.png",
+                          "bytes":  25779,
+                          "sha256":  "e8f2c58d2bf612ed65bb2a70ec24866c7dfc19f588d6ad34b6752e1eaa41962f"
+                      },
+                      {
+                          "file":  "matrix-agent-linear-no-slack.png",
+                          "bytes":  32582,
+                          "sha256":  "50cdbc678da0126b4d3c38e8dd0fbd62becc8b6577d99b650821e94ff1b9d2ff"
+                      },
+                      {
+                          "file":  "matrix-agent-linear-slack.png",
+                          "bytes":  32248,
+                          "sha256":  "46a4eb88c1ebc71b0d7e9bc6cfa0bf720d64f24c0b21a6fd577fbc7b9174e69a"
+                      },
+                      {
+                          "file":  "matrix-agent-jira-no-slack.png",
+                          "bytes":  32042,
+                          "sha256":  "629a1c7616d812c8a1a45d22271d5fb034694b51d6432f46d3bf266b72d11e83"
+                      },
+                      {
+                          "file":  "matrix-agent-jira-slack.png",
+                          "bytes":  31746,
+                          "sha256":  "7b4d8f441c953d4fecaca16d9a4bc2b77e9d0103a2ab347a5d676e16f8aa6265"
+                      },
+                      {
+                          "file":  "event-dispatch-existing-01.png",
+                          "bytes":  33387,
+                          "sha256":  "dc1c70546396e59848f08e61dd7909014ab5aac83cc6e633b463d654029cd9cd"
+                      },
+                      {
+                          "file":  "event-spawn-01.png",
+                          "bytes":  36853,
+                          "sha256":  "665a09541036f7dd345b287a7fb18c2afae6f2850a9f600aaa883608f0df21ae"
+                      },
+                      {
+                          "file":  "event-review_request-01.png",
+                          "bytes":  34453,
+                          "sha256":  "86bac71d21c2063a81bd2c35d00d9ba2f2c9c2d5fd4e7aad135dfe68a756b3a2"
+                      },
+                      {
+                          "file":  "event-verdict-01.png",
+                          "bytes":  34409,
+                          "sha256":  "7a324032f6625a735ed8fd3f1b214fdf70af85d8b61e8b3ff4f19f2953d6c359"
+                      },
+                      {
+                          "file":  "event-accept-01.png",
+                          "bytes":  34052,
+                          "sha256":  "319cea747f7cd1bcf654671c82a5eda8e3c6d84930516891ee89f87dd0c2617b"
+                      },
+                      {
+                          "file":  "event-close-1-01.png",
+                          "bytes":  34266,
+                          "sha256":  "c171a5c76b5ae4c99f5c22433bfc6d21fcc21a05c88a89963902c17df5f2519d"
+                      },
+                      {
+                          "file":  "event-close-2-01.png",
+                          "bytes":  34613,
+                          "sha256":  "02f6a4a94a9f19d1fca00e2e84801f6ca4b8ad71ba4090060b7cc3e21033c02d"
+                      },
+                      {
+                          "file":  "event-close-3-01.png",
+                          "bytes":  34358,
+                          "sha256":  "b3759422305b1e0d9289b70904ff6bf6c8c76fafeca663b4869ecef512981323"
+                      },
+                      {
+                          "file":  "event-memory-01.png",
+                          "bytes":  34987,
+                          "sha256":  "5abbcd554e30821a7cad8a38edc1397cd67a6c1ce10780802fd71d0eeee7fd3d"
+                      },
+                      {
+                          "file":  "event-blocked-close-01.png",
+                          "bytes":  35043,
+                          "sha256":  "da8bbedbb08251caa0a9f23e7b46eb05b7e780301dfd8ef5ea3d457bfef2b78a"
+                      },
+                      {
+                          "file":  "event-close-4-08.png",
+                          "bytes":  32635,
+                          "sha256":  "23810081d3d6a6ff426589c39e181dbefc24ec4557eb14267e780e6581b6ce1c"
+                      },
+                      {
+                          "file":  "event-message-01.png",
+                          "bytes":  32910,
+                          "sha256":  "9397b708c026eb04ee9f6c2afd42d95df17ab72475203e3bc61979a6beb48a52"
+                      },
+                      {
+                          "file":  "event-message-space-01.png",
+                          "bytes":  36691,
+                          "sha256":  "724f4d0443fcb9f6ca53088919865688e53b33262ee021f522fb2a2ed8a9ffcf"
+                      },
+                      {
+                          "file":  "event-message-computer-01.png",
+                          "bytes":  38135,
+                          "sha256":  "384a0d101f71b5dc28477db5afba6f0b3278011fd12676b3ca077f6f9762938f"
+                      },
+                      {
+                          "file":  "scenario-sorting.png",
+                          "bytes":  42085,
+                          "sha256":  "799fabdb013087cdce367296d7ecfb46bc1a22e8356ea8e854bd8bb4a8e49bf4"
+                      },
+                      {
+                          "file":  "scenario-no-issue.png",
+                          "bytes":  32132,
+                          "sha256":  "4a224e45e066d20ee686d5be16f9a7d3bdd2d90d1c103949e639cb18d30e65e6"
+                      },
+                      {
+                          "file":  "scenario-overflow.png",
+                          "bytes":  30086,
+                          "sha256":  "9eca3cc182468db04f6bfac5c7c2027eb4d7a649110af25f544981e7d713d910"
+                      },
+                      {
+                          "file":  "scenario-cross-space.png",
+                          "bytes":  35639,
+                          "sha256":  "03ed68d9ec215b4df268104b539a4b9444563f735c0e94bd05567f03cd1eed86"
+                      },
+                      {
+                          "file":  "scenario-cross-computer.png",
+                          "bytes":  37205,
+                          "sha256":  "02c9f0f1a55c407a5dff81c37e66153566e21c94bbadfa0552edad30210b8d3c"
+                      },
+                      {
+                          "file":  "light-shared-space.png",
+                          "bytes":  31875,
+                          "sha256":  "256e755f774c7d60adf5fca99bf682f128836f8f3478dff893f470d27638f989"
+                      },
+                      {
+                          "file":  "motion-off-a.png",
+                          "bytes":  32022,
+                          "sha256":  "baaca9ffffbab6097f1540730d22c5dcc90de00fc8d8b6737dda9a36829afeda"
+                      }
+                  ]
+}

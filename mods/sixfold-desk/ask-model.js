@@ -13,9 +13,12 @@ const ID = /^[0-9A-HJKMNP-TV-Z]{26}$/;
 const TOKEN = /^[0-9a-f]{64}$/;
 
 // The bridge script from harness-local/config.json; null hides the cards entirely.
-export function bridgeFrom(configText) {
-  let config;
-  try { config = JSON.parse(configText || 'null'); } catch { return null; }
+export function bridgeFrom(configValue) {
+  let config=configValue;
+  // Strings remain compatible for external callers; file subscriptions supply
+  // an already parsed native object and never enter this compatibility branch.
+  if(typeof configValue==='string')try { config = JSON.parse(configValue || 'null'); } catch { return null; }
+  if(!config||typeof config!=='object'||Array.isArray(config))return null;
   const repo = typeof config?.repo_path === 'string' && config.repo_path.trim() ? config.repo_path.trim() : null;
   if (!repo) return null;
   return { python: typeof config.python === 'string' && config.python ? config.python : 'python3',

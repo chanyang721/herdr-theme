@@ -1,6 +1,7 @@
 import {div} from 'gpui-kit';
 import {h_flex} from 'gpui-base';
-import {appHome,readTextFile,watchFolder,openOverlay,run,shared} from 'herdr';
+import {appHome,openOverlay,run,shared} from 'herdr';
+import {subscribeJsonFile} from './panel-io.js';
 
 // Workspace badges: a generic slot beside each workspace name in the sidebar. Any mod can
 // publish them in shared state, and any tool can write them to a file; the theme only draws
@@ -44,15 +45,19 @@ export function badgesFor(key,fromFile,fromShared){
 }
 
 export function watchBadges(view,cx){
-  view.fileBadges={};
-  cx.spawn(async cx=>{
-    const folder=`${appHome()}/data/sixfold`;
-    for(;;){
-      try{view.fileBadges=cleanBadges(JSON.parse(await readTextFile(`${appHome()}/${BADGES_FILE}`)||'{}'));}catch(_){view.fileBadges={};}
-      cx.notify();
-      try{await watchFolder(folder);}catch(_){return;}
-    }
+  view.stopBadges?.();view.fileBadges??={};
+  let disposed=false,previousHash=null,previousValue=null,loaded=false;
+  const unsubscribe=subscribeJsonFile(cx,`${appHome()}/${BADGES_FILE}`,snapshot=>{
+    if(disposed||snapshot.status!=='ready')return;
+    const hash=typeof snapshot.hash==='string'?snapshot.hash:null;
+    if(loaded&&((hash!==null&&hash===previousHash)||(hash===null&&snapshot.value===previousValue)))return;
+    loaded=true;previousHash=hash;previousValue=snapshot.value;
+    view.fileBadges=cleanBadges(snapshot.value);
+    if(!view.panelTrackingActive)cx.notify();
   });
+  const stop=()=>{if(disposed)return;disposed=true;unsubscribe();};
+  view.stopBadges=stop;(view.fileSubscriptions??=[]).push(stop);
+  return stop;
 }
 
 function activate(badge){
