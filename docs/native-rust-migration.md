@@ -90,7 +90,7 @@ Final local Windows validation completed successfully:
 | Check | Passed | Failed | Ignored/skipped |
 | --- | ---: | ---: | ---: |
 | Full native Rust suite | 690 | 0 | 11 |
-| JavaScript suite | 173 | 0 | 6 |
+| JavaScript suite | 174 | 0 | 6 |
 
 The Rust run used one Cargo job and one test thread. It includes all 190
 observer scenarios (141 retained plus 49 from the latest Python main), all

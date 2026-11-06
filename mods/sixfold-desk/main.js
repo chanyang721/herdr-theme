@@ -46,6 +46,8 @@ const invokeHelper = (configured, command, args=[]) => {
 const marks = { blocked: '!', done: '✓', working: '●', idle: '○' };
 // One slow pass of the dot along a link pipe while computers work together.
 const LINK_FLOW_MS = 4000;
+// Bound the three finite host timers per packet, preserving the installed limit.
+const MAX_ACTIVE_FLOWS = 64;
 // Right margin kept beside the computer and workspace lists alike: message curves
 // and computer links draw in it, so both lists end on the same line.
 const LINK_MARGIN = 41;
@@ -381,7 +383,7 @@ export default class SixfoldDesk extends View {
   }
 
   startFlows(cx) {
-    while (this.pendingFlows.length) {
+    while (this.pendingFlows.length && this.activeFlows.length < MAX_ACTIVE_FLOWS) {
       const event = this.pendingFlows.shift();
       // Freshness was checked on ingestion. A real burst must not expire
       // merely because earlier packets occupied the four visible lanes.
