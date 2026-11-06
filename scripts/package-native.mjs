@@ -34,7 +34,9 @@ if(args.includes('--archive')){
   const archive=path.resolve(option('--archive'));
   if(fs.existsSync(archive)||fs.existsSync(archive+'.sha256'))throw Error('Archive already exists');
   // A tar preserves Unix execute bits through GitHub's surrounding artifact ZIP.
-  execFileSync('tar',['-czf',archive,'-C',out,'.']);
+  // Git Bash's GNU tar interprets a Windows drive prefix as a remote host.
+  const tar=process.platform==='win32'?path.join(process.env.SystemRoot||'C:\\Windows','System32','tar.exe'):'tar';
+  execFileSync(tar,['-czf',archive,'-C',out,'.']);
   const digest=crypto.createHash('sha256').update(fs.readFileSync(archive)).digest('hex');
   fs.writeFileSync(archive+'.sha256',`${digest}  ${path.basename(archive)}\n`,{flag:'wx'});
 }
