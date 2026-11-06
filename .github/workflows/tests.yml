@@ -42,7 +42,7 @@ jobs:
           node-version: '22'
       - run: cargo fmt --manifest-path rust/Cargo.toml --all -- --check
       - name: Run native translations of the original behavior tests
-        run: cargo test --manifest-path rust/Cargo.toml --locked --jobs 1 -- --test-threads=1
+        run: cargo test --manifest-path rust/Cargo.toml --locked --jobs 1 --no-fail-fast -- --test-threads=1
       - run: cargo build --manifest-path rust/Cargo.toml --locked --release --bin herdr-theme --jobs 1
       - name: Run the original macOS voice installation cases through the native CLI
         if: runner.os == 'macOS'

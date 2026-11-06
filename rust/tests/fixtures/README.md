@@ -1,5 +1,13 @@
 These JSON files are frozen test oracles. Rust tests consume the data directly; no Python interpreter is needed to run them.
 
+The Windows document-catalog capture used UTC+09. Its original
+`datetime.fromtimestamp` contract uses the runner's local timezone. The native
+fixture test independently verifies the stored calendar dates against UTC+09,
+then binds only `modified` and undated `date`/`recent` fields to the same input
+mtime in the runner's timezone. It never derives expectations from native
+output; the frozen JSON, epoch mtimes, dated filename dates and all other fields
+remain unchanged.
+
 `documents-python-baseline.json` records 271 distinct pure helper calls from theme commit `8c5b71d2f1074bb5d1d831fa395617bf4ae2abc8`. The original document, routing, pin, tab, renderer, base-install, updater and workspace-mod suites ran 113 tests on Windows: 98 passed and 15 were explicitly skipped because their fixtures require symlink privileges, executable POSIX scripts, macOS launchd, or an enabled live WebKit renderer. Filesystem-dependent `seed_config` captures were replaced by native sandbox tests. User home paths were replaced by synthetic fixture paths and the unchanged Python functions recomputed their expected outputs. Path-dependent Windows captures execute on Windows; portable captures execute on every platform. Native tab creation substitutes the new executable path for the two original Python entry-point paths when comparing the unchanged tab structure.
 
 `pinned-agent-plan-baseline.json` records 169 calls from the Apache-2.0 Workspace Mods release `9aa50108fc3cc3c3af0fb376f0bb1760c90af3a6`. Its original collector, metadata, Node-discovery, plan-usage and reset suites ran 81 tests on Windows: 69 passed and 12 were explicitly skipped for POSIX executable fixtures, POSIX named-session fallback, or SQLite fixture handles surviving Windows temporary-directory cleanup. Aggregate tuple keys are serialized as `provider:session`; captured fallback dates prevent a later test run changing the weekly window. Metadata log fixtures use repeated-record encoding to preserve the original bounded-tail behavior without storing large padding files. These tests never contact providers or consume real reset credits.

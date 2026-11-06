@@ -3,6 +3,43 @@
 use herdr_theme::documents::{catalog, common::*, install, observers, pins, render, update};
 use serde_json::{json, Value};
 use std::{collections::HashSet, path::Path};
+
+fn bind_original_local_dates(expected: &mut Value, input: &Value) {
+    // doc_catalog.py uses datetime.fromtimestamp(ms / 1000), without a timezone
+    // argument. The immutable Windows capture used UTC+09; the runner may not.
+    // Validate that capture context before rebinding only its calendar fields.
+    // Do not use the native result or catalog::modified to derive expectations.
+    let captured_zone = chrono::FixedOffset::east_opt(9 * 3600).unwrap();
+    let today = chrono::NaiveDate::parse_from_str(s(&input["today"]), "%Y-%m-%d").unwrap();
+    let since =
+        today - chrono::Duration::days((input["recent_days"].as_i64().unwrap_or(7) - 1).max(0));
+    for row in expected.as_array_mut().unwrap() {
+        let item = input["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|item| item["path"] == row["path"])
+            .unwrap();
+        assert_eq!(row["mtime"], item["mtime"]);
+        let instant =
+            chrono::DateTime::<chrono::Utc>::from_timestamp_millis(item["mtime"].as_i64().unwrap())
+                .unwrap();
+        let captured = instant.with_timezone(&captured_zone).date_naive();
+        let local = instant.with_timezone(&chrono::Local).date_naive();
+        assert_eq!(
+            row["modified"],
+            captured.to_string(),
+            "original capture timezone drift"
+        );
+        row["modified"] = json!(local.to_string());
+        if row["dated"] == false {
+            assert_eq!(row["date"], captured.to_string());
+            assert_eq!(row["recent"], since <= captured && captured <= today);
+            row["date"] = json!(local.to_string());
+            row["recent"] = json!(since <= local && local <= today);
+        }
+    }
+}
 #[test]
 fn original_document_contracts() {
     let corpus: Value =
@@ -48,6 +85,7 @@ fn original_document_contracts() {
                 if !cfg!(windows) {
                     continue;
                 }
+                bind_original_local_dates(&mut expected, input);
                 let day = input["today"]
                     .as_str()
                     .map(|d| chrono::NaiveDate::parse_from_str(d, "%Y-%m-%d").unwrap())
