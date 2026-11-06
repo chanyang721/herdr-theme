@@ -1,6 +1,7 @@
 import {div} from 'gpui-kit';
 import {h_flex,v_flex,InputState,Input} from 'gpui-base';
-import {appHome,readTextFile,spaces,exec,window} from 'herdr';
+import {appHome,spaces,exec,window} from 'herdr';
+import {subscribeJsonFile} from './panel-io.js';
 
 const readable=path=>/\.(md|html?)$/i.test(path);
 const archived=file=>file.archived===true||/archive|아카이브|보관|\.before-/i.test(file.path.normalize('NFC'));
@@ -8,25 +9,42 @@ const foldersFor=files=>{const groups=new Map();for(const f of files){const key=
 export function currentDocs(index){const space=spaces().find(s=>s.active);return index?.spaces?.[space?.id]||index?.spaces?.[space?.name]||null;}
 const COLLECT_MS=30000;
 const native = () => `${appHome()}/scripts/sixfold/herdr-theme${(typeof window==='function' && window()?.platform==='windows') || /^(?:[A-Za-z]:[\\/]|\\\\)/.test(appHome())?'.exe':''}`;
+const COLLECTORS='__sixfoldDocsCollectorsV1';
+function collectDocs(view){
+  if(view.panelTrackingActive)return;
+  const collectors=globalThis[COLLECTORS]??(globalThis[COLLECTORS]=new Map());
+  const key=appHome(),state=collectors.get(key)??{at:null,pending:false};
+  collectors.set(key,state);
+  const now=Date.now();
+  if(state.pending||(state.at!==null&&now-state.at<COLLECT_MS))return;
+  state.at=now;state.pending=true;
+  // Collection discovers new/moved documents; file subscriptions only deliver
+  // its output. Sidebar copies share one actual collection per app home.
+  Promise.resolve().then(()=>exec(native(),['collect_docs'])).catch(()=>{}).finally(()=>{state.pending=false;});
+}
+function validDocs(data){
+  return data&&typeof data==='object'&&!Array.isArray(data)&&data.version===1
+    &&data.spaces&&typeof data.spaces==='object'&&!Array.isArray(data.spaces)
+    &&Object.values(data.spaces).every(item=>item&&typeof item==='object'&&!Array.isArray(item)
+      &&Array.isArray(item.files)&&typeof item.folder==='string'
+      &&item.files.every(file=>file&&typeof file==='object'&&typeof file.path==='string'&&typeof file.name==='string'&&Number.isFinite(file.mtime)));
+}
 export function watchDocs(view,cx){
-  let busy=false,previous,collected=0;
-  const refresh=cx=>{
-    // New and moved documents reach the index without anyone running the collector by hand.
-    if(Date.now()-collected>=COLLECT_MS){collected=Date.now();exec(native(),['collect_docs']).catch(()=>{});}
-    if(busy)return;busy=true;
-    cx.spawn(async cx=>{
-      try{
-        const text=await readTextFile(`${appHome()}/data/sixfold/project-docs-index.json`);
-        if(text===previous)return;
-        const data=text?JSON.parse(text):{version:1,spaces:{}};
-        if(data.version!==1||!data.spaces||typeof data.spaces!=='object')return;
-        for(const item of Object.values(data.spaces))if(!Array.isArray(item.files)||typeof item.folder!=='string'||item.files.some(f=>typeof f.path!=='string'||typeof f.name!=='string'||!Number.isFinite(f.mtime)))return;
-        view.projectDocs=data;previous=text;cx.notify();
-      }catch{/* Retain the previous snapshot through partial writes. */}
-      finally{busy=false;}
-    });
-  };
-  refresh(cx);cx.timer.every(2000,refresh);
+  view.stopDocs?.();
+  let disposed=false,previousHash=null,previousValue=null,loaded=false;
+  const unsubscribe=subscribeJsonFile(cx,`${appHome()}/data/sixfold/project-docs-index.json`,snapshot=>{
+    if(disposed||snapshot.status!=='ready'||!validDocs(snapshot.value))return;
+    const hash=typeof snapshot.hash==='string'?snapshot.hash:null;
+    if(loaded&&((hash!==null&&hash===previousHash)||(hash===null&&snapshot.value===previousValue)))return;
+    loaded=true;previousHash=hash;previousValue=snapshot.value;
+    view.projectDocs=snapshot.value;
+    if(!view.panelTrackingActive)cx.notify();
+  });
+  collectDocs(view);
+  const timer=cx.timer.every(COLLECT_MS,()=>{if(!disposed)collectDocs(view);});
+  const stop=()=>{if(disposed)return;disposed=true;unsubscribe();timer?.cancel?.();};
+  view.stopDocs=stop;(view.fileSubscriptions??=[]).push(stop);
+  return stop;
 }
 // Native retained input state must be created by init/event/command callbacks,
 // never while GPUI is rendering the document section.

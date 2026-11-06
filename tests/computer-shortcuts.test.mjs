@@ -59,6 +59,12 @@ test('computer commands select the listed computer without moving focus, running
   };
   globalThis.__shortcutRuntime=runtime;
   let source=await readFile(new URL('../mods/sixfold-desk/main.js',import.meta.url),'utf8');
+  source=source.replace("import {renderPanelTracking} from './panel-view.js';",'const renderPanelTracking=()=>null;').replace("'./panel-model.js'",JSON.stringify(new URL('../mods/sixfold-desk/panel-model.js',import.meta.url).href));
+  source=source.replace("import {createRetainedPanel} from './panel-retained.js';",'const createRetainedPanel=()=>null;');
+  source=source.replace("import {createRetainedCards} from './retained-cards.js';",'const createRetainedCards=()=>({begin(){},card(_id,_signature,build){return build();},end(){},dispose(){}});');
+  source=source.replace(/import .* from '.\/panel-io.js';/,'const subscribeJsonFile=()=>()=>{},readJsonSnapshot=async()=>({status:"missing",hash:null}),FILE_CHANGED_COMMAND="file-feed-changed",fileDelivery=()=>({enqueue:(callback,value)=>callback(value),flush(){}});')
+    .replace(/import .* from '.\/sidebar-files.js';/,'const watchSidebarFiles=()=>{};')
+    .replace("'./live-events.js'",JSON.stringify(new URL('../mods/sixfold-desk/live-events.js',import.meta.url).href));
   source=source.replace(/import \{ View, div, svg, image \} from 'gpui-kit';/,'const {View,div,svg,image}=globalThis.__shortcutRuntime;')
     .replace(/import \{ h_flex, v_flex \} from 'gpui-base';/,'const {h_flex,v_flex}=globalThis.__shortcutRuntime;')
     .replace(/import \* as herdrNative from 'herdr';/,'const herdrNative=globalThis.__shortcutRuntime;')

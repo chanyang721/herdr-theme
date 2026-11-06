@@ -16,6 +16,7 @@ fn main() {
         }
     }
     let result = match command.as_str() {
+        "panel_feed" => herdr_theme::panel_feed::cli(&args),
         "doc_routing"
         | "collect_docs"
         | "resolve_doc_pins"

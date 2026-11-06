@@ -120,6 +120,10 @@ Local and connected/connecting computers are shown by default. Disconnected remo
 
 From the main computer, `hc send worker/t7 "message"` sends to that computer's terminal (use the qualified address from `hc ls`). A successful send is not a read receipt. The theme does not configure SSH, Tailscale, firewall rules or agent credentials.
 
+### Local task tracking
+
+An optional [local panel feed](docs/panel-feed.md) shows task names, four-stage bars, issue groups, sharing links, message packets and explicit closing stages. The theme draws supplied display data; it does not accept work or close sessions. **목록** returns to the normal workspace navigator and **작업** opens tracking again. Motion off and the system reduced-motion preference keep state updates without movement.
+
 ### Shared work across computers
 
 Workspaces belong to the same project when their names match; a trailing `(computer name)` naming the workspace's own computer is ignored, so `Docs (worker)` on `worker` matches `Docs` here. Unnamed workspaces (`~`) are skipped.

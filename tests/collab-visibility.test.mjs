@@ -32,6 +32,12 @@ test('the collaboration colour follows the theme\'s lightness', () => {
 let loads = 0;
 async function sidebar(runtime) {
   let source = await readFile(new URL('../mods/sixfold-desk/main.js', import.meta.url), 'utf8');
+  source=source.replace("import {renderPanelTracking} from './panel-view.js';",'const renderPanelTracking=()=>null;').replace("'./panel-model.js'",JSON.stringify(new URL('../mods/sixfold-desk/panel-model.js',import.meta.url).href));
+  source=source.replace("import {createRetainedPanel} from './panel-retained.js';",'const createRetainedPanel=()=>null;');
+  source=source.replace("import {createRetainedCards} from './retained-cards.js';",'const createRetainedCards=()=>({begin(){},card(_id,_signature,build){return build();},end(){},dispose(){}});');
+  source=source.replace(/import .* from '.\/panel-io.js';/,'const subscribeJsonFile=()=>()=>{},readJsonSnapshot=async()=>({status:"missing",hash:null}),FILE_CHANGED_COMMAND="file-feed-changed",fileDelivery=()=>({enqueue:(callback,value)=>callback(value),flush(){}});')
+    .replace(/import .* from '.\/sidebar-files.js';/,'const watchSidebarFiles=()=>{};')
+    .replace("'./live-events.js'",JSON.stringify(new URL('../mods/sixfold-desk/live-events.js',import.meta.url).href));
   source = source.replace(/import \{ View, div, svg, image \} from 'gpui-kit';/, 'const {View,div,svg,image}=globalThis.__visRuntime;')
     .replace(/import \{ h_flex, v_flex \} from 'gpui-base';/, 'const {h_flex,v_flex}=globalThis.__visRuntime;')
     .replace(/import \* as herdrNative from 'herdr';/, 'const herdrNative=globalThis.__visRuntime;')
@@ -247,20 +253,20 @@ test('the comet timer wakes only on the next boundary and cancels when motion st
     await tasks[0];
     v.messageEvents = [{id: 's1', source: 't1', target: 'worker/t1', at: now}];
     rows(v, cx);
-    assert.equal(scheduled.at(-1).at, now + FLOW.arriveMs - FLOW.edgeMs, 'place the comet before its arrival');
+    assert.equal(v.cometTimer.at, now + FLOW.arriveMs - FLOW.edgeMs, 'place the comet before its arrival');
     assert(!intervals.some(item => item.ms === FLOW.edgeMs), 'no free-running corner interval');
     const count = scheduled.length;
     now += 100;
     rows(v, cx);
     assert.equal(scheduled.length, count, 'unrelated redraw keeps the same timer');
-    const pending = scheduled.at(-1);
+    const pending = v.cometTimer;
     now = pending.at;
     const before = notifications;
     pending.callback(cx);
     assert.equal(notifications, before + 1);
     rows(v, cx);
-    assert.equal(scheduled.at(-1).at, v.messageEvents[0].at + FLOW.arriveMs, 'next redraw is the arrival');
-    const arrival = scheduled.at(-1);
+    assert.equal(v.cometTimer.at, v.messageEvents[0].at + FLOW.arriveMs, 'next redraw is the arrival');
+    const arrival = v.cometTimer;
     motion = false;
     rows(v, cx);
     assert(arrival.cancelled);
