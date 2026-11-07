@@ -289,44 +289,64 @@ pub fn build(
     }
     rows
 }
-pub fn harness_root(space: &str, app: &Path, override_root: Option<&str>) -> Option<PathBuf> {
-    if let Some(root) = override_root {
-        let root = expand(root);
-        return root.is_dir().then_some(root);
+fn relative_parts(value: &str) -> Option<Vec<&str>> {
+    if value.is_empty() || value.contains(['\\', ':']) || value.starts_with('/') {
+        return None;
     }
-    let base = app.join("data/sixfold/harness-local/views/workspaces");
+    let parts = value.split('/').filter(|p| *p != ".").collect::<Vec<_>>();
+    if parts.iter().any(|part| part.is_empty() || *part == "..") {
+        return None;
+    }
+    Some(parts)
+}
+pub fn local_view(space: &str, app: &Path, override_config: &Value) -> Option<Value> {
+    if let Some(root) = override_config["root"].as_str() {
+        let root = expand(root);
+        if !root.is_dir() {
+            return None;
+        }
+        let mut value = override_config.clone();
+        value["root"] = json!(resolved(root));
+        return Some(value);
+    }
+    let base = app.join("data/sixfold/local-views/workspaces");
+    let canonical_base = fs::canonicalize(&base).ok()?;
     let index = read_json(base.join("index.json")).ok()?;
-    for entry in arr(&index["workspaces"]) {
-        if s(&entry["space_id"]) == space && entry["machine_name"].is_null() {
-            let name = s(&entry["workspace_id"]);
-            if !name.is_empty() && !name.contains('/') && !name.starts_with('.') {
-                let root = base.join(name);
-                if root.is_dir() {
-                    return Some(root);
-                }
-            }
+    if index["schema"] != 1 {
+        return None;
+    }
+    for entry in arr(&index["views"]) {
+        if s(&entry["spaceId"]) != space {
+            continue;
+        }
+        let Some(parts) = relative_parts(s(&entry["directory"])) else {
+            continue;
+        };
+        let root = parts.iter().fold(base.clone(), |p, part| p.join(part));
+        let Ok(root) = fs::canonicalize(root) else {
+            continue;
+        };
+        if root.is_dir() && root.starts_with(&canonical_base) {
+            let mut value = entry.clone();
+            value["root"] = json!(root);
+            return Some(value);
         }
     }
     None
 }
-fn harness_label(name: &str) -> String {
-    match fold(name).as_str() {
-        "readme.md" => "한눈에 보기",
-        "context.md" => "컨텍스트",
-        "goal.md" => "목표",
-        "constraints.md" => "제약",
-        "environment.md" => "환경",
-        "decisions.md" => "결정 요약",
-        "next.md" => "남은 일",
-        "escalation.md" => "막힘",
-        "brain.md" => "승인된 기억",
-        "pending.md" => "승인 대기 기억",
-        _ => return label_of(name, None),
-    }
-    .into()
-}
-pub fn harness(root: &Path, known: &HashMap<String, Value>) -> (Vec<Value>, Vec<Value>) {
-    let hardlinks = json_or(root.join(".hardlinks.json"), json!({}));
+pub fn local_view_documents(
+    root: &Path,
+    known: &HashMap<String, Value>,
+    metadata: &Value,
+) -> (Vec<Value>, Vec<Value>) {
+    let mut definitions = arr(&metadata["sections"])
+        .into_iter()
+        .filter(|section| {
+            !s(&section["id"]).is_empty()
+                && !s(&section["label"]).is_empty()
+                && relative_parts(section["directory"].as_str().unwrap_or(".")).is_some()
+        })
+        .collect::<Vec<_>>();
     let mut rows = vec![];
     for entry in walkdir::WalkDir::new(root)
         .follow_links(false)
@@ -334,99 +354,102 @@ pub fn harness(root: &Path, known: &HashMap<String, Value>) -> (Vec<Value>, Vec<
         .into_iter()
         .filter_entry(|e| e.depth() == 0 || !e.file_name().to_string_lossy().starts_with('.'))
     {
-        let Ok(entry) = entry else { continue };
+        let Ok(entry) = entry else {
+            continue;
+        };
         let path = entry.path();
         if !path.is_file()
             || !(EXTENSIONS.contains(&suffix(path).as_str()) || suffix(path) == ".txt")
         {
             continue;
         }
-        let relative = path.strip_prefix(root).unwrap();
-        let parts = relative
-            .iter()
-            .map(|x| x.to_string_lossy().into_owned())
-            .collect::<Vec<_>>();
-        let top = if parts.len() > 1 {
-            parts[0].as_str()
-        } else {
-            ""
-        };
+        let relative = path
+            .strip_prefix(root)
+            .unwrap()
+            .to_string_lossy()
+            .replace('\\', "/");
         let mut target = resolved(path);
-        if let Some(source) =
-            hardlinks[relative.to_string_lossy().replace('\\', "/")]["source"].as_str()
-        {
-            let original = Path::new(source);
-            if original.is_file() && same_file::is_same_file(path, original).unwrap_or(false) {
-                target = resolved(original)
+        if let Some(source) = metadata["sources"][&relative].as_str() {
+            let source = Path::new(source);
+            if source.is_file() && same_file::is_same_file(path, source).unwrap_or(false) {
+                target = resolved(source);
             }
         }
-        let (section, mut group) = match top {
-            "" | "context" => {
-                if parts.len() > 2 || fold(&filename(path)) == "tree.json" {
-                    continue;
-                }
-                ("status", String::new())
+        let selected = definitions
+            .iter()
+            .enumerate()
+            .filter_map(|(i, definition)| {
+                let parts = relative_parts(definition["directory"].as_str().unwrap_or("."))?;
+                let prefix = parts.join("/");
+                (prefix.is_empty() || relative.starts_with(&format!("{prefix}/")))
+                    .then_some((i, prefix))
+            })
+            .max_by_key(|(_, prefix)| prefix.len());
+        let (section, prefix, depth) = if let Some((index, prefix)) = selected {
+            (
+                s(&definitions[index]["id"]).to_owned(),
+                prefix,
+                definitions[index]["groupDepth"]
+                    .as_u64()
+                    .map(|x| x as usize),
+            )
+        } else {
+            let folder = relative.split('/').collect::<Vec<_>>();
+            let id = if folder.len() > 1 { folder[0] } else { "files" }.to_owned();
+            if !definitions.iter().any(|d| s(&d["id"]) == id) {
+                definitions
+                    .push(json!({"id":id,"label":if folder.len()>1 {folder[0]} else {"Files"}}));
             }
-            "history" => {
-                let month = parts
-                    .iter()
-                    .skip(1)
-                    .take(parts.len().saturating_sub(2))
-                    .find(|p| rx(r"^\d{4}-\d{2}$").is_match(p))
-                    .cloned()
-                    .or_else(|| {
-                        parts
-                            .iter()
-                            .rev()
-                            .find_map(|p| parse_date(p).map(|d| d.format("%Y-%m").to_string()))
-                    })
-                    .unwrap_or_else(|| "날짜 없음".into());
-                ("history", month)
-            }
-            "decisions" => ("decisions", String::new()),
-            "docs" => (
-                "docs",
-                if parts.len() > 2 {
-                    parts[1].clone()
-                } else {
-                    String::new()
-                },
-            ),
-            "brain" => ("brain", String::new()),
-            _ => continue,
+            let prefix = if folder.len() > 1 { folder[0] } else { "" }.to_owned();
+            (id, prefix, None)
         };
-        let mut row = json!({"id":format!("harness-{}",&hash(nfc(&relative.to_string_lossy()))[..16]),"path":target,"name":filename(path),"label":harness_label(&filename(path)),"section":section,"group":group,"status":"ok","pinned":false,"harness":true,"mtime":mtime(&target),"size":fs::metadata(&target).map(|m|m.len()).unwrap_or(0),"relative":relative});
-        if let Some(stamp) = parts.iter().rev().find_map(|p| parse_date(p)) {
-            row["date"] = json!(stamp.to_string())
+        let remainder = relative
+            .strip_prefix(&prefix)
+            .unwrap_or(&relative)
+            .trim_start_matches('/');
+        let mut folders = remainder.split('/').collect::<Vec<_>>();
+        folders.pop();
+        if let Some(depth) = depth {
+            folders.truncate(depth);
+        }
+        let label = metadata["labels"][&relative]
+            .as_str()
+            .map(str::to_owned)
+            .unwrap_or_else(|| label_of(&filename(path), None));
+        let mut row = json!({"id":format!("view-{}", &hash(nfc(&relative))[..16]),"path":target,"name":filename(path),"label":label,
+            "section":section,"group":folders.join("/"),"status":"ok","pinned":false,"localView":true,
+            "mtime":mtime(&target),"size":fs::metadata(&target).map(|m|m.len()).unwrap_or(0),"relative":relative});
+        if let Some(date) = relative.split('/').rev().find_map(parse_date) {
+            row["date"] = json!(date.to_string());
         }
         if let Some(alias) = known.get(&target.to_string_lossy().into_owned()) {
-            row["aliasOf"] = alias.clone()
+            row["aliasOf"] = alias.clone();
         }
-        if section == "docs" && parts.len() > 3 {
-            row["bundle"] = json!(relative.parent().unwrap());
-            row["label"] = json!(label_of(
-                &format!("{}{}", parts[parts.len() - 2], suffix(path)),
-                None
+        rows.push(row);
+    }
+    let mut families: BTreeMap<(String, String, String), Vec<usize>> = BTreeMap::new();
+    for (index, row) in rows.iter().enumerate() {
+        let relative = Path::new(s(&row["relative"]));
+        families
+            .entry((
+                s(&row["section"]).into(),
+                relative
+                    .parent()
+                    .unwrap_or(Path::new(""))
+                    .to_string_lossy()
+                    .into_owned(),
+                family_key(s(&row["name"])).0,
             ))
-        }
-        rows.push(row)
+            .or_default()
+            .push(index);
     }
-    let mut bundles: BTreeMap<String, Vec<usize>> = BTreeMap::new();
-    for (i, row) in rows.iter().enumerate() {
-        if let Some(bundle) = row["bundle"].as_str() {
-            bundles.entry(bundle.to_owned()).or_default().push(i)
-        }
-    }
-    for members in bundles.values_mut() {
-        members.sort_by(|a, b| {
-            let key = |i: usize| {
-                (
-                    s(&rows[i]["date"]).to_owned(),
-                    rows[i]["mtime"].as_u64().unwrap_or(0),
-                    s(&rows[i]["name"]).to_owned(),
-                )
-            };
-            key(*b).cmp(&key(*a))
+    for members in families.values_mut().filter(|m| m.len() > 1) {
+        members.sort_by_key(|i| {
+            std::cmp::Reverse((
+                s(&rows[*i]["date"]).to_owned(),
+                rows[*i]["mtime"].as_u64().unwrap_or(0),
+                s(&rows[*i]["name"]).to_owned(),
+            ))
         });
         let head = members[0];
         rows[head]["versions"] = json!(members[1..]
@@ -436,70 +459,42 @@ pub fn harness(root: &Path, known: &HashMap<String, Value>) -> (Vec<Value>, Vec<
         for i in &members[1..] {
             rows[*i]["state"] = json!("previous");
             rows[*i]["head"] = rows[head]["id"].clone();
-            rows[*i]["label"] = json!(label_of(s(&rows[*i]["name"]), None))
         }
     }
     let mut sections = vec![];
-    for (section, label) in [
-        ("status", "현황"),
-        ("history", "기록"),
-        ("decisions", "결정"),
-        ("docs", "주제 문서"),
-        ("brain", "기억"),
-    ] {
+    for definition in definitions {
+        let id = s(&definition["id"]);
         let mut members = rows
             .iter()
-            .filter(|r| r["section"] == section)
+            .filter(|row| s(&row["section"]) == id)
             .collect::<Vec<_>>();
-        if section == "status" {
-            let order = [
-                "readme.md",
-                "context.md",
-                "goal.md",
-                "constraints.md",
-                "environment.md",
-                "decisions.md",
-                "next.md",
-                "escalation.md",
-            ];
-            members.sort_by_key(|r| {
-                (
-                    order
-                        .iter()
-                        .position(|n| *n == fold(s(&r["name"])))
-                        .unwrap_or(order.len()),
-                    s(&r["relative"]).to_owned(),
-                )
-            })
-        } else if section == "history" || section == "decisions" {
-            members.sort_by_key(|r| {
+        let order = arr(&definition["order"]);
+        members.sort_by_key(|row| {
+            (
+                order
+                    .iter()
+                    .position(|path| path == &row["relative"])
+                    .unwrap_or(order.len()),
                 std::cmp::Reverse((
-                    s(&r["group"]).to_owned(),
-                    s(&r["date"]).to_owned(),
-                    s(&r["relative"]).to_owned(),
-                ))
-            })
-        } else {
-            members.sort_by_key(|r| (s(&r["group"]).to_owned(), fold(s(&r["label"]))))
+                    s(&row["date"]).to_owned(),
+                    row["mtime"].as_u64().unwrap_or(0),
+                )),
+                s(&row["relative"]).to_owned(),
+            )
+        });
+        let mut groups: BTreeMap<String, Vec<Value>> = BTreeMap::new();
+        for row in members {
+            groups
+                .entry(s(&row["group"]).to_owned())
+                .or_default()
+                .push(row["id"].clone());
         }
-        if members.is_empty() {
-            continue;
+        if !groups.is_empty() {
+            sections.push(json!({"id":id,"label":definition["label"],"groups":groups.into_iter().rev().map(|(label, ids)|json!({"label":label,"ids":ids})).collect::<Vec<_>>()}));
         }
-        let mut groups: Vec<Value> = vec![];
-        for member in members {
-            if groups.last().map(|g| &g["label"]) != Some(&member["group"]) {
-                groups.push(json!({"label":member["group"],"ids":[]}))
-            }
-            groups.last_mut().unwrap()["ids"]
-                .as_array_mut()
-                .unwrap()
-                .push(member["id"].clone())
-        }
-        sections.push(json!({"id":section,"label":label,"groups":groups}))
     }
     (rows, sections)
 }
-
 #[cfg(test)]
 mod tests {
     use super::*;

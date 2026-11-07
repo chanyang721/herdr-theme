@@ -586,30 +586,6 @@
       "error": "invalid_store"
     },
     {
-      "function": "collect.unknown",
-      "input": {
-        "terminal": {
-          "address": "t1w",
-          "agent": "codex",
-          "sleepSession": "00000000-0000-4000-8000-000000000002"
-        },
-        "reason": "session_not_indexed"
-      },
-      "expected": {
-        "terminal": "t1w",
-        "agent": "codex",
-        "known": false,
-        "input": null,
-        "output": null,
-        "cacheRead": null,
-        "cacheWrite": null,
-        "total": null,
-        "models": [],
-        "reason": "session_not_indexed",
-        "sleeping": true
-      }
-    },
-    {
       "function": "collect.weighted",
       "input": {
         "row": {
@@ -2938,5 +2914,6 @@
       },
       "expected": []
     }
-  ]
+  ],
+  "release_scope": "Retained general usage calls. One provider-specific parked-session result moved with its adapter source."
 }

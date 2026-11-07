@@ -1,115 +1,92 @@
-// Question and permission cards from an optional local bridge (herdr-harness `asks`).
-// The bridge's files and CLI are the whole contract: `asks --json` lists pending cards and names
-// `token_dir`, where each card's one-time token is `<id>.token`;
-// `asks answer <id> --allow|--deny --token T [--choice "question=label"]...` answers one.
-// Pure helpers only, so they run under node:test without the app.
-
+// Generic local cards and configured command prefixes. No producer-specific policy.
 export const KIND_WORDS = {
-  ko: { permission: '권한', question: '질문', plan: '계획', allow: '허용', deny: '거부', send: '보내기', title: '확인 대기 카드', failed: '응답 실패' },
-  en: { permission: 'Permission', question: 'Question', plan: 'Plan', allow: 'Allow', deny: 'Deny', send: 'Send', title: 'Cards waiting', failed: 'Answer failed' },
+  ko: { permission: '권한', question: '질문', plan: '계획', title: '확인 대기 카드', failed: '응답 실패' },
+  en: { permission: 'Permission', question: 'Question', plan: 'Plan', title: 'Cards waiting', failed: 'Action failed' },
 };
+const KEY = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
+const key = value => typeof value === 'string' && KEY.test(value);
+const REQUEST = /^[a-z0-9][a-z0-9-]{0,95}$/;
+const text = value => typeof value === 'string' && value.length > 0 && !/[\0\r\n]/.test(value);
+const absolute = value => /^(?:\/|[A-Za-z]:[\\/]|\\\\)/.test(value);
 
-const ID = /^[0-9A-HJKMNP-TV-Z]{26}$/;
-const TOKEN = /^[0-9a-f]{64}$/;
-
-// The bridge script from harness-local/config.json; null hides the cards entirely.
-export function bridgeFrom(configText) {
-  let config;
-  try { config = JSON.parse(configText || 'null'); } catch { return null; }
-  const repo = typeof config?.repo_path === 'string' && config.repo_path.trim() ? config.repo_path.trim() : null;
-  if (!repo) return null;
-  return { python: typeof config.python === 'string' && config.python ? config.python : 'python3',
-           script: `${repo.replace(/[\\/]+$/, '')}/runtime/harness.py` };
-}
-
-// Pending cards from `asks --json`; anything malformed is dropped, never guessed.
-export function parseAsks(stdout) {
+export function bridgeFrom(source) {
   let data;
-  try { data = JSON.parse(stdout || 'null'); } catch { return null; }
-  if (data?.schema !== 1 || !Array.isArray(data.asks)) return null;
-  return {
-    dir: typeof data.dir === 'string' ? data.dir : null,
-    tokenDir: typeof data.token_dir === 'string' ? data.token_dir : null,
-    asks: data.asks.filter(a => a && a.schema === 1 && ID.test(a.id) && a.status === 'pending'
-      && ['permission', 'question', 'plan'].includes(a.kind)),
-  };
+  try { data = JSON.parse(source || 'null'); } catch { return null; }
+  if (!text(data?.python) || !text(data?.script) || !absolute(data.script)) return null;
+  if (data.args !== undefined && (!Array.isArray(data.args) || data.args.some(a => typeof a !== 'string' || a.includes('\0')))) return null;
+  return { python: data.python, script: data.script, args: [...(data.args ?? [])] };
 }
-
-export function askFor(asks, terminal) {
-  return (asks ?? []).find(a => a.terminal && a.terminal === terminal) ?? null;
-}
-
-// The questions of an AskUserQuestion card, with their option labels.
-export function questionsOf(ask) {
-  const qs = ask?.tool_input?.questions;
-  if (!Array.isArray(qs)) return [];
-  return qs.filter(q => typeof q?.question === 'string' && q.question).map(q => ({
-    question: q.question,
-    header: typeof q.header === 'string' ? q.header : '',
-    multi: Boolean(q.multiSelect),
-    options: (Array.isArray(q.options) ? q.options : []).map(o => typeof o === 'string' ? o : o?.label).filter(Boolean),
+export function questionsOf(card) {
+  return (Array.isArray(card?.questions) ? card.questions : []).filter(q => q && key(q.id) && text(q.title)).map(q => ({
+    id: q.id, title: q.title, multi: q.multi === true,
+    options: (Array.isArray(q.options) ? q.options : []).filter(o => o && key(o.id) && text(o.label)).map(o => ({id: o.id, label: o.label})),
   }));
 }
-
-// One selection step: single-select replaces, multi-select toggles (labels kept in option order).
-export function choose(selected, q, label) {
-  const now = { ...(selected ?? {}) };
-  if (!q.multi) { now[q.question] = [label]; return now; }
-  const set = new Set(now[q.question] ?? []);
-  if (set.has(label)) set.delete(label); else set.add(label);
-  now[q.question] = q.options.filter(o => set.has(o));
-  if (!now[q.question].length) delete now[q.question];
+export function actionsOf(card) {
+  return (Array.isArray(card?.actions) ? card.actions : []).filter(a => a && key(a.id) && text(a.label)).map(a => ({
+    id: a.id, label: a.label, requiresAnswers: a.requiresAnswers === true,
+    autoSubmit: a.autoSubmit === true, primary: a.primary === true,
+  }));
+}
+export function parseAsks(source) {
+  let data;
+  try { data = JSON.parse(source || 'null'); } catch { return null; }
+  if (data?.schema !== 1 || !Array.isArray(data.cards)) return null;
+  const seen = new Set();
+  return { cards: data.cards.filter(card => {
+    if (!card || !key(card.id) || !text(card.revision) || card.revision.length > 128
+      || !text(card.title) || !['permission', 'question', 'plan'].includes(card.kind) || seen.has(card.id)) return false;
+    seen.add(card.id); return true;
+  }).map(card => ({id: card.id, revision: card.revision, kind: card.kind, title: card.title,
+    detail: typeof card.detail === 'string' ? card.detail : '', terminal: text(card.terminal) ? card.terminal : null,
+    questions: questionsOf(card), actions: actionsOf(card)})) };
+}
+export const askFor = (cards, terminal) => (cards ?? []).find(card => card.terminal && card.terminal === terminal) ?? null;
+export const detailOf = card => typeof card?.detail === 'string' ? card.detail : '';
+export const selectionOf = (selected, id) => Object.hasOwn(selected ?? {}, id) && Array.isArray(selected[id]) ? selected[id] : [];
+export function choose(selected, question, option) {
+  if (!question.options.some(o => o.id === option)) return {...(selected ?? {})};
+  const now = {...(selected ?? {})};
+  if (!question.multi) { now[question.id] = [option]; return now; }
+  const set = new Set(selectionOf(now, question.id));
+  if (set.has(option)) set.delete(option); else set.add(option);
+  now[question.id] = question.options.filter(o => set.has(o.id)).map(o => o.id);
+  if (!now[question.id].length) delete now[question.id];
   return now;
 }
-
-export function complete(ask, selected) {
-  const qs = questionsOf(ask);
-  return qs.length > 0 && qs.every(q => (selected?.[q.question] ?? []).length > 0);
-}
-
-// harness.py arguments for an answer. Multi-select labels join with ", " as Claude expects.
-// The card's token file, read just before answering.
-export function tokenPath(tokenDir, ask) {
-  if (!tokenDir || !ID.test(ask?.id ?? '')) return null;
-  return `${tokenDir.replace(/[\\/]+$/, '')}/${ask.id}.token`;
-}
-
-export function cleanToken(text) {
-  const token = String(text ?? '').trim();
-  return TOKEN.test(token) ? token : null;
-}
-
-export function answerArgs(script, ask, decision, selected, token) {
-  if (!ID.test(ask?.id ?? '')) throw new Error('bad ask id');
-  if (decision !== 'allow' && decision !== 'deny') throw new Error('bad decision');
-  const clean = cleanToken(token);
-  if (!clean) throw new Error('card token missing');
-  const args = [script, 'asks', 'answer', ask.id, decision === 'allow' ? '--allow' : '--deny', '--token', clean];
-  if (decision === 'allow' && ask.kind === 'question') {
-    for (const q of questionsOf(ask)) {
-      const labels = selected?.[q.question] ?? [];
-      if (!labels.length) throw new Error('unanswered question');
-      args.push('--choice', `${q.question}=${labels.join(', ')}`);
-    }
-  }
-  return args;
-}
-
-// The one line under a card's title: what the agent is about to do.
-export function detailOf(ask) {
-  const input = ask?.tool_input ?? {};
-  if (ask?.kind === 'plan') return typeof input.plan === 'string' ? input.plan.split(/\r?\n/).find(l => l.trim())?.trim() ?? '' : '';
-  for (const key of ['command', 'file_path', 'path', 'url', 'pattern']) {
-    if (typeof input[key] === 'string' && input[key].trim()) return input[key].trim();
-  }
-  return '';
-}
-
-// Only names under the asks folder that are cards themselves (not leases, locks or temp files).
-export function touchesCards(paths, dir) {
-  if (!dir) return true;
-  return (paths ?? []).some(p => {
-    const name = String(p).split(/[\\/]/).pop();
-    return String(p).replace(/\\/g, '/') === dir.replace(/\\/g, '/') || /^[0-9A-Z]{26}\.json$/.test(name);
+export function complete(card, selected) {
+  const questions = questionsOf(card);
+  return questions.length > 0 && questions.every(q => {
+    const choices = selectionOf(selected, q.id);
+    return Array.isArray(choices) && choices.length > 0 && (q.multi || choices.length === 1)
+      && choices.every(id => q.options.some(o => o.id === id));
   });
+}
+export function actionRequest(card, actionId, selected, requestId, createdAt) {
+  if (typeof requestId !== 'string' || !REQUEST.test(requestId) || !key(card?.id) || !text(card?.revision)) throw Error('Invalid local action');
+  const action = actionsOf(card).find(a => a.id === actionId);
+  if (!action || (action.requiresAnswers && !complete(card, selected))) throw Error('Complete the card before sending');
+  const answers = {};
+  for (const q of questionsOf(card)) {
+    const choices = selectionOf(selected, q.id);
+    if (!Array.isArray(choices) || (!q.multi && choices.length > 1)
+      || choices.some(id => !q.options.some(o => o.id === id))) throw Error('Invalid option');
+    if (choices.length) answers[q.id] = q.options.filter(o => choices.includes(o.id)).map(o => o.id);
+  }
+  return {schema: 1, id: requestId, cardId: card.id, revision: card.revision, action: actionId, answers, createdAt};
+}
+export function requestPath(home, id) {
+  if (typeof id !== 'string' || !REQUEST.test(id)) throw Error('Invalid request id');
+  return `${home.replace(/[\\/]+$/, '')}/data/sixfold/bridge-actions/${id}.json`;
+}
+export function acceptedReceipt(stdout, id) {
+  try {
+    const receipt = JSON.parse(String(stdout ?? '').trim().split(/\r?\n/).filter(Boolean).at(-1) || 'null');
+    return receipt?.schema === 1 && receipt.id === id && ['accepted', 'duplicate'].includes(receipt.status);
+  } catch { return false; }
+}
+export function touchesCards(paths, directory) {
+  const normalized = path => String(path).replace(/\\/g, '/').replace(/\/+$/, '');
+  return (paths ?? []).some(path => normalized(path) === normalized(directory)
+    || ['cards.json', 'bridge.json'].includes(normalized(path).split('/').at(-1)));
 }

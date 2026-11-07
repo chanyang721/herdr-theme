@@ -72,7 +72,6 @@ pub fn show(command: &str, args: &[String]) -> Result<bool> {
     };
     let alias = match command {
         "install_voice" => "voice_install",
-        "install_session_sleep" => "install_space_cleanup",
         _ => command,
     };
     let Some(text) = snapshots

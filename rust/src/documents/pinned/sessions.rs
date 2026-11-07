@@ -128,22 +128,6 @@ impl Resolver {
         }
         let facts = run_json(&self.hc, &["get", address, "--json"]).ok()?;
         let foreground = &facts["foreground"];
-        let parked = facts["labels"]["sixfold.sleep"].as_str();
-        let argv = arr(&foreground["argv"]);
-        if let Some(parked) = parked {
-            if argv.iter().any(|arg| {
-                s(arg).ends_with("session_sleep_stub.py")
-                    || ["session_sleep_stub", "session-sleep-stub"].contains(&s(arg))
-            }) {
-                let (kind, session) = parked.split_once(':')?;
-                let kind = family(kind);
-                let session = session.to_lowercase();
-                if ["claude", "codex"].contains(&kind) && session_regex().is_match(&session) {
-                    return Some(json!({"address":address,"agent":kind,"sleepSession":session}));
-                }
-                return None;
-            }
-        }
         foreground_kind(foreground).map(|kind| json!({"address":address,"agent":kind}))
     }
     fn children(&self, pid: u32) -> Result<Vec<u32>> {
@@ -516,9 +500,6 @@ impl Resolver {
         .to_owned()
     }
     pub fn identify(&mut self, terminal: &Value) -> Result<Option<String>> {
-        if let Some(session) = terminal["sleepSession"].as_str().filter(|s| !s.is_empty()) {
-            return Ok(Some(session.into()));
-        }
         let address = s(&terminal["address"]);
         let kind = family(s(&terminal["agent"]));
         if address.contains('/') {

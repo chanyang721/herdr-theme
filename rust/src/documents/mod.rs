@@ -6,7 +6,6 @@ pub mod catalog;
 pub mod common;
 pub mod install;
 pub mod migration;
-pub mod observers;
 pub mod pinned;
 pub mod pins;
 pub mod render;
@@ -49,8 +48,6 @@ pub fn run(command: &str, args: &[String]) -> Result<()> {
                 format!("Install failed: {error}").into()
             }
         }),
-        "install_session_sleep" => observers::cli(args, true),
-        "install_space_cleanup" => observers::cli(args, false),
         "install_voice" => {
             let mut args = args.to_vec();
             if args.first().is_some_and(|s| !s.starts_with('-')) {

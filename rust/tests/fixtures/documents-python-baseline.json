@@ -1005,7 +1005,7 @@
                 "C:\\herdr-fixture\\home\\AppData\\Local\\Temp\\doc-catalog-_3k0zpm8\\docs"
               ],
               "pins": [],
-              "harness": {
+              "localViews": {
                 "root": "C:\\herdr-fixture\\home\\AppData\\Local\\Temp\\doc-catalog-_3k0zpm8\\manual"
               }
             }
@@ -1016,10 +1016,7 @@
           "folders": [
             "C:\\herdr-fixture\\home\\AppData\\Local\\Temp\\doc-catalog-_3k0zpm8\\docs"
           ],
-          "pins": [],
-          "harness": {
-            "root": "C:\\herdr-fixture\\home\\AppData\\Local\\Temp\\doc-catalog-_3k0zpm8\\manual"
-          }
+          "pins": []
         }
       },
       "expected": [
@@ -12795,5 +12792,6 @@
     "macOS launchd/getuid fixture and historical observer file-list hash",
     "HERDR_RENDER_LIVE not enabled"
   ],
-  "path_redaction": "User home replaced with C:/herdr-fixture/home; pure results recomputed from redacted inputs on the original Python baseline."
+  "path_redaction": "User home replaced with C:/herdr-fixture/home; pure results recomputed from redacted inputs on the original Python baseline.",
+  "release_scope": "Retained document helpers; external review-policy cases moved with their source."
 }

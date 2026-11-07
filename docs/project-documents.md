@@ -32,8 +32,8 @@ If a configured workspace has no folder rows, inspect `files` and `warning` in i
 
 - **도구 막대**: 사이드바 ◧, 보기 전환(**▥ 열** 기본 · **☰ 목록**), **종류: 전체 ▾**(종류 칩), 검색창, 새로 고침, 분류 규칙.
 - **경로 막대**: `위치 › 폴더 › 문서`. 앞 단계를 누르면 그 폴더로 돌아간다.
-- **사이드바**(칸 폭 1100px 이상이면 처음부터 보임): **즐겨찾기** = 고정 문서, **위치** = 공간 문서 · 하네스 · 열람 · 보관(개수 표시).
-- **열 보기**: 공간 문서는 종류 폴더 → 문서(최신 먼저), 하네스는 현황/기록(월)/결정/주제 문서(그룹)/기억 폴더. 폴더를 누르면 오른쪽에 다음 열이 열리고, 문서를 누르면 오른쪽 본문에 보인다. 열이 넘치면 앞 열을 접고 ‹ 버튼을 보인다. 열 보기 부품 `mods/project-docs-tabs/column-view.js`는 하네스 기억 패널과 바이트 그대로 같은 파일이다(원본은 하네스 레포, 첫 줄 `COLUMN_VIEW_VERSION`). 고치지 말고 원본을 바꾼 뒤 복사한다.
+- **사이드바**(칸 폭 1100px 이상이면 처음부터 보임): **즐겨찾기** = 고정 문서, **위치** = 공간 문서 · 로컬 보기 · 열람 · 보관(개수 표시).
+- **열 보기 부품**: `mods/project-docs-tabs/column-view.js`는 일반 문서 패널이 재사용할 수 있는 공개 위젯이다. 첫 줄 `COLUMN_VIEW_VERSION`으로 복사본의 호환성을 확인한다.
 - **목록 보기**: 이름·수정일·종류·크기 열. 머리글을 누르면 정렬(다시 누르면 반대), 폴더와 판이 여럿인 문서는 ▸로 펼친다. 폴더는 늘 위.
 - **아이콘**: 📁 폴더, 📝 Markdown·텍스트, 🌐 HTML, 📕 PDF, 📘 Word, 📗 Excel, 📄 기타.
 - **선택 강조**: 테마 `selected` 배경과 왼쪽 2px `accent` 막대. 색은 테마 토큰만 써서 밤·낮 테마를 따른다.
@@ -51,19 +51,11 @@ If a configured workspace has no folder rows, inspect `files` and `warning` in i
 - **검색 규칙**: 이름·파일명·폴더·종류에 띄어쓰기로 나눈 낱말이 모두 들어 있는지 본다(NFC). 종류 칩은 한 종류만 남긴다.
 - 예전 규칙의 `recent.limit`·`recent.keywords`·`excluded`는 고정/고정 해제 확인에만 쓰고 트리에는 영향이 없다.
 
-### 하네스 폴더
+### 로컬 보기
 
-하네스 폴더 계약 v1을 따른다. `~/.config/herdr-app/data/sixfold/harness-local/views/workspaces/index.json`에서 `space_id`가 이 공간이고 `machine_name`이 `null`(이 Mac)인 항목의 `workspace_id` 폴더를 연다. 항목이나 폴더가 없으면 사이드바에 하네스 위치를 보이지 않는다. 공간 규칙에 `"harness": {"root": "/경로"}`를 두면 그 폴더를 대신 쓴다(수동 지정).
+외부 도구는 `data/sixfold/local-views/workspaces/index.json`에 일반 보기 목록을 공급할 수 있다. 각 항목의 `spaceId`가 현재 공간이면 해당 상대 `directory`의 문서를 읽는다. 경로가 없거나 잘못되면 위치를 숨긴다. 공간 규칙의 `localViews.root`로 명시적인 로컬 폴더를 선택할 수도 있다.
 
-| 하네스 폴더 | 원본 |
-|---|---|
-| 현황 | `README.md`, `context.md`, `context/goal·constraints·environment·decisions.md`, `next.md`, `escalation.md` |
-| 기록 | `history/YYYY-MM/YYYY-MM-DD/*.md` — 월별로 나누고 최신부터 |
-| 결정 | `decisions/YYYY-MM-DD-*.md` — 최신부터 |
-| 주제 문서 | `docs/<그룹>/*` — 원본으로 가는 링크라서 링크를 따라가 원본을 연다. 이미 목록에 있는 원본이면 그 줄을 선택한다. 깨진 링크는 숨긴다 |
-| 기억 | `brain/brain.md`(승인됨), `brain/pending.md`(승인 대기) |
-
-모두 생성물이라 고정 버튼이 없고 읽기 전용이다. `.`으로 시작하는 이름은 숨긴다.
+section의 이름·폴더·표시 순서는 생산자가 준 metadata를 따른다. 테마는 특정 도구의 기록 구조를 분류하지 않는다. 문서 링크와 같은 파일을 가리키는 원본 mapping은 기존 문서를 선택하며, 끊긴 링크와 숨긴 파일은 표시하지 않는다. 이 위치는 읽기 전용이고 고정 버튼이 없다. 자세한 형식은 [일반 연동 계약](local-integrations.md)을 따른다.
 
 초기 고정 목록은 실제 읽을 수 있는 원문으로 선정했다.
 
@@ -116,4 +108,4 @@ If a configured workspace has no folder rows, inspect `files` and `warning` in i
 
 ## 세션에서 문서 열기
 
-모든 세션은 `herdr-doc <파일>`(`~/.local/bin/herdr-doc` → 설치된 `scripts/sixfold/herdr-theme open-doc-tab`)로 문서를 그 문서가 속한 공간의 **문서** 탭에 연다. 공간은 지금 열려 있고 문서 탭이 있는 공간의 규칙 중에서만 고른다. 지워진 공간의 규칙은 건너뛴다. 가장 구체적인 폴더가 이기고, 같은 폴더면 키워드 규칙이 이긴다. 맞는 규칙이 없으면 현재 공간에 연다. `--space`로 지정할 수 있고, `--no-show`는 탭을 바꾸지 않고 불러만 둔다. 요청 파일 `project-docs-open.json`은 version 2부터 공간별로 하나씩 보관하므로, 두 공간에 연달아 열어도 앞의 요청이 사라지지 않는다. 문서 탭 목록은 위의 트리로 보여 준다. 이 사용 규칙은 Claude·Codex 공용 `~/dotfiles/agents/AGENTS.md`의 "문서 열기" 절에 있다.
+모든 세션은 `herdr-doc <파일>`(`~/.local/bin/herdr-doc` → 설치된 `scripts/sixfold/herdr-theme open-doc-tab`)로 문서를 그 문서가 속한 공간의 **문서** 탭에 연다. 공간은 지금 열려 있고 문서 탭이 있는 공간의 규칙 중에서만 고른다. 지워진 공간의 규칙은 건너뛴다. 가장 구체적인 폴더가 이기고, 같은 폴더면 키워드 규칙이 이긴다. 맞는 규칙이 없으면 현재 공간에 연다. `--space`로 지정할 수 있고, `--no-show`는 탭을 바꾸지 않고 불러만 둔다. 요청 파일 `project-docs-open.json`은 version 2부터 공간별로 하나씩 보관하므로, 두 공간에 연달아 열어도 앞의 요청이 사라지지 않는다. 문서 탭 목록은 위의 트리로 보여 준다. 이 사용 규칙은 Claude·Codex 공용 로컬 설정에 지정한 규칙 문서의 "문서 열기" 절에 있다.

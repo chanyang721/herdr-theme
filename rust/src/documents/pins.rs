@@ -624,14 +624,18 @@ pub fn catalog(
             s(&r["id"]).to_owned(),
         ))
     });
-    let root = harness_root(space, app, settings["harness"]["root"].as_str());
-    let (mut harness_rows, sections) = if let Some(root) = &root {
+    let view = local_view(space, app, &settings["localViews"]);
+    let root = view
+        .as_ref()
+        .and_then(|v| v["root"].as_str())
+        .map(PathBuf::from);
+    let (mut view_rows, sections) = if let Some(root) = &root {
         let known = pins
             .iter()
             .chain(rows.iter())
             .filter_map(|d| d["path"].as_str().map(|p| (p.to_owned(), d["id"].clone())))
             .collect();
-        harness(root, &known)
+        local_view_documents(root, &known, view.as_ref().unwrap())
     } else {
         (vec![], vec![])
     };
@@ -669,9 +673,9 @@ pub fn catalog(
     warnings.sort();
     warnings.dedup();
     pins.extend(rows);
-    pins.append(&mut harness_rows);
+    pins.append(&mut view_rows);
     Ok(
-        json!({"version":2,"spaceId":space,"name":base["name"],"checkedAt":base["checkedAt"],"documents":pins,"warnings":warnings,"watchRoots":watch,"kinds":kinds_output,"recentDays":days,"harness":root.map(|root|json!({"root":root,"sections":sections}))}),
+        json!({"version":2,"spaceId":space,"name":base["name"],"checkedAt":base["checkedAt"],"documents":pins,"warnings":warnings,"watchRoots":watch,"kinds":kinds_output,"recentDays":days,"localViews":view.map(|mut view| {view["sections"] = json!(sections); view})}),
     )
 }
 pub fn mutate(

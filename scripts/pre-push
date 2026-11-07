@@ -2,7 +2,7 @@
 # Fast checks before every push: a failure stops the push.
 # Install once per clone: sh scripts/install-git-hooks.sh
 # Skip on purpose:         git push --no-verify   (or SKIP_PREPUSH_TESTS=1 git push)
-# Same script in herdr-theme, herdr-harness and dotfiles; only checks() differs.
+# Shared hook runner; each repository supplies its own checks().
 
 # Zero tests (or far fewer than expected) must not pass: that is what a test runner that runs nothing looks like.
 run_npm_tests() {

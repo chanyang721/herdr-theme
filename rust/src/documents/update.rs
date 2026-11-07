@@ -1,4 +1,4 @@
-use super::{common::*, install, observers, render::python_json};
+use super::{common::*, install, render::python_json};
 use serde_json::{json, Value};
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -8,13 +8,11 @@ use std::{
 };
 pub mod cancellation;
 pub type Input = (PathBuf, Vec<u8>, u32);
-/// Owned script names in the final Python source snapshot (same inventory at
-/// 8c5b71d and fb3c234). Unlisted user-supplied .py files remain copied data.
+/// Owned general helper names from the former Python implementation.
+/// External service scripts and unlisted user-supplied files remain copied data.
 pub const MIGRATED_SCRIPTS: &[&str] = &[
     "agent_env.py",
-    "agent_sessions.py",
     "balance_grid.py",
-    "close_finished_spaces.py",
     "collaborate.py",
     "collect_computers.py",
     "collect_docs.py",
@@ -28,8 +26,6 @@ pub const MIGRATED_SCRIPTS: &[&str] = &[
     "install.py",
     "install_doc_tabs.py",
     "install_preview.py",
-    "install_session_sleep.py",
-    "install_space_cleanup.py",
     "install_voice.py",
     "model_tier.py",
     "open_doc_tab.py",
@@ -39,11 +35,8 @@ pub const MIGRATED_SCRIPTS: &[&str] = &[
     "resolve_doc_pins.py",
     "route.py",
     "seed_workspace_pins.py",
-    "session_sleep_stub.py",
     "set_workspace_icon.py",
     "site_config.py",
-    "sleep_idle_sessions.py",
-    "space_job_evidence.py",
     "tui_bridge.py",
     "update_install.py",
     "workspace.py",
@@ -908,29 +901,13 @@ pub fn cli_with_backend(args: &[String], backend: &mut dyn UpdateCliBackend) -> 
     if voice {
         backend.voice(&repo, &home)?;
     }
-    let observer_result = if app_files
-        .iter()
-        .any(|p| Path::new(p).starts_with("scripts"))
-    {
-        let observer_home = option(args, "--observer-home")
-            .map(expand)
-            .unwrap_or_else(user_home);
-        Some(observers::refresh(&observer_home, &repo)?)
-    } else {
-        None
-    };
     if let Some(backup) = backup {
         println!(
             "Installed and verified errors=0; backup/receipt: {}",
             backup.display()
         )
     }
-    if let Some(result) = observer_result {
-        crate::common::print_line(&format!(
-            "Observer copies: {}",
-            crate::common::json_text(&result, false)
-        ))?;
-    }
+
     Ok(())
 }
 #[cfg(test)]

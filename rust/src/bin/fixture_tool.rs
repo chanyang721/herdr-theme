@@ -158,8 +158,6 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         }
         program = argv.remove(0);
     }
-    // The observer discovers herdr-core before hc, as the original does. Both
-    // roles must reach the same refusing fixture, never a user's real service.
     let invoked_program = program.clone();
     if program == "workflow-gui-parent" && config["allowWorkflowConsole"] == true {
         if !argv.is_empty() {
@@ -247,41 +245,6 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             json!(result)
         };
         return herdr_theme::common::print(&value);
-    }
-    if program == "herdr-theme"
-        && config["allowObserverInstall"] == true
-        && argv == ["native_observer_hash"]
-    {
-        println!("{}", config["nativeSourceHashes"]);
-        return Ok(());
-    }
-    if program == "launchctl" && config["allowObserverInstall"] == true {
-        let log = env::var("HERDR_TEST_CALL_LOG")?;
-        let mut file = OpenOptions::new().create(true).append(true).open(log)?;
-        writeln!(file, "{}", json!({"program":invoked_program,"args":argv}))?;
-        drop(file);
-        let state_path = Path::new(&path)
-            .parent()
-            .ok_or("fixture parent missing")?
-            .join("launchctl-state.json");
-        let mut state = read(&state_path).unwrap_or_else(|| json!({"loaded":false}));
-        match argv.first().map(String::as_str) {
-            Some("print") if argv.len() == 2 => {
-                std::process::exit(if state["loaded"] == true { 0 } else { 1 })
-            }
-            Some("bootstrap") if argv.len() == 3 => {
-                let home = config["home"].as_str().ok_or("fixture home missing")?;
-                if !Path::new(&argv[2]).starts_with(home) {
-                    return Err("launchctl fixture path escapes scratch home".into());
-                }
-                state["loaded"] = json!(true);
-            }
-            Some("bootout") if argv.len() == 2 => state["loaded"] = json!(false),
-            Some("kickstart") if argv.len() == 2 && state["loaded"] == true => {}
-            _ => return Err("unconfigured observer installer service command".into()),
-        }
-        fs::write(state_path, state.to_string())?;
-        return Ok(());
     }
     if config["allowVoice"] == true {
         if program == "voice-contract" {
@@ -390,18 +353,15 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         };
         return herdr_theme::common::print(&value);
     }
-    if program == "observer-error-contract" {
+    if program == "json-error-contract" {
         if config["allowProcessContract"] != true {
-            return Err("observer-error-contract was not explicitly enabled".into());
+            return Err("process contract not enabled".into());
         }
-        let parent = Path::new(&path).parent().ok_or("fixture parent missing")?;
-        return herdr_theme::observers::spaces::finish(
-            &parent.join("observer-state.json"),
-            &parent.join("observer-log.jsonl"),
-            &json!({}),
-            &json!({"at":"2000-01-01T00:00:00+00:00","mode":"dry-run","error":"synthetic observer failure","results":[]}),
-            false,
-        );
+        herdr_theme::common::print(&json!({"error":"synthetic process failure"}))?;
+        return Err(Box::new(herdr_theme::common::CliError {
+            code: 1,
+            message: String::new(),
+        }));
     }
     if program == "herdr" && config["allowWorkflow"] == true {
         if !matches!(argv.first().map(String::as_str), Some("pane")) {
@@ -410,14 +370,10 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         println!("{}", config["workflowReply"]);
         std::process::exit(config["workflowExit"].as_i64().unwrap_or(0) as i32);
     }
-    if !["hc", "herdr-app", "observer-harness", "ps", "lsof"].contains(&program.as_str()) {
+    if !["hc", "herdr-app"].contains(&program.as_str()) {
         return Err("unsupported fixture tool name".into());
     }
-    if ["observer-harness", "ps", "lsof"].contains(&program.as_str())
-        && config["allowObserver"] != true
-    {
-        return Err("observer-only fixture role was not explicitly enabled".into());
-    }
+
     let command = argv.first().map(String::as_str).unwrap_or("");
     let rpc_request = if program == "hc" && command == "connect" {
         let mut line = String::new();
@@ -463,86 +419,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             return Ok(());
         }
     }
-    if program == "observer-harness" {
-        let parent = Path::new(&path).parent().ok_or("fixture parent missing")?;
-        match command {
-            "close-status" => {
-                if config["observerScenario"] == "missing-report" {
-                    println!("{}", json!({"ok":false}));
-                } else {
-                    println!(
-                        "{}",
-                        json!({"ok":true,"report_id":"fixture-report","task_id":"fixture-task"})
-                    );
-                }
-            }
-            "park" => {
-                let event = argv
-                    .iter()
-                    .position(|a| a == "--event")
-                    .and_then(|i| argv.get(i + 1))
-                    .map(String::as_str)
-                    .unwrap_or("");
-                if ![
-                    "close_requested",
-                    "close_aborted",
-                    "closed",
-                    "suspended",
-                    "resumed",
-                ]
-                .contains(&event)
-                {
-                    return Err("fixture park event refused".into());
-                }
-                if event == "close_requested" {
-                    fs::write(parent.join("observer-parked.json"), "true")?;
-                }
-                println!("{}", json!({"id":"fixture-record"}));
-            }
-            _ => return Err("fixture harness action refused".into()),
-        }
-        return Ok(());
-    }
-    if program == "ps" {
-        if argv.get(0).map(String::as_str) != Some("-axo") {
-            return Err("fixture ps operation refused".into());
-        }
-        let column = argv.get(1).map(String::as_str).unwrap_or("");
-        for row in config["observerProcesses"]
-            .as_array()
-            .ok_or("fixture process rows missing")?
-        {
-            match column {
-                "pid=,ppid=,comm=" => println!(
-                    "{} {} {}",
-                    row["pid"].as_u64().ok_or("fixture pid missing")?,
-                    row["parent"].as_u64().ok_or("fixture parent missing")?,
-                    row["name"].as_str().ok_or("fixture name missing")?
-                ),
-                "pid=,args=" => println!(
-                    "{} {}",
-                    row["pid"].as_u64().ok_or("fixture pid missing")?,
-                    row["args"].as_str().ok_or("fixture args missing")?
-                ),
-                _ => return Err("fixture ps columns refused".into()),
-            }
-        }
-        return Ok(());
-    }
-    if program == "lsof" {
-        if argv.first().map(String::as_str) != Some("-n")
-            || argv.last().map(String::as_str) != Some("-Fn")
-        {
-            return Err("fixture lsof operation refused".into());
-        }
-        println!(
-            "n{}",
-            config["observerRollout"]
-                .as_str()
-                .ok_or("fixture rollout missing")?
-        );
-        return Ok(());
-    }
+
     if program == "herdr-app" {
         if config["allowWorkspaceFocus"] == true {
             let parent = Path::new(&path).parent().ok_or("fixture parent missing")?;
@@ -644,10 +521,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             fs::write(state_path, state.to_string())?;
             return Ok(());
         }
-        if command == "status" && config["allowObserver"] == true {
-            println!("{}", config["observerStatus"]);
-            return Ok(());
-        }
+
         if command != "ls" {
             return Err("fixture herdr-app only supports ls".into());
         }
@@ -669,19 +543,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                 println!("{}", json!({"labeled":true}));
                 return Ok(());
             }
-            if config["allowPtyReceipt"] != true
-                || argv.get(1).map(String::as_str) != Some("fixture-stub")
-                || argv.get(2..).unwrap_or_default()
-                    != ["sixfold.sleep=", "sixfold.title=", "sixfold.sleep.new="]
-            {
-                return Err("fixture label operation refused".into());
-            }
-            let parent = Path::new(&path).parent().ok_or("fixture parent missing")?;
-            fs::write(
-                parent.join("cleared-labels.json"),
-                json!({"sixfold.sleep":"","sixfold.title":"","sixfold.sleep.new":""}).to_string(),
-            )?;
-            println!("{}", json!({"labeled":true}));
+            return Err("fixture label operation refused".into());
         }
         "connect" => println!(
             "{}",
@@ -694,23 +556,8 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         "ls" => println!("{}", json!({"terminals":config["terminals"]})),
         "get" => {
             let target = argv.get(1).map(String::as_str).unwrap_or("");
-            let mut fact=config["get"].get(target).cloned().unwrap_or(json!({"address":target,"state":"live","status":{"state":config["getState"].as_str().unwrap_or("idle")}}));
-            if config["allowObserver"] == true
-                && target == "fixture-target"
-                && Path::new(&path)
-                    .parent()
-                    .unwrap()
-                    .join("observer-parked.json")
-                    .exists()
-            {
-                match config["observerScenario"].as_str().unwrap_or("") {
-                    "working-after-park" => fact["status"]["state"] = json!("working"),
-                    "identity-after-park" => {
-                        fact["created_ms"] = json!(fact["created_ms"].as_u64().unwrap_or(0) + 1)
-                    }
-                    _ => {}
-                }
-            }
+            let fact=config["get"].get(target).cloned().unwrap_or(json!({"address":target,"state":"live","status":{"state":config["getState"].as_str().unwrap_or("idle")}}));
+
             println!("{fact}")
         }
         "read" => {

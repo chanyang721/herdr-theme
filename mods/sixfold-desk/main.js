@@ -21,6 +21,7 @@ import { paneMeta, paneMetaChip, showPaneIndex, showTitle } from './pane-meta.js
 import { watchBadges, workspaceBadges } from './badges.js';
 import { watchAsks, askSection, hasAsks } from './asks.js';
 import { askFor } from './ask-model.js';
+import { watchReports, reportsSection } from './session-reports.js';
 
 const hasPanel=node=>node?.id==='panel'||(node?.children||[]).some(hasPanel);
 const native = () => `${appHome()}/scripts/sixfold/herdr-theme${(typeof window==='function' && window()?.platform==='windows') || /^(?:[A-Za-z]:[\\/]|\\\\)/.test(appHome())?'.exe':''}`;
@@ -99,6 +100,7 @@ export default class SixfoldDesk extends View {
     watchAlerts(this, cx);
     watchBadges(this, cx);
     watchAsks(this, cx);
+    watchReports(this, cx);
     // File notifications start a small number of finite native transitions.
     // No frame-by-frame JavaScript animation or old-message replay on reload.
     this.previousEvents = null;
@@ -795,7 +797,7 @@ export default class SixfoldDesk extends View {
               cx.notify();
             }).child(`${this.expandedAgents.has(p.terminal)?'▾':'▸'} ${activeCount} · 기록 ${records.length-activeCount}`)))
           .when(Boolean(askFor(this.asks,p.terminal)),e=>e.child(div().id(`sf-ask-chip-${p.terminal}`).px(4).rounded(3).bg(t.blocked).text_color(t.background).text_size(10)
-            .tooltip(askFor(this.asks,p.terminal)?.reason||'').child('?')))
+            .tooltip(askFor(this.asks,p.terminal)?.title||'').child('?')))
           .child(this.badge(p.status,'',t)))
           .when(children.length>0,el=>el.children(children.map(node=>h_flex().id(`sf-node-${node.id}`).h(42).flex_none().pl(12+Math.min(node.depth,4)*5).pr(5).gap(4).items_center().rounded(3)
             .when(endpoint(node.id),el=>el.border(1).border_color(routeColor(node.id)))
@@ -874,6 +876,7 @@ export default class SixfoldDesk extends View {
           .when(discoveryOnly,row=>row.child(div().text_size(10).text_color(t.dim).child(this.lang()==='ko'?'설정 → Machines에서 SSH 컴퓨터를 등록하세요.':'Register an SSH computer in Settings → Machines.')))))
         )
       .when(hasAsks(this), e=>e.child(askSection(this,t,this.lang(),terminal=>{const p=panes().find(x=>x.terminal===terminal);return p?title(p):(terminal||'');})))
+      .when((this.sessionReports ?? []).length>0, e=>e.child(reportsSection(this,t)))
       .when(visibleAlerts(this.alerts).length>0, e=>e.child(alertSection(this,t)))
       .when(routes.length>0,e=>e.child(v_flex().id('sf-transient-flows').flex_none().px(10).py(6).gap(3).bg(t.surface).border_t(1).border_color(t.border)
         .children(routes.slice(0,2).map(flow=>h_flex().id(`sf-transfer-${flow.id}`).gap(5).items_center().text_size(10)

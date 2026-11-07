@@ -17,7 +17,7 @@
       ],
       "recent": {"highlightDays": 7},
       "classify": {"kinds": [{"id": "reply", "label": "회신안", "terms": ["회신", "질의"]}]},
-      "harness": {"root": "/optional/manual/harness/view/folder"}
+      "localViews": {"root": "/optional/manual/view/folder"}
     }
   }
 }
