@@ -101,13 +101,8 @@ pub fn aggregate(store: &Value, since: &Value) -> Result<BTreeMap<(String, Strin
     Ok(totals)
 }
 pub fn unknown(terminal: &Value, reason: &str) -> Value {
-    let mut entry = json!({"terminal":terminal["address"],"agent":family(s(&terminal["agent"])),"known":false,"input":null,"output":null,"cacheRead":null,"cacheWrite":null,"total":null,"models":[],"reason":reason});
-    if terminal["sleepSession"]
-        .as_str()
-        .is_some_and(|s| !s.is_empty())
-    {
-        entry["sleeping"] = json!(true)
-    }
+    let entry = json!({"terminal":terminal["address"],"agent":family(s(&terminal["agent"])),"known":false,"input":null,"output":null,"cacheRead":null,"cacheWrite":null,"total":null,"models":[],"reason":reason});
+
     entry
 }
 pub fn collect(store_path: &Path, resolver: &mut Resolver, since: &Value, meta: bool) -> Value {
@@ -208,12 +203,7 @@ pub fn collect(store_path: &Path, resolver: &mut Resolver, since: &Value, meta: 
         for field in ["input", "output", "cacheRead", "cacheWrite", "total"] {
             entry[field] = record[field].clone()
         }
-        if terminal["sleepSession"]
-            .as_str()
-            .is_some_and(|s| !s.is_empty())
-        {
-            entry["sleeping"] = json!(true)
-        }
+
         if let Some(settings) = settings {
             entry["meta"] = settings
         }

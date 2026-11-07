@@ -190,10 +190,10 @@ fn empty_hc_marker_has_original_false_value_semantics() {
     }
 }
 #[test]
-fn structured_observer_failure_has_json_stdout_exit_one_and_no_stderr() {
+fn structured_process_failure_has_json_stdout_exit_one_and_no_stderr() {
     let f = Fixture::new();
     let mut command = Command::new(env!("CARGO_BIN_EXE_herdr-theme-test-fixture"));
-    command.arg("observer-error-contract");
+    command.arg("json-error-contract");
     f.configure(&mut command);
     let out = command.output().unwrap();
     assert_eq!(out.status.code(), Some(1));
@@ -203,10 +203,7 @@ fn structured_observer_failure_has_json_stdout_exit_one_and_no_stderr() {
         String::from_utf8_lossy(&out.stderr)
     );
     let value: Value = serde_json::from_slice(&out.stdout).unwrap();
-    assert_eq!(
-        value,
-        json!({"at":"2000-01-01T00:00:00+00:00","mode":"dry-run","error":"synthetic observer failure","results":[]})
-    );
+    assert_eq!(value, json!({"error":"synthetic process failure"}));
     assert!(out
         .stdout
         .ends_with(if cfg!(windows) { b"\r\n" } else { b"\n" }));

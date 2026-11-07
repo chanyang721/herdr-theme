@@ -61,22 +61,10 @@ fn validate_native(command: &str, args: &[String]) -> Result<Vec<String>> {
                 "--cli",
                 "--workspace-mods-source",
                 "--verify-timeout",
-                "--observer-home",
             ],
             &["--without-workspace-mods", "--allow-unhealthy-before"],
             0,
             usize::MAX,
-        ),
-        "install_session_sleep" | "install_space_cleanup" => (
-            &["--home", "--source"],
-            &[
-                "--install",
-                "--enable-apply",
-                "--refresh",
-                "--user-approved",
-            ],
-            0,
-            0,
         ),
         "install_voice" => (
             &["--home", "--source"],
@@ -215,12 +203,7 @@ fn validate_native(command: &str, args: &[String]) -> Result<Vec<String>> {
     if command == "install_doc_tabs" && has(&output, "--install") && has(&output, "--ensure-tabs") {
         return crate::common::usage("--install and --ensure-tabs are mutually exclusive");
     }
-    if ["install_space_cleanup", "install_session_sleep"].contains(&command)
-        && has(&output, "--user-approved")
-        && !has(&output, "--enable-apply")
-    {
-        return crate::common::usage("--user-approved only goes with --enable-apply");
-    }
+
     if command == "pinned_scan_insights" {
         required(&output, "--store")?;
         if let Some(timeout) = option(&output, "--timeout") {

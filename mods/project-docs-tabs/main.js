@@ -20,13 +20,13 @@ const SIDE_BY_SIDE = 760;
 // Below this width the sidebar starts hidden (the toolbar button still shows it).
 const WITH_SIDEBAR = 1100;
 const COLUMN = 200;
-const LOCATION_ICONS = { docs: '🗂', harness: '🧭', opened: '👁', archived: '🗄' };
-const HARNESS_TAG = '하네스 생성물 · 읽기 전용';
+const LOCATION_ICONS = { docs: '🗂', localViews: '🧭', opened: '👁', archived: '🗄' };
+const LOCAL_VIEW_TAG = '로컬 보기 · 읽기 전용';
 const isHtml = path => /\.html?$/i.test(path);
 const windows = () => typeof hostWindow === 'function' && hostWindow()?.platform === 'windows';
 const native = () => `${appHome()}/scripts/sixfold/herdr-theme${windows()?'.exe':''}`;
 const desktop = (action, path) => exec(native(), ['desktop', action, path]);
-// Explicit user-owned scripts are an external adapter, as the harness is. The
+// Explicit user-owned scripts are external adapters. The
 // bundled helper paths saved by old installers always migrate to the native CLI.
 const helper = (p, name, stem) => {
   const command = p[`${name}Command`];
@@ -84,7 +84,7 @@ export default class ProjectDocuments extends View {
     this.htmlCommand = helper(p, 'html', 'render_html');
     this.documents = []; this.watchers = new Map(); this.generation = 0;
     this.selected = shared(STATE)?.[this.spaceId]; this.width = 800; this.paneWidth = 1200;
-    this.kinds = []; this.harness = null; this.kindFilter = null; this.kindMenu = false; this.sidebar = null;
+    this.kinds = []; this.localViews = null; this.kindFilter = null; this.kindMenu = false; this.sidebar = null;
     const saved = shared(FINDER)?.[this.spaceId] || {};
     this.view = saved.view === 'list' ? 'list' : 'column'; this.location = saved.location || 'docs'; this.colPath = saved.colPath || '';
     this.expanded = new Set(); this.sort = { key: 'date', dir: -1 }; this.query = '';
@@ -112,7 +112,7 @@ export default class ProjectDocuments extends View {
         const data = JSON.parse(result.stdout);
         if (!Array.isArray(data.documents) || data.spaceId !== this.spaceId) throw Error('문서 목록 형식을 확인하세요.');
         this.documents = data.documents.slice();
-        this.kinds = Array.isArray(data.kinds) ? data.kinds : []; this.harness = data.harness || null; this.recentDays = data.recentDays || 7;
+        this.kinds = Array.isArray(data.kinds) ? data.kinds : []; this.localViews = data.localViews || null; this.recentDays = data.recentDays || 7;
         this.warnings = data.warnings || []; this.listError = null;
         if (this.linked) {
           const pinned = this.documents.find(d => d.path === this.linked.path);
@@ -326,7 +326,7 @@ export default class ProjectDocuments extends View {
     else cx.notify();
   }
 
-  locs() { return locations(this.documents, { kinds: this.kinds, harness: this.harness, kind: this.kindFilter }); }
+  locs() { return locations(this.documents, { kinds: this.kinds, localViews: this.localViews, kind: this.kindFilter }); }
 
   remember() {
     setShared(FINDER, { ...(shared(FINDER) || {}), [this.spaceId]: { view: this.view, location: this.location, colPath: this.colPath } });
@@ -478,14 +478,14 @@ export default class ProjectDocuments extends View {
     const kind = this.kinds.find(k => k.id === doc.kind)?.label;
     const head = this.documents.find(d => d.id === (doc.head || doc.id));
     const family = head ? [head, ...(head.versions || []).map(id => this.documents.find(d => d.id === id)).filter(Boolean)] : [doc];
-    const state = doc.state === 'previous' ? '이전 버전' : doc.state === 'archived' ? '보관' : doc.harness ? HARNESS_TAG : null;
+    const state = doc.state === 'previous' ? '이전 버전' : doc.state === 'archived' ? '보관' : doc.localView ? LOCAL_VIEW_TAG : null;
     root = root.child(h_flex().flex_none().px(8).pt(4).gap(4).items_center()
       .child(div().flex_1().min_w(0).truncate().font_semibold().tooltip(doc.path || doc.name || '').child(doc.name || doc.label))
       .when(Boolean(doc.path), el => el.child(button('docs-open', '기본 앱', cx => this.external('open', [doc.path], cx)))
         .child(button('docs-edit', 'VS Code', cx => this.external('code', ['--reuse-window', doc.path], cx)))
         .child(button('docs-copy-file', '파일 복사', cx => this.copy(doc.path, 'file', cx)))
         .when(/\.md$/i.test(doc.path), el => el.child(button('docs-copy-text', '본문 복사', cx => this.copy(doc.path, 'text', cx)))))
-      .when(!doc.harness, el => el.child(button('docs-pin', doc.pinned ? '고정 해제' : '고정', cx => this.action(doc.pinned ? ['--unpin', doc.id] : ['--pin', doc.path], cx))))
+      .when(!doc.localView, el => el.child(button('docs-pin', doc.pinned ? '고정 해제' : '고정', cx => this.action(doc.pinned ? ['--unpin', doc.id] : ['--pin', doc.path], cx))))
       .when(Boolean(doc.opened), el => el.child(button(`doc-close-${doc.id}`, '닫기', cx => this.dismiss(doc.id, cx)))))
       .child(notice([kind, state, doc.date, doc.path || doc.error || '경로 확인 필요'].filter(Boolean).join(' · ')))
       .when(family.length > 1, el => el.child(h_flex().id('docs-versions').flex_none().flex_wrap().gap(4).px(12).pb(4)

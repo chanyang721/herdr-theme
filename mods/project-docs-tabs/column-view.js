@@ -1,6 +1,6 @@
 export const COLUMN_VIEW_VERSION = 1;
-// Finder-style column view shared by herdr mods (harness-memory's 기억 panel, project-docs-tabs).
-// Source of truth: herdr-harness mods/harness-memory/column-view.js. Other mods copy this file
+// Finder-style column view reusable by local document panels.
+// Reusable public column view; copies use COLUMN_VIEW_VERSION for compatibility. Other mods copy this file
 // byte for byte and check COLUMN_VIEW_VERSION; change it here and bump the version.
 //
 // entries: [{ path: 'a/b.md', dir: false, name?, date?, muted?, badge? }] relative POSIX paths under

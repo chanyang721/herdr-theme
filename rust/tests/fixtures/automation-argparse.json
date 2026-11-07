@@ -60,7 +60,7 @@
         "--help"
       ],
       "code": 0,
-      "stdout": "usage: herdr-theme workspace [-h] [--agents | --shells] [--tiers TIERS] [--by BY]\n                    name folder\n\nCreate a workspace with ONE coordinating Claude session. More panes are added\nlater by the harness `dispatch` when work arrives, and finished panes are\nclosed by the observer. --tiers <tier> opens that one pane on the model for\nthe tier (low|mid|high|max, default high). The plan is kept in\ndata/sixfold/space-tiers.json. A site.local.json \"new_space_tiers\" list (old\nsix-pane setting) is used only as a fallback: its first value, with a warning.\nTier -> model and effort come from \"model_tiers\" (ADR-0008,\nscripts/model_tier.py).\n\npositional arguments:\n  name\n  folder\n\noptions:\n  -h, --help     show this help message and exit\n  --agents\n  --shells\n  --tiers TIERS  tier of the single session (low|mid|high|max, default high)\n  --by BY        who decided the tiers (default: this session)\n",
+      "stdout": "usage: herdr-theme workspace [-h] [--agents | --shells] [--tiers TIERS] [--by BY]\n                    name folder\n\nCreate a workspace with ONE coordinating Claude session. Additional panes and session reports may be supplied by local tools. --tiers <tier> opens that one pane on the model for\nthe tier (low|mid|high|max, default high). The plan is kept in\ndata/sixfold/space-tiers.json. A site.local.json \"new_space_tiers\" list (old\nsix-pane setting) is used only as a fallback: its first value, with a warning.\nTier -> model and effort come from \"model_tiers\" (ADR-0008,\nscripts/model_tier.py).\n\npositional arguments:\n  name\n  folder\n\noptions:\n  -h, --help     show this help message and exit\n  --agents\n  --shells\n  --tiers TIERS  tier of the single session (low|mid|high|max, default high)\n  --by BY        who decided the tiers (default: this session)\n",
       "stderr": ""
     },
     {
@@ -80,7 +80,7 @@
         "--help"
       ],
       "code": 0,
-      "stdout": "usage: herdr-theme workspace [-h] [--agents | --shells] [--tiers TIERS] [--by BY]\n                    name folder\n\nCreate a workspace with ONE coordinating Claude session. More panes are added\nlater by the harness `dispatch` when work arrives, and finished panes are\nclosed by the observer. --tiers <tier> opens that one pane on the model for\nthe tier (low|mid|high|max, default high). The plan is kept in\ndata/sixfold/space-tiers.json. A site.local.json \"new_space_tiers\" list (old\nsix-pane setting) is used only as a fallback: its first value, with a warning.\nTier -> model and effort come from \"model_tiers\" (ADR-0008,\nscripts/model_tier.py).\n\npositional arguments:\n  name\n  folder\n\noptions:\n  -h, --help     show this help message and exit\n  --agents\n  --shells\n  --tiers TIERS  tier of the single session (low|mid|high|max, default high)\n  --by BY        who decided the tiers (default: this session)\n",
+      "stdout": "usage: herdr-theme workspace [-h] [--agents | --shells] [--tiers TIERS] [--by BY]\n                    name folder\n\nCreate a workspace with ONE coordinating Claude session. Additional panes and session reports may be supplied by local tools. --tiers <tier> opens that one pane on the model for\nthe tier (low|mid|high|max, default high). The plan is kept in\ndata/sixfold/space-tiers.json. A site.local.json \"new_space_tiers\" list (old\nsix-pane setting) is used only as a fallback: its first value, with a warning.\nTier -> model and effort come from \"model_tiers\" (ADR-0008,\nscripts/model_tier.py).\n\npositional arguments:\n  name\n  folder\n\noptions:\n  -h, --help     show this help message and exit\n  --agents\n  --shells\n  --tiers TIERS  tier of the single session (low|mid|high|max, default high)\n  --by BY        who decided the tiers (default: this session)\n",
       "stderr": ""
     },
     {
@@ -88,7 +88,7 @@
       "args": [],
       "code": 2,
       "stdout": "",
-      "stderr": "usage: herdr-theme route [-h] [--from SOURCE] [--drain] [--reply]\n                [--tier {low,mid,high,max}] [--enable]\n                [project] [text]\nherdr-theme route: error: project \uc640 \uc791\uc5c5 \uba54\uc2dc\uc9c0\uac00 \ud544\uc694\ud569\ub2c8\ub2e4.\n"
+      "stderr": "usage: herdr-theme route [-h] [--from SOURCE] [--drain] [--reply]\n                [--tier {low,mid,high,max}] [--enable]\n                [project] [text]\nherdr-theme route: error: project 와 작업 메시지가 필요합니다.\n"
     },
     {
       "command": "route",
@@ -136,7 +136,7 @@
         "bad"
       ],
       "code": 0,
-      "stdout": "usage: herdr-theme route [-h] [--from SOURCE] [--drain] [--reply]\n                [--tier {low,mid,high,max}] [--enable]\n                [project] [text]\n\nRoute Common workspace tasks to the same project slot, with idle fallback.\n\npositional arguments:\n  project\n  text\n\noptions:\n  -h, --help            show this help message and exit\n  --from SOURCE\n  --drain\n  --reply               request one explicit result reply\n  --tier {low,mid,high,max}\n                        \uc791\uc5c5 \ub09c\uc774\ub3c4 low|mid|high(\uae30\ubcf8): \uac19\uc740 \ubaa8\ub378 \uc138\uc158 \uba3c\uc800, \uc5c6\uc73c\uba74 \ub354 \ub192\uc740 \ubaa8\ub378, \ub0ae\uc740\n                        \ubaa8\ub378\uc5d4 \ubcf4\ub0b4\uc9c0 \uc54a\uc74c\n  --enable              enable the sidebar queue drain for this checkout\n",
+      "stdout": "usage: herdr-theme route [-h] [--from SOURCE] [--drain] [--reply]\n                [--tier {low,mid,high,max}] [--enable]\n                [project] [text]\n\nRoute Common workspace tasks to the same project slot, with idle fallback.\n\npositional arguments:\n  project\n  text\n\noptions:\n  -h, --help            show this help message and exit\n  --from SOURCE\n  --drain\n  --reply               request one explicit result reply\n  --tier {low,mid,high,max}\n                        작업 난이도 low|mid|high(기본): 같은 모델 세션 먼저, 없으면 더 높은 모델, 낮은\n                        모델엔 보내지 않음\n  --enable              enable the sidebar queue drain for this checkout\n",
       "stderr": ""
     },
     {
@@ -243,5 +243,6 @@
       "stdout": "",
       "stderr": "usage: herdr-theme collect_workflow [-h] [--once]\nherdr-theme collect_workflow: error: unrecognized arguments: --unknown\n"
     }
-  ]
+  ],
+  "release_scope": "Workspace help describes optional local tools; parser outcomes and general behavior remain original."
 }

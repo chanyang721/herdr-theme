@@ -4,7 +4,15 @@ import {readFile} from 'node:fs/promises';
 
 test('workspace badges: a generic, validated slot keyed by computer and space',async()=>{
  let source=(await readFile(new URL('../mods/sixfold-desk/badges.js',import.meta.url),'utf8')).replace(/^import[^\n]*\n/gm,'');
- source='const div=()=>null,h_flex=()=>null,appHome=()=>"",readTextFile=async()=>null,watchFolder=async()=>{},openOverlay=()=>{},run=()=>{},shared=()=>undefined;\n'+source;
+ source=`const renderedLabels=[];
+ const element=()=>{
+  const el={};
+  for(const name of ['flex_none','gap','children','id','h','px','items_center','rounded','text_size','font_bold','bg','text_color','tooltip','accessibility_label','cursor_pointer','on_mouse_down','on_mouse_up','on_click'])el[name]=()=>el;
+  el.when=(condition,fn)=>condition?fn(el):el;
+  el.child=value=>{if(typeof value==='string')renderedLabels.push(value);return el;};
+  return el;
+ };
+ const div=element,h_flex=element,appHome=()=>"",readTextFile=async()=>null,watchFolder=async()=>{},openOverlay=()=>{},run=()=>{},shared=()=>undefined;\n`+source+'\nexport {renderedLabels};';
  const m=await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
  assert.equal(m.badgeKey(null,'sp1'),'|sp1');
  assert.equal(m.badgeKey('sub1','sub1/spc82'),'sub1|spc82');
@@ -20,6 +28,8 @@ test('workspace badges: a generic, validated slot keyed by computer and space',a
  assert.equal(clean['sub1|spc82'][1].open,null,'a mod name with a path is refused');
  assert.deepEqual(m.badgesFor('|sp1',{'|sp1':[{id:'file'}]},{'|sp1':[{id:'live',text:'L'}]}).map(b=>b.id),['live'],'shared state wins over the file');
  assert.deepEqual(m.badgesFor('|sp1',{'|sp1':[{id:'file'}]},undefined).map(b=>b.id),['file']);
- const text=await readFile(new URL('../mods/sixfold-desk/badges.js',import.meta.url),'utf8');
- assert.ok(!/harness|escalation|기억함/i.test(text),'the public slot carries no private terms');
+ const allowedLabels=['Ready','Review','Notes'];
+ const badges=allowedLabels.map((text,i)=>({id:`demo-${i}`,text,tone:['done','working','dim'][i]}));
+ m.workspaceBadges({fileBadges:m.cleanBadges({'|sp1':badges})},{id:'sp1',machine:null},{done:'green',working:'blue',dim:'gray',background:'black'});
+ assert.deepEqual(m.renderedLabels,allowedLabels,'the public slot renders exactly the supplied general labels');
 });

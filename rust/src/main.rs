@@ -1,7 +1,7 @@
 fn main() {
     let mut args: Vec<String> = std::env::args().skip(1).collect();
     if args.is_empty() || args[0] == "--help" {
-        println!("herdr-theme <command> [arguments]\nNative Sixfold workspace, documents, lifecycle and voice tools.");
+        println!("herdr-theme <command> [arguments]\nNative Sixfold workspace, documents, local integration and voice tools.");
         return;
     }
     let command = args.remove(0).replace('-', "_");
@@ -28,21 +28,15 @@ fn main() {
         | "install"
         | "install_doc_tabs"
         | "install_preview"
-        | "install_session_sleep"
-        | "install_space_cleanup"
         | "install_voice"
         | "update_install"
         | "set_workspace_icon"
         | "media_image" => herdr_theme::documents::run(&command, &args),
         "pinned_system_metrics" => herdr_theme::automation::run(&command, &args),
         name if name.starts_with("pinned_") => herdr_theme::documents::run(&command, &args),
-        "agent_sessions" | "space_job_evidence" | "model_tier" | "doc_catalog" | "site_config"
-        | "file_lock" | "workspace_mods" | "app_backend" | "voice_policy" | "voice_settings" => {
-            Ok(())
-        }
-        "close_finished_spaces" | "sleep_idle_sessions" | "session_sleep_stub" => {
-            herdr_theme::observers::run(&command, &args)
-        }
+        "model_tier" | "doc_catalog" | "site_config" | "file_lock" | "workspace_mods"
+        | "app_backend" | "voice_policy" | "voice_settings" => Ok(()),
+
         name if name.starts_with("native_") => herdr_theme::observers::run(&command, &args),
         name if name.starts_with("voice_")
             || matches!(

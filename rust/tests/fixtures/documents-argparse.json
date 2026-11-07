@@ -249,7 +249,7 @@
       "expected": {
         "kind": "help",
         "exit": 0,
-        "stdout": "usage: herdr-theme resolve_doc_pins [-h] [--config CONFIG] --space SPACE\n                           [--routing ROUTING]\n                           [--pin PIN | --pin-id PIN_ID | --unpin UNPIN]\n\nRead-only project document selection; only explicit pin commands write pin\nrules. The CLI prints ``catalog()``: pins first, then every document in the\nspace's folders with its kind, version family and state, then the harness\nview. ``resolve()`` is the older pins-plus-recent selection that pin commands\nstill validate against.\n\noptions:\n  -h, --help         show this help message and exit\n  --config CONFIG\n  --space SPACE\n  --routing ROUTING  routing file (default: project-docs-routing.local.json\n                     beside --config)\n  --pin PIN\n  --pin-id PIN_ID\n  --unpin UNPIN\n",
+        "stdout": "usage: herdr-theme resolve_doc_pins [-h] [--config CONFIG] --space SPACE\n                           [--routing ROUTING]\n                           [--pin PIN | --pin-id PIN_ID | --unpin UNPIN]\n\nRead-only project document selection; only explicit pin commands write pin\nrules. The CLI prints ``catalog()``: pins first, then every document in the\nspace's folders with its kind, version family and state, then the local\nview. ``resolve()`` is the older pins-plus-recent selection that pin commands\nstill validate against.\n\noptions:\n  -h, --help         show this help message and exit\n  --config CONFIG\n  --space SPACE\n  --routing ROUTING  routing file (default: project-docs-routing.local.json\n                     beside --config)\n  --pin PIN\n  --pin-id PIN_ID\n  --unpin UNPIN\n",
         "stderr": ""
       }
     },
@@ -262,7 +262,7 @@
       "expected": {
         "kind": "help",
         "exit": 0,
-        "stdout": "usage: herdr-theme resolve_doc_pins [-h] [--config CONFIG] --space SPACE\n                           [--routing ROUTING]\n                           [--pin PIN | --pin-id PIN_ID | --unpin UNPIN]\n\nRead-only project document selection; only explicit pin commands write pin\nrules. The CLI prints ``catalog()``: pins first, then every document in the\nspace's folders with its kind, version family and state, then the harness\nview. ``resolve()`` is the older pins-plus-recent selection that pin commands\nstill validate against.\n\noptions:\n  -h, --help         show this help message and exit\n  --config CONFIG\n  --space SPACE\n  --routing ROUTING  routing file (default: project-docs-routing.local.json\n                     beside --config)\n  --pin PIN\n  --pin-id PIN_ID\n  --unpin UNPIN\n",
+        "stdout": "usage: herdr-theme resolve_doc_pins [-h] [--config CONFIG] --space SPACE\n                           [--routing ROUTING]\n                           [--pin PIN | --pin-id PIN_ID | --unpin UNPIN]\n\nRead-only project document selection; only explicit pin commands write pin\nrules. The CLI prints ``catalog()``: pins first, then every document in the\nspace's folders with its kind, version family and state, then the local\nview. ``resolve()`` is the older pins-plus-recent selection that pin commands\nstill validate against.\n\noptions:\n  -h, --help         show this help message and exit\n  --config CONFIG\n  --space SPACE\n  --routing ROUTING  routing file (default: project-docs-routing.local.json\n                     beside --config)\n  --pin PIN\n  --pin-id PIN_ID\n  --unpin UNPIN\n",
         "stderr": ""
       }
     },
@@ -275,7 +275,7 @@
       "expected": {
         "kind": "help",
         "exit": 0,
-        "stdout": "usage: herdr-theme resolve_doc_pins [-h] [--config CONFIG] --space SPACE\n                           [--routing ROUTING]\n                           [--pin PIN | --pin-id PIN_ID | --unpin UNPIN]\n\nRead-only project document selection; only explicit pin commands write pin\nrules. The CLI prints ``catalog()``: pins first, then every document in the\nspace's folders with its kind, version family and state, then the harness\nview. ``resolve()`` is the older pins-plus-recent selection that pin commands\nstill validate against.\n\noptions:\n  -h, --help         show this help message and exit\n  --config CONFIG\n  --space SPACE\n  --routing ROUTING  routing file (default: project-docs-routing.local.json\n                     beside --config)\n  --pin PIN\n  --pin-id PIN_ID\n  --unpin UNPIN\n",
+        "stdout": "usage: herdr-theme resolve_doc_pins [-h] [--config CONFIG] --space SPACE\n                           [--routing ROUTING]\n                           [--pin PIN | --pin-id PIN_ID | --unpin UNPIN]\n\nRead-only project document selection; only explicit pin commands write pin\nrules. The CLI prints ``catalog()``: pins first, then every document in the\nspace's folders with its kind, version family and state, then the local\nview. ``resolve()`` is the older pins-plus-recent selection that pin commands\nstill validate against.\n\noptions:\n  -h, --help         show this help message and exit\n  --config CONFIG\n  --space SPACE\n  --routing ROUTING  routing file (default: project-docs-routing.local.json\n                     beside --config)\n  --pin PIN\n  --pin-id PIN_ID\n  --unpin UNPIN\n",
         "stderr": ""
       }
     },
@@ -287,7 +287,7 @@
       "expected": {
         "kind": "help",
         "exit": 0,
-        "stdout": "usage: herdr-theme resolve_doc_pins [-h] [--config CONFIG] --space SPACE\n                           [--routing ROUTING]\n                           [--pin PIN | --pin-id PIN_ID | --unpin UNPIN]\n\nRead-only project document selection; only explicit pin commands write pin\nrules. The CLI prints ``catalog()``: pins first, then every document in the\nspace's folders with its kind, version family and state, then the harness\nview. ``resolve()`` is the older pins-plus-recent selection that pin commands\nstill validate against.\n\noptions:\n  -h, --help         show this help message and exit\n  --config CONFIG\n  --space SPACE\n  --routing ROUTING  routing file (default: project-docs-routing.local.json\n                     beside --config)\n  --pin PIN\n  --pin-id PIN_ID\n  --unpin UNPIN\n",
+        "stdout": "usage: herdr-theme resolve_doc_pins [-h] [--config CONFIG] --space SPACE\n                           [--routing ROUTING]\n                           [--pin PIN | --pin-id PIN_ID | --unpin UNPIN]\n\nRead-only project document selection; only explicit pin commands write pin\nrules. The CLI prints ``catalog()``: pins first, then every document in the\nspace's folders with its kind, version family and state, then the local\nview. ``resolve()`` is the older pins-plus-recent selection that pin commands\nstill validate against.\n\noptions:\n  -h, --help         show this help message and exit\n  --config CONFIG\n  --space SPACE\n  --routing ROUTING  routing file (default: project-docs-routing.local.json\n                     beside --config)\n  --pin PIN\n  --pin-id PIN_ID\n  --unpin UNPIN\n",
         "stderr": ""
       }
     },
@@ -299,7 +299,7 @@
       "expected": {
         "kind": "help",
         "exit": 0,
-        "stdout": "usage: herdr-theme resolve_doc_pins [-h] [--config CONFIG] --space SPACE\n                           [--routing ROUTING]\n                           [--pin PIN | --pin-id PIN_ID | --unpin UNPIN]\n\nRead-only project document selection; only explicit pin commands write pin\nrules. The CLI prints ``catalog()``: pins first, then every document in the\nspace's folders with its kind, version family and state, then the harness\nview. ``resolve()`` is the older pins-plus-recent selection that pin commands\nstill validate against.\n\noptions:\n  -h, --help         show this help message and exit\n  --config CONFIG\n  --space SPACE\n  --routing ROUTING  routing file (default: project-docs-routing.local.json\n                     beside --config)\n  --pin PIN\n  --pin-id PIN_ID\n  --unpin UNPIN\n",
+        "stdout": "usage: herdr-theme resolve_doc_pins [-h] [--config CONFIG] --space SPACE\n                           [--routing ROUTING]\n                           [--pin PIN | --pin-id PIN_ID | --unpin UNPIN]\n\nRead-only project document selection; only explicit pin commands write pin\nrules. The CLI prints ``catalog()``: pins first, then every document in the\nspace's folders with its kind, version family and state, then the local\nview. ``resolve()`` is the older pins-plus-recent selection that pin commands\nstill validate against.\n\noptions:\n  -h, --help         show this help message and exit\n  --config CONFIG\n  --space SPACE\n  --routing ROUTING  routing file (default: project-docs-routing.local.json\n                     beside --config)\n  --pin PIN\n  --pin-id PIN_ID\n  --unpin UNPIN\n",
         "stderr": ""
       }
     },
@@ -311,7 +311,7 @@
       "expected": {
         "kind": "help",
         "exit": 0,
-        "stdout": "usage: herdr-theme resolve_doc_pins [-h] [--config CONFIG] --space SPACE\n                           [--routing ROUTING]\n                           [--pin PIN | --pin-id PIN_ID | --unpin UNPIN]\n\nRead-only project document selection; only explicit pin commands write pin\nrules. The CLI prints ``catalog()``: pins first, then every document in the\nspace's folders with its kind, version family and state, then the harness\nview. ``resolve()`` is the older pins-plus-recent selection that pin commands\nstill validate against.\n\noptions:\n  -h, --help         show this help message and exit\n  --config CONFIG\n  --space SPACE\n  --routing ROUTING  routing file (default: project-docs-routing.local.json\n                     beside --config)\n  --pin PIN\n  --pin-id PIN_ID\n  --unpin UNPIN\n",
+        "stdout": "usage: herdr-theme resolve_doc_pins [-h] [--config CONFIG] --space SPACE\n                           [--routing ROUTING]\n                           [--pin PIN | --pin-id PIN_ID | --unpin UNPIN]\n\nRead-only project document selection; only explicit pin commands write pin\nrules. The CLI prints ``catalog()``: pins first, then every document in the\nspace's folders with its kind, version family and state, then the local\nview. ``resolve()`` is the older pins-plus-recent selection that pin commands\nstill validate against.\n\noptions:\n  -h, --help         show this help message and exit\n  --config CONFIG\n  --space SPACE\n  --routing ROUTING  routing file (default: project-docs-routing.local.json\n                     beside --config)\n  --pin PIN\n  --pin-id PIN_ID\n  --unpin UNPIN\n",
         "stderr": ""
       }
     },
@@ -323,7 +323,7 @@
       "expected": {
         "kind": "help",
         "exit": 0,
-        "stdout": "usage: herdr-theme resolve_doc_pins [-h] [--config CONFIG] --space SPACE\n                           [--routing ROUTING]\n                           [--pin PIN | --pin-id PIN_ID | --unpin UNPIN]\n\nRead-only project document selection; only explicit pin commands write pin\nrules. The CLI prints ``catalog()``: pins first, then every document in the\nspace's folders with its kind, version family and state, then the harness\nview. ``resolve()`` is the older pins-plus-recent selection that pin commands\nstill validate against.\n\noptions:\n  -h, --help         show this help message and exit\n  --config CONFIG\n  --space SPACE\n  --routing ROUTING  routing file (default: project-docs-routing.local.json\n                     beside --config)\n  --pin PIN\n  --pin-id PIN_ID\n  --unpin UNPIN\n",
+        "stdout": "usage: herdr-theme resolve_doc_pins [-h] [--config CONFIG] --space SPACE\n                           [--routing ROUTING]\n                           [--pin PIN | --pin-id PIN_ID | --unpin UNPIN]\n\nRead-only project document selection; only explicit pin commands write pin\nrules. The CLI prints ``catalog()``: pins first, then every document in the\nspace's folders with its kind, version family and state, then the local\nview. ``resolve()`` is the older pins-plus-recent selection that pin commands\nstill validate against.\n\noptions:\n  -h, --help         show this help message and exit\n  --config CONFIG\n  --space SPACE\n  --routing ROUTING  routing file (default: project-docs-routing.local.json\n                     beside --config)\n  --pin PIN\n  --pin-id PIN_ID\n  --unpin UNPIN\n",
         "stderr": ""
       }
     },
@@ -2097,7 +2097,7 @@
       "expected": {
         "kind": "help",
         "exit": 0,
-        "stdout": "usage: herdr-theme update_install [-h] [--without-workspace-mods]\n                         [--workspace-mods-source WORKSPACE_MODS_SOURCE]\n                         [--home HOME] [--repo REPO] [--cli CLI]\n                         [--verify-timeout VERIFY_TIMEOUT]\n                         [--allow-unhealthy-before]\n                         [--observer-home OBSERVER_HOME]\n                         [files ...]\n\nUpdate explicitly selected Herdr files under one lock, or roll them back.\n\npositional arguments:\n  files                 Explicit repository-relative files; existing unlisted\n                        files are preserved. \"voice\" (or any voice/... file)\n                        installs the voice plugin as one unit with\n                        voice/install.py\n\noptions:\n  -h, --help            show this help message and exit\n  --without-workspace-mods\n                        Leave Herdr Workspace Mods as installed (default:\n                        bring them to the version pinned in workspace-\n                        mods.lock.json)\n  --workspace-mods-source WORKSPACE_MODS_SOURCE\n                        A local Herdr Workspace Mods checkout already at the\n                        pinned commit (default: fetch it)\n  --home HOME\n  --repo REPO           Reviewed source worktree (required when running an\n                        installed copy)\n  --cli CLI\n  --verify-timeout VERIFY_TIMEOUT\n  --allow-unhealthy-before\n                        Authorized repair only; post-install status must still\n                        become error-free\n  --observer-home OBSERVER_HOME\n                        Home whose registered cleanup/sleep observer copies\n                        follow an install of their scripts\n",
+        "stdout": "usage: herdr-theme update_install [-h] [--without-workspace-mods]\n                         [--workspace-mods-source WORKSPACE_MODS_SOURCE]\n                         [--home HOME] [--repo REPO] [--cli CLI]\n                         [--verify-timeout VERIFY_TIMEOUT]\n                         [--allow-unhealthy-before]\n                         [files ...]\n\nUpdate explicitly selected Herdr files under one lock, or roll them back.\n\npositional arguments:\n  files                 Explicit repository-relative files; existing unlisted\n                        files are preserved. \"voice\" (or any voice/... file)\n                        installs the voice plugin as one unit with\n                        voice/install.py\n\noptions:\n  -h, --help            show this help message and exit\n  --without-workspace-mods\n                        Leave Herdr Workspace Mods as installed (default:\n                        bring them to the version pinned in workspace-\n                        mods.lock.json)\n  --workspace-mods-source WORKSPACE_MODS_SOURCE\n                        A local Herdr Workspace Mods checkout already at the\n                        pinned commit (default: fetch it)\n  --home HOME\n  --repo REPO           Reviewed source worktree (required when running an\n                        installed copy)\n  --cli CLI\n  --verify-timeout VERIFY_TIMEOUT\n  --allow-unhealthy-before\n                        Authorized repair only; post-install status must still\n                        become error-free\n",
         "stderr": ""
       }
     },
@@ -2110,7 +2110,7 @@
       "expected": {
         "kind": "help",
         "exit": 0,
-        "stdout": "usage: herdr-theme update_install [-h] [--without-workspace-mods]\n                         [--workspace-mods-source WORKSPACE_MODS_SOURCE]\n                         [--home HOME] [--repo REPO] [--cli CLI]\n                         [--verify-timeout VERIFY_TIMEOUT]\n                         [--allow-unhealthy-before]\n                         [--observer-home OBSERVER_HOME]\n                         [files ...]\n\nUpdate explicitly selected Herdr files under one lock, or roll them back.\n\npositional arguments:\n  files                 Explicit repository-relative files; existing unlisted\n                        files are preserved. \"voice\" (or any voice/... file)\n                        installs the voice plugin as one unit with\n                        voice/install.py\n\noptions:\n  -h, --help            show this help message and exit\n  --without-workspace-mods\n                        Leave Herdr Workspace Mods as installed (default:\n                        bring them to the version pinned in workspace-\n                        mods.lock.json)\n  --workspace-mods-source WORKSPACE_MODS_SOURCE\n                        A local Herdr Workspace Mods checkout already at the\n                        pinned commit (default: fetch it)\n  --home HOME\n  --repo REPO           Reviewed source worktree (required when running an\n                        installed copy)\n  --cli CLI\n  --verify-timeout VERIFY_TIMEOUT\n  --allow-unhealthy-before\n                        Authorized repair only; post-install status must still\n                        become error-free\n  --observer-home OBSERVER_HOME\n                        Home whose registered cleanup/sleep observer copies\n                        follow an install of their scripts\n",
+        "stdout": "usage: herdr-theme update_install [-h] [--without-workspace-mods]\n                         [--workspace-mods-source WORKSPACE_MODS_SOURCE]\n                         [--home HOME] [--repo REPO] [--cli CLI]\n                         [--verify-timeout VERIFY_TIMEOUT]\n                         [--allow-unhealthy-before]\n                         [files ...]\n\nUpdate explicitly selected Herdr files under one lock, or roll them back.\n\npositional arguments:\n  files                 Explicit repository-relative files; existing unlisted\n                        files are preserved. \"voice\" (or any voice/... file)\n                        installs the voice plugin as one unit with\n                        voice/install.py\n\noptions:\n  -h, --help            show this help message and exit\n  --without-workspace-mods\n                        Leave Herdr Workspace Mods as installed (default:\n                        bring them to the version pinned in workspace-\n                        mods.lock.json)\n  --workspace-mods-source WORKSPACE_MODS_SOURCE\n                        A local Herdr Workspace Mods checkout already at the\n                        pinned commit (default: fetch it)\n  --home HOME\n  --repo REPO           Reviewed source worktree (required when running an\n                        installed copy)\n  --cli CLI\n  --verify-timeout VERIFY_TIMEOUT\n  --allow-unhealthy-before\n                        Authorized repair only; post-install status must still\n                        become error-free\n",
         "stderr": ""
       }
     },
@@ -2123,7 +2123,7 @@
       "expected": {
         "kind": "help",
         "exit": 0,
-        "stdout": "usage: herdr-theme update_install [-h] [--without-workspace-mods]\n                         [--workspace-mods-source WORKSPACE_MODS_SOURCE]\n                         [--home HOME] [--repo REPO] [--cli CLI]\n                         [--verify-timeout VERIFY_TIMEOUT]\n                         [--allow-unhealthy-before]\n                         [--observer-home OBSERVER_HOME]\n                         [files ...]\n\nUpdate explicitly selected Herdr files under one lock, or roll them back.\n\npositional arguments:\n  files                 Explicit repository-relative files; existing unlisted\n                        files are preserved. \"voice\" (or any voice/... file)\n                        installs the voice plugin as one unit with\n                        voice/install.py\n\noptions:\n  -h, --help            show this help message and exit\n  --without-workspace-mods\n                        Leave Herdr Workspace Mods as installed (default:\n                        bring them to the version pinned in workspace-\n                        mods.lock.json)\n  --workspace-mods-source WORKSPACE_MODS_SOURCE\n                        A local Herdr Workspace Mods checkout already at the\n                        pinned commit (default: fetch it)\n  --home HOME\n  --repo REPO           Reviewed source worktree (required when running an\n                        installed copy)\n  --cli CLI\n  --verify-timeout VERIFY_TIMEOUT\n  --allow-unhealthy-before\n                        Authorized repair only; post-install status must still\n                        become error-free\n  --observer-home OBSERVER_HOME\n                        Home whose registered cleanup/sleep observer copies\n                        follow an install of their scripts\n",
+        "stdout": "usage: herdr-theme update_install [-h] [--without-workspace-mods]\n                         [--workspace-mods-source WORKSPACE_MODS_SOURCE]\n                         [--home HOME] [--repo REPO] [--cli CLI]\n                         [--verify-timeout VERIFY_TIMEOUT]\n                         [--allow-unhealthy-before]\n                         [files ...]\n\nUpdate explicitly selected Herdr files under one lock, or roll them back.\n\npositional arguments:\n  files                 Explicit repository-relative files; existing unlisted\n                        files are preserved. \"voice\" (or any voice/... file)\n                        installs the voice plugin as one unit with\n                        voice/install.py\n\noptions:\n  -h, --help            show this help message and exit\n  --without-workspace-mods\n                        Leave Herdr Workspace Mods as installed (default:\n                        bring them to the version pinned in workspace-\n                        mods.lock.json)\n  --workspace-mods-source WORKSPACE_MODS_SOURCE\n                        A local Herdr Workspace Mods checkout already at the\n                        pinned commit (default: fetch it)\n  --home HOME\n  --repo REPO           Reviewed source worktree (required when running an\n                        installed copy)\n  --cli CLI\n  --verify-timeout VERIFY_TIMEOUT\n  --allow-unhealthy-before\n                        Authorized repair only; post-install status must still\n                        become error-free\n",
         "stderr": ""
       }
     },
@@ -2136,7 +2136,7 @@
         "kind": "error",
         "exit": 2,
         "stdout": "",
-        "stderr": "usage: herdr-theme update_install [-h] [--without-workspace-mods]\n                         [--workspace-mods-source WORKSPACE_MODS_SOURCE]\n                         [--home HOME] [--repo REPO] [--cli CLI]\n                         [--verify-timeout VERIFY_TIMEOUT]\n                         [--allow-unhealthy-before]\n                         [--observer-home OBSERVER_HOME]\n                         [files ...]\nherdr-theme update_install: error: ambiguous option: --h could match --help, --home\n"
+        "stderr": "usage: herdr-theme update_install [-h] [--without-workspace-mods]\n                         [--workspace-mods-source WORKSPACE_MODS_SOURCE]\n                         [--home HOME] [--repo REPO] [--cli CLI]\n                         [--verify-timeout VERIFY_TIMEOUT]\n                         [--allow-unhealthy-before]\n                         [files ...]\nherdr-theme update_install: error: ambiguous option: --h could match --help, --home\n"
       }
     },
     {
@@ -2147,7 +2147,7 @@
       "expected": {
         "kind": "help",
         "exit": 0,
-        "stdout": "usage: herdr-theme update_install [-h] [--without-workspace-mods]\n                         [--workspace-mods-source WORKSPACE_MODS_SOURCE]\n                         [--home HOME] [--repo REPO] [--cli CLI]\n                         [--verify-timeout VERIFY_TIMEOUT]\n                         [--allow-unhealthy-before]\n                         [--observer-home OBSERVER_HOME]\n                         [files ...]\n\nUpdate explicitly selected Herdr files under one lock, or roll them back.\n\npositional arguments:\n  files                 Explicit repository-relative files; existing unlisted\n                        files are preserved. \"voice\" (or any voice/... file)\n                        installs the voice plugin as one unit with\n                        voice/install.py\n\noptions:\n  -h, --help            show this help message and exit\n  --without-workspace-mods\n                        Leave Herdr Workspace Mods as installed (default:\n                        bring them to the version pinned in workspace-\n                        mods.lock.json)\n  --workspace-mods-source WORKSPACE_MODS_SOURCE\n                        A local Herdr Workspace Mods checkout already at the\n                        pinned commit (default: fetch it)\n  --home HOME\n  --repo REPO           Reviewed source worktree (required when running an\n                        installed copy)\n  --cli CLI\n  --verify-timeout VERIFY_TIMEOUT\n  --allow-unhealthy-before\n                        Authorized repair only; post-install status must still\n                        become error-free\n  --observer-home OBSERVER_HOME\n                        Home whose registered cleanup/sleep observer copies\n                        follow an install of their scripts\n",
+        "stdout": "usage: herdr-theme update_install [-h] [--without-workspace-mods]\n                         [--workspace-mods-source WORKSPACE_MODS_SOURCE]\n                         [--home HOME] [--repo REPO] [--cli CLI]\n                         [--verify-timeout VERIFY_TIMEOUT]\n                         [--allow-unhealthy-before]\n                         [files ...]\n\nUpdate explicitly selected Herdr files under one lock, or roll them back.\n\npositional arguments:\n  files                 Explicit repository-relative files; existing unlisted\n                        files are preserved. \"voice\" (or any voice/... file)\n                        installs the voice plugin as one unit with\n                        voice/install.py\n\noptions:\n  -h, --help            show this help message and exit\n  --without-workspace-mods\n                        Leave Herdr Workspace Mods as installed (default:\n                        bring them to the version pinned in workspace-\n                        mods.lock.json)\n  --workspace-mods-source WORKSPACE_MODS_SOURCE\n                        A local Herdr Workspace Mods checkout already at the\n                        pinned commit (default: fetch it)\n  --home HOME\n  --repo REPO           Reviewed source worktree (required when running an\n                        installed copy)\n  --cli CLI\n  --verify-timeout VERIFY_TIMEOUT\n  --allow-unhealthy-before\n                        Authorized repair only; post-install status must still\n                        become error-free\n",
         "stderr": ""
       }
     },
@@ -2159,7 +2159,7 @@
       "expected": {
         "kind": "help",
         "exit": 0,
-        "stdout": "usage: herdr-theme update_install [-h] [--without-workspace-mods]\n                         [--workspace-mods-source WORKSPACE_MODS_SOURCE]\n                         [--home HOME] [--repo REPO] [--cli CLI]\n                         [--verify-timeout VERIFY_TIMEOUT]\n                         [--allow-unhealthy-before]\n                         [--observer-home OBSERVER_HOME]\n                         [files ...]\n\nUpdate explicitly selected Herdr files under one lock, or roll them back.\n\npositional arguments:\n  files                 Explicit repository-relative files; existing unlisted\n                        files are preserved. \"voice\" (or any voice/... file)\n                        installs the voice plugin as one unit with\n                        voice/install.py\n\noptions:\n  -h, --help            show this help message and exit\n  --without-workspace-mods\n                        Leave Herdr Workspace Mods as installed (default:\n                        bring them to the version pinned in workspace-\n                        mods.lock.json)\n  --workspace-mods-source WORKSPACE_MODS_SOURCE\n                        A local Herdr Workspace Mods checkout already at the\n                        pinned commit (default: fetch it)\n  --home HOME\n  --repo REPO           Reviewed source worktree (required when running an\n                        installed copy)\n  --cli CLI\n  --verify-timeout VERIFY_TIMEOUT\n  --allow-unhealthy-before\n                        Authorized repair only; post-install status must still\n                        become error-free\n  --observer-home OBSERVER_HOME\n                        Home whose registered cleanup/sleep observer copies\n                        follow an install of their scripts\n",
+        "stdout": "usage: herdr-theme update_install [-h] [--without-workspace-mods]\n                         [--workspace-mods-source WORKSPACE_MODS_SOURCE]\n                         [--home HOME] [--repo REPO] [--cli CLI]\n                         [--verify-timeout VERIFY_TIMEOUT]\n                         [--allow-unhealthy-before]\n                         [files ...]\n\nUpdate explicitly selected Herdr files under one lock, or roll them back.\n\npositional arguments:\n  files                 Explicit repository-relative files; existing unlisted\n                        files are preserved. \"voice\" (or any voice/... file)\n                        installs the voice plugin as one unit with\n                        voice/install.py\n\noptions:\n  -h, --help            show this help message and exit\n  --without-workspace-mods\n                        Leave Herdr Workspace Mods as installed (default:\n                        bring them to the version pinned in workspace-\n                        mods.lock.json)\n  --workspace-mods-source WORKSPACE_MODS_SOURCE\n                        A local Herdr Workspace Mods checkout already at the\n                        pinned commit (default: fetch it)\n  --home HOME\n  --repo REPO           Reviewed source worktree (required when running an\n                        installed copy)\n  --cli CLI\n  --verify-timeout VERIFY_TIMEOUT\n  --allow-unhealthy-before\n                        Authorized repair only; post-install status must still\n                        become error-free\n",
         "stderr": ""
       }
     },
@@ -2171,7 +2171,7 @@
       "expected": {
         "kind": "help",
         "exit": 0,
-        "stdout": "usage: herdr-theme update_install [-h] [--without-workspace-mods]\n                         [--workspace-mods-source WORKSPACE_MODS_SOURCE]\n                         [--home HOME] [--repo REPO] [--cli CLI]\n                         [--verify-timeout VERIFY_TIMEOUT]\n                         [--allow-unhealthy-before]\n                         [--observer-home OBSERVER_HOME]\n                         [files ...]\n\nUpdate explicitly selected Herdr files under one lock, or roll them back.\n\npositional arguments:\n  files                 Explicit repository-relative files; existing unlisted\n                        files are preserved. \"voice\" (or any voice/... file)\n                        installs the voice plugin as one unit with\n                        voice/install.py\n\noptions:\n  -h, --help            show this help message and exit\n  --without-workspace-mods\n                        Leave Herdr Workspace Mods as installed (default:\n                        bring them to the version pinned in workspace-\n                        mods.lock.json)\n  --workspace-mods-source WORKSPACE_MODS_SOURCE\n                        A local Herdr Workspace Mods checkout already at the\n                        pinned commit (default: fetch it)\n  --home HOME\n  --repo REPO           Reviewed source worktree (required when running an\n                        installed copy)\n  --cli CLI\n  --verify-timeout VERIFY_TIMEOUT\n  --allow-unhealthy-before\n                        Authorized repair only; post-install status must still\n                        become error-free\n  --observer-home OBSERVER_HOME\n                        Home whose registered cleanup/sleep observer copies\n                        follow an install of their scripts\n",
+        "stdout": "usage: herdr-theme update_install [-h] [--without-workspace-mods]\n                         [--workspace-mods-source WORKSPACE_MODS_SOURCE]\n                         [--home HOME] [--repo REPO] [--cli CLI]\n                         [--verify-timeout VERIFY_TIMEOUT]\n                         [--allow-unhealthy-before]\n                         [files ...]\n\nUpdate explicitly selected Herdr files under one lock, or roll them back.\n\npositional arguments:\n  files                 Explicit repository-relative files; existing unlisted\n                        files are preserved. \"voice\" (or any voice/... file)\n                        installs the voice plugin as one unit with\n                        voice/install.py\n\noptions:\n  -h, --help            show this help message and exit\n  --without-workspace-mods\n                        Leave Herdr Workspace Mods as installed (default:\n                        bring them to the version pinned in workspace-\n                        mods.lock.json)\n  --workspace-mods-source WORKSPACE_MODS_SOURCE\n                        A local Herdr Workspace Mods checkout already at the\n                        pinned commit (default: fetch it)\n  --home HOME\n  --repo REPO           Reviewed source worktree (required when running an\n                        installed copy)\n  --cli CLI\n  --verify-timeout VERIFY_TIMEOUT\n  --allow-unhealthy-before\n                        Authorized repair only; post-install status must still\n                        become error-free\n",
         "stderr": ""
       }
     },
@@ -2184,7 +2184,7 @@
         "kind": "error",
         "exit": 2,
         "stdout": "",
-        "stderr": "usage: herdr-theme update_install [-h] [--without-workspace-mods]\n                         [--workspace-mods-source WORKSPACE_MODS_SOURCE]\n                         [--home HOME] [--repo REPO] [--cli CLI]\n                         [--verify-timeout VERIFY_TIMEOUT]\n                         [--allow-unhealthy-before]\n                         [--observer-home OBSERVER_HOME]\n                         [files ...]\nherdr-theme update_install: error: argument -h/--help: ignored explicit argument 'x'\n"
+        "stderr": "usage: herdr-theme update_install [-h] [--without-workspace-mods]\n                         [--workspace-mods-source WORKSPACE_MODS_SOURCE]\n                         [--home HOME] [--repo REPO] [--cli CLI]\n                         [--verify-timeout VERIFY_TIMEOUT]\n                         [--allow-unhealthy-before]\n                         [files ...]\nherdr-theme update_install: error: argument -h/--help: ignored explicit argument 'x'\n"
       }
     },
     {
@@ -2196,7 +2196,7 @@
         "kind": "error",
         "exit": 2,
         "stdout": "",
-        "stderr": "usage: herdr-theme update_install [-h] [--without-workspace-mods]\n                         [--workspace-mods-source WORKSPACE_MODS_SOURCE]\n                         [--home HOME] [--repo REPO] [--cli CLI]\n                         [--verify-timeout VERIFY_TIMEOUT]\n                         [--allow-unhealthy-before]\n                         [--observer-home OBSERVER_HOME]\n                         [files ...]\nherdr-theme update_install: error: unrecognized arguments: --unknown\n"
+        "stderr": "usage: herdr-theme update_install [-h] [--without-workspace-mods]\n                         [--workspace-mods-source WORKSPACE_MODS_SOURCE]\n                         [--home HOME] [--repo REPO] [--cli CLI]\n                         [--verify-timeout VERIFY_TIMEOUT]\n                         [--allow-unhealthy-before]\n                         [files ...]\nherdr-theme update_install: error: unrecognized arguments: --unknown\n"
       }
     },
     {
@@ -2221,7 +2221,7 @@
         "kind": "error",
         "exit": 2,
         "stdout": "",
-        "stderr": "usage: herdr-theme update_install [-h] [--without-workspace-mods]\n                         [--workspace-mods-source WORKSPACE_MODS_SOURCE]\n                         [--home HOME] [--repo REPO] [--cli CLI]\n                         [--verify-timeout VERIFY_TIMEOUT]\n                         [--allow-unhealthy-before]\n                         [--observer-home OBSERVER_HOME]\n                         [files ...]\nherdr-theme update_install: error: unrecognized arguments: two.js\n"
+        "stderr": "usage: herdr-theme update_install [-h] [--without-workspace-mods]\n                         [--workspace-mods-source WORKSPACE_MODS_SOURCE]\n                         [--home HOME] [--repo REPO] [--cli CLI]\n                         [--verify-timeout VERIFY_TIMEOUT]\n                         [--allow-unhealthy-before]\n                         [files ...]\nherdr-theme update_install: error: unrecognized arguments: two.js\n"
       }
     },
     {
@@ -2250,7 +2250,7 @@
         "kind": "error",
         "exit": 2,
         "stdout": "",
-        "stderr": "usage: herdr-theme update_install [-h] [--without-workspace-mods]\n                         [--workspace-mods-source WORKSPACE_MODS_SOURCE]\n                         [--home HOME] [--repo REPO] [--cli CLI]\n                         [--verify-timeout VERIFY_TIMEOUT]\n                         [--allow-unhealthy-before]\n                         [--observer-home OBSERVER_HOME]\n                         [files ...]\nherdr-theme update_install: error: argument --verify-timeout: invalid float value: 'bad'\n"
+        "stderr": "usage: herdr-theme update_install [-h] [--without-workspace-mods]\n                         [--workspace-mods-source WORKSPACE_MODS_SOURCE]\n                         [--home HOME] [--repo REPO] [--cli CLI]\n                         [--verify-timeout VERIFY_TIMEOUT]\n                         [--allow-unhealthy-before]\n                         [files ...]\nherdr-theme update_install: error: argument --verify-timeout: invalid float value: 'bad'\n"
       }
     },
     {
@@ -2289,248 +2289,9 @@
         "kind": "error",
         "exit": 2,
         "stdout": "",
-        "stderr": "usage: herdr-theme update_install [-h] [--without-workspace-mods]\n                         [--workspace-mods-source WORKSPACE_MODS_SOURCE]\n                         [--home HOME] [--repo REPO] [--cli CLI]\n                         [--verify-timeout VERIFY_TIMEOUT]\n                         [--allow-unhealthy-before]\n                         [--observer-home OBSERVER_HOME]\n                         [files ...]\nherdr-theme update_install: error: argument --verify-timeout: expected one argument\n"
-      }
-    },
-    {
-      "command": "install_session_sleep",
-      "args": [
-        "--help"
-      ],
-      "expected": {
-        "kind": "help",
-        "exit": 0,
-        "stdout": "usage: herdr-theme install_session_sleep [-h] [--home HOME] [--source SOURCE]\n                                [--install] [--enable-apply] [--refresh]\n                                [--user-approved]\n\nRegister the 5-minute space-cleanup observer in dry-run mode; enable apply\nonly after a reviewed live trial, or after the person approved apply and one\ndry-run of this code ran.\n\noptions:\n  -h, --help       show this help message and exit\n  --home HOME\n  --source SOURCE\n  --install        write files and register launchd; default is a plan\n  --enable-apply   review the saved trial and switch to real actions\n  --refresh        only replace the registered observer copies with this\n                   source (no plist, no launchctl)\n  --user-approved  with --enable-apply: the person approved apply; one\n                   recorded dry-run of this code suffices\n",
-        "stderr": ""
-      }
-    },
-    {
-      "command": "install_session_sleep",
-      "args": [
-        "--unknown",
-        "--help"
-      ],
-      "expected": {
-        "kind": "help",
-        "exit": 0,
-        "stdout": "usage: herdr-theme install_session_sleep [-h] [--home HOME] [--source SOURCE]\n                                [--install] [--enable-apply] [--refresh]\n                                [--user-approved]\n\nRegister the 5-minute space-cleanup observer in dry-run mode; enable apply\nonly after a reviewed live trial, or after the person approved apply and one\ndry-run of this code ran.\n\noptions:\n  -h, --help       show this help message and exit\n  --home HOME\n  --source SOURCE\n  --install        write files and register launchd; default is a plan\n  --enable-apply   review the saved trial and switch to real actions\n  --refresh        only replace the registered observer copies with this\n                   source (no plist, no launchctl)\n  --user-approved  with --enable-apply: the person approved apply; one\n                   recorded dry-run of this code suffices\n",
-        "stderr": ""
-      }
-    },
-    {
-      "command": "install_session_sleep",
-      "args": [
-        "--help",
-        "--unknown"
-      ],
-      "expected": {
-        "kind": "help",
-        "exit": 0,
-        "stdout": "usage: herdr-theme install_session_sleep [-h] [--home HOME] [--source SOURCE]\n                                [--install] [--enable-apply] [--refresh]\n                                [--user-approved]\n\nRegister the 5-minute space-cleanup observer in dry-run mode; enable apply\nonly after a reviewed live trial, or after the person approved apply and one\ndry-run of this code ran.\n\noptions:\n  -h, --help       show this help message and exit\n  --home HOME\n  --source SOURCE\n  --install        write files and register launchd; default is a plan\n  --enable-apply   review the saved trial and switch to real actions\n  --refresh        only replace the registered observer copies with this\n                   source (no plist, no launchctl)\n  --user-approved  with --enable-apply: the person approved apply; one\n                   recorded dry-run of this code suffices\n",
-        "stderr": ""
-      }
-    },
-    {
-      "command": "install_session_sleep",
-      "args": [
-        "--h"
-      ],
-      "expected": {
-        "kind": "error",
-        "exit": 2,
-        "stdout": "",
-        "stderr": "usage: herdr-theme install_session_sleep [-h] [--home HOME] [--source SOURCE]\n                                [--install] [--enable-apply] [--refresh]\n                                [--user-approved]\nherdr-theme install_session_sleep: error: ambiguous option: --h could match --help, --home\n"
-      }
-    },
-    {
-      "command": "install_session_sleep",
-      "args": [
-        "--he"
-      ],
-      "expected": {
-        "kind": "help",
-        "exit": 0,
-        "stdout": "usage: herdr-theme install_session_sleep [-h] [--home HOME] [--source SOURCE]\n                                [--install] [--enable-apply] [--refresh]\n                                [--user-approved]\n\nRegister the 5-minute space-cleanup observer in dry-run mode; enable apply\nonly after a reviewed live trial, or after the person approved apply and one\ndry-run of this code ran.\n\noptions:\n  -h, --help       show this help message and exit\n  --home HOME\n  --source SOURCE\n  --install        write files and register launchd; default is a plan\n  --enable-apply   review the saved trial and switch to real actions\n  --refresh        only replace the registered observer copies with this\n                   source (no plist, no launchctl)\n  --user-approved  with --enable-apply: the person approved apply; one\n                   recorded dry-run of this code suffices\n",
-        "stderr": ""
-      }
-    },
-    {
-      "command": "install_session_sleep",
-      "args": [
-        "-hh"
-      ],
-      "expected": {
-        "kind": "help",
-        "exit": 0,
-        "stdout": "usage: herdr-theme install_session_sleep [-h] [--home HOME] [--source SOURCE]\n                                [--install] [--enable-apply] [--refresh]\n                                [--user-approved]\n\nRegister the 5-minute space-cleanup observer in dry-run mode; enable apply\nonly after a reviewed live trial, or after the person approved apply and one\ndry-run of this code ran.\n\noptions:\n  -h, --help       show this help message and exit\n  --home HOME\n  --source SOURCE\n  --install        write files and register launchd; default is a plan\n  --enable-apply   review the saved trial and switch to real actions\n  --refresh        only replace the registered observer copies with this\n                   source (no plist, no launchctl)\n  --user-approved  with --enable-apply: the person approved apply; one\n                   recorded dry-run of this code suffices\n",
-        "stderr": ""
-      }
-    },
-    {
-      "command": "install_session_sleep",
-      "args": [
-        "-hfoo"
-      ],
-      "expected": {
-        "kind": "help",
-        "exit": 0,
-        "stdout": "usage: herdr-theme install_session_sleep [-h] [--home HOME] [--source SOURCE]\n                                [--install] [--enable-apply] [--refresh]\n                                [--user-approved]\n\nRegister the 5-minute space-cleanup observer in dry-run mode; enable apply\nonly after a reviewed live trial, or after the person approved apply and one\ndry-run of this code ran.\n\noptions:\n  -h, --help       show this help message and exit\n  --home HOME\n  --source SOURCE\n  --install        write files and register launchd; default is a plan\n  --enable-apply   review the saved trial and switch to real actions\n  --refresh        only replace the registered observer copies with this\n                   source (no plist, no launchctl)\n  --user-approved  with --enable-apply: the person approved apply; one\n                   recorded dry-run of this code suffices\n",
-        "stderr": ""
-      }
-    },
-    {
-      "command": "install_session_sleep",
-      "args": [
-        "--help=x"
-      ],
-      "expected": {
-        "kind": "error",
-        "exit": 2,
-        "stdout": "",
-        "stderr": "usage: herdr-theme install_session_sleep [-h] [--home HOME] [--source SOURCE]\n                                [--install] [--enable-apply] [--refresh]\n                                [--user-approved]\nherdr-theme install_session_sleep: error: argument -h/--help: ignored explicit argument 'x'\n"
-      }
-    },
-    {
-      "command": "install_session_sleep",
-      "args": [
-        "--unknown"
-      ],
-      "expected": {
-        "kind": "error",
-        "exit": 2,
-        "stdout": "",
-        "stderr": "usage: herdr-theme install_session_sleep [-h] [--home HOME] [--source SOURCE]\n                                [--install] [--enable-apply] [--refresh]\n                                [--user-approved]\nherdr-theme install_session_sleep: error: unrecognized arguments: --unknown\n"
-      }
-    },
-    {
-      "command": "install_session_sleep",
-      "args": [],
-      "expected": {
-        "kind": "accepted",
-        "exit": 0,
-        "stdout": "",
-        "stderr": ""
-      }
-    },
-    {
-      "command": "install_space_cleanup",
-      "args": [
-        "--help"
-      ],
-      "expected": {
-        "kind": "help",
-        "exit": 0,
-        "stdout": "usage: herdr-theme install_space_cleanup [-h] [--home HOME] [--source SOURCE]\n                                [--install] [--enable-apply] [--refresh]\n                                [--user-approved]\n\nRegister the 5-minute space-cleanup observer in dry-run mode; enable apply\nonly after a reviewed live trial, or after the person approved apply and one\ndry-run of this code ran.\n\noptions:\n  -h, --help       show this help message and exit\n  --home HOME\n  --source SOURCE\n  --install        write files and register launchd; default is a plan\n  --enable-apply   review the saved trial and switch to real actions\n  --refresh        only replace the registered observer copies with this\n                   source (no plist, no launchctl)\n  --user-approved  with --enable-apply: the person approved apply; one\n                   recorded dry-run of this code suffices\n",
-        "stderr": ""
-      }
-    },
-    {
-      "command": "install_space_cleanup",
-      "args": [
-        "--unknown",
-        "--help"
-      ],
-      "expected": {
-        "kind": "help",
-        "exit": 0,
-        "stdout": "usage: herdr-theme install_space_cleanup [-h] [--home HOME] [--source SOURCE]\n                                [--install] [--enable-apply] [--refresh]\n                                [--user-approved]\n\nRegister the 5-minute space-cleanup observer in dry-run mode; enable apply\nonly after a reviewed live trial, or after the person approved apply and one\ndry-run of this code ran.\n\noptions:\n  -h, --help       show this help message and exit\n  --home HOME\n  --source SOURCE\n  --install        write files and register launchd; default is a plan\n  --enable-apply   review the saved trial and switch to real actions\n  --refresh        only replace the registered observer copies with this\n                   source (no plist, no launchctl)\n  --user-approved  with --enable-apply: the person approved apply; one\n                   recorded dry-run of this code suffices\n",
-        "stderr": ""
-      }
-    },
-    {
-      "command": "install_space_cleanup",
-      "args": [
-        "--help",
-        "--unknown"
-      ],
-      "expected": {
-        "kind": "help",
-        "exit": 0,
-        "stdout": "usage: herdr-theme install_space_cleanup [-h] [--home HOME] [--source SOURCE]\n                                [--install] [--enable-apply] [--refresh]\n                                [--user-approved]\n\nRegister the 5-minute space-cleanup observer in dry-run mode; enable apply\nonly after a reviewed live trial, or after the person approved apply and one\ndry-run of this code ran.\n\noptions:\n  -h, --help       show this help message and exit\n  --home HOME\n  --source SOURCE\n  --install        write files and register launchd; default is a plan\n  --enable-apply   review the saved trial and switch to real actions\n  --refresh        only replace the registered observer copies with this\n                   source (no plist, no launchctl)\n  --user-approved  with --enable-apply: the person approved apply; one\n                   recorded dry-run of this code suffices\n",
-        "stderr": ""
-      }
-    },
-    {
-      "command": "install_space_cleanup",
-      "args": [
-        "--h"
-      ],
-      "expected": {
-        "kind": "error",
-        "exit": 2,
-        "stdout": "",
-        "stderr": "usage: herdr-theme install_space_cleanup [-h] [--home HOME] [--source SOURCE]\n                                [--install] [--enable-apply] [--refresh]\n                                [--user-approved]\nherdr-theme install_space_cleanup: error: ambiguous option: --h could match --help, --home\n"
-      }
-    },
-    {
-      "command": "install_space_cleanup",
-      "args": [
-        "--he"
-      ],
-      "expected": {
-        "kind": "help",
-        "exit": 0,
-        "stdout": "usage: herdr-theme install_space_cleanup [-h] [--home HOME] [--source SOURCE]\n                                [--install] [--enable-apply] [--refresh]\n                                [--user-approved]\n\nRegister the 5-minute space-cleanup observer in dry-run mode; enable apply\nonly after a reviewed live trial, or after the person approved apply and one\ndry-run of this code ran.\n\noptions:\n  -h, --help       show this help message and exit\n  --home HOME\n  --source SOURCE\n  --install        write files and register launchd; default is a plan\n  --enable-apply   review the saved trial and switch to real actions\n  --refresh        only replace the registered observer copies with this\n                   source (no plist, no launchctl)\n  --user-approved  with --enable-apply: the person approved apply; one\n                   recorded dry-run of this code suffices\n",
-        "stderr": ""
-      }
-    },
-    {
-      "command": "install_space_cleanup",
-      "args": [
-        "-hh"
-      ],
-      "expected": {
-        "kind": "help",
-        "exit": 0,
-        "stdout": "usage: herdr-theme install_space_cleanup [-h] [--home HOME] [--source SOURCE]\n                                [--install] [--enable-apply] [--refresh]\n                                [--user-approved]\n\nRegister the 5-minute space-cleanup observer in dry-run mode; enable apply\nonly after a reviewed live trial, or after the person approved apply and one\ndry-run of this code ran.\n\noptions:\n  -h, --help       show this help message and exit\n  --home HOME\n  --source SOURCE\n  --install        write files and register launchd; default is a plan\n  --enable-apply   review the saved trial and switch to real actions\n  --refresh        only replace the registered observer copies with this\n                   source (no plist, no launchctl)\n  --user-approved  with --enable-apply: the person approved apply; one\n                   recorded dry-run of this code suffices\n",
-        "stderr": ""
-      }
-    },
-    {
-      "command": "install_space_cleanup",
-      "args": [
-        "-hfoo"
-      ],
-      "expected": {
-        "kind": "help",
-        "exit": 0,
-        "stdout": "usage: herdr-theme install_space_cleanup [-h] [--home HOME] [--source SOURCE]\n                                [--install] [--enable-apply] [--refresh]\n                                [--user-approved]\n\nRegister the 5-minute space-cleanup observer in dry-run mode; enable apply\nonly after a reviewed live trial, or after the person approved apply and one\ndry-run of this code ran.\n\noptions:\n  -h, --help       show this help message and exit\n  --home HOME\n  --source SOURCE\n  --install        write files and register launchd; default is a plan\n  --enable-apply   review the saved trial and switch to real actions\n  --refresh        only replace the registered observer copies with this\n                   source (no plist, no launchctl)\n  --user-approved  with --enable-apply: the person approved apply; one\n                   recorded dry-run of this code suffices\n",
-        "stderr": ""
-      }
-    },
-    {
-      "command": "install_space_cleanup",
-      "args": [
-        "--help=x"
-      ],
-      "expected": {
-        "kind": "error",
-        "exit": 2,
-        "stdout": "",
-        "stderr": "usage: herdr-theme install_space_cleanup [-h] [--home HOME] [--source SOURCE]\n                                [--install] [--enable-apply] [--refresh]\n                                [--user-approved]\nherdr-theme install_space_cleanup: error: argument -h/--help: ignored explicit argument 'x'\n"
-      }
-    },
-    {
-      "command": "install_space_cleanup",
-      "args": [
-        "--unknown"
-      ],
-      "expected": {
-        "kind": "error",
-        "exit": 2,
-        "stdout": "",
-        "stderr": "usage: herdr-theme install_space_cleanup [-h] [--home HOME] [--source SOURCE]\n                                [--install] [--enable-apply] [--refresh]\n                                [--user-approved]\nherdr-theme install_space_cleanup: error: unrecognized arguments: --unknown\n"
-      }
-    },
-    {
-      "command": "install_space_cleanup",
-      "args": [],
-      "expected": {
-        "kind": "accepted",
-        "exit": 0,
-        "stdout": "",
-        "stderr": ""
+        "stderr": "usage: herdr-theme update_install [-h] [--without-workspace-mods]\n                         [--workspace-mods-source WORKSPACE_MODS_SOURCE]\n                         [--home HOME] [--repo REPO] [--cli CLI]\n                         [--verify-timeout VERIFY_TIMEOUT]\n                         [--allow-unhealthy-before]\n                         [files ...]\nherdr-theme update_install: error: argument --verify-timeout: expected one argument\n"
       }
     }
-  ]
+  ],
+  "scope": "Retained document commands; provider-owned lifecycle commands and their parser cases moved with their implementation."
 }

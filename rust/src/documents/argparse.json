@@ -14,9 +14,7 @@
     "install": "4c80527a82dcf1bda98d1345e1bb9c994992b4fe06ada6db784caffb8512157b",
     "install_doc_tabs": "7c9d7eb86790bc14e8ebc5b0fdb4c369acf9696a991998c13af7d8cf5e75e2b8",
     "install_preview": "f7e570b873ab03b60dae5990197e45ff81d9500f0542993aafeeb0485e37971e",
-    "update_install": "09d87856cdc46bf83276007c5b73ca9c328c022aab1018dc3d58e0569aa71e2b",
-    "install_session_sleep": "d74d4fe6e14703643bc6b25415472305fbc043361299d60f870fed083beae7ac",
-    "install_space_cleanup": "88d39fde385e2e4e6656359013140af244ad71ac2119d196cdb7d140382da6c8"
+    "update_install": "09d87856cdc46bf83276007c5b73ca9c328c022aab1018dc3d58e0569aa71e2b"
   },
   "parsers": {
     "collect_docs": {
@@ -734,7 +732,7 @@
       ]
     },
     "update_install": {
-      "usage": "usage: herdr-theme update_install [-h] [--without-workspace-mods]\n                         [--workspace-mods-source WORKSPACE_MODS_SOURCE]\n                         [--home HOME] [--repo REPO] [--cli CLI]\n                         [--verify-timeout VERIFY_TIMEOUT]\n                         [--allow-unhealthy-before]\n                         [--observer-home OBSERVER_HOME]\n                         [files ...]\n",
+      "usage": "usage: herdr-theme update_install [-h] [--without-workspace-mods]\n                         [--workspace-mods-source WORKSPACE_MODS_SOURCE]\n                         [--home HOME] [--repo REPO] [--cli CLI]\n                         [--verify-timeout VERIFY_TIMEOUT]\n                         [--allow-unhealthy-before]\n                         [files ...]\n",
       "actions": [
         {
           "options": [
@@ -836,198 +834,6 @@
             "--allow-unhealthy-before"
           ],
           "dest": "allow_unhealthy_before",
-          "required": false,
-          "nargs": 0,
-          "class": "_StoreTrueAction",
-          "type": null,
-          "choices": null,
-          "group": null
-        },
-        {
-          "options": [
-            "--observer-home"
-          ],
-          "dest": "observer_home",
-          "required": false,
-          "nargs": null,
-          "class": "_StoreAction",
-          "type": "Path",
-          "choices": null,
-          "group": null
-        }
-      ]
-    },
-    "install_session_sleep": {
-      "usage": "usage: herdr-theme install_session_sleep [-h] [--home HOME] [--source SOURCE]\n                                [--install] [--enable-apply] [--refresh]\n                                [--user-approved]\n",
-      "actions": [
-        {
-          "options": [
-            "-h",
-            "--help"
-          ],
-          "dest": "help",
-          "required": false,
-          "nargs": 0,
-          "class": "_HelpAction",
-          "type": null,
-          "choices": null,
-          "group": null
-        },
-        {
-          "options": [
-            "--home"
-          ],
-          "dest": "home",
-          "required": false,
-          "nargs": null,
-          "class": "_StoreAction",
-          "type": "Path",
-          "choices": null,
-          "group": null
-        },
-        {
-          "options": [
-            "--source"
-          ],
-          "dest": "source",
-          "required": false,
-          "nargs": null,
-          "class": "_StoreAction",
-          "type": "Path",
-          "choices": null,
-          "group": null
-        },
-        {
-          "options": [
-            "--install"
-          ],
-          "dest": "install",
-          "required": false,
-          "nargs": 0,
-          "class": "_StoreTrueAction",
-          "type": null,
-          "choices": null,
-          "group": null
-        },
-        {
-          "options": [
-            "--enable-apply"
-          ],
-          "dest": "enable_apply",
-          "required": false,
-          "nargs": 0,
-          "class": "_StoreTrueAction",
-          "type": null,
-          "choices": null,
-          "group": null
-        },
-        {
-          "options": [
-            "--refresh"
-          ],
-          "dest": "refresh",
-          "required": false,
-          "nargs": 0,
-          "class": "_StoreTrueAction",
-          "type": null,
-          "choices": null,
-          "group": null
-        },
-        {
-          "options": [
-            "--user-approved"
-          ],
-          "dest": "user_approved",
-          "required": false,
-          "nargs": 0,
-          "class": "_StoreTrueAction",
-          "type": null,
-          "choices": null,
-          "group": null
-        }
-      ]
-    },
-    "install_space_cleanup": {
-      "usage": "usage: herdr-theme install_space_cleanup [-h] [--home HOME] [--source SOURCE]\n                                [--install] [--enable-apply] [--refresh]\n                                [--user-approved]\n",
-      "actions": [
-        {
-          "options": [
-            "-h",
-            "--help"
-          ],
-          "dest": "help",
-          "required": false,
-          "nargs": 0,
-          "class": "_HelpAction",
-          "type": null,
-          "choices": null,
-          "group": null
-        },
-        {
-          "options": [
-            "--home"
-          ],
-          "dest": "home",
-          "required": false,
-          "nargs": null,
-          "class": "_StoreAction",
-          "type": "Path",
-          "choices": null,
-          "group": null
-        },
-        {
-          "options": [
-            "--source"
-          ],
-          "dest": "source",
-          "required": false,
-          "nargs": null,
-          "class": "_StoreAction",
-          "type": "Path",
-          "choices": null,
-          "group": null
-        },
-        {
-          "options": [
-            "--install"
-          ],
-          "dest": "install",
-          "required": false,
-          "nargs": 0,
-          "class": "_StoreTrueAction",
-          "type": null,
-          "choices": null,
-          "group": null
-        },
-        {
-          "options": [
-            "--enable-apply"
-          ],
-          "dest": "enable_apply",
-          "required": false,
-          "nargs": 0,
-          "class": "_StoreTrueAction",
-          "type": null,
-          "choices": null,
-          "group": null
-        },
-        {
-          "options": [
-            "--refresh"
-          ],
-          "dest": "refresh",
-          "required": false,
-          "nargs": 0,
-          "class": "_StoreTrueAction",
-          "type": null,
-          "choices": null,
-          "group": null
-        },
-        {
-          "options": [
-            "--user-approved"
-          ],
-          "dest": "user_approved",
           "required": false,
           "nargs": 0,
           "class": "_StoreTrueAction",

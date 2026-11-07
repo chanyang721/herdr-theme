@@ -32,11 +32,11 @@ function fileEntry(folder, doc, rank, kindLabel) {
 /**
  * Sidebar locations, each { key, label, count, entries, order }.
  * docs: kind folders holding the newest version of each document (pinned ones too, ◆).
- * harness: 현황/기록/결정/주제 문서/기억 and their sub-groups. opened: 열람 files.
- * archived: 보관 documents by kind. options: kinds, harness, kind (filter id or null).
+ * localViews: producer-defined sections and groups. opened: opened files.
+ * archived: 보관 documents by kind. options: kinds, localViews, kind (filter id or null).
  */
 export function locations(documents, options = {}) {
-  const { kinds = [], harness = null, kind = null } = options;
+  const { kinds = [], localViews = null, kind = null } = options;
   const order = [...kinds.filter(k => k.id !== OTHER.id), OTHER];
   const byId = new Map(documents.map(d => [d.id, d]));
   const result = [];
@@ -53,23 +53,23 @@ export function locations(documents, options = {}) {
     const count = entries.filter(e => !e.dir).length;
     if (count) result.push({ key, label, count, entries, order: order.map(k => safe(k.label)) });
   };
-  const catalog = documents.filter(d => !d.harness && !d.opened);
+  const catalog = documents.filter(d => !d.localView && !d.opened);
   byKind(catalog.filter(d => d.pinned || d.state === 'latest' || !d.state), 'docs', '공간 문서');
-  if (harness?.sections?.length && !kind) {
+  if (localViews?.sections?.length && !kind) {
     const entries = [];
-    for (const section of harness.sections) {
+    for (const section of localViews.sections) {
       entries.push({ path: safe(section.label), dir: true, name: section.label });
       for (const group of section.groups) {
         const folder = group.label ? `${safe(section.label)}/${safe(group.label)}` : safe(section.label);
         if (group.label) entries.push({ path: folder, dir: true, name: group.label });
         const docs = group.ids.map(id => byId.get(id)).filter(d => d && d.state !== 'previous');
-        // 현황·주제 문서·기억 keep the resolver's order; 기록·결정 list the newest first.
-        const fixed = !['history', 'decisions'].includes(section.id);
+        // The producer's section metadata determines grouping and ordering.
+        const fixed = true;
         docs.forEach((d, i) => entries.push(fileEntry(folder, d, fixed ? String(9999 - i).padStart(4, '0') : d.date || '0000', section.label)));
       }
     }
-    result.push({ key: 'harness', label: '하네스', count: entries.filter(e => !e.dir).length, entries,
-      order: harness.sections.map(s => safe(s.label)), harness: true });
+    result.push({ key: 'localViews', label: '로컬 보기', count: entries.filter(e => !e.dir).length, entries,
+      order: localViews.sections.map(s => safe(s.label)), localViews: true });
   }
   const opened = documents.filter(d => d.opened);
   if (opened.length) result.push({ key: 'opened', label: '열람', count: opened.length,
@@ -116,14 +116,14 @@ export function searchTree(documents, query, kinds = [], kind = null) {
   return { id: '', name: `검색: ${query}`, folder: true, children: hits.map(d => ({ id: `hit/${d.id}`, docId: d.id,
     name: `${d.pinned ? '◆ ' : ''}${d.label}${d.state === 'previous' ? ' (이전 버전)' : d.state === 'archived' ? ' (보관)' : ''}`,
     fileName: d.name, date: d.modified || d.date, mtime: d.mtime, size: d.size, muted: d.state === 'previous' || d.state === 'archived',
-    kind: d.harness ? '하네스' : labels.get(d.kind) || '문서' })) };
+    kind: d.localView ? '로컬 보기' : labels.get(d.kind) || '문서' })) };
 }
 
 // Counts behind the kind filter; archived files and earlier versions are not counted.
 export function kindCounts(documents, kinds = []) {
   const counts = new Map();
   for (const d of documents) {
-    if (d.harness || d.opened || (d.state && d.state !== 'latest')) continue;
+    if (d.localView || d.opened || (d.state && d.state !== 'latest')) continue;
     const id = d.kind || OTHER.id;
     counts.set(id, (counts.get(id) || 0) + 1);
   }

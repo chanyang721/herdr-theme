@@ -21,8 +21,8 @@ On Windows use the MSVC Rust toolchain with its C/C++ Build Tools, or a complete
 | Local and remote system counters | `rust/src/automation/metrics.rs` |
 | Document catalog, routing, pin resolution and opening | `rust/src/documents/{catalog,routing,pins}.rs` |
 | HTML/Mermaid cache control, media metadata and desktop actions | `rust/src/documents/render.rs` |
-| Installation, staged updates, verification and rollback | `rust/src/documents/{install,update,observers}.rs` |
-| Idle-session and space observers, job evidence, resume stub | `rust/src/observers/` |
+| Installation, staged updates, verification and rollback | `rust/src/documents/{install,update}.rs` |
+| Explicit disposable UI/process probes | `rust/src/observers/native*.rs` |
 | Voice focus, submit policy, recovery, enrollment, VAD and offline evaluation | `rust/src/voice/` |
 | Pinned usage, account CLI and MCP collectors | `rust/src/documents/pinned/` |
 | Windows helper-lock compatibility | `rust/src/locking.rs` |
@@ -68,69 +68,19 @@ and several domain-specific IO facades. These are explicit future refactoring
 areas, with the original-case correspondence table as their regression baseline;
 they are not additional release gates.
 
-The default installed theme helpers use the native executable. User-owned resolver/renderer commands and an optional external prompt-card/lifecycle bridge remain configurable. A legacy custom Python script outside this repository still needs its owner's interpreter; it is an optional external adapter, not a bundled theme implementation. Native command arrays can be configured instead.
+The default installed theme helpers use the native executable. User-owned resolver/renderer commands and an optional external local-card bridge remain configurable. A legacy custom Python script outside this repository still needs its owner's interpreter; it is an optional external adapter, not a bundled theme implementation. Native command arrays can be configured instead.
 
 The native updater preserves staging, complete mod backups, status/focus verification, rollback and concurrent-writer protection. Moving to Git or Rust does not authorize an installation or restart. No running user application was updated during migration validation.
 
-## Validation status
+## Validation scope
 
-Acceptance is the original Python repository's behavior test cases translated
-to Rust, followed by successful hosted CI. Current upstream observer changes
-through `e383c3ce2935334c14b1f1f6e7e67426282b4e9b` are included in the migration
-scope. Supplemental ISO, TLS, locale, replay and reinstall-roundtrip comparisons
-are not additional acceptance gates. Excluding such a comparison is not a pass.
+The retained original behavior mappings are in [the inventory](native-original-tests.md).
+Automatic session lifecycle policies, service installers and their dedicated tests
+are maintained outside this release. They are not executed or counted here.
+The original source snapshots moved with that implementation for comparison.
 
-The function correspondence table and JSON inventory identify each original
-test, its native test or corpus evidence, and platform/transport conditions.
-An aggregate corpus is distinguished from a named end-to-end test. Platform
-skips and opt-in tests do not count as successful execution.
-
-Final local Windows validation completed successfully:
-
-| Check | Passed | Failed | Ignored/skipped |
-| --- | ---: | ---: | ---: |
-| Full native Rust suite | 690 | 0 | 11 |
-| JavaScript suite | 174 | 0 | 6 |
-
-The Rust run used one Cargo job and one test thread. It includes all 190
-observer scenarios (141 retained plus 49 from the latest Python main), all
-twenty original updater methods, workspace/model-tier cases, and actual
-Windows parent/child console and running-executable replacement checks.
-The eleven ignored Rust tests are optional external-original comparisons or
-manual diagnostics; they are not passes. The six JavaScript skips require macOS.
-Hosted Linux, Windows and both macOS architecture results remain separate
-and pending until the published commit's workflow succeeds.
-
-The [function correspondence table](native-original-tests.md) and
-[machine-readable companion](native-original-tests.json) cover 580 original
-test declarations and six dynamically attached aliases at upstream commit
-`e383c3ce2935334c14b1f1f6e7e67426282b4e9b`. Source inspection also checked
-128 inherited reruns: they introduce no distinct fixture/assertion scenario
-missing from the declared-function mapping. These are source coverage counts,
-not native execution counts.
-
-Run checks serially:
-
-```sh
-npm test
-cargo fmt --manifest-path rust/Cargo.toml --all -- --check
-CARGO_BUILD_JOBS=1 cargo test --manifest-path rust/Cargo.toml --locked --jobs 1 -- --test-threads=1
-node scripts/check-native.mjs
-```
-
-The native tests run without Python. Their frozen original-output provenance
-is documented in [the fixture inventory](../rust/tests/fixtures/README.md).
-The original Windows Python suite's environment/fixture failures are recorded
-separately in [the baseline report](native-baseline-windows.md); those failures
-are not treated as native passes.
-
-The two original live WebKit cases execute on macOS with the unchanged Swift
-renderer. The six original macOS voice-installation cases use a scratch home
-and a fake plugin service. No production installation, microphone, clipboard,
-app/core restart or provider account is used by these checks. Physical
-microphone/default-device, Accessibility/CoreGraphics, focus-race and dictation
-hardware acceptance remains unverified and is planned separately after merge.
-
-CI packages each tested executable with its commit/tree receipt, dependency
-manifests and native notices. An archive preserves executable permissions.
-CI success and physical-device evidence must be recorded separately.
+General document, workspace, updater, usage and voice cases remain in this tree.
+Local view and card tests now exercise the neutral producer protocol, including
+missing-file behavior, path containment, revision changes and configured commands.
+Test receipts must identify the tested commit and platform. Historical migration
+counts do not describe the current release; ignored cases are not passes.

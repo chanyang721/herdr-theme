@@ -614,7 +614,7 @@ impl Routed {
             .as_array()
             .unwrap()
             .iter()
-            .filter(|d| d["harness"] != true && d["state"] != "previous")
+            .filter(|d| d["localView"] != true && d["state"] != "previous")
             .map(|d| s(&d["name"]).to_owned())
             .collect()
     }
@@ -705,7 +705,7 @@ fn test_pins_and_folders_stay_and_a_file_is_listed_once() {
         .as_array()
         .unwrap()
         .iter()
-        .filter(|d| d["harness"] != true)
+        .filter(|d| d["localView"] != true)
         .collect::<Vec<_>>();
     assert_eq!(rows[0]["id"], "p1");
     assert_eq!(rows[0]["pinned"], true);

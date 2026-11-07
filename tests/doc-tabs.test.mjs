@@ -18,7 +18,7 @@ async function load(file, runtime) {
   delete globalThis[key];
   return module;
 }
-async function harness({ documents = [document('a'), document('b')], selection, lineEnding, props: extra = {}, hostWindow = () => null } = {}) {
+async function localViews({ documents = [document('a'), document('b')], selection, lineEnding, props: extra = {}, hostWindow = () => null } = {}) {
   const handlers = new Map(), calls = [], reads = [], labels = [], timer = new Map(), watchers = new Map();
   const state = { documents, selected: selection, active: false, text: path => `본문 ${path}`, result: null, stage: async text => ({ blocks: [{ text }], files: [], unavailable: false }) };
   const stored = { 'sixfold.docs.selection.v1': selection ? { Demo: selection, Other: 'other' } : { Other: 'other' } };
@@ -76,7 +76,7 @@ async function harness({ documents = [document('a'), document('b')], selection, 
 
 for (const lineEnding of ['\n', '\r\n']) {
 test(`document selection restores per workspace and changing it preserves other workspace selections (${lineEnding === '\n' ? 'LF' : 'CRLF'})`, async t => {
-  const h = await harness({ selection: 'b', lineEnding }); t.after(() => h.view.close());
+  const h = await localViews({ selection: 'b', lineEnding }); t.after(() => h.view.close());
   assert.equal(h.view.selected, 'b'); assert.equal(h.view.bodyText, '본문 /docs/b.md');
   h.view.choose('a', h.cx); await h.flush();
   assert.deepEqual(h.stored['sixfold.docs.selection.v1'], { Other: 'other', Demo: 'a' });
@@ -85,7 +85,7 @@ test(`document selection restores per workspace and changing it preserves other 
 }
 
 test('late reads from the previous document cannot overwrite a new selection', async t => {
-  const h = await harness(); t.after(() => h.view.close());
+  const h = await localViews(); t.after(() => h.view.close());
   const old = deferred(); h.state.text = path => path === '/docs/a.md' ? old.promise : 'new selection';
   h.view.load(h.cx); h.view.choose('b', h.cx); await h.flush();
   assert.equal(h.view.bodyText, 'new selection');
@@ -94,7 +94,7 @@ test('late reads from the previous document cannot overwrite a new selection', a
 });
 
 test('late Markdown staging from a previous date cannot overwrite the latest dated path', async t => {
-  const h = await harness(); t.after(() => h.view.close());
+  const h = await localViews(); t.after(() => h.view.close());
   const old = deferred(); h.state.stage = text => text === 'old body' ? old.promise : Promise.resolve({ blocks: [{ text }], files: [], unavailable: false });
   h.state.text = () => 'old body'; h.view.load(h.cx); await h.flush();
   h.state.documents = [document('a', '/docs/20261102-a.md')]; h.state.text = () => 'latest body';
@@ -105,7 +105,7 @@ test('late Markdown staging from a previous date cannot overwrite the latest dat
 });
 
 test('failed rereads keep the last successful same-file body and show a failure', async t => {
-  const h = await harness(); t.after(() => h.view.close());
+  const h = await localViews(); t.after(() => h.view.close());
   const body = h.view.blocks, success = h.view.lastSuccess;
   h.state.text = () => { throw Error('access denied'); }; h.view.load(h.cx); await h.flush();
   assert.equal(h.view.blocks, body); assert.equal(h.view.lastSuccess, success); assert.match(h.view.bodyError, /access denied/);
@@ -115,7 +115,7 @@ test('failed rereads keep the last successful same-file body and show a failure'
 });
 
 test('watcher events, five-second fallback and workspace tab activation reread documents', async t => {
-  const h = await harness(); t.after(() => h.view.close());
+  const h = await localViews(); t.after(() => h.view.close());
   assert.ok(h.timer.has(5000)); assert.ok(h.watchers.has('/docs')); assert.ok(h.watchers.has('/app/data/sixfold'));
   const initial = h.calls.length;
   h.watchers.get('/app/data/sixfold').resolve(['/app/data/sixfold/doc-tabs-install.lock']); await h.flush();
@@ -128,7 +128,7 @@ test('watcher events, five-second fallback and workspace tab activation reread d
 });
 
 test('ADR Markdown links open inside the read-only panel and can become pins', async t => {
-  const h = await harness(); t.after(() => h.view.close());
+  const h = await localViews(); t.after(() => h.view.close());
   h.view.follow('/docs/adr/README.md', './0015-queue.md', h.cx); await h.flush();
   assert.equal(h.view.bodyText, '본문 /docs/adr/0015-queue.md');
   assert.ok(h.view.documents.some(d => d.opened && d.path === '/docs/adr/0015-queue.md'));
@@ -138,7 +138,7 @@ test('ADR Markdown links open inside the read-only panel and can become pins', a
 });
 
 test('background loading does not launch an editor and external actions require explicit clicks', async t => {
-  const h = await harness(); t.after(() => h.view.close());
+  const h = await localViews(); t.after(() => h.view.close());
   h.render(); assert.ok(h.calls.every(call => call.command === '/app/scripts/sixfold/herdr-theme'));
   h.handlers.get('docs-edit')({}, h.cx); await h.flush();
   assert.deepEqual(h.calls.at(-1), { command: 'code', args: ['--reuse-window', '/docs/a.md'] });
@@ -147,7 +147,7 @@ test('background loading does not launch an editor and external actions require 
 });
 
 test('pin and unpin actions target the selected document and resolver space', async t => {
-  const h = await harness(); t.after(() => h.view.close());
+  const h = await localViews(); t.after(() => h.view.close());
   h.render(); h.handlers.get('docs-pin')({}, h.cx); await h.flush();
   assert.ok(h.calls.some(call => call.command === '/app/scripts/sixfold/herdr-theme' && call.args.includes('--space') && call.args.includes('Demo') && call.args.at(-2) === '--unpin' && call.args.at(-1) === 'a'));
   h.state.documents = [document('a', '/docs/a.md', false)]; h.view.refresh(h.cx); await h.flush();
@@ -156,14 +156,14 @@ test('pin and unpin actions target the selected document and resolver space', as
 });
 
 test('resolver failure preserves visible documents and Office files never become Markdown', async t => {
-  const h = await harness({ documents: [document('office', '/docs/report.xlsx')] }); t.after(() => h.view.close());
+  const h = await localViews({ documents: [document('office', '/docs/report.xlsx')] }); t.after(() => h.view.close());
   assert.equal(h.reads.length, 0); h.render(); assert.ok(h.labels.includes('PDF·Word·Excel 문서는 기본 앱으로 여세요.'));
   h.state.result = () => ({ code: 1, stdout: '', stderr: 'source unavailable' }); h.view.refresh(h.cx); await h.flush();
   assert.equal(h.view.documents[0].id, 'office'); assert.match(h.view.listError, /source unavailable/);
 });
 
 test('large Markdown is bounded for rendering and closing blocks delayed body delivery', async t => {
-  const h = await harness(); t.after(() => h.view.close());
+  const h = await localViews(); t.after(() => h.view.close());
   let stagedLength = 0;
   h.state.stage = async text => { stagedLength = text.length; return { blocks: [{ text }], files: [], unavailable: false }; };
   h.state.text = () => '한'.repeat(400001); h.view.load(h.cx); await h.flush();
@@ -174,7 +174,7 @@ test('large Markdown is bounded for rendering and closing blocks delayed body de
 });
 
 test('missing and conflicting latest candidates retain the last successful body and stop loading', async t => {
-  const h = await harness(); t.after(() => h.view.close());
+  const h = await localViews(); t.after(() => h.view.close());
   for (const status of ['missing', 'conflict']) {
     const body = h.view.blocks, success = h.view.lastSuccess, key = h.view.bodyKey;
     const pending = deferred(); h.state.text = () => pending.promise; h.view.load(h.cx);
@@ -191,7 +191,7 @@ test('missing and conflicting latest candidates retain the last successful body 
 });
 
 test('malformed or wrong-workspace resolver replies cannot replace the last valid list', async t => {
-  const h = await harness(); t.after(() => h.view.close());
+  const h = await localViews(); t.after(() => h.view.close());
   const documents = h.view.documents, body = h.view.blocks;
   for (const invalid of [{ spaceId: 'Demo' }, { spaceId: 'Demo', documents: {} }, { spaceId: 'Other', documents: [document('foreign')] }]) {
     h.state.result = () => ({ code: 0, stdout: JSON.stringify(invalid), stderr: '' });
@@ -202,7 +202,7 @@ test('malformed or wrong-workspace resolver replies cannot replace the last vali
 });
 
 test('an open request shows its file once in the matching space and leaves other spaces alone', async t => {
-  const h = await harness({ documents: [document('a'), document('b', '/docs/b.md')] }); t.after(() => h.view.close());
+  const h = await localViews({ documents: [document('a'), document('b', '/docs/b.md')] }); t.after(() => h.view.close());
   h.state.request = { spaceId: 'Other', path: '/docs/b.md', at: 5 }; h.view.refresh(h.cx); await h.flush();
   assert.equal(h.view.selected, 'a');
   h.state.request = { spaceId: 'Demo', path: '/docs/b.md', at: 6 }; h.view.refresh(h.cx); await h.flush();
@@ -215,7 +215,7 @@ test('an open request shows its file once in the matching space and leaves other
 });
 
 test('per-space open requests are each shown in their own space and pinned ones are favorites', async t => {
-  const h = await harness({ documents: [document('a'), document('r', '/reports/r.md', false), document('b')] }); t.after(() => h.view.close());
+  const h = await localViews({ documents: [document('a'), document('r', '/reports/r.md', false), document('b')] }); t.after(() => h.view.close());
   h.state.request = { version: 2, requests: { Other: { path: '/docs/a.md', at: 9 }, Demo: { path: '/docs/b.md', at: 8 } } };
   h.view.refresh(h.cx); await h.flush();
   assert.equal(h.view.selected, 'b', 'a later request for another space must not hide this space\'s request');
@@ -238,7 +238,7 @@ test('mermaid fences are found by exact code and unrendered diagrams stay as cod
 });
 
 test('documents with mermaid render diagram images once and keep code with a notice on failure', async t => {
-  const h = await harness(); t.after(() => h.view.close());
+  const h = await localViews(); t.after(() => h.view.close());
   let runs = 0;
   h.state.mermaid = args => { runs++; assert.deepEqual(args.slice(-4), ['--theme', 'dark', '--background', '#101010']);
     return { code: 0, stdout: JSON.stringify({ diagrams: [{ code: 'graph TD\nA-->B', path: 'mods/project-docs-tabs/.cache/a.png', width: 40, height: 20 }] }), stderr: '' }; };
@@ -251,7 +251,7 @@ test('documents with mermaid render diagram images once and keep code with a not
 });
 
 test('html documents render as page images once and report renderer failures', async t => {
-  const h = await harness({ documents: [document('report', '/docs/report.html')] }); t.after(() => h.view.close());
+  const h = await localViews({ documents: [document('report', '/docs/report.html')] }); t.after(() => h.view.close());
   let runs = 0;
   h.state.html = args => { runs++; assert.deepEqual(args.slice(1), ['--doc', '/docs/report.html', '--theme', 'dark', '--width', '760']);
     return { code: 0, stdout: JSON.stringify({ pages: [{ path: 'mods/project-docs-tabs/.cache/html-a-0.png', width: 960, height: 2000 }, { path: 'mods/project-docs-tabs/.cache/html-a-1.png', width: 960, height: 300 }] }), stderr: '' }; };
@@ -265,7 +265,7 @@ test('html documents render as page images once and report renderer failures', a
 });
 
 test('html renders at the pane width and redraws once the pane stops resizing', async t => {
-  const h = await harness({ documents: [document('report', '/docs/report.html')] }); t.after(() => h.view.close());
+  const h = await localViews({ documents: [document('report', '/docs/report.html')] }); t.after(() => h.view.close());
   const widths = [];
   h.state.html = args => { const width = Number(args.at(-1)); widths.push(width);
     return { code: 0, stdout: JSON.stringify({ pages: [{ path: `w${width}.png`, width, height: 100 }] }), stderr: '' }; };
@@ -278,7 +278,7 @@ test('html renders at the pane width and redraws once the pane stops resizing', 
 });
 
 test('html with clicks or popups shows a banner that opens the default browser', async t => {
-  const h = await harness({ documents: [document('report', '/docs/report.html')] }); t.after(() => h.view.close());
+  const h = await localViews({ documents: [document('report', '/docs/report.html')] }); t.after(() => h.view.close());
   h.state.html = () => ({ code: 0, stdout: JSON.stringify({ pages: [{ path: 'a.png', width: 760, height: 100 }], interactive: ['펼침 영역', '입력 양식'], truncated: true }), stderr: '' });
   h.state.osascript = () => ({ code: 0, stdout: '/Applications/Browser.app\n', stderr: '' });
   h.state.text = () => '<details><summary>더</summary></details>'; h.view.load(h.cx); await h.flush();
@@ -294,7 +294,7 @@ test('html with clicks or popups shows a banner that opens the default browser',
 
 test('only 열람 rows close; listed catalog documents stay in the tree', async t => {
   const listed = { ...document('r', '/docs/r.md', false), state: 'latest', kind: 'other', mtime: 10 };
-  const h = await harness({ documents: [document('a'), listed] }); t.after(() => h.view.close());
+  const h = await localViews({ documents: [document('a'), listed] }); t.after(() => h.view.close());
   h.render(); assert.ok(!h.handlers.has('doc-close-a'), 'pinned rows close with 고정 해제');
   assert.ok(!h.handlers.has('doc-close-r'), 'catalog rows have no close button');
   h.view.dismiss('r', h.cx); assert.deepEqual(h.view.documents.map(d => d.id), ['a', 'r']);
@@ -311,7 +311,7 @@ const catalogDocs = () => [document('a'),
 const KINDS = [{ id: 'reply', label: '회신안' }, { id: 'structure', label: '구조도' }, { id: 'other', label: '기타' }];
 
 test('column view: folders open the next column, files open in the viewer, the path bar follows', async t => {
-  const h = await harness({ documents: catalogDocs() }); t.after(() => h.view.close());
+  const h = await localViews({ documents: catalogDocs() }); t.after(() => h.view.close());
   h.view.kinds = KINDS; h.render();
   assert.ok(h.handlers.has('docs-loc-docs') && h.handlers.has('docs-loc-archived'), 'sidebar lists 공간 문서 and 보관');
   assert.ok(h.handlers.has('docs-fav-a'), 'pinned documents are favorites');
@@ -331,7 +331,7 @@ test('column view: folders open the next column, files open in the viewer, the p
 });
 
 test('list view sorts by column, unfolds folders and versions; search and kind filter live in the toolbar', async t => {
-  const h = await harness({ documents: catalogDocs() }); t.after(() => h.view.close());
+  const h = await localViews({ documents: catalogDocs() }); t.after(() => h.view.close());
   h.view.kinds = KINDS; h.render();
   h.handlers.get('docs-view-list')(null, h.cx); h.render();
   assert.ok(h.handlers.has('docs-list-docs-sort-size') && h.labels.includes('수정일 ▼'));
@@ -350,16 +350,16 @@ test('list view sorts by column, unfolds folders and versions; search and kind f
   assert.equal(h.view.query, ''); assert.ok(h.handlers.has('docs-list-archived-row-기타'));
 });
 
-test('harness location and favorites; a harness link selects the listed document', async t => {
-  const docs = [document('a'), { id: 'h1', path: '/h/README.md', name: 'README.md', label: '한눈에 보기', harness: true, section: 'status', status: 'ok' },
-    { id: 'h2', path: '/docs/a.md', name: 'a.md', label: 'a', harness: true, section: 'docs', aliasOf: 'a', status: 'ok' }];
-  const h = await harness({ documents: docs, selection: 'h1' }); t.after(() => h.view.close());
-  h.view.harness = { sections: [{ id: 'status', label: '현황', groups: [{ label: '', ids: ['h1'] }] }, { id: 'docs', label: '주제 문서', groups: [{ label: '고정', ids: ['h2'] }] }] };
+test('localViews location and favorites; a localViews link selects the listed document', async t => {
+  const docs = [document('a'), { id: 'h1', path: '/demo/README.md', name: 'README.md', label: '한눈에 보기', localView: true, section: 'status', status: 'ok' },
+    { id: 'h2', path: '/docs/a.md', name: 'a.md', label: 'a', localView: true, section: 'docs', aliasOf: 'a', status: 'ok' }];
+  const h = await localViews({ documents: docs, selection: 'h1' }); t.after(() => h.view.close());
+  h.view.localViews = { sections: [{ id: 'status', label: '현황', groups: [{ label: '', ids: ['h1'] }] }, { id: 'docs', label: '주제 문서', groups: [{ label: '고정', ids: ['h2'] }] }] };
   h.view.revealInBrowser('h1'); h.render();
-  assert.equal(h.view.location, 'harness'); assert.ok(h.labels.includes('한눈에 보기'));
-  assert.ok(!h.handlers.has('docs-pin'), 'generated harness files are not pinned');
+  assert.equal(h.view.location, 'localViews'); assert.ok(h.labels.includes('한눈에 보기'));
+  assert.ok(!h.handlers.has('docs-pin'), 'generated localViews files are not pinned');
   h.view.openPath('주제 문서', true, h.cx); h.view.openPath('주제 문서/고정', true, h.cx); h.render();
-  const alias = [...h.handlers.keys()].find(k => k.startsWith('docs-col-harness-c2-'));
+  const alias = [...h.handlers.keys()].find(k => k.startsWith('docs-col-localViews-c2-'));
   h.handlers.get(alias)(null, h.cx); await h.flush(); assert.equal(h.view.selected, 'a');
 });
 
@@ -386,7 +386,7 @@ test('the column view is the byte-identical shared copy', async () => {
 });
 
 test('a selected 열람 tab is shown again after the mod reloads', async t => {
-  const h = await harness({ selection: 'opened-/elsewhere/x.html' }); t.after(() => h.view.close());
+  const h = await localViews({ selection: 'opened-/elsewhere/x.html' }); t.after(() => h.view.close());
   assert.equal(h.view.selected, 'opened-/elsewhere/x.html');
   assert.ok(h.view.documents.some(d => d.opened && d.path === '/elsewhere/x.html'));
 });
@@ -408,19 +408,19 @@ test('kind folders and the 수정일 column list the newest write first, whateve
 });
 
 test('native resolver tolerates no host window and selects the Windows executable', async t => {
-  const absent = await harness(); t.after(() => absent.view.close());
+  const absent = await localViews(); t.after(() => absent.view.close());
   assert.deepEqual(absent.view.resolverCommand, ['/app/scripts/sixfold/herdr-theme', 'resolve_doc_pins']);
-  const windows = await harness({ hostWindow: () => ({ platform: 'windows' }) }); t.after(() => windows.view.close());
+  const windows = await localViews({ hostWindow: () => ({ platform: 'windows' }) }); t.after(() => windows.view.close());
   assert.deepEqual(windows.view.resolverCommand, ['/app/scripts/sixfold/herdr-theme.exe', 'resolve_doc_pins']);
 });
 
 test('old tabs use the native resolver and an explicit native command remains configurable', async () => {
   const resolver = h => h.calls.find(c => c.args[0] === 'resolve_doc_pins').command;
-  assert.equal(resolver(await harness({ props: { resolverScript: '/app/data/sixfold/doc-tabs/resolve_doc_pins.py' } })), '/app/scripts/sixfold/herdr-theme');
-  assert.equal(resolver(await harness({ props: { resolverCommand: '/custom/herdr-theme' } })), '/custom/herdr-theme');
-  assert.equal(resolver(await harness()), '/app/scripts/sixfold/herdr-theme');
-  const external = await harness({ props: { resolverScript: '/custom/resolve_doc_pins.py' } });
+  assert.equal(resolver(await localViews({ props: { resolverScript: '/app/data/sixfold/doc-tabs/resolve_doc_pins.py' } })), '/app/scripts/sixfold/herdr-theme');
+  assert.equal(resolver(await localViews({ props: { resolverCommand: '/custom/herdr-theme' } })), '/custom/herdr-theme');
+  assert.equal(resolver(await localViews()), '/app/scripts/sixfold/herdr-theme');
+  const external = await localViews({ props: { resolverScript: '/custom/resolve_doc_pins.py' } });
   assert.deepEqual(external.calls[0], {command:'python3',args:['/custom/resolve_doc_pins.py','--config','/app/data/sixfold/project-docs-pins.json','--space','Demo']});
-  const similar = await harness({ props: { python:'/custom/python', resolverScript: '/custom/data/sixfold/doc-tabs/resolve_doc_pins.py' } });
+  const similar = await localViews({ props: { python:'/custom/python', resolverScript: '/custom/data/sixfold/doc-tabs/resolve_doc_pins.py' } });
   assert.deepEqual(similar.calls[0], {command:'/custom/python',args:['/custom/data/sixfold/doc-tabs/resolve_doc_pins.py','--config','/app/data/sixfold/project-docs-pins.json','--space','Demo']});
 });

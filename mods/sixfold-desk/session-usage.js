@@ -14,7 +14,7 @@ export function sharePercent(value){
 
 export function paneUsageTip(entry,terminal){
   const name=NAMES[entry.agent]||'Agent';
-  // A parked (session-sleep) pane: nothing runs; the numbers are the conversation Enter resumes.
+  // An external producer can mark inactive sessions while retaining their usage.
   const asleep=entry.sleeping?' · 절전 중 (이어 열 대화)':'';
   if(!entry.known)return `${terminal} · ${name}${asleep} · ${REASONS[entry.reason]||'사용량 미확인'}`;
   const window=entry.since?`현재 주간 한도 기간(${entry.since}~)`:'최근 7일';

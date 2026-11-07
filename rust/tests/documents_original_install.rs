@@ -1,10 +1,10 @@
-//! Original catalog harness, document installer and Workspace Mods tests.
+//! Catalog integration, document installer and Workspace Mods tests.
 //! Git fixtures are local disposable repositories; no GitHub/app is contacted.
 use chrono::NaiveDate;
-use herdr_theme::documents::{catalog, common::*, install, update};
+use herdr_theme::documents::{common::*, install, update};
 use serde_json::{json, Value};
 use std::{
-    collections::{BTreeMap, VecDeque},
+    collections::VecDeque,
     fs,
     path::{Path, PathBuf},
     process::Command,
@@ -67,74 +67,70 @@ impl Catalog {
         )
         .unwrap()
     }
-    fn harness(&self, space: &str, machine: Value) -> PathBuf {
-        let base = self.app.join("data/sixfold/harness-local/views/workspaces");
-        let root = base.join(format!("core-{space}"));
+    fn local_view(&self, space: &str, metadata: Value) -> PathBuf {
+        let base = self.app.join("data/sixfold/local-views/workspaces");
+        let root = base.join("demo-view");
         fs::create_dir_all(&root).unwrap();
+        let mut view =
+            json!({"id":"demo-view","spaceId":space,"name":"Local notes","directory":"demo-view"});
+        for (key, value) in metadata.as_object().unwrap() {
+            view[key] = value.clone();
+        }
         save(
             &base.join("index.json"),
-            &json!({"workspaces":[{"workspace_id":format!("other-{space}"),"space_id":space,"machine_name":"remote"},{"workspace_id":format!("core-{space}"),"space_id":space,"machine_name":machine}]}),
+            &json!({"schema":1,"views":[view]}),
         );
         root
     }
 }
 #[test]
 #[cfg(unix)]
-fn test_harness_sections_follow_the_folder_contract() {
+fn local_views_use_provider_sections_labels_and_source_links() {
     let f = Catalog::new();
-    let root = f.harness("sp1", Value::Null);
+    let root = f.local_view("sp1", json!({"sections":[
+        {"id":"overview","label":"Overview","directory":".","order":["README.md","intro/goal.md","todo.md"]},
+        {"id":"journal","label":"Journal","directory":"journal","groupDepth":1},
+        {"id":"references","label":"References","directory":"references","groupDepth":1}],
+        "labels":{"README.md":"Summary"}}));
     let listed = put(&f.docs, "20261104_데모_구조.md", "본문");
     for name in [
         "README.md",
-        "context/goal.md",
-        "context/constraints.md",
-        "next.md",
-        "escalation.md",
-        "history/2026-11/2026-11-04/fix.md",
-        "history/2026-10/2026-10-30/old.md",
-        "decisions/2026-11-03-choose.md",
-        "brain/brain.md",
+        "intro/goal.md",
+        "todo.md",
+        "journal/2026-11/2026-11-04/fix.md",
+        "journal/2026-10/2026-10-30/old.md",
         ".hidden.md",
     ] {
         put(&root, name, "본문");
     }
-    link(&listed, &root.join("docs/고정/20261104_데모_구조.md"));
-    link(&root.join("missing.md"), &root.join("docs/고정/broken.md"));
+    link(
+        &listed,
+        &root.join("references/pinned/20261104_데모_구조.md"),
+    );
+    link(
+        &root.join("missing.md"),
+        &root.join("references/pinned/broken.md"),
+    );
     let data = f.view();
-    let sections = data["harness"]["sections"].as_array().unwrap();
+    let sections = data["localViews"]["sections"].as_array().unwrap();
     assert_eq!(
         sections
             .iter()
-            .map(|s| s["id"].as_str().unwrap())
+            .map(|section| s(&section["id"]))
             .collect::<Vec<_>>(),
-        vec!["status", "history", "decisions", "docs", "brain"]
+        vec!["overview", "journal", "references"]
     );
     let rows = data["documents"]
         .as_array()
         .unwrap()
         .iter()
-        .filter(|d| d["harness"] == true)
-        .map(|d| (s(&d["id"]), d))
-        .collect::<BTreeMap<_, _>>();
-    let section = |name: &str| sections.iter().find(|s| s["id"] == name).unwrap();
-    let status = section("status")["groups"][0]["ids"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .map(|id| s(&rows[id.as_str().unwrap()]["name"]))
+        .filter(|d| d["localView"] == true)
         .collect::<Vec<_>>();
+    assert!(rows.iter().any(|d| d["label"] == "Summary"));
+    assert!(!rows.iter().any(|d| s(&d["name"]).starts_with('.')));
+    let journal = sections.iter().find(|d| d["id"] == "journal").unwrap();
     assert_eq!(
-        status,
-        vec![
-            "README.md",
-            "goal.md",
-            "constraints.md",
-            "next.md",
-            "escalation.md"
-        ]
-    );
-    assert_eq!(
-        section("history")["groups"]
+        journal["groups"]
             .as_array()
             .unwrap()
             .iter()
@@ -142,17 +138,14 @@ fn test_harness_sections_follow_the_folder_contract() {
             .collect::<Vec<_>>(),
         vec!["2026-11", "2026-10"]
     );
-    let doc_ids = section("docs")["groups"][0]["ids"].as_array().unwrap();
-    let alias = rows[doc_ids[0].as_str().unwrap()];
+    let alias = rows.iter().find(|d| d["section"] == "references").unwrap();
     let original = data["documents"]
         .as_array()
         .unwrap()
         .iter()
-        .find(|d| d["name"] == "20261104_데모_구조.md" && d["harness"] != true)
+        .find(|d| d["name"] == "20261104_데모_구조.md" && d["localView"] != true)
         .unwrap();
     assert_eq!(alias["aliasOf"], original["id"]);
-    assert_eq!(doc_ids.len(), 1);
-    assert!(!rows.values().any(|d| s(&d["name"]).starts_with('.')));
     assert!(data["watchRoots"]
         .as_array()
         .unwrap()
@@ -160,60 +153,83 @@ fn test_harness_sections_follow_the_folder_contract() {
 }
 #[test]
 #[cfg(unix)]
-fn test_harness_version_folders_fold_under_the_newest_link() {
+fn local_view_versions_group_by_generic_topic_and_directory() {
     let f = Catalog::new();
-    let root = f.harness("sp1", Value::Null);
+    let root = f.local_view(
+        "sp1",
+        json!({"sections":[{"id":"files","label":"Files","directory":"files","groupDepth":1}]}),
+    );
     let older = f.temp.put("src/20261101_데모_구조.md", "본문");
     let newer = f.temp.put("src/20261103_데모_구조.md", "본문");
-    let bundle = root.join("docs/주제/데모_구조");
-    link(&older, &bundle.join(older.file_name().unwrap()));
-    link(&newer, &bundle.join(newer.file_name().unwrap()));
+    link(
+        &older,
+        &root.join("files/category/topic/20261101_데모_구조.md"),
+    );
+    link(
+        &newer,
+        &root.join("files/category/topic/20261103_데모_구조.md"),
+    );
     let data = f.view();
-    let rows = data["documents"]
-        .as_array()
-        .unwrap()
+    let rows = data["documents"].as_array().unwrap();
+    let head = rows
         .iter()
-        .filter(|d| d["harness"] == true)
-        .map(|d| (s(&d["name"]), d))
-        .collect::<BTreeMap<_, _>>();
-    let head = rows["20261103_데모_구조.md"];
-    let previous = rows["20261101_데모_구조.md"];
+        .find(|d| d["name"] == "20261103_데모_구조.md")
+        .unwrap();
+    let previous = rows
+        .iter()
+        .find(|d| d["name"] == "20261101_데모_구조.md")
+        .unwrap();
     assert_eq!(head["label"], "데모 구조");
     assert_eq!(head["versions"], json!([previous["id"]]));
     assert_eq!(previous["state"], "previous");
     assert_eq!(previous["head"], head["id"]);
-    let section = data["harness"]["sections"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .find(|s| s["id"] == "docs")
-        .unwrap();
-    assert_eq!(section["groups"][0]["label"], "주제");
+    assert_eq!(
+        data["localViews"]["sections"][0]["groups"][0]["label"],
+        "category"
+    );
 }
 #[test]
-fn test_harness_is_hidden_without_a_local_entry() {
+fn local_views_hide_without_an_entry_and_allow_explicit_local_roots() {
     let mut f = Catalog::new();
-    f.harness("other", Value::Null);
-    assert!(f.view()["harness"].is_null());
+    f.local_view("other", json!({}));
+    assert!(f.view()["localViews"].is_null());
     let root = f.temp.root.join("manual");
     put(&root, "README.md", "본문");
-    f.config["spaces"]["sp1"]["harness"] = json!({"root":root});
-    assert_eq!(f.view()["harness"]["root"], json!(root));
+    f.config["spaces"]["sp1"]["localViews"] = json!({"root":root});
+    assert_eq!(f.view()["localViews"]["root"], json!(root));
 }
 #[test]
-fn test_remote_machine_entry_is_not_this_mac() {
+fn local_view_directories_reject_cross_platform_escapes_and_malformed_indexes() {
     let f = Catalog::new();
-    let base = f.app.join("data/sixfold/harness-local/views/workspaces");
-    fs::create_dir_all(base.join("core-sp1")).unwrap();
+    let base = f.app.join("data/sixfold/local-views/workspaces");
+    fs::create_dir_all(&base).unwrap();
+    for directory in ["../outside", "/absolute", "C:/Windows", "C:\\Windows"] {
+        save(
+            &base.join("index.json"),
+            &json!({"schema":1,"views":[{"id":"demo","spaceId":"sp1","directory":directory}]}),
+        );
+        assert!(f.view()["localViews"].is_null(), "{directory}");
+    }
+    save(&base.join("index.json"), &json!({"schema":2,"views":[]}));
+    assert!(f.view()["localViews"].is_null());
+}
+#[test]
+#[cfg(unix)]
+fn local_view_directory_symlink_cannot_escape_the_neutral_root() {
+    let f = Catalog::new();
+    let base = f.app.join("data/sixfold/local-views/workspaces");
+    fs::create_dir_all(&base).unwrap();
+    let outside = f.temp.root.join("outside");
+    fs::create_dir_all(&outside).unwrap();
+    std::os::unix::fs::symlink(&outside, base.join("escape")).unwrap();
     save(
         &base.join("index.json"),
-        &json!({"workspaces":[{"workspace_id":"core-sp1","space_id":"sp1","machine_name":"remote"}]}),
+        &json!({"schema":1,"views":[{"id":"demo","spaceId":"sp1","directory":"escape"}]}),
     );
-    assert!(catalog::harness_root("sp1", &f.app, None).is_none());
+    assert!(f.view()["localViews"].is_null());
 }
-
 fn document() -> Value {
-    json!({"spaces":[{"id":"sp1","name":"Demo","folder":"/demo","tabs":[{"id":"work","name":"Work","root":{"id":"row","type":"row","size":{"weight":2},"children":[{"id":"p1","type":"block","content":{"terminal":"t1"}}]}}]}]})
+    json!({"spaces":[{"id":"sp1","name":"Demo","folder":"/demo","tabs":[{"id":"work","name":"Work","root":{"id":"row","type":"row","size":{"weight":2},"children":[{"id":"p1","type":"block","content":{"terminal":"demo-terminal"}}]}}]}]})
 }
 #[test]
 fn test_seed_preserves_user_settings_and_original_project_config() {

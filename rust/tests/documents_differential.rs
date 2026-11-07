@@ -1,6 +1,6 @@
 //! Frozen outputs from the original Python helpers at 8c5b71d.
 //! Path-dependent records were captured on Windows; portable pure records run on every OS.
-use herdr_theme::documents::{catalog, common::*, install, observers, pins, render, update};
+use herdr_theme::documents::{catalog, common::*, install, pins, render, update};
 use serde_json::{json, Value};
 use std::{collections::HashSet, path::Path};
 
@@ -190,9 +190,7 @@ fn original_document_contracts() {
                 let found = install::replace_files(&mut node, &input["stack"]);
                 json!([found, node])
             }
-            "install_space_cleanup.review_findings" => {
-                json!(observers::review_findings(s(&input["text"])))
-            }
+
             // seed_config reads live README sources. Those integration cases have dedicated sandbox tests.
             "install_doc_tabs.seed_config" => continue,
             other => panic!("unhandled frozen function {other}"),

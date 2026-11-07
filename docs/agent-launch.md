@@ -4,7 +4,7 @@ Claude·Codex 안에서 `herdr-app do space.new|tab.new|pane.split --argv …`�
 
 | 물려받는 값 | 결과 |
 | --- | --- |
-| `CLAUDECODE`, `CLAUDE_CODE_CHILD_SESSION` | 새 Claude가 자식 세션이 되어 전사 저장이 꺼진다(`Transcript saving is off — inherited CLAUDE_CODE_CHILD_SESSION`). 사용량·절전 이어 열기·하네스 매핑이 모두 그 세션을 못 찾는다. |
+| `CLAUDECODE`, `CLAUDE_CODE_CHILD_SESSION` | 새 Claude가 자식 세션이 되어 전사 저장이 꺼진다(`Transcript saving is off — inherited CLAUDE_CODE_CHILD_SESSION`). 사용량·세션 식별이 모두 그 세션을 못 찾는다. |
 | `HERDR_PANE_ID`, `HERDR_TAB_ID`, `HERDR_WORKSPACE_ID` | Herdr의 SessionStart 훅이 새 세션을 **부모의 원본 칸**에 보고해 그 칸의 `agent_session`을 덮어쓴다. |
 | `CLAUDE_CODE_SESSION_ID`, `CLAUDE_PID`, `CLAUDE_CODE_MESSAGING_*` 등 | 부모 세션 값이 그대로 남는다. |
 
@@ -20,7 +20,6 @@ herdr-app do space.new '{"name":"<이름>","folder":"<폴더>","argv":["env","-u
 
 같은 argv 생성 함수는 `rust/src/automation/mod.rs`의 `launch_argv()`다. 이미 떠 있는 셸에서 바로 실행할 때는 `<앱 홈>/scripts/sixfold/herdr-theme agent_env claude …`를 쓴다(Windows는 `herdr-theme.exe`). 이 경우 hc 터미널(`HC_TERMINAL_ID`가 있음)에서만 `HERDR_*` 칸 표식을 지우고, Herdr 원본 칸에서는 그 칸 자신의 값을 남긴다.
 
-이미 자식 세션으로 떠 있는 Claude(머리줄 아래 `Transcript saving is off — inherited CLAUDE_CODE_CHILD_SESSION`)도 정리는 된다. 공간 정리·절전 관찰기는 그 칸을 터미널 주소·생성 시각·에이전트 pid로 만든 대체 세션 id로 부르고(하네스 `pane_session_id`와 같은 값), 세션 스스로 `close-report --mask`로 보고한 뒤 기록·보관한다. 전사가 없으니 이어 열지는 못하고, 절전 칸을 깨우거나 `harness.py reopen`하면 새 세션이 워크스페이스 기억을 읽고 시작한다. 절전 칸을 깨울 때는 셸이 물려받은 표식을 지우고 실행한다.
 
 `env -u`는 macOS·Linux의 `env(1)`에 있다. Windows에는 `env`가 없어서 `launch_argv()`가 argv를 그대로 돌려준다.
 

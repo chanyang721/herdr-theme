@@ -1,5 +1,5 @@
 // Finder list view and path bar for the 문서 tab. The column view and file icons come from
-// column-view.js (a byte-identical copy shared with the harness memory panel), so both
+// column-view.js (the shared public column widget), so both
 // draw files the same way. Pure description: safe inside render(); theme tokens only.
 //
 // A node is { id, name, fileName?, folder?, date?, size?, kind?, badge?, muted?, children? }.
