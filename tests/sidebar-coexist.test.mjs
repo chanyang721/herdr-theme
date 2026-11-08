@@ -60,15 +60,16 @@ test('native computer navigator, task rows, documents, badges and local question
   assert(flatten(localTree).some(node=>node.nodes.includes(c.bodyFor(native[0]))),'retained tasks are inside the native workspace card');
   const card=tree=>flatten(tree).find(node=>node.calls.some(call=>call[0]==='id'&&call[1]==='sf-space-sp-local'));
   assert.equal(card(localTree).calls.find(call=>call[0]==='mr')[1],41,'original native card margin is preserved');
-  const sized=localTree.calls.find(call=>call[0]==='on_size_change')[1];sized({width:344},cx);
+  const sized=localTree.calls.find(call=>call[0]==='on_size_change')[1];sized({width:432},cx);
   const gutterTree=desk.render(cx),gutter=flatten(gutterTree).find(node=>node.calls.some(call=>call[0]==='id'&&call[1]==='sf-message-gutter'));
   assert(gutter);assert.equal(gutter.calls.find(call=>call[0]==='w')[1],120);
   assert.equal(card(gutterTree).calls.find(call=>call[0]==='mr')[1],161);
-  assert.equal(c.panelWidth,224,'the message gap never consumes native card content width');
+  assert.equal(c.panelWidth,312,'the message gap never consumes native card content width');
   desk.computerFollow={follow:false};store.set('sixfold.computing.selected','remote:worker');
   const remoteTree=desk.render(cx),remoteIds=ids(remoteTree);
   assert(remoteIds.includes('sf-docs-toggle-worker/sp-remote'));assert(!remoteIds.includes('sf-docs-toggle-sp-local'));
   assert(flatten(remoteTree).some(node=>node.nodes.includes(c.bodyFor(native[1]))));
+  c.resize(224,cx);
   const agent=c.feed.spaces[0].agents[0],row=entities.find(entity=>entity.view.id===agent.id);
   assert(ids(row.view.render()).includes(`panel-stacked-${agent.id}`),'narrow native cards put the stage below the one-line title');
   c.resize(280,cx);

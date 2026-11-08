@@ -21,10 +21,10 @@
       "id": "sidebar",
       "type": "block",
       "size": {
-        "px": 344
+        "px": 432
       },
-      "min": 224,
-      "max": 600,
+      "min": 312,
+      "max": 680,
       "window_drag": true,
       "content": {
         "mod": "sixfold-desk",

@@ -51,10 +51,10 @@ test('flow lanes stay outside cards in ordered bands; only proven remote endpoin
 
 
 test('external gutter preserves original card width while placing the apex beyond the visible panel',()=>{
- const original=sidebarGeometry(224),wide=sidebarGeometry(344),narrow=sidebarGeometry(280);
- assert.equal(original.cardMargin,41);assert.equal(wide.content,224);assert.equal(wide.lane,120);
+ const original=sidebarGeometry(312),wide=sidebarGeometry(432),narrow=sidebarGeometry(368);
+ assert.equal(original.cardMargin,41);assert.equal(wide.content,312);assert.equal(wide.lane,120);
  for(const geometry of [wide,narrow]){
-  assert.equal(geometry.total-geometry.cardMargin,224-41);
+  assert.equal(geometry.total-geometry.cardMargin,312-41);
   const flow=messageFlowGeometry(geometry.cardMargin),origin=geometry.total-geometry.cardMargin;
   assert(origin+flow.width-24>geometry.content,'pipe enters the separate gap beyond the panel');
   assert(origin+flow.width+flow.right===geometry.total,'gap ends before terminal content');

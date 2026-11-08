@@ -64,10 +64,10 @@ export function panelMessageAnchors(feed,layout,event){
  return [panelFlowAnchor(feed,layout,event.from),panelFlowAnchor(feed,layout,event.to)];
 }
 
-// Keep the original 224px sidebar content and 41px card margin. A wider
+// Keep a readable 312px sidebar content area and the original 41px card margin. A wider
 // layout slot reserves a separate canvas-coloured lane beside that panel.
 export function sidebarGeometry(width){
- const total=Math.max(180,Number(width)||224),lane=Math.max(0,Math.min(120,total-224));
+ const total=Math.max(180,Number(width)||312),lane=Math.max(0,Math.min(120,total-312));
  return {total,lane,content:total-lane,cardMargin:41+lane};
 }
 export function messageFlowGeometry(gutter){

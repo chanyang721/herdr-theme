@@ -339,5 +339,5 @@ test('hosted message tube uses the external gutter without narrowing the origina
  const state={...view.panelEvents,packets:[{id:'external',kind:'message',from:a.id,to:b.id,phase:'travel',elapsed:120}]};
  const tree=r.panelFlowLayer(feed,layout,state,()=>t.accent,t,true,224,161),head=byId(tree,'panel-packet-external');
  const route=byId(tree,'panel-route-external');assert.equal(call(route,'w')[1],153);
- const x=344-161+call(head,'left')[1]+4.5;assert(x>304&&x<344,'orb reaches deep into gap beyond224px panel without entering CLI');
+ const x=432-161+call(head,'left')[1]+4.5;assert(x>392&&x<432,'orb reaches deep into gap beyond312px panel without entering CLI');
 });
