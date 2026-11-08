@@ -193,13 +193,13 @@ test('header metrics share the exact memory endpoint and reserve nonoverlapping 
   assert.equal(call(ping,'h')[1],24);
 });
 
-test('summary counts exclude cleaned sessions and classify completion and blocked work first',async()=>{
+test('summary counts exclude cleaned sessions and preserve observed pane status',async()=>{
   const r=await renderer(false);
   assert.deepEqual(r.panelCounts({spaces:[{agents:[
     {status:'working',stage:2},{status:'idle',stage:0},{status:'done',stage:5},
     {status:'working',stage:2,closing:{blocked_reason:'Approval needed'}},
     {status:'working',stage:2,closing:{step:4}},
-  ]}]}),{working:1,idle:1,done:1,blocked:1,total:4});
+  ]}]}),{working:2,idle:1,done:1,blocked:0,total:4});
 });
 
 test('newborn dotted reveal uses a finite native transition and motion off stays still',async()=>{
@@ -368,5 +368,16 @@ test('native working state stays working after the last task reached stage5',asy
  const state={packets:[],connections:[],spawning:new Set(),active:[]};
  const row=r.agentRow(view,agent,space,null,state,t.accent,t,false);
  assert.equal(call(row,'opacity')[1],1);assert(words(byId(row,`panel-status-${agent.id}`)).includes('●'));
+ assert.deepEqual(r.panelCounts({spaces:[{agents:[agent]}]}),{working:1,idle:0,blocked:0,done:0,total:1});
+});
+
+test('closing warnings do not replace the observed working marker or summary',async()=>{
+ const r=await renderer(false),view=viewFor(makePanelFixture()),space=view.panelState.feed.spaces[0];
+ const agent={...space.agents[0],stage:5,status:'working',closing:{step:3,blocked_reason:'Save needs confirmation'}};
+ const state={packets:[],connections:[],spawning:new Set(),active:[]};
+ const row=r.agentRow(view,agent,space,null,state,t.accent,t,false);
+ assert.equal(call(row,'opacity')[1],1);
+ assert(words(byId(row,'panel-status-'+agent.id)).includes(String.fromCodePoint(0x25cf)));
+ assert(call(row,'tooltip')[1].includes(agent.closing.blocked_reason));
  assert.deepEqual(r.panelCounts({spaces:[{agents:[agent]}]}),{working:1,idle:0,blocked:0,done:0,total:1});
 });

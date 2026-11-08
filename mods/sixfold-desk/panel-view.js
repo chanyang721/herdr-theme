@@ -1,7 +1,7 @@
 import {div, svg, image, PathBuilder} from 'gpui-kit';
 import {h_flex, v_flex} from 'gpui-base';
 import {spaces, panes, shared, setShared, run, settings} from 'herdr';
-import {agentGroups, agentState, panelEventStates, panelSpaces, panelSpacePartners, PANEL_TIMING, MESSAGE_LEGS, messageLeg} from './panel-model.js';
+import {agentGroups, panelEventStates, panelSpaces, panelSpacePartners, PANEL_TIMING, MESSAGE_LEGS, messageLeg} from './panel-model.js';
 import {groupColors, paletteMode} from './collab-flow.js';
 import {rowDetailParts} from './task-row-details.js';
 import {PANEL_FLOW, panelFlowAnchor, panelMessageAnchors, messageFlowGeometry, messageCurveReach, computerFlow} from './panel-host.js';
@@ -17,8 +17,7 @@ export function panelCounts(feed){
   for(const agent of (feed?.spaces||[]).flatMap(space=>space.agents)){
     if(agent.closing?.step===4)continue;
     counts.total++;
-    const state=agentState(agent);
-    counts[state==='blocked'?'blocked':agent.status==='done'?'done':agent.status==='working'?'working':'idle']++;
+    counts[agent.status==='blocked'?'blocked':agent.status==='done'?'done':agent.status==='working'?'working':'idle']++;
   }
   return counts;
 }
@@ -106,8 +105,9 @@ export function agentRow(view,agent,space,tag,state,color,t,motion){
   const detail=rowDetailParts({errorLabel:agent.report_missing?'보고 없음':agent.error,
     unread:agent.unread,quota:agent.usage,
     remoteName:agent.nav?.machine||space.nav?.machine?view.names?.get(space.computer)||'원격 컴퓨터':null},t,{compact,motion});
-  const closingBlocked=Boolean(agent.closing?.blocked_reason);
-  const status=closingBlocked?'blocked':agent.status;
+  // Task/closing warnings remain in the stage bar and tooltip; the status mark
+  // follows the producer's observed pane status.
+  const status=agent.status;
   const pulse=state.packets.some(event=>event.to===agent.id&&event.phase==='ping')
     ||!motion&&state.connections?.some(event=>event.kind==='message'&&event.to===agent.id);
   const born=state.spawning.has(agent.id);
