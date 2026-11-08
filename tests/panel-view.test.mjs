@@ -139,10 +139,10 @@ test('stage marks are fixed 9 by 3 segments and completed or child rows have no 
   const segments=all(row).filter(n=>call(n,'id')?.[1]?.startsWith(`panel-stage-${agent.id}-`));
   assert.equal(segments.length,4);
   assert(segments.every(n=>call(n,'w')?.[1]===9&&call(n,'h')?.[1]===3&&!call(n,'flex_1')));
-  agent.stage=5;tree=r.renderPanelTracking(view,t,r.cx);row=byId(tree,`panel-agent-${agent.id}`);
+  agent.stage=5;agent.status='done';tree=r.renderPanelTracking(view,t,r.cx);row=byId(tree,`panel-agent-${agent.id}`);
   assert.equal(all(row).filter(n=>call(n,'id')?.[1]?.startsWith('panel-stage-')).length,0);
   assert(words(byId(row,`panel-status-${agent.id}`)).includes('✓'));
-  agent.stage=2;view.rowMeta=new Map([[agent.id,{parent:'parent',depth:2}]]);
+  agent.stage=2;agent.status='working';view.rowMeta=new Map([[agent.id,{parent:'parent',depth:2}]]);
   row=r.agentRow(view,agent,view.panelState.feed.spaces[0],null,view.panelEvents,t.accent,t,false);
   assert.equal(call(row,'h')[1],20);assert.equal(call(row,'pl')[1],46);
   assert(byId(row,`panel-child-branch-${agent.id}`));
@@ -196,7 +196,7 @@ test('header metrics share the exact memory endpoint and reserve nonoverlapping 
 test('summary counts exclude cleaned sessions and classify completion and blocked work first',async()=>{
   const r=await renderer(false);
   assert.deepEqual(r.panelCounts({spaces:[{agents:[
-    {status:'working',stage:2},{status:'idle',stage:0},{status:'working',stage:5},
+    {status:'working',stage:2},{status:'idle',stage:0},{status:'done',stage:5},
     {status:'working',stage:2,closing:{blocked_reason:'Approval needed'}},
     {status:'working',stage:2,closing:{step:4}},
   ]}]}),{working:1,idle:1,done:1,blocked:1,total:4});
@@ -360,4 +360,13 @@ test('a proposed memory at closing step3 gets a header badge without inventing a
  raw.spaces[0].agents[0].closing={step:3,memory:{state:'proposed',proposals:0}};
  const tree=r.renderPanelTracking(viewFor(raw),t,r.cx),badge=byId(tree,`panel-memory-${raw.spaces[0].id}`);
  assert(badge);assert(!words(badge).some(word=>/0/.test(word)));
+});
+
+test('native working state stays working after the last task reached stage5',async()=>{
+ const r=await renderer(false),view=viewFor(makePanelFixture()),space=view.panelState.feed.spaces[0];
+ const agent={...space.agents[0],stage:5,status:'working',closing:null};
+ const state={packets:[],connections:[],spawning:new Set(),active:[]};
+ const row=r.agentRow(view,agent,space,null,state,t.accent,t,false);
+ assert.equal(call(row,'opacity')[1],1);assert(words(byId(row,`panel-status-${agent.id}`)).includes('●'));
+ assert.deepEqual(r.panelCounts({spaces:[{agents:[agent]}]}),{working:1,idle:0,blocked:0,done:0,total:1});
 });

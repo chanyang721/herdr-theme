@@ -27,7 +27,9 @@ unconnected tool fields remain visibly unmeasured or disconnected. No command
 or executable supplied in a feed is run.
 
 Agent stages 1–4 fill the distribution, work, review and acceptance slots. Stage
-0 is unstarted; stage 5 shows a check without a bar. A changed stage or a new
+0 is unstarted; stage 5 completes the task bar. The observed session `status`
+is separate: a pane can still be working after its last task reached stage 5.
+A changed stage or a new
 event replaces that bar with a label for 1.7 seconds without moving the task
 title. Initial history is not replayed. A local message has a white head, two
 teal tail pieces and a thin right-side curve; it travels for one second and

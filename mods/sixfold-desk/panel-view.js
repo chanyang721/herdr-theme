@@ -18,7 +18,7 @@ export function panelCounts(feed){
     if(agent.closing?.step===4)continue;
     counts.total++;
     const state=agentState(agent);
-    counts[state==='blocked'?'blocked':state==='done'?'done':agent.status==='working'?'working':'idle']++;
+    counts[state==='blocked'?'blocked':agent.status==='done'?'done':agent.status==='working'?'working':'idle']++;
   }
   return counts;
 }
@@ -107,7 +107,7 @@ export function agentRow(view,agent,space,tag,state,color,t,motion){
     unread:agent.unread,quota:agent.usage,
     remoteName:agent.nav?.machine||space.nav?.machine?view.names?.get(space.computer)||'원격 컴퓨터':null},t,{compact,motion});
   const closingBlocked=Boolean(agent.closing?.blocked_reason);
-  const status=closingBlocked?'blocked':agentState(agent)==='done'?'done':agent.status;
+  const status=closingBlocked?'blocked':agent.status;
   const pulse=state.packets.some(event=>event.to===agent.id&&event.phase==='ping')
     ||!motion&&state.connections?.some(event=>event.kind==='message'&&event.to===agent.id);
   const born=state.spawning.has(agent.id);
@@ -117,7 +117,7 @@ export function agentRow(view,agent,space,tag,state,color,t,motion){
   const line=h_flex().id(`panel-agent-content-${agent.id}`).w_full().min_w(0).gap(5).items_center().opacity(ghost?0:1)
     .when(born&&motion,e=>e.transition('opacity',{duration:180,easing:'ease-out'}));
   const row=h_flex().id(`panel-agent-${agent.id}`).relative().h(child?PANEL_GEOMETRY.child:ROW).flex_none().pl(child?30+(depth-1)*16:7).pr(7).gap(5).items_center().rounded(3)
-    .opacity(agentState(agent)==='done'||agent.report_missing?0.52:1)
+    .opacity(status==='done'||agent.report_missing?0.52:1)
     .when(born,e=>e.border(1).border_dashed().border_color(color))
     .when(pulse,e=>e.border(1).border_color(color))
     .tooltip([agent.title,agent.tooltip_addr,agent.closing?.blocked_reason,detail.tooltip].filter(Boolean).join('\n'))
