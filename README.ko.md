@@ -1,25 +1,29 @@
 # Herdr Theme
 
-여러 프로젝트와 여러 컴퓨터의 코딩 에이전트를 왼쪽 패널 하나에서 살펴보는 Herdr 테마입니다. 모든 워크스페이스와 에이전트, 동시에 오가는 메시지(컴퓨터 사이 전송 포함), 두 대 이상의 컴퓨터에서 함께 작업 중인 프로젝트를 보고, CPU·RAM, MCP 연결, 계정 CLI, 요금제 한도, 세션별 토큰 사용량을 현재 터미널을 떠나지 않고 확인합니다.
+여러 프로젝트와 여러 컴퓨터의 코딩 에이전트를 왼쪽 패널 하나에서 살펴보는 Herdr 테마입니다. 워크스페이스·에이전트 상태·컴퓨터 간 공동 작업과 프로젝트 문서를 보고, CPU·RAM, MCP 연결, 계정 CLI, 요금제 한도, 세션별 토큰 사용량을 터미널 옆에서 확인합니다. 메시지 애니메이션은 앱과 코어가 메시지 이벤트를 제공할 때 동작합니다.
 
 ![Windows의 Herdr Theme: 컴퓨터 두 대, Storefront 공동 작업, 모니터 줄](preview.gif)
 
 [English](README.md)
 
-반복 GIF와 스크린샷은 Windows 11 실제 앱의 데모 워크스페이스를 담았습니다. 두 번째 컴퓨터 "worker"와 그 사이드바 데이터(전송 이벤트 포함)만 합성이고, 모니터 줄은 이 기기의 실제 값입니다. 12초 반복 영상에서 전송이 협업 테두리 혜성으로 이어졌다가 숨쉬기로 돌아옵니다. [정지 이미지](preview.png).
+반복 GIF와 스크린샷은 Windows 11 실제 앱의 데모 워크스페이스로 협업 표시를 설명합니다. 두 번째 컴퓨터 "worker"와 그 사이드바 데이터(전송 이벤트 포함)만 합성이고, 모니터 줄은 촬영 기기의 실제 값입니다. 12초 반복 영상에서 전송이 협업 테두리 혜성으로 이어졌다가 숨쉬기로 돌아옵니다. 현재 기능과 이벤트 지원 조건은 아래 기능 목록과 요구 사항을 참고하세요. [정지 이미지](preview.png).
 
 ## 구성
 
 Herdr Theme은 레이아웃과 사이드바입니다. 설치기는 [Herdr Workspace Mods](https://github.com/chanyang721/herdr-workspace-mods)를 고정된 버전으로 함께 설치하므로 모니터 줄이 바로 동작합니다. 저장소는 둘이지만 설명은 이 README 하나에 모았습니다.
 
+이 README는 현재 `main` 브랜치 기준입니다. 함께 설치되는 도우미는 Rust 네이티브 실행 파일 `herdr-theme`입니다. 로컬 작업 배분·세션 절전·정리 같은 자동화 정책은 각 도구가 별도로 제공하며, 테마는 [선택적 로컬 연동](#선택적-로컬-연동)으로 받은 데이터를 표시합니다.
+
 | 부분 | 보여 주는 것 |
 | --- | --- |
 | 사이드바(이 저장소) | 컴퓨터별 상태, 워크스페이스와 에이전트, 미확인 메시지, 전송 애니메이션, 컴퓨터 간 공동 작업, 서브에이전트 트리 |
+| [프로젝트 문서](#프로젝트-문서) | 공간별 문서 검색, 고정·미리보기를 제공하는 선택적 **문서** 탭 |
 | [System Metrics](#system-metrics) | CPU·RAM과 최근 표본 막대 |
 | [MCP Status](#mcp-status) | MCP 서버별 연결 상태(Claude·Codex 합침) |
 | [CLI Status](#cli-status) | AWS 프로필·GitHub·kubectl·Docker 로그인 상태 |
 | [Plan Usage](#plan-usage) | Codex·Claude 5시간/7일 한도, Codex 한도 초기화 |
-| [Agent Usage](#agent-usage) | 실행 중인 Claude·Codex 세션별 토큰 사용량, 칸 머리줄의 모델·이번 주 비중 |
+| [Agent Usage](#agent-usage) | 세션별 토큰·모델·effort·권한 모드·이번 주 비중, 에이전트 상태를 나타내는 머리줄 고양이 |
+| [로컬 연동](#선택적-로컬-연동)(선택) | 외부 도구가 제공한 배지·질문/권한 카드·문서 보기·세션 보고 |
 | [Document Viewer](#document-viewer)(선택) | 터미널 옆 프로젝트 파일과 Markdown |
 
 ## 운영체제별 지원
@@ -35,16 +39,17 @@ Herdr Theme은 레이아웃과 사이드바입니다. 설치기는 [Herdr Worksp
 | Document Viewer: HTML 미리보기 | 됨(WebKit 스냅숏) | 안 됨 — 소스로 열리고, HTML 탭에 macOS가 필요하다는 안내 |
 | Document Viewer: 저장하면 자동 새로고침 | 됨 | 됨 |
 | 음성 | 됨 | 안 됨(설치기가 건너뜀) |
-| 실시간 TUI 연결 | 됨(Linux도) | 안 됨(`termios` 필요) |
-| 대기 세션 절전·끝난 워크스페이스 정리 | 됨(LaunchAgent) | 안 됨 |
+| 선택적 실시간 TUI 연결 | 됨(POSIX 터미널 API, Linux도) | 안 됨 |
+| 로컬 연동 표시 | 생산자를 설정하면 됨 | 생산자를 설정하면 됨 |
 
-Linux는 따로 적은 곳 외에는 macOS와 같지만 이번 버전에서 확인하지는 않았습니다.
+Linux에는 네이티브 도구와 POSIX 연결 경로가 있지만 이번 버전의 데스크톱 UI 확인은 하지 않았습니다. WebKit 렌더러와 음성 설치는 macOS 전용입니다. 세션 절전·정리 서비스는 이 테마 릴리스 밖에서 관리하며, 지원 운영체제는 별도로 설치한 서비스에 따라 다릅니다.
 
 ## 요구 사항
 
-- Herdr 앱 0.1.11 이상, Git. 네이티브 도구를 빌드하려면 stable Rust와 C 컴파일러도 필요합니다. 컴퓨터 목록과 원격 워크스페이스는 머신 레이아웃을 지원하는 앱·코어가 필요합니다(0.1.17에서 확인).
-- 메시지 애니메이션에는 네이티브 메시지 이벤트가 필요합니다: `messageEvents()`를 제공하는 앱과 `message_sent`를 내보내는 코어. 정식 릴리스에 들어가기 전까지는 둘 다 소스에서 빌드합니다. 앱은 [`feat/message-sent-events`](https://github.com/chanyang721/herdr-app/tree/feat/message-sent-events) 브랜치, 코어는 [herdrdev/herdr-core#90](https://github.com/herdrdev/herdr-core/pull/90)입니다. 앱과 코어를 함께 설치하고, 전송을 보고 싶은 모든 컴퓨터의 코어를 교체하세요(메시지를 전달하는 쪽 코어가 이벤트를 냅니다). 없어도 나머지는 동작하고 전송 애니메이션만 나오지 않습니다.
+- Herdr 앱 0.1.11 이상, 호환되는 herdr-core와 Git. 컴퓨터 목록과 원격 워크스페이스에는 머신 레이아웃 지원이 필요합니다. 네이티브 도구를 빌드하려면 stable Rust와 C 컴파일러도 필요하며, Windows에서는 MSVC C/C++ Build Tools 또는 완전한 GNU 호환 도구 모음을 사용합니다. 테마에 포함된 도우미에는 Python이 필요하지 않습니다.
+- 메시지 애니메이션은 앱이 호환되는 `messageEvents()` 메타데이터를 제공하고 관련 코어가 전송 이벤트를 내보낼 때 동작합니다. API가 없으면 실시간 전송 애니메이션이 나오지 않습니다. 테마 설치는 앱·코어를 설치하거나 교체하지 않으므로, 이 기능을 쓰려면 서로 호환되는 앱·코어 빌드를 준비하세요.
 - Agent Usage는 [Insights](https://github.com/GaganSD/coding-agent-toolkit/tree/main/herdr-insights) mod의 로컬 저장소를 읽습니다(따로 설치, Node.js 필요).
+- 로컬 **+ Space** 창은 Claude 세션 하나로 시작하며 Claude CLI 설치 여부를 확인합니다. 원격 공간은 터미널로 시작합니다. 기존 세션과 모니터 줄은 새 공간 생성과 별개로 사용할 수 있습니다.
 
 ## 설치
 
@@ -90,7 +95,7 @@ herdr-theme update-install            # Workspace Mods만 고정 버전으로 �
 
 updater는 `data/sixfold/install.lock`을 잡고, 바뀌는 mod 전체를 `mods/` 밖에 만들어 각각 `herdr-app check`로 검사하고, `backups/sixfold-update-*/`에 전체 백업을 둔 뒤 mod 폴더를 교체합니다. macOS·Linux는 원자적으로 교환하고, Windows는 디렉터리 교환이 없어 그 순간 mod 경로가 잠깐 비며 실패하면 설치본을 되돌립니다. 이후 `status.errors`가 1초간 비어 있고 워크스페이스·탭·포커스가 그대로여야 통과하고, 아니면 되돌립니다(그 사이 다른 작성자의 변경은 보존하고 보고). 결과는 백업의 영수증에 남습니다. `status` 통과는 화면 확인이 아니므로 `herdr-app shot`도 보세요.
 
-파일은 하나씩이 아니라 한 번에 묶어 설치하세요. 교체마다 mod가 다시 로드되고 잦은 재로드는 앱을 지치게 할 수 있습니다. 편집 세션마다 별도 git worktree를 쓰고 한 세션만 검토된 결과를 설치합니다. **설치된 mod를 `mods/*-recovery`로 복사하지 마세요.** `--allow-unhealthy-before`는 승인된 복구에서 시작 오류만 허용하고(최종 오류는 0이어야 함), `--verify-timeout 30`은 확인 시간을 늘립니다. updater는 Herdr나 herdr-core를 종료·재시작하지 않습니다. `scripts/sixfold/`에 설치된 사본을 실행할 때는 `--repo /검토한/worktree`를 줍니다.
+검토한 파일 묶음을 한 번에 설치하세요. 교체할 때마다 mod가 다시 로드되므로 불필요한 재로드를 줄일 수 있습니다. 편집 세션마다 별도 git worktree를 쓰고 한 세션만 검토된 결과를 설치합니다. **설치된 mod를 `mods/*-recovery`로 복사하지 마세요.** `--allow-unhealthy-before`는 승인된 복구에서 시작 오류만 허용하고(최종 오류는 0이어야 함), `--verify-timeout 30`은 확인 시간을 늘립니다. updater는 Herdr나 herdr-core를 종료·재시작하지 않습니다. `scripts/sixfold/`에 설치된 사본을 실행할 때는 `--repo /검토한/worktree`를 줍니다.
 
 ## 단축키
 
@@ -103,6 +108,8 @@ updater는 `data/sixfold/install.lock`을 잡고, 바뀌는 mod 전체를 `mods/
 | Ctrl+Shift+방향키 | 이웃 pane으로 이동 |
 | Cmd+Shift+↑ / ↓ | 이전·다음 워크스페이스 |
 | Cmd+Shift+J / U | 다음 승인 대기·완료 에이전트 |
+| Cmd+Ctrl+1…9 | 컴퓨터 선택 |
+| Cmd+Option+F | 현재 공간의 문서 목록을 펼치고 검색 |
 | Ctrl+Shift+N | 선택한 컴퓨터에 새 워크스페이스 |
 | Cmd+R | 탭 이름 바꾸기 |
 | Cmd+X | 앱 pane 닫기 |
@@ -116,7 +123,7 @@ Windows·Linux에서는 `keys.json`의 레이아웃 전용 조각을 키보드�
 
 컴퓨터 행에는 작업 중·완료·승인 대기 수(0이 아닌 것만, 툴팁에 전체)와 **최근 10분**간 다른 컴퓨터로 보낸·받은 전송 수 ↑N ↓N이 나옵니다.
 
-이 컴퓨터와 연결됨·연결 중인 컴퓨터만 기본으로 보이고, 끊긴 원격과 등록되지 않은 Tailscale 기기는 **COMPUTERS** 옆 화살표로 펼쳐야 보입니다. **+ Space**와 **Ctrl+Shift+N**은 선택한 컴퓨터에 워크스페이스를 만듭니다. 이 컴퓨터에서는 조정용 Claude 세션 1개, 원격에서는 그 컴퓨터 홈(또는 설정한 폴더)의 터미널 하나입니다.
+이 컴퓨터와 연결됨·연결 중인 컴퓨터만 기본으로 보이고, 끊긴 원격과 등록되지 않은 Tailscale 기기는 **COMPUTERS** 옆 화살표로 펼쳐야 보입니다. **+ Space**와 **Ctrl+Shift+N**은 선택한 컴퓨터에 워크스페이스를 만듭니다. 이 컴퓨터에서는 조정용 Claude 세션 1개, 원격에서는 그 컴퓨터 홈(또는 설정한 폴더)의 터미널 하나입니다. 추가 칸과 그 수명은 수동으로 관리하거나 별도로 설정한 도구에 맡깁니다.
 
 메인에서 `hc ls`의 주소로 `hc send worker/t7 "메시지"`를 보냅니다. 전송 성공이 읽음 확인은 아닙니다. SSH·Tailscale·방화벽·에이전트 인증은 테마가 설정하지 않습니다.
 
@@ -172,7 +179,9 @@ Windows 11 실제 앱에서 `sixfold-night`·`sixfold-day`와 데모 워크스�
 
 서브에이전트는 부모 행의 `▸ N`으로 펼치고, 새 위임이 생기면 트리를 펼치며 흐름을 보여 줍니다. `herdr-theme collect-workflow`는 Claude 메타데이터·읽기 전용 Codex DB·hc 부모 관계로 `data/sixfold/workflow.json`을 만듭니다(`--once`, 또는 3초마다 바뀐 것만 기록). macOS·Linux·Windows에서 동작하며 Windows에서는 콘솔 창을 띄우지 않습니다.
 
-설치된 네이티브 도구에는 수집기가 포함되지만 백그라운드로 등록하거나 시작하지는 않습니다. Windows에서는 로그온 때 창 없이, 한 번에 하나만 실행할 수 있습니다.
+설치된 네이티브 도구에는 수집기가 포함되지만 백그라운드로 등록하거나 시작하지는 않습니다. 한 번만 수집하려면 `herdr-theme collect-workflow --once`를 실행하세요. 상시 수집은 3초마다 로컬 세션 기록을 살펴보며 자원을 사용하므로, 서브에이전트 트리를 계속 갱신해야 할 때만 등록합니다. 멈추면 마지막 저장 결과가 남으며 실시간 상태는 아닙니다.
+
+Windows에서는 로그온 때 창 없이, 한 번에 하나만 실행할 수 있습니다.
 
 ```powershell
 $home_ = "$HOME\.config\herdr-app"
@@ -186,7 +195,7 @@ Register-ScheduledTask -TaskName 'Herdr Theme workflow collector' -Action $actio
 Start-ScheduledTask -TaskName 'Herdr Theme workflow collector'
 ```
 
-해제는 `Stop-ScheduledTask` 후 `Unregister-ScheduledTask -TaskName 'Herdr Theme workflow collector' -Confirm:$false`입니다.
+`Stop-ScheduledTask`로 작업을 멈추고 그 자식인 `herdr-theme.exe collect-workflow`도 종료됐는지 확인한 뒤 `Unregister-ScheduledTask -TaskName 'Herdr Theme workflow collector' -Confirm:$false`로 등록을 해제합니다. 숨겨진 PowerShell 실행기만 멈추면 수집기가 남을 수 있으므로, 확인된 해당 수집기만 종료하고 다른 네이티브 도우미는 유지하세요.
 
 ## Workspace Mods
 
@@ -214,7 +223,7 @@ AWS 프로필(AWS CLI가 있을 때 프로필마다), GitHub(`gh auth status`, �
 
 ![Plan Usage](docs/images/plan-usage.png)
 
-Codex·Claude 한도를 브랜드 아이콘·막대·백분율로: 5시간·7일 창, 제공자가 알려 주면 모델별 주간 창(`Fable 7d`), Codex 한도 초기화 남은 횟수 `↺ N`과 확인 후 사용하는 버튼. Codex 워크스페이스의 크레딧 소진·지출 한도 도달은 개인 한도가 낮아 보여도 표시합니다. 2분마다 갱신하고, 제공자가 확인 요청을 제한하면 다음에 읽힐 때까지 오류를 표시합니다.
+Codex·Claude 한도를 브랜드 아이콘·막대·백분율로: 5시간·7일 창, 초기화 시각과 남은 시간, 제공자가 알려 주면 모델별 주간 창(`Fable 7d`), Codex 한도 초기화 남은 횟수 `↺ N`과 확인 후 사용하는 버튼. Codex 워크스페이스의 크레딧 소진·지출 한도 도달은 개인 한도가 낮아 보여도 표시합니다. 2분마다 갱신하고, 제공자가 확인 요청을 제한하면 다음에 읽힐 때까지 오류를 표시합니다.
 
 ### Agent Usage
 
@@ -224,13 +233,32 @@ Codex·Claude 한도를 브랜드 아이콘·막대·백분율로: 5시간·7일
 
 ![칸 머리줄](docs/images/pane-header.png)
 
+머리줄 고양이는 작업 중에는 달리고, 확인 필요·완료 상태에는 앉으며, 대기 중에는 잡니다. **Motion off**면 애니메이션이 멈춥니다. 모델·effort·권한·사용량은 대응이 확인된 세션의 값이며, 고양이 상태나 다른 칸의 값으로 사용량을 추정하지 않습니다.
+
+머리줄의 이번 주 비중은 로컬 세션 기록을 가격 비율로 가중한 추정치입니다. 툴팁은 제공자가 알려 준 주간 사용량을 대략 나눠 보여 줄 수 있지만, 세션별로 따로 남아 있는 할당량은 아닙니다. 계정 전체 한도와 초기화 시각은 Plan Usage에 나옵니다.
+
 ### Document Viewer
 
 ![Document Viewer](docs/images/document-viewer.png)
 
 프로젝트 파일 트리와 미리보기 패널. Markdown(macOS에서는 이미지·PDF·로컬 HTML을 읽기 전용 WebKit 스냅숏으로도)을 Source·Open과 함께 보여 줍니다. Files 패널이 있는 레이아웃에 설치되고 검토한 원본(Preview Plus / Files Plus)을 고정 커밋으로 받습니다. Windows에서는 HTML이 소스로 열리고 HTML 탭에 macOS 렌더러가 필요하다는 안내가 나오며, Markdown 미리보기와 저장 시 새로고침은 됩니다.
 
-## 사이드바의 다른 기능
+## 프로젝트 문서
+
+워크스페이스 옆 화살표를 펼치면 설정한 문서 폴더가 나옵니다. 검색은 해당 공간의 파일명을 걸러 주고, Enter는 첫 결과를 열며, **Cmd+Option+F**는 같은 검색창에 포커스를 둡니다. 보관 경로는 요청할 때만 보여 주며 원본 문서는 보존합니다. 원본 위치는 `data/sixfold/project-docs.json` 또는 문서 탭 규칙 `data/sixfold/project-docs-pins.json`에 설정합니다.
+
+선택적 **문서** 탭은 Files/Preview 패널과 별개인, 터미널 없는 프로젝트 문서 보기입니다. 고정·분류 목록·검색·읽기 전용 Markdown 미리보기를 제공하며, 설치하면 기존 개발 탭과 선택을 보존하면서 로컬 공간에 문서 탭을 추가합니다.
+
+```sh
+herdr-theme install-doc-tabs             # 읽기 전용 설치 계획
+herdr-theme install-doc-tabs --install   # mod 검사·설치와 문서 탭 추가
+```
+
+로컬 공간을 더 만든 뒤에는 `--install`을 다시 실행하세요. 문서 규칙은 실제 공간 ID 기준이며 설정이 없으면 추측하지 않고 그 상태를 보여 줍니다. 선택적 로컬 문서 보기는 아래 생산자 계약으로 연결합니다. 원본 규칙·미리보기 지원·운영체제별 한계는 [프로젝트 문서 추적](docs/project-documents.md)을 참고하세요.
+
+## 선택적 로컬 연동
+
+이 표시는 앱 홈의 `data/sixfold/`에 별도로 설정한 로컬 생산자가 제공하는 파일을 읽습니다. 사용할 입력이 없으면 숨깁니다. 작업 정책과 동작 검증은 생산자가 맡으며, 테마 설치가 그 도구를 찾아내거나 설치하지는 않습니다. [연동 계약](docs/local-integrations.md)을 참고하세요.
 
 **워크스페이스 배지.** 다른 mod·도구가 공유 상태 `sixfold.workspace.badges`나 `data/sixfold/workspace-badges.json`으로 워크스페이스 이름 옆에 작은 배지를 4개까지 올릴 수 있습니다.
 
@@ -245,6 +273,10 @@ Codex·Claude 한도를 브랜드 아이콘·막대·백분율로: 5시간·7일
 
 **채널 알림.** `data/sixfold/project-alerts.json`의 새 채널 메시지는 워크스페이스 제목 아래 줄에 나오고, `sixfold-slack-inbox` mod는 `data/sixfold/slack-mentions.json`의 멘션을 스레드별로 보여 줍니다. Slack에서 모으는 일은 별도 도구가 합니다.
 
+**로컬 문서 보기·세션 보고.** 생산자는 `local-views/workspaces/index.json`에 공간별 문서 메타데이터를, `session-reports.json`에 표시용 요약을 제공합니다. 보고를 누르면 해당 터미널로 이동할 수 있지만, 보고가 세션을 닫거나 재개하지는 않습니다. 작업 추적과 세션 수명 관리 서비스는 테마에 포함되지 않는 외부 연동입니다.
+
+## 워크스페이스 조작
+
 **분할과 새 워크스페이스.** `herdr-theme balance-grid`는 아무것도 재시작하지 않고 6개 터미널 탭을 같은 크기로 맞추고, `herdr-theme workspace "Example" /path`는 **+ Space**처럼 워크스페이스를 만듭니다(`--shells`는 셸만, `--tiers high`는 그 한 칸을 해당 난이도의 모델로 엽니다. [모델 난이도 기본값](rust/src/automation/tiers.rs) 참고). 새 워크스페이스가 선택을 가져간 경우 이전 공간·탭·칸으로 되돌리며, 사용자가 다른 칸이나 탭을 직접 고른 경우에는 유지합니다. 알려진 한계: 생성이 중간에 실패하고 다른 프로세스가 동시에 만든 새 터미널을 사용자가 고르면, 그 선택 위로 이전 선택을 복원할 수 있습니다.
 
 **고정 표시·아이콘·로컬 설정.** `data/sixfold/workspace-pins.local.json`(`{"spaces":[{"id":"…","machine":null}]}`)은 정확히 그 워크스페이스에 핀과 강조 테두리를 붙입니다. `herdr-theme set-workspace-icon 'ID 또는 이름' icon.png`는 프로젝트 아이콘(SVG/PNG/JPEG/WebP)을 지정합니다. 사람마다 다른 이름·색·폴더·Slack 주소는 `data/sixfold/site.local.json`(`config/site.example.json`에서 시작)에 두며, `"pane_header_index": true`는 칸 번호를 다시 보여 줍니다. `*.local.json`은 git이 무시합니다.
@@ -254,7 +286,7 @@ Codex·Claude 한도를 브랜드 아이콘·막대·백분율로: 5시간·7일
 
 ## 실행하는 것
 
-UI는 Herdr의 워크스페이스·에이전트 API만 쓰고 자체 네트워크 요청을 하지 않습니다. 도우미는 이 컴퓨터의 `hc`, `herdr-app`, Python, 계정 CLI를 실행하고, 설치기는 고정 버전을 받기 위해 Git을 실행합니다. 개인 설정·계정 정보·세션 대응표는 이 저장소에 두지 않습니다.
+UI는 Herdr의 워크스페이스·에이전트 API를 씁니다. 네이티브 도우미는 이 컴퓨터의 `hc`·`herdr-app`·계정 CLI를 실행하고, 설치기는 고정 버전을 받기 위해 Git을 실행합니다. 요금제 사용량 수집기의 기존 제공자 네트워크 요청은 네이티브 수집기에도 유지됩니다. 선택적 외부 어댑터는 소유자가 설정한 명령을 사용합니다. 개인 설정·계정 정보·세션 대응표는 이 저장소에 두지 않습니다.
 
 ## 개발
 

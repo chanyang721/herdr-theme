@@ -1,25 +1,29 @@
 # Herdr Theme
 
-Coordinate coding agents across projects and computers from one live sidebar. See every workspace and agent, follow concurrent messages (including sends between computers), see which projects are being worked on from more than one computer, and keep CPU/RAM, MCP connections, account CLIs, plan limits and per-session token use in view — without leaving your current terminal.
+Coordinate coding agents across projects and computers from one live sidebar. See workspaces, agent states and shared work across computers; browse project documents; and keep CPU/RAM, MCP connections, account CLIs, plan limits and per-session token use beside your terminals. Message animations are available when the app and core supply message events.
 
 ![Herdr Theme on Windows: two computers, shared work on Storefront, the monitor strip](preview.gif)
 
 [한국어](README.ko.md)
 
-The looping GIF and screenshots show the real app on Windows 11 with labelled demo workspaces. Only the second computer, "worker", and its sidebar data (including send events) are synthetic. The monitor strip shows this machine's real readings. The 12-second loop follows a send into the collaboration-border comet and back to breathing. [Still image](preview.png).
+The looping GIF and screenshots illustrate the collaboration display in the real app on Windows 11 with labelled demo workspaces. Only the second computer, "worker", and its sidebar data (including send events) are synthetic. The monitor strip shows the capture machine's real readings. The 12-second loop follows a send into the collaboration-border comet and back to breathing. The feature list and requirements below describe current functionality and event support. [Still image](preview.png).
 
 ## What you get
 
 Herdr Theme is the layout and sidebar. The installer also adds [Herdr Workspace Mods](https://github.com/chanyang721/herdr-workspace-mods) at a pinned release, so the monitor strip works out of the box. Both repositories stay separate; this README covers them together.
 
+This README describes the current `main` branch. The bundled helper is the native Rust executable `herdr-theme`. Local task delegation, session sleep/cleanup and other automation policies are supplied separately by their owners; the theme displays their optional data through [local integrations](#optional-local-integrations).
+
 | Part | What it shows |
 | --- | --- |
 | Sidebar (this repo) | Computers with per-computer status, workspaces and their agents, unread messages, animated sends, shared work across computers, subagent trees |
+| [Project documents](#project-documents) | Workspace document search and an optional persistent **문서** tab, with pins and previews |
 | [System Metrics](#system-metrics) | CPU and RAM with recent-sample bars |
 | [MCP Status](#mcp-status) | Each MCP server's connection, Claude and Codex merged |
 | [CLI Status](#cli-status) | Sign-in state of AWS profiles, GitHub, kubectl and Docker |
 | [Plan Usage](#plan-usage) | Codex and Claude 5h / 7d limits, Codex limit resets |
-| [Agent Usage](#agent-usage) | Token use of each live Claude/Codex session; the session's model and weekly share in its pane header |
+| [Agent Usage](#agent-usage) | Session tokens, model, effort, permission mode and weekly share; pane-header cats reflect agent state |
+| [Local integrations](#optional-local-integrations) (optional) | Producer-supplied badges, question/permission cards, document views and session reports |
 | [Document Viewer](#document-viewer) (optional) | Project files and Markdown beside your terminals |
 
 ## Platform support
@@ -35,16 +39,17 @@ The table describes supported behavior and the previous release's checks. Native
 | Document Viewer: HTML preview | yes (WebKit snapshot) | no — HTML opens on its source; the HTML tab says the preview needs macOS |
 | Document Viewer: refresh when a file is saved | yes | yes |
 | Voice | yes | no (the installer skips it) |
-| Live TUI bridge | yes (also Linux) | no (needs `termios`) |
-| Idle-session sleep and finished-workspace cleanup | yes (LaunchAgents) | no |
+| Optional live TUI relay | yes (POSIX terminal APIs; also Linux) | no |
+| Local integration displays | yes, with a configured producer | yes, with a configured producer |
 
-Linux follows the macOS column except where noted, but was not checked for this release.
+Linux has native helper and POSIX relay paths, but its desktop UI was not checked for this release. The macOS WebKit renderer and voice installation are macOS-specific. Session sleep/cleanup services are maintained outside this theme release; their platform support is determined by the service you install.
 
 ## Requirements
 
-- Herdr app 0.1.11 or newer, Git; building the native helper also needs stable Rust and a C compiler. Computer lists and remote workspaces need machine-layout support (checked on 0.1.17).
-- Message animations need the native message events: an app exposing `messageEvents()` and a core emitting `message_sent`. Until they ship in a release, build both from source: the app from the [`feat/message-sent-events`](https://github.com/chanyang721/herdr-app/tree/feat/message-sent-events) branch and the core from [herdrdev/herdr-core#90](https://github.com/herdrdev/herdr-core/pull/90). Install the app and core together, and replace the core on every computer whose sends you want to see (the core that delivers a message emits the event). Without them everything else works; sends do not animate.
+- Herdr app 0.1.11 or newer, a compatible herdr-core and Git. Computer lists and remote workspaces need machine-layout support. Building the native helper also needs stable Rust and a C compiler; on Windows, use the MSVC C/C++ Build Tools or a complete GNU-compatible toolchain. Bundled theme helpers do not require Python.
+- Message animations are capability-dependent: the app must expose compatible `messageEvents()` metadata and the relevant cores must emit the underlying send events. The theme uses the API when present and otherwise has no live send animation. Installing this theme does not install or replace the app or core; use a mutually compatible app/core build if you need this feature.
 - Agent Usage reads the local store of the [Insights](https://github.com/GaganSD/coding-agent-toolkit/tree/main/herdr-insights) mod (install it separately; it needs Node.js).
+- The local **+ Space** dialog starts one Claude session and checks that the Claude CLI is installed. Remote workspaces start with a terminal. Existing sessions and the monitor strip can be used independently of workspace creation.
 
 ## Install
 
@@ -90,7 +95,7 @@ The examples assume the built executable is on PATH; alternatively use `./rust/t
 
 The updater locks `data/sixfold/install.lock`, builds complete affected mod trees outside `mods/`, runs `herdr-app check` on each, keeps full backups under `backups/sixfold-update-*/`, then exchanges each mod directory. On macOS and Linux the exchange is atomic; Windows has no directory swap, so the mod path is missing for a moment and a failed move puts the installed tree back. It then requires `status.errors` to stay empty for one second with space, tab and focus unchanged, and rolls back otherwise (a later concurrent writer is preserved and reported). The receipt in the backup records what happened. A clean status is not a visual check: also look at `herdr-app shot`.
 
-Install several files in one run rather than one at a time: each swap reloads a mod, and a burst of reloads can exhaust the app. Use a separate git worktree per editing session, and let one session install a reviewed candidate. **Never duplicate an installed mod into `mods/*-recovery`.** `--allow-unhealthy-before` permits initial errors for an authorized repair (final errors must still be zero); `--verify-timeout 30` gives hot reload more time. The updater never quits or restarts Herdr or herdr-core. When running the installed copy in `scripts/sixfold/`, pass `--repo /path/to/reviewed-worktree`.
+Install a reviewed group of files in one run: each swap reloads a mod, so this avoids unnecessary reloads. Use a separate git worktree per editing session, and let one session install a reviewed candidate. **Never duplicate an installed mod into `mods/*-recovery`.** `--allow-unhealthy-before` permits initial errors for an authorized repair (final errors must still be zero); `--verify-timeout 30` gives hot reload more time. The updater never quits or restarts Herdr or herdr-core. When running the installed copy in `scripts/sixfold/`, pass `--repo /path/to/reviewed-worktree`.
 
 ## Keys
 
@@ -103,6 +108,8 @@ These bindings apply only while the `sixfold` layout is selected; other Herdr bi
 | Ctrl+Shift+arrows | Focus a neighbour |
 | Cmd+Shift+Up / Down | Previous / next workspace |
 | Cmd+Shift+J / U | Next blocked / completed agent |
+| Cmd+Ctrl+1…9 | Select a computer |
+| Cmd+Option+F | Expand and search the active workspace's documents |
 | Ctrl+Shift+N | New workspace on the selected computer |
 | Cmd+R | Rename tab |
 | Cmd+X | Close the app pane |
@@ -116,7 +123,7 @@ The sidebar lists this computer and persistent `hc machine` connections. Selecti
 
 Each computer row shows its working / done / needs-you counts (only non-zero ones; the tooltip has all of them) and ↑N ↓N, the sends to and from other computers in the **last ten minutes**.
 
-Local and connected/connecting computers are shown by default. Disconnected remotes and unregistered Tailscale peers are hidden until you expand the list with the arrow beside **COMPUTERS**. **+ Space** and **Ctrl+Shift+N** target the selected computer: locally one coordinating Claude session (panes are added by `dispatch` and closed when finished), remotely one terminal in that computer's home (or its configured folder).
+Local and connected/connecting computers are shown by default. Disconnected remotes and unregistered Tailscale peers are hidden until you expand the list with the arrow beside **COMPUTERS**. **+ Space** and **Ctrl+Shift+N** target the selected computer: locally one coordinating Claude session, remotely one terminal in that computer's home (or its configured folder). Additional panes and their lifecycle are managed manually or by a separately configured tool.
 
 From the main computer, `hc send worker/t7 "message"` sends to that computer's terminal (use the qualified address from `hc ls`). A successful send is not a read receipt. The theme does not configure SSH, Tailscale, firewall rules or agent credentials.
 
@@ -172,7 +179,9 @@ The sidebar reads sends from the app's in-memory `messageEvents()` (see [Require
 
 Subagents expand under their parent with `▸ N`; new delegations open the tree and animate a pipeline. `herdr-theme collect-workflow` reads Claude metadata, the read-only Codex database and hc parent links into `data/sixfold/workflow.json` (`--once`, or every three seconds writing only changes). It runs on macOS, Linux and Windows (on Windows without opening console windows).
 
-The installed native helper includes the collector, but does not register or start it in the background. On Windows you can run it at logon, hidden, one instance at a time:
+The installed native helper includes the collector, but does not register or start it in the background. For a one-time snapshot, run `herdr-theme collect-workflow --once`. Continuous collection scans local session records every three seconds and consumes resources; register it only if you need a continuously refreshed subagent tree. Stopping it leaves the last saved snapshot, not live subagent status.
+
+On Windows you can run it at logon, hidden, one instance at a time:
 
 ```powershell
 $home_ = "$HOME\.config\herdr-app"
@@ -186,7 +195,7 @@ Register-ScheduledTask -TaskName 'Herdr Theme workflow collector' -Action $actio
 Start-ScheduledTask -TaskName 'Herdr Theme workflow collector'
 ```
 
-Remove it with `Stop-ScheduledTask` and then `Unregister-ScheduledTask -TaskName 'Herdr Theme workflow collector' -Confirm:$false`.
+Stop the task with `Stop-ScheduledTask`, verify that its `herdr-theme.exe collect-workflow` child has exited, then remove the registration with `Unregister-ScheduledTask -TaskName 'Herdr Theme workflow collector' -Confirm:$false`. The hidden PowerShell launcher can leave its collector child running; stop only that identified collector, not other native helpers.
 
 ## Workspace Mods
 
@@ -214,7 +223,7 @@ Square tags for AWS profiles (one per profile, when the AWS CLI is installed), G
 
 ![Plan Usage](docs/images/plan-usage.png)
 
-Codex and Claude limits as brand icons, bars and percentages: 5-hour and 7-day windows, model-scoped weekly windows when the provider reports them (`Fable 7d`), and `↺ N`, the Codex limit resets left, with a confirm-first button to use one. A Codex workspace that ran out of credits or hit its spend limit is shown even when the personal windows read low. Limits refresh every two minutes; when the provider rate-limits the check, the pill shows an error until the next successful read.
+Codex and Claude limits as brand icons, bars and percentages: 5-hour and 7-day windows, reset times and countdowns, model-scoped weekly windows when the provider reports them (`Fable 7d`), and `↺ N`, the Codex limit resets left, with a confirm-first button to use one. A Codex workspace that ran out of credits or hit its spend limit is shown even when the personal windows read low. Limits refresh every two minutes; when the provider rate-limits the check, the pill shows an error until the next successful read.
 
 ### Agent Usage
 
@@ -224,13 +233,32 @@ Token use of each live Claude/Codex session the core reports, grouped by workspa
 
 ![Pane header](docs/images/pane-header.png)
 
+The pane-header cat runs while the agent works, sits when it needs attention or has completed, and sleeps when idle. **Motion off** stops its animation. Model, effort, permission and usage labels describe the matched session; unknown usage is not inferred from the cat or another pane.
+
+The header's weekly share is a price-weighted estimate from local session records. Its tooltip can apportion the provider's weekly usage approximately; it is not a separate remaining quota for that session. Account-level limits and reset times are shown by Plan Usage.
+
 ### Document Viewer
 
 ![Document Viewer](docs/images/document-viewer.png)
 
 A project file tree and a preview panel for Markdown (and on macOS images, PDFs and local HTML as a read-only WebKit snapshot), with Source and Open. It installs into a layout with a Files panel and fetches its reviewed upstream (Preview Plus / Files Plus) at a pinned commit. On Windows HTML opens on its source, and its HTML tab says the preview needs the macOS renderer; Markdown preview and save-to-refresh work.
 
-## More of the sidebar
+## Project documents
+
+Expand the arrow beside a workspace to browse its configured document folders. Search filters filenames inside that workspace, Enter opens the first match, and **Cmd+Option+F** focuses the same search. Archive paths are hidden until requested; original documents are preserved. Configure sources in `data/sixfold/project-docs.json` or the document-tab rules in `data/sixfold/project-docs-pins.json`.
+
+The optional **문서** tab is a terminal-free project document view, separate from the Files/Preview panel. It provides pins, grouped document lists, search and read-only Markdown previews. Installing it adds tabs to local workspaces while preserving existing development tabs and selection:
+
+```sh
+herdr-theme install-doc-tabs             # show a read-only plan
+herdr-theme install-doc-tabs --install   # check/install the mod and add document tabs
+```
+
+Repeat `--install` after creating more local workspaces. Document rules are keyed by actual space ID; missing configuration is shown instead of guessed. Optional local document views use the producer contract described below. See [project document tracking](docs/project-documents.md) for source rules, supported previews and platform limitations.
+
+## Optional local integrations
+
+These displays consume files supplied by a separately configured local producer under the app home's `data/sixfold/`. They are hidden when no usable input is available. The producer owns task policy and action validation; installing the theme does not discover or install that tool. See the [integration contracts](docs/local-integrations.md).
 
 **Workspace badges.** Other mods and tools can put up to four small badges beside a workspace name via shared state `sixfold.workspace.badges` or `data/sixfold/workspace-badges.json`:
 
@@ -244,6 +272,10 @@ A project file tree and a preview panel for Markdown (and on macOS images, PDFs 
 **Question and permission cards.** An optional local tool publishes generic cards in `data/sixfold/cards.json` and its command prefix in `data/sixfold/bridge.json`. Buttons create a new JSON action file and pass only that file path to the configured command. The theme displays supplied titles, choices and actions; validation and execution belong to the external tool. Missing files keep the section hidden. See [local integrations](docs/local-integrations.md).
 
 **Channel alerts.** New channel messages listed in `data/sixfold/project-alerts.json` appear on a line under the workspace title; the `sixfold-slack-inbox` mod shows mentions from `data/sixfold/slack-mentions.json` grouped by thread. Collecting from Slack is a separate tool.
+
+**Local document views and session reports.** A producer can publish workspace document metadata in `local-views/workspaces/index.json` and display-only summaries in `session-reports.json`. Clicking a report can focus its terminal; reports do not close, resume or otherwise manage sessions. Task-tracking and lifecycle services are external integrations, not bundled theme services.
+
+## Workspace controls
 
 **Grids and new workspaces.** `herdr-theme balance-grid` equalises six-terminal tabs without restarting anything; `herdr-theme workspace "Example" /path` creates a workspace like **+ Space** with one coordinating session (`--shells` for a plain shell; `--tiers high` opens that one session on the model for the given task tier, default `high`, see `rust/src/automation/tiers.rs`). Additional panes can be created independently. Creating a workspace leaves the window showing what you were looking at: the selection is put back if the new space took it (a pane or tab you chose yourself is left alone). Known limit: if the creation fails midway and another process makes a terminal at the same moment that you then select, the earlier selection is restored over it.
 
