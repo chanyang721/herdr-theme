@@ -289,8 +289,8 @@ test('filtered remote messages retain a computer dash and bright packet; departu
  assert(byId(tree,'panel-route-remote-remote-message'));assert(byId(tree,'panel-packet-remote-message'));
  const sender=byId(tree,'panel-sender-remote-message');assert(sender);assert.equal(call(sender,'left')[1],2);assert.equal(call(sender,'w')[1],24);
  const arrival=r.panelFlowLayer(feed,layout,{...view.panelEvents,packets:[{...packet,phase:'ping'}]},()=>t.accent,t,true,224);
- assert.equal(call(byId(arrival,'panel-receiver-remote-message'),'left')[1],88);
- const route=byId(tree,'panel-route-remote-message');assert.equal(call(route,'right')[1],8);assert.equal(call(route,'w')[1],104);
+ assert.equal(call(byId(arrival,'panel-receiver-remote-message'),'left')[1],48);
+ const route=byId(tree,'panel-route-remote-message');assert.equal(call(route,'right')[1],8);assert.equal(call(route,'w')[1],64);
 });
 
 

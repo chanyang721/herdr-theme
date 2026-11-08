@@ -215,7 +215,7 @@ export function route(id,a,b,color,{dashed=false,packet=null,motion=false,relati
     const start=a.y-top,end=b.y-top;
     const sourceX=a.kind==='computer'?PANEL_FLOW.computer:startX;
     const targetX=b.kind==='computer'?PANEL_FLOW.computer:endX;
-    const reach=Math.min(PANEL_FLOW.width-8-(packet.routeLane?0:10),Math.max(58,height*0.22+58));
+    const reach=Math.min(PANEL_FLOW.width-4-(packet.routeLane?0:4),Math.max(40,height*0.22+40));
     const middle=(start+end)/2;
     // These two cubics match the native ease-out/ease-in horizontal halves
     // and the single full-length ease-in-out vertical transition exactly.

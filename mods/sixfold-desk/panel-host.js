@@ -1,5 +1,5 @@
 // Join display records only through explicit native navigation identities.
-export const PANEL_FLOW=Object.freeze({gutter:112,right:8,width:104,message:78,messageNext:90,collaboration:44,computer:100,endpoint:0});
+export const PANEL_FLOW=Object.freeze({gutter:72,right:8,width:64,message:22,messageNext:32,collaboration:44,computer:60,endpoint:0});
 
 // Only filtered remote endpoints project to their explicitly identified
 // computer. Hidden local rows must not acquire an invented route.

@@ -99,7 +99,7 @@ test('native issue popover opens with retained input; completion returns via own
   state.input.text='manual';state.input.events.get('change')();
   popup=r.controller.issuePopover(card,element(),t);
   const body=popup.calls.find(call=>call[0]==='content')[1];
-  assert.equal(body.calls.find(call=>call[0]==='ml')[1],130,'surface clears the route gutter and leaves ten pixels outside the sidebar');
+  assert.equal(body.calls.find(call=>call[0]==='ml')[1],90,'surface clears the route gutter and leaves ten pixels outside the sidebar');
   const walk=node=>[node,...(node.nodes||[]).filter(value=>typeof value==='object').flatMap(walk)];
   const button=walk(body).find(node=>node.calls?.some(call=>call[0]==='id'&&call[1]===`task-issues-pull-${space.id}-DEMO-99`));
   assert(button);button.calls.find(call=>call[0]==='on_click')[1](null,{stop_propagation(){}});

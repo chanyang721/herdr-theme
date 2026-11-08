@@ -44,7 +44,7 @@ test('flow lanes stay outside cards in ordered bands; only proven remote endpoin
  assert.equal(panelFlowAnchor(feed,layout,'a'),local);assert.equal(panelFlowAnchor(feed,layout,'b'),remote);
  assert.equal(panelFlowAnchor(feed,layout,'two'),remote);assert.equal(panelFlowAnchor(feed,layout,'unknown'),null);
  layout.anchors.delete('a');assert.equal(panelFlowAnchor(feed,layout,'a'),null);
- assert.equal(PANEL_FLOW.endpoint,0);assert(PANEL_FLOW.message<PANEL_FLOW.messageNext);assert(PANEL_FLOW.collaboration<PANEL_FLOW.message);assert(PANEL_FLOW.messageNext<PANEL_FLOW.computer);
+ assert.equal(PANEL_FLOW.endpoint,0);assert(PANEL_FLOW.message<PANEL_FLOW.messageNext);assert(PANEL_FLOW.messageNext<PANEL_FLOW.collaboration);assert(PANEL_FLOW.collaboration<PANEL_FLOW.computer);
  assert.equal(taskComputerRecord(feed,'worker').id,'remote');assert.equal(taskComputerRecord(feed,null).id,'local');
  assert.equal(taskComputerRecord(feed,'name-only'),null);
 });

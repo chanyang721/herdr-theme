@@ -61,7 +61,7 @@ const LINK_FLOW_MS = 4000;
 const MAX_ACTIVE_FLOWS = 64;
 // Right margin kept beside the computer and workspace lists alike: message curves
 // and computer links draw in it, so both lists end on the same line.
-const LINK_MARGIN = 112;
+const LINK_MARGIN = 72;
 // Computer rows match the workspace header rows now that they hold one status line.
 const COMPUTER_ROW = 36;
 
