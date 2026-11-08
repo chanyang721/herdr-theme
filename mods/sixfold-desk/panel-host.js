@@ -61,11 +61,13 @@ export function panelMessageAnchors(feed,layout,event){
  return [panelFlowAnchor(feed,layout,event.from),panelFlowAnchor(feed,layout,event.to)];
 }
 
-// All flow lanes share the existing right gutter; no separate canvas strip
-// takes width away from workspace names.
-export function sidebarGeometry(width){
- const total=Math.max(180,Number(width)||312);
- return {total,lane:0,content:total,cardMargin:PANEL_FLOW.gutter};
+// All flow lanes share one fixed right gutter (PANEL_FLOW.gutter): a wider
+// sidebar widens the cards, never the gutter. The layout only changes when the
+// sidebar crosses one of these widths (stacked stage, short stage bar, compact
+// header), so nothing needs to redraw between them.
+export const PANEL_BREAKPOINTS=Object.freeze([260,300,420]);
+export function panelWidthClass(width){
+ return PANEL_BREAKPOINTS.filter(edge=>width>=edge).length;
 }
 export function messageFlowGeometry(gutter){
  if(!Number.isFinite(gutter))return PANEL_FLOW;

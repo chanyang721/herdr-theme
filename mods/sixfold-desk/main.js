@@ -27,7 +27,7 @@ import {panelCounts,panelHeaderMetrics} from './panel-view.js';
 import {TASK_FEED_FILE,createTaskFeedSource} from './task-feed-source.js';
 import {issueRequest,saveIssueRequest} from './task-issue-state.js';
 import {createRetainedPanel} from './panel-retained.js';
-import {taskComputerAnchors,taskComputerRecord,sidebarGeometry} from './panel-host.js';
+import {taskComputerAnchors,taskComputerRecord} from './panel-host.js';
 import {subscribeJsonFile,readJsonSnapshot,fileDelivery,FILE_CHANGED_COMMAND} from './panel-io.js';
 import {watchSidebarFiles} from './sidebar-files.js';
 import {subscribeLiveEvents} from './live-events.js';
@@ -61,7 +61,8 @@ const LINK_FLOW_MS = 4000;
 // Bound the three finite host timers per packet, preserving the installed limit.
 const MAX_ACTIVE_FLOWS = 64;
 // Right margin kept beside the computer and workspace lists alike: message curves
-// and computer links draw in it, so both lists end on the same line.
+// and computer links draw in it, so both lists end on the same line. It stays the
+// same at every sidebar width and equals the task panel's PANEL_FLOW.gutter.
 const LINK_MARGIN = 72;
 // Computer rows match the workspace header rows now that they hold one status line.
 const COMPUTER_ROW = 36;
@@ -568,8 +569,6 @@ export default class SixfoldDesk extends View {
     // Task rows extend the native computer navigator. They never replace its
     // computer selection, workspace actions, documents or local card sections.
     const taskPanel=role==='sidebar'&&this.panelTrackingActive?this.panelRetained:null;
-    const sidebarSize=sidebarGeometry(this.sidebarWidth),extraLane=role==='sidebar'?sidebarSize.lane:0;
-    const LINK_MARGIN=sidebarSize.cardMargin;
     const list = agents().filter(a => workspaceIds.has(a.space));
     const local = all.filter(p => p.tab === f?.tab);
     const taskComputer=taskComputerRecord(taskPanel?.feed,selectedMachine);
@@ -1014,20 +1013,21 @@ export default class SixfoldDesk extends View {
         return pipeline({id:`${route.id}-hop`,width:8+(route.lane%2)*10,inset:14,from:outgoing?row:0,to:outgoing?0:row,color:workspaceFlowColor(route),phase:route.phase,packets:route.packets,motion})
           .right(LINK_MARGIN-26-(route.lane%2)*10);
       }));
-    return v_flex().id('sixfold-sidebar').relative().size_full().bg(t.chrome)
-      .when(extraLane>0,e=>e.child(div().id('sf-message-gutter').absolute().right(0).top(0).bottom(0).w(extraLane).bg(t.canvas||t.background).border_l(1).border_color(t.border))).text_color(t.foreground)
-      .on_size_change((size,cx)=>{const width=size.width/(settings().zoom||1);if(Math.abs((this.sidebarWidth??224)-width)>1){this.sidebarWidth=width;this.panelRetained?.resize(sidebarGeometry(width).content,cx);this.invalidateSidebar?this.invalidateSidebar():cx.notify();}})
+    return v_flex().id('sixfold-sidebar').size_full().bg(t.chrome).text_color(t.foreground)
+      // Width only matters to the task panel's breakpoints; between them the
+      // flex layout resizes the cards without a redraw.
+      .on_size_change((size,cx)=>{if(this.panelRetained?.resize(size.width/(settings().zoom||1))){this.invalidateSidebar?this.invalidateSidebar():cx.notify();}})
       .on_mouse_up('left',(_e,cx)=>{
         if(this.dragSpace){this.dragSpace=null;this.overSpace=null;cx.notify();}
       })
-      .child(v_flex().h(58).mr(extraLane).flex_none()
+      .child(v_flex().h(58).flex_none()
         .child(h_flex().h(30).flex_none().pl(window()?.platform==='macos'?76:12).pr(8).items_center().gap(4)
           .child(div().flex_1().min_w(0).truncate().font_bold().text_size(14).child('Herdr Theme'))
           .child(this.button('sf-language',w.language,()=>run('sixfold-desk.language'),t)))
         .child(h_flex().h(24).flex_none().px(8).items_center().gap(4)
           .when(Boolean(this.panelState?.feed),e=>e.child(this.button('sf-tracking',taskPanel?'작업 켜짐':'작업',()=>setShared('sixfold.panel.enabled',!this.panelTrackingActive),t)))
           .child(this.button('sf-motion',motion?'Motion on':'Motion off',()=>setShared('sixfold.motion',shared('sixfold.motion')===false),t))))
-      .child(h_flex().mr(extraLane).px(12).py(11).gap(16).flex_none().justify_center().font_bold().children(['blocked','done','working'].map(s => this.badge(s,String(total[s]),t,14))))
+      .child(h_flex().px(12).py(11).gap(16).flex_none().justify_center().font_bold().children(['blocked','done','working'].map(s => this.badge(s,String(total[s]),t,14))))
       .child(v_flex().id('sf-scroll').flex_1().min_h(0).overflow_y_scroll()
         .child(computerSection)
         .child(v_flex().relative().flex_none().pl(7).pr(LINK_MARGIN).pb(6).gap(3).children(computerRows)
@@ -1086,7 +1086,7 @@ export default class SixfoldDesk extends View {
         .tooltip(this.queuedRoutes.map(item=>`${item.project} · ${item.error || (item.hold?'전달 보류':'수신 pane 대기')}`).join('\n'))
         .child(div().text_size(10).text_color(this.queuedRoutes.some(item=>item.hold||item.error)?t.blocked:t.muted)
           .child(this.lang()==='ko'?`전달 대기 ${this.queuedRoutes.length} · 오류/보류 ${this.queuedRoutes.filter(item=>item.hold||item.error).length}`:`Queued ${this.queuedRoutes.length} · Error/held ${this.queuedRoutes.filter(item=>item.hold||item.error).length}`))))
-      .child(h_flex().h(38).mr(extraLane).flex_none().px(7).items_center()
+      .child(h_flex().h(38).flex_none().px(7).items_center()
         .child(this.button('sf-settings',w.settings,()=>run('app.settings'),t))
         .child(div().flex_1())
         .when(!discoveryOnly,e=>e.child(this.button('sf-new-space','+ Space',()=>this.newWorkspace(selectedMachine),t))));

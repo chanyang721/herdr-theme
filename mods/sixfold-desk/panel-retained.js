@@ -6,7 +6,7 @@ import {panelLayout,cardView,agentRow,panelFlowLayer,panelCounts,PANEL_GEOMETRY,
 import {groupColors,paletteMode} from './collab-flow.js';
 import {issuePopover} from './task-issues-view.js';
 import {issueScopeData,issueCacheLabel} from './task-issue-state.js';
-import {nativeTaskSpace,hostedTaskLayout} from './panel-host.js';
+import {nativeTaskSpace,hostedTaskLayout,panelWidthClass} from './panel-host.js';
 
 // Each retained entity receives only a local controller key. Display data stays
 // in this generation's registry, not in persisted shared state (which refreshes
@@ -193,7 +193,7 @@ export function createRetainedPanel(cx,{macTitlebar=false,onClassic=null,onDispo
     const oldFeed=c.feed,oldLayoutKey=c.layoutKey,oldMotion=c.motion;
     const nextTheme=signature(theme());
     c.hostVisible=typeof window!=='function'||window()?.visible!==false;
-    c.preferenceKey=signature([shared('sixfold.motion'),c.enabled,c.visible,c.hostVisible,c.panelWidth,nextTheme]);
+    c.preferenceKey=signature([shared('sixfold.motion'),c.enabled,c.visible,c.hostVisible,panelWidthClass(c.panelWidth),nextTheme]);
     c.input=input;c.status=status;
     if(!c.visible||!c.hostVisible||!c.enabled){
       c.motion=false;c.events=panelEventStates(input,Date.now(),{motion:false});
@@ -233,13 +233,13 @@ export function createRetainedPanel(cx,{macTitlebar=false,onClassic=null,onDispo
           ||!c.motion&&c.events.connections.some(event=>event.kind==='message'&&event.to===agent.id);
         const born=c.events.spawning.has(agent.id);
         const revealed=c.motion&&born&&c.events.active.some(event=>event.to===agent.id&&(event.kind==='spawn'||event.allocation?.kind==='new')&&event.elapsed>=PANEL_TIMING.packetMs);
-        const rowKey=signature([agent,c.rowMeta.get(agent.id),tag?.id||null,tag?.label||null,ping,born,revealed,c.motion,c.panelWidth<420,c.panelWidth<300,c.panelWidth<260,c.themeRevision]);
+        const rowKey=signature([agent,c.rowMeta.get(agent.id),tag?.id||null,tag?.label||null,ping,born,revealed,c.motion,panelWidthClass(c.panelWidth),c.themeRevision]);
         if(c.rowKeys.get(agent.id)!==rowKey){c.rowKeys.set(agent.id,rowKey);c.notify(c.rows.get(agent.id));}
       }
       if(!c.cards.has(space.id)){c.cards.set(space.id,make(PanelSpace,space.id));structure=true;}
       const nativeSpace=c.spaceMap.get(space.id);
       const cardKey=signature([{...space,agents:undefined},panelSpacePartners(c.feed,space.id),topology.find(item=>item[0]===space.id),space.agents.filter(a=>a.status==='working'&&a.closing?.step!==4).length,
-        c.events.packets.some(event=>event.kind==='memory'&&event.to===space.id&&event.phase==='ping'),c.motion,c.panelWidth<420,c.panelWidth<300,nativeSpace?.native?.active||false,c.themeRevision]);
+        c.events.packets.some(event=>event.kind==='memory'&&event.to===space.id&&event.phase==='ping'),c.motion,panelWidthClass(c.panelWidth),nativeSpace?.native?.active||false,c.themeRevision]);
       if(c.cardKeys.get(space.id)!==cardKey){c.cardKeys.set(space.id,cardKey);c.notify(c.cards.get(space.id));}
       c.settleIssue(space.id);
     }
@@ -255,7 +255,7 @@ export function createRetainedPanel(cx,{macTitlebar=false,onClassic=null,onDispo
     if(summaryKey!==c.summaryKey){c.summaryKey=summaryKey;c.notify(c.summary);}
     const hostKey=signature([c.layoutKey,c.feed.computers,c.feed.spaces.map(space=>[space.id,space.nav,space.memory,space.share,panelSpacePartners(c.feed,space.id),panelCounts({spaces:[space]})]),c.status]);
     if(c.embedded&&hostKey!==c.hostKey){c.hostKey=hostKey;c.onHostChange?.();}
-    const flowsKey=signature([c.layoutKey,c.feed.spaces.map(space=>[space.share,space.memory]),c.feed.links,c.events.packets.map(event=>[event.id,event.phase,event.kind==='message'?messageLeg(event.elapsed):(event.elapsed<40?0:event.elapsed<300?1:event.elapsed<1400?2:3)]),c.events.connections.map(event=>event.id),c.motion,c.panelWidth,c.themeRevision]);
+    const flowsKey=signature([c.layoutKey,c.feed.spaces.map(space=>[space.share,space.memory]),c.feed.links,c.events.packets.map(event=>[event.id,event.phase,event.kind==='message'?messageLeg(event.elapsed):(event.elapsed<40?0:event.elapsed<300?1:event.elapsed<1400?2:3)]),c.events.connections.map(event=>event.id),c.motion,panelWidthClass(c.panelWidth),c.themeRevision]);
     if(flowsKey!==c.flowsKey){c.flowsKey=flowsKey;c.notify(c.flows);if(c.embedded)c.onHostChange?.();}
     if(!oldFeed||oldMotion!==c.motion||themeChanged)c.notify(c.entity);
     c.wake?.cancel();c.wake=null;c.wakeAt=null;
@@ -268,11 +268,18 @@ export function createRetainedPanel(cx,{macTitlebar=false,onClassic=null,onDispo
     }
   };
   c.preferences=()=>{
-    const next=signature([shared('sixfold.motion'),c.enabled,c.visible,typeof window!=='function'||window()?.visible!==false,c.panelWidth,signature(theme())]);
+    const next=signature([shared('sixfold.motion'),c.enabled,c.visible,typeof window!=='function'||window()?.visible!==false,panelWidthClass(c.panelWidth),signature(theme())]);
     if(c.input&&next!==c.preferenceKey)c.apply(c.input);
   };
   c.navigation=()=>{if(c.input&&c.visible&&c.enabled)c.apply(c.input);};
-  c.resize=(width,_cx)=>{if(Math.abs(width-c.panelWidth)>1){c.panelWidth=width;c.preferences();}};
+  // True when the width crossed a layout breakpoint (the only time anything redraws).
+  c.resize=width=>{
+    if(!(Math.abs(width-c.panelWidth)>1))return false;
+    const crossed=panelWidthClass(width)!==panelWidthClass(c.panelWidth);
+    c.panelWidth=width;
+    if(crossed)c.preferences();
+    return crossed;
+  };
   c.setVisible=visible=>{
     if(c.visible!==visible){
       c.visible=visible;

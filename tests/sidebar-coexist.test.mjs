@@ -65,6 +65,11 @@ test('native computer navigator, task rows, documents, badges and local question
   assert(!gutter,'no extra strip narrows the original card');
   assert.equal(card(gutterTree).calls.find(call=>call[0]==='mr')[1],72);
   assert.equal(c.panelWidth,432,'the fixed gutter never creates a second content strip');
+  const updates=c.stats.updates;
+  assert.equal(c.resize(520),false,'widening between breakpoints redraws nothing');
+  assert.equal(c.stats.updates,updates);assert.equal(c.panelWidth,520);
+  assert.equal(c.resize(380),true,'crossing the compact header width redraws');
+  assert(c.stats.updates>updates);
   desk.computerFollow={follow:false};store.set('sixfold.computing.selected','remote:worker');
   const remoteTree=desk.render(cx),remoteIds=ids(remoteTree);
   assert(remoteIds.includes('sf-docs-toggle-worker/sp-remote'));assert(!remoteIds.includes('sf-docs-toggle-sp-local'));
