@@ -151,6 +151,7 @@ export function cardView(view,card,state,color,computerNames,t,motion,rowEntitie
   const sharing=Boolean(space.share);
   const partners=panelSpacePartners(view.feed||view.panelState?.feed,space.id);
   const localPartner=partners[0],partnerLabel=localPartner?localPartner.name+(partners.length>1?` +${partners.length-1}`:''):'';
+  const localTone=paletteMode(t)==='light'?'#56307D':'#c3a6ff';
   const selected=space.native?.active;
   const memory=state.packets.some(event=>event.kind==='memory'&&event.to===space.id&&event.phase==='ping');
   const box=v_flex().id(`panel-space-${space.id}`).relative().flex_none().min_w(0);
@@ -164,9 +165,9 @@ export function cardView(view,card,state,color,computerNames,t,motion,rowEntitie
       .child(svg('mods/sixfold-desk/icons/device-computer.svg').size(12).flex_none().text_color(color))
       .child(text(computerNames.get(space.share.computer)||'공유 컴퓨터',color,10))))
     .when(Boolean(localPartner),e=>e.child(h_flex().id(`panel-local-partner-${space.id}`).h(18).rounded(9)
-      .border(1).border_color('#c3a6ff5c').bg('#c3a6ff1f').px(compact?4:7).gap(3).items_center()
+      .border(1).border_color(localTone+'5c').bg(localTone+'1f').px(compact?4:7).gap(3).items_center()
       .max_w((view.panelWidth||224)<300?(sharing?32:48):95).min_w(0).tooltip(partners.map(partner=>partner.name).join(', '))
-      .child(text('↔','#c3a6ff',10).flex_none()).child(text(partnerLabel,'#c3a6ff',10))))
+      .child(svg('mods/sixfold-desk/icons/link.svg').size(11).flex_none().text_color(localTone)).child(text(partnerLabel,localTone,10))))
     .when(metrics.hasMemory,e=>e.child(div().id(`panel-memory-${space.id}`).w(memoryWidth).flex_none().px(compact?1:4).h(16).truncate().rounded(3).bg(memory?color:t.selected)
       .text_color(memory?t.background:t.ansi6||t.accent).text_size(compact&&space.memory.proposals>9?8:9).tooltip(`기억 제안${space.memory.proposals?` ${space.memory.proposals}`:''}`).child(compact?`◈${space.memory.proposals?` ${space.memory.proposals}`:''}`:`기억 제안${space.memory.proposals?` ${space.memory.proposals}`:''}`)))
     .when(count>0,e=>e.child(text(`◌ ${count}`,t.muted,compact?8:10).w(countWidth).flex_none())));
@@ -316,6 +317,7 @@ export function route(id,a,b,color,{dashed=false,packet=null,motion=false,relati
 
 export function panelFlowLayer(feed,layout,state,color,t,motion,width,gutter=null){
   const flow=messageFlowGeometry(gutter);
+  const localTone=paletteMode(t)==='light'?'#56307D':'#c3a6ff';
   const remoteId=(a,b)=>{
     const local=feed.spaces.find(space=>space.nav?.machine===null)?.computer||feed.computers[0]?.id;
     return a.computer!==local?a.computer:b.computer;
@@ -353,9 +355,9 @@ export function panelFlowLayer(feed,layout,state,color,t,motion,width,gutter=nul
   for(const link of feed.links){
     const a=layout.anchors.get(link.a),b=layout.anchors.get(link.b);if(!a||!b)continue;
     if(link.kind==='collaboration'){
-      layer.child(drawRoute(`collaboration-${link.a}-${link.b}`,a,b,'#c3a6ff').opacity(0.55));
+      layer.child(drawRoute(`collaboration-${link.a}-${link.b}`,a,b,localTone).opacity(0.55));
       for(const [index,end] of [a,b].entries())layer.child(div().id(`panel-collaboration-end-${link.a}-${link.b}-${index}`)
-        .absolute().right(flow.gutter-3).top(end.y-3).child(square('#c3a6ff',false)).bg(t.chrome));
+        .absolute().right(flow.gutter-3).top(end.y-3).child(square(localTone,false)).bg(t.chrome));
     }else if(link.kind==='task')layer.child(drawRoute(`task-${link.a}-${link.b}`,{...a,x:0},{...b,x:0},t.dim,{relation:true}));
   }
   for(const packet of state.packets){

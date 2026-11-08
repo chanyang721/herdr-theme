@@ -938,7 +938,7 @@ export default class SixfoldDesk extends View {
         .child(div().flex_1().min_w(0).truncate().text_color(s.active?t.foreground:t.muted).tooltip(s.name).child(s.name))
         .when(Boolean(feedPartner),e=>e.child(chip(`sf-task-partner-${s.id}`,feedPartner.name,feedTone,'device-computer')))
         .when(!feedPartner&&Boolean(partnerTail),e=>e.child(partnerTail))
-        .when(Boolean(localPartner),e=>e.child(chip(`sf-local-partner-${s.id}`,localPartner.name+(localPartners.length>1?` +${localPartners.length-1}`:''),'#c3a6ff','link')))
+        .when(Boolean(localPartner),e=>e.child(chip(`sf-local-partner-${s.id}`,localPartner.name+(localPartners.length>1?` +${localPartners.length-1}`:''),paletteMode(t)==='light'?'#56307D':'#c3a6ff','link')))
         .when(Boolean(metrics?.hasMemory),e=>e.child(div().id(`sf-task-memory-${s.id}`).w(metrics.memoryWidth).flex_none().h(16).rounded(3).bg(t.selected)
           .text_size(9).text_color(t.ansi6||t.accent).truncate().tooltip(`기억 제안${task.memory.proposals?` ${task.memory.proposals}`:''}`)
           .child(metrics.compact?`◈${task.memory.proposals?` ${task.memory.proposals}`:''}`:`기억 제안${task.memory.proposals?` ${task.memory.proposals}`:''}`)))
