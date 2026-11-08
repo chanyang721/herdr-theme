@@ -1,3 +1,4 @@
+import {classicPanelImports} from './classic-panel-imports.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
@@ -54,7 +55,7 @@ let loads = 0;
 async function sidebar(runtime) {
   let source = await readFile(new URL('../mods/sixfold-desk/main.js', import.meta.url), 'utf8');
   source=source.replace("'./panel-host.js'",JSON.stringify(new URL('../mods/sixfold-desk/panel-host.js',import.meta.url).href));
-  source=source.replace("import {renderPanelTracking} from './panel-view.js';",'const renderPanelTracking=()=>null;').replace("'./panel-model.js'",JSON.stringify(new URL('../mods/sixfold-desk/panel-model.js',import.meta.url).href));
+  source=classicPanelImports(source).replace("'./panel-model.js'",JSON.stringify(new URL('../mods/sixfold-desk/panel-model.js',import.meta.url).href));
   source=source.replace("import {createRetainedPanel} from './panel-retained.js';",'const createRetainedPanel=()=>null;');
   for(const name of ['task-feed-source','task-issue-state'])source=source.replace(`'./${name}.js'`,JSON.stringify(new URL(`../mods/sixfold-desk/${name}.js`,import.meta.url).href));
   source=source.replace("import {createRetainedCards} from './retained-cards.js';",'const createRetainedCards=()=>({begin(){},card(_id,_signature,build){return build();},end(){},dispose(){}});');
