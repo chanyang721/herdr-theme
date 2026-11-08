@@ -74,7 +74,7 @@ export function projectTaskTree(entries, {
   return rows;
 }
 
-// Keep roots visible and fold only direct child branches (>4 => first3).
+// Keep roots visible and fold direct child branches beyond the first three.
 // A branch includes its visible descendants; its fold follows their final row.
 export function projectTaskBranches(entries, { expandedParents = new Set(), ...options } = {}) {
   const all = projectTaskTree(entries, { ...options, expandedIDs: null, defaultExpanded: true });
@@ -87,7 +87,7 @@ export function projectTaskBranches(entries, { expandedParents = new Set(), ...o
     const item = pending.pop();
     if (item.fold) { folds.push({ ...item.fold, after: idOf(rows.at(-1).entry) });continue; }
     const row = item.row, branches = children.get(row.entry), parentId = idOf(row.entry);
-    const expandable = branches.length > 4, expanded = expandable && expandedParents.has(parentId);
+    const expandable = branches.length > 3, expanded = expandable && expandedParents.has(parentId);
     const visible = expandable && !expanded ? branches.slice(0, 3) : branches;
     rows.push({ ...row, childCount: branches.length, expanded: !expandable || expanded });
     if (expandable) {

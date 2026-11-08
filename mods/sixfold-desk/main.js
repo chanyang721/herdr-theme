@@ -22,7 +22,8 @@ import { watchBadges, workspaceBadges } from './badges.js';
 import { watchAsks, askSection, hasAsks } from './asks.js';
 import { askFor } from './ask-model.js';
 import { watchReports, reportsSection } from './session-reports.js';
-import {reconcilePanelFeed} from './panel-model.js';
+import {reconcilePanelFeed,panelSpacePartners} from './panel-model.js';
+import {panelCounts,panelHeaderMetrics} from './panel-view.js';
 import {TASK_FEED_FILE,createTaskFeedSource} from './task-feed-source.js';
 import {issueRequest,saveIssueRequest} from './task-issue-state.js';
 import {createRetainedPanel} from './panel-retained.js';
@@ -568,10 +569,11 @@ export default class SixfoldDesk extends View {
     // computer selection, workspace actions, documents or local card sections.
     const taskPanel=role==='sidebar'&&this.panelTrackingActive?this.panelRetained:null;
     const sidebarSize=sidebarGeometry(this.sidebarWidth),extraLane=role==='sidebar'?sidebarSize.lane:0;
-    const LINK_MARGIN=41+extraLane;
+    const LINK_MARGIN=sidebarSize.cardMargin;
     const list = agents().filter(a => workspaceIds.has(a.space));
     const local = all.filter(p => p.tab === f?.tab);
-    const total = counts(list);
+    const taskComputer=taskComputerRecord(taskPanel?.feed,selectedMachine);
+    const total = taskComputer?panelCounts({spaces:taskPanel.feed.spaces.filter(space=>space.computer===taskComputer.id)}):counts(list);
     const nodeIds = new Set([...facts.map(x=>x.address),...this.workflowNodes.map(x=>x.id)]);
     const events = [...(this.messageEvents ?? []),...this.workflowEvents].filter(e=>nodeIds.has(e.source)&&nodeIds.has(e.target));
     const unseen = address => unreadCount(this.messageEvents,address,this.readMessages);
@@ -706,7 +708,12 @@ export default class SixfoldDesk extends View {
     const laneOf = (from, to) => lanes.find(lane => !lane.gone && lane.link.machines.includes(from) && lane.link.machines.includes(to));
     // Link lanes sit in a fixed right margin of the computer list (LINK_MARGIN), drawn
     // over it: rows keep their width whether or not a link shows. Offsets are from the right.
-    const laneRight = slot => extraLane + 4 + slot * 4;
+    const laneRight = slot => Math.max(8,LINK_MARGIN-40-slot*8);
+    const coveredComputerPair=(a,b)=>{
+      const first=taskComputerRecord(taskPanel?.feed,a),second=taskComputerRecord(taskPanel?.feed,b);
+      return Boolean(first&&second&&taskPanel.feed.spaces.some(space=>space.share&&
+        (space.computer===first.id&&space.share.computer===second.id||space.computer===second.id&&space.share.computer===first.id)));
+    };
     const sendNote = this.lang()==='ko' ? '전송 이벤트 · 읽음 확인 아님' : 'Send event, not a read receipt';
     const computerItems = (typeof herdrNative.machines === 'function' ? herdrNative.machines() : [{name:null,layout:'ready'}]).map(machine => {
       const name = machine.name;
@@ -802,9 +809,8 @@ export default class SixfoldDesk extends View {
     });
     for(const id of this.classicMembers.keys())if(!workspaceIds.has(id))this.classicMembers.delete(id);
     const extraHeight=s=>{
-      const key=`${s.machine??''}|${String(s.id).split('/').pop()}`,task=taskPanel?.taskFor(s);
-      return partnersOf(s)||this.fileBadges?.[key]?.length||shared('sixfold.workspace.badges')?.[key]?.length||task?.memory?.proposals>0||
-        taskPanel?.feed?.links.some(link=>link.kind==='collaboration'&&(link.a===task?.id||link.b===task?.id))?20:0;
+      const key=`${s.machine??''}|${String(s.id).split('/').pop()}`;
+      return this.fileBadges?.[key]?.length||shared('sixfold.workspace.badges')?.[key]?.length?20:0;
     };
     const positions={};let offset=0;
     for(const {s,members} of groups){
@@ -845,7 +851,7 @@ export default class SixfoldDesk extends View {
       const task=taskPanel?.taskFor(s),taskBody=taskPanel?.bodyFor(s);
       const partner=partnersOf(s),mark=spaceLink(s);
       const badgeKey=`${s.machine??''}|${String(s.id).split('/').pop()}`;
-      const key=JSON.stringify([s,members,task?.id,task?.memory,task?.share,taskPanel?.names&&[...taskPanel.names],taskPanel?.feed?.links,t,w,motion,partner,mark,comets.comets.get(groupKey(partner?.group.name??mark?.lane.link.name)),
+      const key=JSON.stringify([s,members,task?.id,task?.memory,task?.share,task?.agents.map(agent=>[agent.id,agent.status,agent.closing]),taskPanel?.names&&[...taskPanel.names],taskPanel?.feed?.links,t,w,motion,partner,mark,comets.comets.get(groupKey(partner?.group.name??mark?.lane.link.name)),
         this.boxSizes?.[s.id],partner?.partners.includes(this.hoverComputer)||false,this.dragSpace,this.overSpace,
         this.workspaceIcons[s.id]||this.workspaceIcons[s.name],workspaceColor(s),workspacePinned(s,this.workspacePins),
         this.fileBadges?.[badgeKey],shared('sixfold.workspace.badges')?.[badgeKey],this.projectDocs?.spaces?.[s.id]||this.projectDocs?.spaces?.[s.name],
@@ -883,8 +889,17 @@ export default class SixfoldDesk extends View {
         .tooltip(partnerText)
         .child(svg(`mods/sixfold-desk/icons/device-${computerKind(this.computers?.machines?.[partner.partners[0]]?.os)}.svg`).size(14).flex_none().text_color(tailColor))
         .child(div().min_w(0).truncate().child(`${partnerNames[0]}${partnerNames.length > 1 ? ` +${partnerNames.length - 1}` : ''}`)) : null;
-      return v_flex().id(`sf-space-${s.id}`).relative().ml(7).mr(LINK_MARGIN).mb(12).gap(2).flex_none().rounded(6).border(1).border_color(workspacePinned(s,this.workspacePins)?t.accent:t.border)
-      .when(lit,e=>e.bg(collab+'1A'))
+      const metrics=task?panelHeaderMetrics(task,taskPanel.panelWidth):null;
+      const feedPartner=task?.share?taskPanel.feed.computers.find(computer=>computer.id===task.share.computer):null;
+      const feedTone=feedPartner?taskPanel.color(`computer:${feedPartner.id}`):null;
+      const localPartners=task?panelSpacePartners(taskPanel.feed,task.id):[];
+      const localPartner=localPartners[0];
+      const chip=(id,label,tone,icon)=>h_flex().id(id).h(18).max_w(94).min_w(0).flex_none().px(5).gap(3).items_center().rounded(9)
+        .bg(tone+'1F').border(1).border_color(tone+'5C').text_color(tone).text_size(10).font_normal().tooltip(label)
+        .child(svg(`mods/sixfold-desk/icons/${icon}.svg`).size(11).flex_none())
+        .child(div().min_w(0).truncate().child(label));
+      return v_flex().id(`sf-space-${s.id}`).relative().ml(7).mr(LINK_MARGIN).mb(12).gap(2).flex_none().rounded(6).border(1).border_color(feedTone|| (workspacePinned(s,this.workspacePins)?t.accent:t.border))
+      .when(lit,e=>e.bg(collab+'1A')).when(Boolean(feedTone),e=>e.bg(feedTone+'1A'))
       // ⑩ The box's size, for the flow drawn along its border.
       .on_size_change((size,cx)=>{const zoom=settings().zoom||1,w=size.width/zoom,h=size.height/zoom,prev=this.boxSizes?.[s.id];if(!prev||Math.abs(prev.w-w)>0.5||Math.abs(prev.h-h)>0.5){this.boxSizes={...this.boxSizes,[s.id]:{w,h}};this.invalidateSidebar?this.invalidateSidebar():cx.notify();}})
       .on_hover((hovered,cx)=>{const next=hovered?s.id:(this.hoverSpace===s.id?null:this.hoverSpace);if(next!==this.hoverSpace){this.hoverSpace=next;this.invalidateSidebar?this.invalidateSidebar():cx.notify();}})
@@ -921,16 +936,16 @@ export default class SixfoldDesk extends View {
         .when(workspacePinned(s,this.workspacePins),e=>e.child(div().id(`sf-pinned-${s.id}`).w(14).flex_none()
           .tooltip(this.lang()==='ko'?'고정 워크스페이스 · workspace-pins.local.json':'Pinned workspace · workspace-pins.local.json')
           .child(svg('mods/sixfold-desk/icons/pin.svg').size(12).text_color(t.accent))))
-        .child(div().flex_1().min_w(0).truncate().text_color(s.active?t.foreground:t.muted).child(s.name))
-        .child(div().text_size(10).text_color(t.muted).child(String(members.length))))
+        .child(div().flex_1().min_w(0).truncate().text_color(s.active?t.foreground:t.muted).tooltip(s.name).child(s.name))
+        .when(Boolean(feedPartner),e=>e.child(chip(`sf-task-partner-${s.id}`,feedPartner.name,feedTone,'device-computer')))
+        .when(!feedPartner&&Boolean(partnerTail),e=>e.child(partnerTail))
+        .when(Boolean(localPartner),e=>e.child(chip(`sf-local-partner-${s.id}`,localPartner.name+(localPartners.length>1?` +${localPartners.length-1}`:''),'#c3a6ff','link')))
+        .when(Boolean(metrics?.hasMemory),e=>e.child(div().id(`sf-task-memory-${s.id}`).w(metrics.memoryWidth).flex_none().h(16).rounded(3).bg(t.selected)
+          .text_size(9).text_color(t.ansi6||t.accent).truncate().tooltip(`기억 제안${task.memory.proposals?` ${task.memory.proposals}`:''}`)
+          .child(metrics.compact?`◈${task.memory.proposals?` ${task.memory.proposals}`:''}`:`기억 제안${task.memory.proposals?` ${task.memory.proposals}`:''}`)))
+        .when(Boolean(metrics?.count),e=>e.child(div().w(metrics.countWidth).flex_none().text_size(10).text_color(t.muted).child(`◌ ${metrics.count}`)))
+        .when(!metrics,e=>e.child(div().text_size(10).text_color(t.muted).child(String(members.length)))))
       .when(extraHeight(s)>0,e=>e.child(h_flex().id(`sf-space-extras-${s.id}`).h(18).flex_none().px(7).gap(4).items_center().min_w(0)
-        .when(Boolean(partnerTail),e=>e.child(partnerTail))
-        .when(Boolean(task),e=>e.child(h_flex().gap(3).flex_none()
-          .children(taskPanel.feed.links.filter(link=>link.kind==='collaboration'&&(link.a===task.id||link.b===task.id)).map(link=>{
-            const other=taskPanel.feed.spaces.find(space=>space.id===(link.a===task.id?link.b:link.a));
-            return div().max_w(70).truncate().text_size(9).text_color('#c3a6ff').tooltip(other?.name||'').child(`↔ ${other?.name||''}`);
-          }))
-          .when(task.memory.proposals>0,row=>row.child(div().px(3).rounded(3).bg(t.selected).text_size(9).text_color(t.ansi6||t.accent).tooltip(`기억 제안 ${task.memory.proposals}`).child(`◈ ${task.memory.proposals}`)))))
         .child(workspaceBadges(this,s,t))
       ))
       .child(workspaceAlertsRow(s,t))
@@ -1020,7 +1035,7 @@ export default class SixfoldDesk extends View {
           // Computers joined now: right-angle 1px dashed pipes in the right margin, one lane
           // each, ending on the rows. A slow dim dot runs while they work together; a send
           // passes from its sender's row to its receiver's as a brighter packet.
-          .children(lanes.flatMap(lane => {
+          .children(lanes.filter(lane=>!lane.link.machines.every((a,i,all)=>all.slice(i+1).every(b=>coveredComputerPair(a,b)))).flatMap(lane => {
             const rows = lane.link.machines.map(rowIndex).filter(index => index >= 0).sort((a, b) => a - b);
             if (rows.length < 2) return [];
             const right = laneRight(lane.slot), top = rowY(rows[0]), bottom = rowY(rows[rows.length - 1]);
@@ -1039,6 +1054,7 @@ export default class SixfoldDesk extends View {
           }))
           // One packet per send: a route merges same-way sends, each still moves on its own.
           .children(remoteRoutes.flatMap(({ route, hop }) => {
+            if(coveredComputerPair(hop.from,hop.to))return [];
             const lane = laneOf(hop.from, hop.to), from = rowIndex(hop.from), to = rowIndex(hop.to);
             if (!lane || from < 0 || to < 0) return [];
             return (route.packets?.length ? route.packets : [{ id: route.id, phase: route.phase }]).map(packet => {

@@ -18,7 +18,7 @@ test('allocation metadata supplies finite default tags and distinguishes new row
     const next={...initial,events:[{id:`event-${kind}`,at:NOW,kind:'dispatch',from,to:from,label:'',allocation:{kind,count:2}}]};
     const playing=advance(next,prior,0);
     assert.equal(playing.spawning.has(from),kind==='new');
-    assert.equal(playing.tags.get(from).label,kind==='new'?'조정: 새로 열어 맡김':'계획: 일 2개로 나눔');
+    assert.equal(playing.tags.get(from).label,'일 나누기 · 2개');
     assert(!advance(next,playing,1700).tags.has(from));
     assert.equal(advance(next,playing,3000).nextAt,null);
   }
@@ -188,7 +188,7 @@ test('distribution, review, verdict, acceptance and closing labels occupy the sa
   for (const kind of ['dispatch', 'review_request', 'verdict', 'accept', 'close_step', 'memory']) {
     const value = normalize({ events: [{ id: `event-${kind}`, at: NOW, kind, from: 'one-agent', to: 'one', label: `Label ${kind}` }] });
     const started = advance(value, boot(normalize({ events: [] })), 0);
-    assert.equal(started.tags.get('one-agent').label, `Label ${kind}`);
+    assert.equal(started.tags.get('one-agent').label, kind==='dispatch'?'일 나누기':`Label ${kind}`);
     assert.equal(advance(value, started, 1699).tags.has('one-agent'), true);
     assert.equal(advance(value, started, 1700).tags.size, 0);
     assert.equal(value.spaces[0].agents[0].title, 'Task one-agent', 'a tag never rewrites the task title');
@@ -228,7 +228,7 @@ test('delayed polling starts a new packet at observation time without changing s
   assert.equal(state.packets[0].phase, 'start');
   assert.equal(state.packets[0].at, NOW + 1000);
   assert.equal(state.packets[0].sourceAt, NOW - 1000);
-  assert.equal(state.nextAt, NOW + 1120);
+  assert.equal(state.nextAt, NOW + 1040);
   assert.equal(JSON.stringify(value), before);
 });
 
@@ -542,7 +542,7 @@ test('completed children leave both expanded rows and collapsed branch counts',(
   assert.equal(agentGroups(initial).folds[0].hidden,3);
   const next={...initial,agents:initial.agents.map(row=>row.id==='child0'?{...row,status:'done'}:row.id==='child1'?{...row,stage:5}:row)};
   const collapsed=agentGroups(next),expanded=agentGroups(next,{expandedParents:new Set(['root'])});
-  assert.equal(collapsed.rowMeta.get('root').childCount,4);assert.equal(collapsed.hidden,0);assert.equal(collapsed.folds.length,0);
+  assert.equal(collapsed.rowMeta.get('root').childCount,4);assert.equal(collapsed.hidden,1);assert.equal(collapsed.folds.length,1);
   assert.deepEqual(expanded.agents.map(row=>row.id),['root','child2','child3','child4','child5']);
   assert.equal(initial.agents[1].status,'working');assert.equal(next.agents.length,7,'display filtering does not change the producer snapshot');
 });
@@ -765,12 +765,47 @@ test('unresolved messages are quiet; new messages stagger in two bounded native 
 });
 
 
-test('message travel lasts750ms and its pipe settles within1460ms',()=>{
- const initial=normalize(),previous=boot(initial),from=initial.spaces[0].agents[0].id;
- const value=normalize({events:[{id:'pipe',at:stamp(NOW),kind:'message',from,to:'worker'}]});
- let state=advance(value,previous,0);assert.equal(state.packets[0].phase,'start');assert.equal(state.packets[0].travelMs,750);
- state=advance(value,state,789);assert.equal(state.packets[0].phase,'travel');
- state=advance(value,state,870);assert.equal(state.packets[0].phase,'ping');
- state=advance(value,state,1000);assert.equal(state.packets[0].phase,'fade');
- state=advance(value,state,1460);assert.equal(state.packets.length,0);assert.equal(state.nextAt,null);
+test('message travel lasts one second and its curve settles within1600ms',()=>{
+ const previous=boot(normalize({events:[]}));
+ const value=normalize({events:[{id:'pipe',kind:'message',at:NOW,from:'one-agent',to:'one',label:''}]});
+ let state=advance(value,previous,0);assert.equal(state.packets[0].phase,'start');assert.equal(state.packets[0].travelMs,1000);
+ state=advance(value,state,40);assert.equal(state.packets[0].phase,'travel');
+ state=advance(value,state,1040);assert.equal(state.packets[0].phase,'ping');
+ state=advance(value,state,1210);assert.equal(state.packets[0].phase,'fade');
+ state=advance(value,state,1600);assert.equal(state.packets.length,0);assert.equal(state.nextAt,null);
+});
+
+test('a real stage transition without an event shows its label once and releases its timer at1700ms',()=>{
+ const initial=normalize(),previous=boot(initial);
+ const next=normalize({spaces:[space('one',{agents:[agent('one-agent',{stage:3})]})]});
+ const changing=advance(next,previous,100,false);
+ assert.equal(changing.tags.get('one-agent').label,'검수 중');assert.equal(changing.packets.length,0);
+ assert.equal(changing.nextAt,NOW+1800);assert.equal(advance(next,changing,1799,false).tags.size,1);
+ const settled=advance(next,changing,1800,false);assert.equal(settled.tags.size,0);assert.equal(settled.nextAt,null);
+ assert.equal(panelEventStates(next,NOW+4000).tags.size,0,'a new instance consumes current stages as its watermark');
+});
+
+test('new allocation labels the coordinator while the destination owns the new-row outline',()=>{
+ const initial=normalize({spaces:[space('one',{agents:[agent('sender'),agent('receiver')]})]});
+ const value={...initial,events:[{id:'allocate',at:NOW,kind:'dispatch',from:'sender',to:'receiver',label:'',allocation:{kind:'new',count:2}}]};
+ const state=advance(value,boot(initial),0);assert.equal(state.tags.get('sender').label,'일 나누기 · 2개');
+ assert(!state.tags.has('receiver'));assert(state.spawning.has('receiver'));
+});
+
+test('a proven remote send labels its receiving row at arrival, while motion-off keeps only receipt information',()=>{
+ const initial=normalize(),event={id:'remote',at:NOW,kind:'message',from:'worker',to:'one-agent',label:''};
+ const value=normalize({events:[event]});let state=advance(value,boot(initial),0);
+ assert(!state.tags.has('one-agent'));state=advance(value,state,1040);assert.equal(state.tags.get('one-agent').label,'← Worker');
+ state=advance(value,state,2740);assert(!state.tags.has('one-agent'));assert.equal(state.nextAt,null);
+ const still=advance(value,boot(initial),0,false);assert.equal(still.packets.length,0);assert.equal(still.tags.get('one-agent').label,'← Worker');
+ const unresolved=normalize({events:[{...event,animate:false}]});assert.equal(advance(unresolved,boot(initial),0).tags.size,0);
+});
+
+test('optional tool links are preserved only as explicit web URLs, never guessed from project keys',()=>{
+ for(const url of ['javascript:alert(1)','file:///demo','https://user:pass@example.invalid/a','https://example.invalid/a\\b','https://example.invalid/a\nb']){
+  const value=normalize({spaces:[space('one',{work:{tool:'linear',key:'DEMO',url}})]});assert.equal(value.spaces[0].work.url,null);
+ }
+ const value=normalize({spaces:[space('one',{work:{tool:'linear',key:'DEMO',url:'https://issues.example.invalid/project'}})]});
+ assert.equal(projectPanelFeed(value).feed.spaces[0].work.url,'https://issues.example.invalid/project');
+ assert(!('url' in normalize({spaces:[space('one',{work:{tool:'linear',key:'DEMO'}})]}).spaces[0].work));
 });

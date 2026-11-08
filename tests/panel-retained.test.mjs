@@ -63,8 +63,8 @@ test('child completion updates the retained card and fold without focus or expan
   raw.spaces[0].agents[1].status='done';raw.spaces[0].agents[1].stage=5;
   raw.spaces[0].agents[2].status='done';raw.spaces[0].agents[2].stage=5;
   r.controller.apply(cleanPanelFeed(raw),'ready');r.flush();
-  const card=r.controller.layout.cards[0];assert(!card.rows.some(row=>row.kind==='children-more'));
-  assert.equal(card.rows.filter(row=>row.kind==='agent').length,5);
+  const card=r.controller.layout.cards[0];assert.equal(card.rows.find(row=>row.kind==='children-more').fold.hidden,1);
+  assert.equal(card.rows.filter(row=>row.kind==='agent').length,4);
   for(const child of raw.spaces[0].agents.slice(1,3))assert(!card.rows.some(row=>row.agent?.id===child.id));
   assert.equal(r.controller.expandedParents.size,0);r.controller.dispose();
 });
@@ -140,7 +140,7 @@ test('hiding cancels the finite animation wake; data can change while hidden wit
   r.controller.dispose();
 });
 
-test('the finite start boundary invalidates the newborn row to begin its native reveal',async()=>{
+test('a newborn placeholder hides its content until the finite packet arrival boundary',async()=>{
   const original=Date.now;let now=1780000000000;Date.now=()=>now;let r;
   try{
     r=await runtime(true);const feed=cleanPanelFeed(makePanelFixture({now}));
@@ -148,9 +148,9 @@ test('the finite start boundary invalidates the newborn row to begin its native 
     const next=cleanPanelFeed(eventSequence.find(step=>step.name==='spawn').apply(feed,now));
     r.controller.apply(next,'ready');r.flush();
     const id=[...r.controller.events.spawning][0],entity=r.controller.rows.get(id);
-    const opacity=()=>entity.tree.calls.filter(call=>call[0]==='opacity').at(-1)[1];
-    assert.equal(opacity(),0.25);assert.equal(r.controller.wakeAt,now+40);
-    const renders=r.controller.stats.renders[`row:${id}`];now+=40;r.controller.wake.fn();r.flush();
+    const opacity=()=>{const walk=n=>[n,...n.nodes.filter(x=>x&&typeof x==='object').flatMap(walk)];return walk(entity.tree).find(n=>n.calls.some(c=>c[0]==='id'&&c[1]===`panel-agent-content-${id}`)).calls.find(c=>c[0]==='opacity')[1];};
+    assert.equal(opacity(),0);assert.equal(r.controller.wakeAt,now+40);
+    const renders=r.controller.stats.renders[`row:${id}`];now+=1640;r.controller.wake.fn();r.flush();
     assert.equal(opacity(),1);assert.equal(r.controller.stats.renders[`row:${id}`],renders+1);
   }finally{r?.controller.dispose();Date.now=original;}
 });
@@ -232,4 +232,15 @@ test('an explicit local partner rename updates its chips without invalidating ag
   r.controller.apply(cleanPanelFeed(next),'ready');r.flush();
   assert.deepEqual(Object.keys(r.controller.stats.renders).filter(key=>renamed[key]!==r.controller.stats.renders[key]).sort(),[`space:${a.id}`,`space:${b.id}`,'flows:all'].sort());
   r.controller.dispose();
+});
+
+test('opening another space closes the previous issue popup and only its retained card changes',async()=>{
+ const r=await runtime(),raw=makePanelLoadFixture({spaces:2,agentsPerSpace:1,now:Date.now()});
+ try{
+  r.controller.apply(cleanPanelFeed(raw),'ready');r.flush();const [a,b]=r.controller.feed.spaces;
+  const open=space=>r.controller.issuePopover(space,element(),r.native.theme()).calls.find(c=>c[0]==='on_open_change')[1](true,{});
+  open(a);assert(r.controller.issueStates.get(a.id).open);open(b);
+  assert(!r.controller.issueStates.get(a.id).open);assert(r.controller.issueStates.get(b.id).open);
+  assert.equal(r.controller.issueStates.size,2,'local search/pending state is retained when another popup opens');
+ }finally{r.controller.dispose();}
 });

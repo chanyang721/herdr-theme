@@ -27,9 +27,21 @@ unconnected tool fields remain visibly unmeasured or disconnected. No command
 or executable supplied in a feed is run.
 
 Agent stages 1–4 fill the distribution, work, review and acceptance slots. Stage
-0 is unstarted; stage 5 shows a check without a bar. A new event briefly replaces that bar
-with its supplied label without moving the task title. Initial history is not
-replayed. A newly observed message gets a bright eight-pixel packet and fading tail along a right-side Bezier arc, with square departure and arrival pings. A reserved 72px gutter separates messages from stationary purple collaboration brackets and outer computer dashes. Arc width scales with row distance within that gutter; upward sends curve upward. Two message lanes stagger bursts, with at most eight scheduled routes. Native interpolation uses eight finite curve targets rather than a JavaScript frame loop. Known remote endpoints project only to their explicit computer anchor; the packet curves toward its dashed lane and follows it. Unknown endpoints are skipped. Optional `animate: false` retains static labels but suppresses packets and connections. Initial history and hidden-window backlogs are never replayed. Dashed routes identify
+0 is unstarted; stage 5 shows a check without a bar. A changed stage or a new
+event replaces that bar with a label for 1.7 seconds without moving the task
+title. Initial history is not replayed. A local message has a white head, two
+teal tail pieces and a thin right-side curve; it travels for one second and
+finishes with a square arrival ping. All lines occupy the same 72px gutter:
+message curves extend at most 24px beyond the card, stationary purple links
+use 30px, and remote-computer pipes start at 40px with 8px spacing. Explicit
+row endpoints stay on their rows; space-wide endpoints use their headers.
+Two message lanes stagger bursts, with at most eight scheduled routes. Native
+interpolation uses finite targets rather than a JavaScript frame loop. A remote
+packet follows its computer-coloured dashed pipe, and its receiving row briefly
+shows that computer's name. Motion off omits message curves and packets while
+counts and receiving-row information still update. Unknown endpoints are skipped.
+Optional `animate: false` retains supplied labels but suppresses packets and
+connections. Initial history and hidden-window backlogs are never replayed. Dashed routes identify
 cross-computer sharing: a whole space uses a hollow square, and one shared agent
 uses a filled circle. Same-task agent brackets are stationary gray solid lines.
 An explicit `links` entry with `kind: "collaboration"` and two space IDs in `a`
@@ -40,7 +52,7 @@ endpoints. Names, bundle IDs and messages alone never create a partnership.
 Issue groups and flat rows sort blocked, working, review, waiting and done.
 Within a state, producer ordering is preserved. More than four issue groups show
 three and an expandable **+N**; agents inside an issue are not truncated. Explicit
-`parent_id` relationships form trees within the same issue. More than four child
+`parent_id` relationships form trees within the same issue. More than three child
 branches show three and their own **+N**. Child rows use a compact status dot,
 without another stage bar. Agents without an issue follow the issue groups.
 The supplied `title` is the current task or subtask work name; role, session or
@@ -48,7 +60,9 @@ workspace labels should be used only when that work name is unavailable.
 An explicitly completed child (`status: done` or `stage: 5`, without blocking
 state) is removed before tree projection and does not count toward **+N**.
 Active descendants remain visible. Different issue/space bindings remain
-independent roots, with their own completion and closing lifecycle.
+independent roots, with their own completion and closing lifecycle. A newly
+allocated row first shows a dotted placeholder; its content appears at packet
+arrival, or immediately when motion is off.
 Explicit closing data uses four teal stages. Its final label remains briefly
 before the row disappears; a supplied blocking reason keeps the row visible.
 Optional closing `memory` data distinguishes pending storage, saved memory and
@@ -61,7 +75,11 @@ issues in `spaces[].issues`. Natural week items stay included. The popover sends
 explicit per-issue requests through the fixed `panel-issue-requests` directory
 beside the selected feed, using a unique file per request. Producer results match
 the request ID and report local inclusion or rejection. Opening or searching the
-popover never sends an external service request.
+popover never sends an external service request. Only one space's popover is
+open at a time; search and pending-selection state remain local to each space.
+An optional `work.url` enables the explicit **open in tool** action. Only a
+provided HTTP(S) URL without embedded credentials is accepted; no URL is guessed
+from an issue key. Without it the footer states that the link is unavailable.
 
 Optional issue fields `week`, `pinned` and `milestone_id` preserve the producer's
 selection. Milestone metadata supplies its name, optional `YYYY-MM-DD` due date

@@ -1,10 +1,10 @@
 import { projectTaskBranches } from './task-tree.js';
 
 // Display data only. The producer owns task interpretation and lifecycle policy.
-export const MESSAGE_TIMING=Object.freeze({startMs:120,packetMs:870,pingMs:130,coolMs:460});
-// A message packet moves out to its lane, along it, then into the receiver.
-// Each leg changes one axis, so the packet never leaves the drawn line.
-export const MESSAGE_LEGS=Object.freeze([120,232,757]);
+export const MESSAGE_TIMING=Object.freeze({startMs:40,packetMs:1040,pingMs:170,coolMs:390});
+// Finite native targets: departure, remote vertical leg, local curve turn,
+// remote arrival leg. There is no JavaScript animation-frame timer.
+export const MESSAGE_LEGS=Object.freeze([40,190,540,890]);
 export const messageLeg=elapsed=>MESSAGE_LEGS.filter(at=>elapsed>=at).length;
 export const PANEL_TIMING = Object.freeze({ tagMs: 1700, startMs: 40, packetMs: 1640, pingMs: 460, coolMs: 900 });
 const MAX = Object.freeze({ computers: 64, spaces: 128, agents: 256, issues: 128, links: 512, events: 256, bytes: 2 * 1024 * 1024 });
@@ -19,6 +19,7 @@ const measurement = value => typeof value === 'number' && Number.isFinite(value)
 const time = value => typeof value === 'string' ? (Number.isFinite(Date.parse(value)) ? Date.parse(value) : null) : Number.isFinite(value) && value >= 0 ? value : null;
 const list = (value, limit) => Array.isArray(value) ? value.slice(0, limit) : [];
 const owns = (value, key) => Object.prototype.hasOwnProperty.call(value, key);
+const toolUrl=value=>typeof value==='string'&&value.length<=2048&&!/[\\\u0000-\u0020\u007f]/.test(value)&&/^https?:\/\/[^/@?#]+(?:[/?#].*)?$/i.test(value)?value:null;
 const cleanMemory = value => object(value) && ['pending', 'saved', 'proposed'].includes(value.state)
   ? { state: value.state, proposals: integer(value.proposals) } : null;
 const copyMemory = value => value ? { state: value.state, proposals: value.proposals } : null;
@@ -127,7 +128,8 @@ export function cleanPanelFeed(raw) {
     if (!object(value) || !id(value.id)) return null;
     const agents = unique(list(value.agents, MAX.agents), agent => cleanAgent(agent, knownAgents));
     const issues = cleanIssues(value.issues, MAX.issues);
-    const work = object(value.work) && text(value.work.tool, 40) ? { tool: text(value.work.tool, 40).toLowerCase(), key: text(value.work.key, 80), open: integer(value.work.open) } : null;
+    const work = object(value.work) && text(value.work.tool, 40) ? { tool: text(value.work.tool, 40).toLowerCase(), key: text(value.work.key, 80), open: integer(value.work.open),
+      ...(owns(value.work,'url')?{url:toolUrl(value.work.url)}:{}) } : null;
     const share = object(value.share) && knownComputers.has(value.computer) && knownComputers.has(value.share.computer) && value.share.computer !== value.computer && ['space', 'agent'].includes(value.share.kind)
       && (value.share.kind !== 'agent' || agents.some(agent => agent.id === value.share.agent_id))
       ? { computer: value.share.computer, kind: value.share.kind, ...(value.share.kind === 'agent' ? { agent_id: value.share.agent_id } : {}) } : null;
@@ -266,7 +268,7 @@ function copyDisplaySpace(space, agents) {
     id: space.id, name: space.name, bundle: space.bundle, computer: space.computer, nav: copyNavigation(space.nav, 'space_id'),
     share: space.share ? { computer: space.share.computer, kind: space.share.kind, ...(space.share.kind === 'agent' ? { agent_id: space.share.agent_id } : {}) } : null,
     slack: space.slack ? { channel: space.slack.channel } : null,
-    work: space.work ? { tool: space.work.tool, key: space.work.key, open: space.work.open } : null,
+    work: space.work ? { tool: space.work.tool, key: space.work.key, open: space.work.open,...(owns(space.work,'url')?{url:space.work.url}:{}) } : null,
     issues: copyIssues(space.issues),
     memory: { proposals: space.memory.proposals }, agents,
     ...(owns(space, 'issue_catalog') ? { issue_catalog: space.issue_catalog ? {
@@ -357,6 +359,8 @@ export function createPanelProjection() {
 }
 
 export function panelEventLabel(event){
+  if(event.kind==='dispatch')return `일 나누기${event.allocation?.count>1?` · ${event.allocation.count}개`:''}`;
+  if(event.kind==='spawn')return '새 에이전트';
   if(event.label)return event.label;
   if(event.allocation?.kind==='new')return '조정: 새로 열어 맡김';
   if(event.allocation?.kind==='existing')return event.allocation.count>1?`계획: 일 ${event.allocation.count}개로 나눔`:'조정: 일 맡김';
@@ -371,6 +375,16 @@ export function panelEventStates(feed, now, { previous = null, motion = true } =
   const incoming = feed?.events ?? [];
   const seen = new Set(previous?.seen ?? incoming.map(event => event.id));
   const pending = new Map(previous?.pending ?? []);
+  const agentStages=new Map(),stageNames=['대기','배분 중','작업 중','검수 중','수락 대기','완료'];
+  let stageRevision=previous?.stageRevision||0;
+  for(const agent of (feed?.spaces||[]).flatMap(space=>space.agents)){
+    const signature=JSON.stringify([agent.stage,agent.closing?.step||0]);agentStages.set(agent.id,signature);
+    if(previous?.agentStages?.has(agent.id)&&previous.agentStages.get(agent.id)!==signature){
+      const label=agent.closing?['','보고 작성','경험·결정 저장','기억함 제안','닫힘'][agent.closing.step]:stageNames[agent.stage];
+      const event={id:`stage-${++stageRevision}`,kind:'stage_change',from:agent.id,to:null,label,sourceAt:now,at:now,routeAt:now,drawRoute:false};
+      pending.set(event.id,event);
+    }
+  }
   for (const event of incoming) {
     if (seen.has(event.id)) {
       // Corrections can revoke a route, but never replay an old ID.
@@ -385,7 +399,7 @@ export function panelEventStates(feed, now, { previous = null, motion = true } =
     if(!route&&!label)continue;
     let routeAt=now,routeLane=0,drawRoute=Boolean(route);
     if(event.kind==='message'&&route&&animate){
-      const queued=[...pending.values()].filter(item=>item.kind==='message'&&item.drawRoute&&item.routeAt+1460>now);
+      const queued=[...pending.values()].filter(item=>item.kind==='message'&&item.drawRoute&&item.routeAt+1600>now);
       if(queued.length>=8)drawRoute=false;
       else {
         const last=queued.at(-1);routeAt=Math.max(now,last?last.routeAt+260:now);
@@ -396,21 +410,33 @@ export function panelEventStates(feed, now, { previous = null, motion = true } =
     pending.set(event.id,{...event,label,sourceAt:event.at,at:now,routeAt,routeLane,drawRoute});
   }
   const active = [], tags = new Map(), spawning = new Set(), packets = [], connections = [];
+  const endpointComputers=new Map(),agentIDs=new Set(),computerNames=new Map((feed?.computers||[]).map(c=>[c.id,c.name]));
+  for(const computer of feed?.computers||[])endpointComputers.set(computer.id,computer.id);
+  for(const space of feed?.spaces||[]){endpointComputers.set(space.id,space.computer);for(const agent of space.agents){agentIDs.add(agent.id);endpointComputers.set(agent.id,space.computer);}}
   let nextAt = null;
   const wake = at => { if (at > now && (nextAt === null || at < nextAt)) nextAt = at; };
   for (const [key, event] of pending) {
     const elapsed = now - event.at;
     const timing=event.kind==='message'?MESSAGE_TIMING:PANEL_TIMING;
     const routeAt=event.routeAt??event.at,routeElapsed=now-routeAt;
-    const end = Math.max(event.label?event.at+PANEL_TIMING.tagMs:0,routeAt + timing.packetMs + timing.pingMs + timing.coolMs);
+    const sourceComputer=endpointComputers.get(event.from),targetComputer=endpointComputers.get(event.to);
+    const incoming=event.kind==='message'&&event.drawRoute!==false&&event.animate!==false&&agentIDs.has(event.to)
+      &&sourceComputer&&targetComputer&&sourceComputer!==targetComputer?computerNames.get(sourceComputer):null;
+    const incomingAt=routeAt+(animate?timing.packetMs:0);
+    const end = event.kind==='stage_change'?event.at+PANEL_TIMING.tagMs
+      :Math.max(event.label?event.at+PANEL_TIMING.tagMs:0,routeAt + timing.packetMs + timing.pingMs + timing.coolMs,incoming?incomingAt+PANEL_TIMING.tagMs:0);
     if (now >= end) { pending.delete(key); continue; }
     if (elapsed < 0) { wake(event.at); continue; }
     active.push({ ...event, elapsed });
     if (event.label && elapsed < PANEL_TIMING.tagMs) {
-      const target = event.kind === 'spawn'||event.allocation?.kind==='new' ? event.to : event.from;
+      const target = event.kind === 'spawn' ? event.to : event.from;
       const old = tags.get(target);
       if (target && (!old || old.sourceAt < event.sourceAt || (old.sourceAt === event.sourceAt && old.at <= event.at))) tags.set(target, { ...event, elapsed });
       wake(event.at + PANEL_TIMING.tagMs);
+    }
+    if(incoming){
+      if(now>=incomingAt&&now<incomingAt+PANEL_TIMING.tagMs)tags.set(event.to,{...event,id:`incoming-${event.id}`,label:`← ${incoming}`,elapsed:now-incomingAt});
+      wake(incomingAt);wake(incomingAt+PANEL_TIMING.tagMs);
     }
     if (event.animate!==false && (event.kind === 'spawn'||event.allocation?.kind==='new') && event.to && elapsed < PANEL_TIMING.tagMs) {
       spawning.add(event.to);
@@ -427,5 +453,5 @@ export function panelEventStates(feed, now, { previous = null, motion = true } =
     }
     wake(end);
   }
-  return { seen: [...seen].slice(-4096), pending: [...pending], active, tags, spawning, packets, connections, nextAt, motion: animate };
+  return { seen: [...seen].slice(-4096), pending: [...pending], active, tags, spawning, packets, connections, nextAt, motion: animate,agentStages,stageRevision };
 }

@@ -50,13 +50,23 @@ test('flow lanes stay outside cards in ordered bands; only proven remote endpoin
 });
 
 
-test('external gutter preserves original card width while placing the apex beyond the visible panel',()=>{
- const original=sidebarGeometry(312),wide=sidebarGeometry(432),narrow=sidebarGeometry(368);
- assert.equal(original.cardMargin,41);assert.equal(wide.content,312);assert.equal(wide.lane,120);
- for(const geometry of [wide,narrow]){
-  assert.equal(geometry.total-geometry.cardMargin,312-41);
-  const flow=messageFlowGeometry(geometry.cardMargin),origin=geometry.total-geometry.cardMargin;
-  assert(origin+flow.width-24>geometry.content,'pipe enters the separate gap beyond the panel');
-  assert(origin+flow.width+flow.right===geometry.total,'gap ends before terminal content');
+test('the fixed gutter contains message curves, collaboration and outer computer lanes',()=>{
+ for(const width of [224,312,432,680]){
+  const box=sidebarGeometry(width),flow=messageFlowGeometry(box.cardMargin);
+  assert.equal(box.content,width);assert.equal(box.lane,0);assert.equal(box.cardMargin,72);
+  assert.equal(flow.collaboration,30);assert.equal(flow.computer,40);
+  assert(flow.messageNext<flow.collaboration);assert(flow.collaboration<flow.computer);
+  assert.equal(flow.width+flow.right,box.cardMargin);
  }
+});
+
+test('curve extent stays inside its band and each of four remote computers has its own outer lane',async()=>{
+ const {messageCurveReach,computerFlow}=await import('../mods/sixfold-desk/panel-host.js');
+ for(const distance of [0,20,100,400,10000]){
+  const reach=messageCurveReach(distance);assert(reach>0&&reach<=24);
+  assert.equal(messageCurveReach(-distance),reach);assert(messageCurveReach(distance,1)<reach);
+ }
+ assert.equal(messageCurveReach(10000),24);
+ const feed={computers:['local','a','b','c','d'].map(id=>({id})),spaces:[]};
+ assert.deepEqual(['a','b','c','d'].map(id=>computerFlow(feed,id).computer),[40,48,56,64]);
 });

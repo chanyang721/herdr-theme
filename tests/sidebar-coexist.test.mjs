@@ -59,12 +59,12 @@ test('native computer navigator, task rows, documents, badges and local question
   assert(localIds.includes('sf-asks'));assert(localIds.includes('sf-ask-demo-question-action-0'));
   assert(flatten(localTree).some(node=>node.nodes.includes(c.bodyFor(native[0]))),'retained tasks are inside the native workspace card');
   const card=tree=>flatten(tree).find(node=>node.calls.some(call=>call[0]==='id'&&call[1]==='sf-space-sp-local'));
-  assert.equal(card(localTree).calls.find(call=>call[0]==='mr')[1],41,'original native card margin is preserved');
+  assert.equal(card(localTree).calls.find(call=>call[0]==='mr')[1],72,'all lanes stay in the fixed native card gutter');
   const sized=localTree.calls.find(call=>call[0]==='on_size_change')[1];sized({width:432},cx);
   const gutterTree=desk.render(cx),gutter=flatten(gutterTree).find(node=>node.calls.some(call=>call[0]==='id'&&call[1]==='sf-message-gutter'));
-  assert(gutter);assert.equal(gutter.calls.find(call=>call[0]==='w')[1],120);
-  assert.equal(card(gutterTree).calls.find(call=>call[0]==='mr')[1],161);
-  assert.equal(c.panelWidth,312,'the message gap never consumes native card content width');
+  assert(!gutter,'no extra strip narrows the original card');
+  assert.equal(card(gutterTree).calls.find(call=>call[0]==='mr')[1],72);
+  assert.equal(c.panelWidth,432,'the fixed gutter never creates a second content strip');
   desk.computerFollow={follow:false};store.set('sixfold.computing.selected','remote:worker');
   const remoteTree=desk.render(cx),remoteIds=ids(remoteTree);
   assert(remoteIds.includes('sf-docs-toggle-worker/sp-remote'));assert(!remoteIds.includes('sf-docs-toggle-sp-local'));

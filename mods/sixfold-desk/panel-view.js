@@ -1,17 +1,16 @@
 import {div, svg, image, PathBuilder} from 'gpui-kit';
 import {h_flex, v_flex} from 'gpui-base';
 import {spaces, panes, shared, setShared, run, settings} from 'herdr';
-import {agentGroups, agentState, panelEventStates, panelSpaces, panelSpacePartners, MESSAGE_LEGS, messageLeg} from './panel-model.js';
+import {agentGroups, agentState, panelEventStates, panelSpaces, panelSpacePartners, PANEL_TIMING, MESSAGE_LEGS, messageLeg} from './panel-model.js';
 import {groupColors, paletteMode} from './collab-flow.js';
 import {rowDetailParts} from './task-row-details.js';
-import {PANEL_FLOW, panelFlowAnchor, panelMessageAnchors, messageFlowGeometry} from './panel-host.js';
+import {PANEL_FLOW, panelFlowAnchor, panelMessageAnchors, messageFlowGeometry, messageCurveReach, computerFlow} from './panel-host.js';
 
 const MARK={working:'●',idle:'○',blocked:'!',done:'✓'};
 const STAGES=['배분','작업','검수','수락 대기'];
 const CLOSE=['보고 작성','경험·결정 저장','기억함 제안','닫힘'];
 const ISSUE={blocked:'막힘',working:'진행 중',review:'검수',waiting:'대기',done:'완료'};
 const RIGHT=PANEL_FLOW.gutter, ROW=28;
-const MESSAGE_TAIL_MS=113;
 export const PANEL_GEOMETRY=Object.freeze({header:34,meta:26,issue:18,row:ROW,child:20,border:1,bottom:4,gap:4,padding:7,rightGutter:RIGHT,popoverGap:10});
 export function panelCounts(feed){
   const counts={working:0,idle:0,blocked:0,done:0,total:0};
@@ -25,13 +24,14 @@ export function panelCounts(feed){
 }
 export function panelHeaderMetrics(space,width=224){
   const compact=width<420,proposals=space.memory?.proposals||0;
+  const hasMemory=proposals>0||space.agents.some(agent=>agent.closing?.step>=3&&agent.closing.memory?.state==='proposed');
   const count=panelCounts({spaces:[space]}).working;
-  const memoryWidth=proposals>0?(compact?(proposals>9?32:22):64):0;
+  const memoryWidth=hasMemory?(compact?(proposals>9?32:22):64):0;
   const countWidth=count>0?(compact?24:32):0;
   // The flow coordinate origin is the card's right edge. Derive the memory
   // badge centre from the same fixed widths and spacing used by its header.
   const memoryAnchorX=-(PANEL_GEOMETRY.padding+PANEL_GEOMETRY.border+countWidth+(countWidth?PANEL_GEOMETRY.gap:0)+memoryWidth/2);
-  return {...PANEL_GEOMETRY,compact,memoryWidth,countWidth,count,memoryAnchorX};
+  return {...PANEL_GEOMETRY,compact,hasMemory,memoryWidth,countWidth,count,memoryAnchorX};
 }
 const qualified=(nav,key)=>nav?.machine?`${nav.machine}/${nav[key]}`:nav?.[key];
 export function navigatePanelAgent(agent){
@@ -108,12 +108,16 @@ export function agentRow(view,agent,space,tag,state,color,t,motion){
     remoteName:agent.nav?.machine||space.nav?.machine?view.names?.get(space.computer)||'원격 컴퓨터':null},t,{compact,motion});
   const closingBlocked=Boolean(agent.closing?.blocked_reason);
   const status=closingBlocked?'blocked':agentState(agent)==='done'?'done':agent.status;
-  const pulse=state.packets.some(event=>event.to===agent.id&&event.phase==='ping');
+  const pulse=state.packets.some(event=>event.to===agent.id&&event.phase==='ping')
+    ||!motion&&state.connections?.some(event=>event.kind==='message'&&event.to===agent.id);
   const born=state.spawning.has(agent.id);
+  const birthAge=state.active?.find(event=>(event.kind==='spawn'||event.allocation?.kind==='new')&&event.to===agent.id)?.elapsed||0;
+  const ghost=born&&motion&&birthAge<PANEL_TIMING.packetMs;
   const stacked=view.embedded&&(view.panelWidth||224)<260&&!child;
-  const line=h_flex().w_full().min_w(0).gap(5).items_center();
+  const line=h_flex().id(`panel-agent-content-${agent.id}`).w_full().min_w(0).gap(5).items_center().opacity(ghost?0:1)
+    .when(born&&motion,e=>e.transition('opacity',{duration:180,easing:'ease-out'}));
   const row=h_flex().id(`panel-agent-${agent.id}`).relative().h(child?PANEL_GEOMETRY.child:ROW).flex_none().pl(child?30+(depth-1)*16:7).pr(7).gap(5).items_center().rounded(3)
-    .opacity(agentState(agent)==='done'?0.52:1)
+    .opacity(agentState(agent)==='done'||agent.report_missing?0.52:1)
     .when(born,e=>e.border(1).border_dashed().border_color(color))
     .when(pulse,e=>e.border(1).border_color(color))
     .tooltip([agent.title,agent.tooltip_addr,agent.closing?.blocked_reason,detail.tooltip].filter(Boolean).join('\n'))
@@ -135,14 +139,8 @@ export function agentRow(view,agent,space,tag,state,color,t,motion){
     .tooltip(remembered?`${remembered.state==='pending'?'기억 저장 대기':remembered.state==='saved'?'기억함에 저장됨':'기억 제안'}${remembered.proposals?` ${remembered.proposals}`:''}`:status)
     .child(detail.statusMark||(remembered?(remembered.state==='pending'?'◌':'◈'):MARK[status])||'?'));
   if(stacked)row.child(v_flex().id(`panel-stacked-${agent.id}`).w_full().min_w(0).child(line)
-    .when(Boolean(showStage),e=>e.child(stageBar(agent,tag,color,t,motion,224).h(tag?10:7).ml(18).w(52).justify_start())));
+    .when(Boolean(showStage),e=>e.child(stageBar(agent,tag,color,t,motion,224).h(tag?10:7).ml(18).w(52).justify_start().opacity(ghost?0:1))));
   else row.child(line);
-  if(born&&motion){
-    const age=state.active?.find(event=>(event.kind==='spawn'||event.allocation?.kind==='new')&&event.to===agent.id)?.elapsed||0;
-    // Native opacity interpolation, with only the existing finite packet
-    // boundaries triggering another render. No JavaScript frame loop.
-    row.opacity(age<40?0.25:1).transition('opacity',{duration:260,easing:'ease-out'});
-  }
   return row;
 }
 
@@ -169,8 +167,8 @@ export function cardView(view,card,state,color,computerNames,t,motion,rowEntitie
       .border(1).border_color('#c3a6ff5c').bg('#c3a6ff1f').px(compact?4:7).gap(3).items_center()
       .max_w((view.panelWidth||224)<300?(sharing?32:48):95).min_w(0).tooltip(partners.map(partner=>partner.name).join(', '))
       .child(text('↔','#c3a6ff',10).flex_none()).child(text(partnerLabel,'#c3a6ff',10))))
-    .when(space.memory.proposals>0,e=>e.child(div().id(`panel-memory-${space.id}`).w(memoryWidth).flex_none().px(compact?1:4).h(16).truncate().rounded(3).bg(memory?color:t.selected)
-      .text_color(memory?t.background:t.ansi6||t.accent).text_size(compact&&space.memory.proposals>9?8:9).tooltip(`기억 제안 ${space.memory.proposals}`).child(compact?`◈ ${space.memory.proposals}`:`기억 제안 ${space.memory.proposals}`)))
+    .when(metrics.hasMemory,e=>e.child(div().id(`panel-memory-${space.id}`).w(memoryWidth).flex_none().px(compact?1:4).h(16).truncate().rounded(3).bg(memory?color:t.selected)
+      .text_color(memory?t.background:t.ansi6||t.accent).text_size(compact&&space.memory.proposals>9?8:9).tooltip(`기억 제안${space.memory.proposals?` ${space.memory.proposals}`:''}`).child(compact?`◈${space.memory.proposals?` ${space.memory.proposals}`:''}`:`기억 제안${space.memory.proposals?` ${space.memory.proposals}`:''}`)))
     .when(count>0,e=>e.child(text(`◌ ${count}`,t.muted,compact?8:10).w(countWidth).flex_none())));
   const tool=h_flex().gap(5).items_center().min_w(0)
     .when(Boolean(space.work),e=>e.child(toolIcon(space.work.tool,t)))
@@ -185,12 +183,12 @@ export function cardView(view,card,state,color,computerNames,t,motion,rowEntitie
       .child(toolIcon(space.work.tool,t)).child(text(row.group.issue?.key||'이슈 없음',color,9).flex_none())
       .child(text(row.group.issue?.title||'',t.muted,9).flex_1())
       .when(row.group.issue&&(row.group.issue.pinned===true&&!row.group.issue.week||typeof row.group.issue.pinned!=='boolean'&&space.issue_catalog&&!space.issue_catalog.week.some(issue=>issue.key===row.group.issue.key)),e=>e.child(text('가져옴',t.ansi6||t.accent,8)))
-      .child(text(row.group.issue?ISSUE[row.group.issue.state]||'대기':'',row.group.issue?.state==='blocked'?t.blocked:t.dim,8)));
+      .child(text(row.group.issue?(row.group.issue.state==='done'?'✓ ':'')+(ISSUE[row.group.issue.state]||'대기'):'',row.group.issue?.state==='blocked'?t.blocked:t.dim,8)));
     else if(row.kind==='agent')box.child(rowEntities?.get(row.agent.id)||agentRow(view,row.agent,space,state.tags.get(row.agent.id),state,color,t,motion));
     else if(row.kind==='children-more'||row.kind==='issues-more')box.child(h_flex().id(`panel-fold-${space.id}-${row.fold?.parent||'issues'}`).h(22).flex_none()
       .pl(row.fold?30+Math.min(6,view.rowMeta?.get(row.fold.parent)?.depth||0)*16:8).pr(8).items_center().cursor_pointer()
       .on_click((_event,cx)=>{cx.stop_propagation();row.fold?view.toggleChildren?.(row.fold.parent):view.toggleIssues?.(space.id);})
-      .child(text((row.fold?.expanded||row.expanded)?'접기':`+${row.fold?.hidden??row.count}개`,t.dim,10)));
+      .child(text((row.fold?.expanded||row.expanded)?'접기':`+${row.fold?.hidden??row.count}${row.fold?' 하위 작업':'개 이슈'}`,t.dim,10)));
     else box.child(h_flex().h(ROW).px(8).items_center().child(text('진행 중인 작업 없음',t.dim,10)));
   }
   return box.child(div().h(4).flex_none());
@@ -213,43 +211,54 @@ export function route(id,a,b,color,{dashed=false,packet=null,motion=false,relati
   const startX=a.x??(packet?flow.endpoint:0),endX=b.x??(packet?flow.endpoint:0);
   const base=div().id(`panel-route-${id}`).absolute().right(flow.right).top(top).w(flow.width).h(height+3);
   if(packet?.kind==='message'){
-    // ㉑/㉒: a message rides the line that already joins its ends — the
-    // computer pipe for another computer, the collaboration lane between
-    // spaces — and otherwise the inner message lane beside the card. Same
-    // right angle and rounded corners as every other flow line.
-    const start=a.y-top,end=b.y-top;
-    const remoteEnd=a.kind==='computer'||b.kind==='computer';
-    const laneX=remoteEnd?flow.computer:a.kind==='space'&&b.kind==='space'?flow.collaboration:packet.routeLane?flow.messageNext:flow.message;
-    const sourceX=a.kind==='computer'?flow.computer:startX;
-    const targetX=b.kind==='computer'?flow.computer:endX;
-    const r=Math.min(6,Math.abs(end-start)/2),sign=end>=start?1:-1;
-    const pb=PathBuilder.stroke(1.5).move_to(sourceX,start);
-    if(r)pb.line_to(laneX-r,start).cubic_bezier_to(laneX,start+sign*r,laneX,start,laneX,start)
-      .line_to(laneX,end-sign*r).cubic_bezier_to(laneX-r,end,laneX,end,laneX,end);
-    base.child(window.paint_path(pb.line_to(targetX,end).build(),color+'99').absolute().left(0).top(0).w(flow.width+4).h(height+4));
-    if(motion&&['start','travel','ping'].includes(packet.phase)){
-      const leg=packet.phase==='start'?0:messageLeg(packet.elapsed);
-      const [x,y,ms,easing]=[[sourceX,start,1,'linear'],[sourceX,start,1,'linear'],
-        [laneX,start,MESSAGE_LEGS[1]-MESSAGE_LEGS[0],'ease-in'],
-        [laneX,end,MESSAGE_LEGS[2]-MESSAGE_LEGS[1],'linear'],
-        [targetX,end,MESSAGE_TAIL_MS,'ease-out']][Math.min(4,leg+1)];
-      for(const [index,size,tint,opacity,delay] of [[2,2,color,0.3,50],[1,3,color,0.75,25],[0,4,'#E9FBFF',1,0]]){
+    if(!motion)return base;
+    const start=a.y-top,end=b.y-top,sourceX=startX,targetX=endX;
+    const reach=messageCurveReach(height,packet.routeLane);
+    if(remote){
+      // A remote send follows the same dashed pipe and computer colour. It
+      // never adds a second solid or curved connection across the other lanes.
+      base.child(route(`${id}-pipe`,a,b,color,{dashed:true,flow}).right(0).top(0));
+    }else{
+      const ease=t=>t<.5?4*t*t*t:1-(-2*t+2)**3/2;
+      const points=Array.from({length:25},(_,i)=>{const t=i/24;return {
+        x:t<=.5?sourceX+(reach-sourceX)*ease(t*2):reach+(targetX-reach)*ease(t*2-1),
+        y:start+(end-start)*ease(t),
+      };});
+      const path=PathBuilder.stroke(1.5).move_to(sourceX,start);
+      for(let i=0;i<points.length-1;i++){
+        const a=points[Math.max(0,i-1)],b=points[i],c=points[i+1],d=points[Math.min(points.length-1,i+2)];
+        path.cubic_bezier_to(c.x,c.y,b.x+(c.x-a.x)/6,b.y+(c.y-a.y)/6,c.x-(d.x-b.x)/6,c.y-(d.y-b.y)/6);
+      }
+      base.child(window.paint_path(path.build(),color+'99').absolute().left(0).top(0).w(flow.width+4).h(height+4));
+    }
+    if(['start','travel','ping'].includes(packet.phase)){
+      const initial=packet.phase==='start';let x,y,dx,dy,easing;
+      if(remote){
+        const elapsed=packet.elapsed;
+        [x,y,dx,easing]=initial?[sourceX,start,1,'linear']
+          :elapsed<190?[flow.computer,start,150,'ease-in']
+          :elapsed<890?[flow.computer,end,700,'linear']
+          :[targetX,end,150,'ease-out'];dy=dx;
+      }else{
+        x=initial?sourceX:packet.elapsed>=540?targetX+.001:reach;y=initial?start:end;
+        dx=initial?1:500;dy=initial?1:1000;easing='ease-in-out';
+      }
+      // Stable native policies across the curve turn avoid reversal jumps.
+      // Two delayed copies form the tail; only finite target changes wake JS.
+      for(const [index,size,tint,opacity,delay] of [[2,2.5,color,.3,80],[1,3.5,color,.75,40],[0,4,'#E9FBFF',1,0]]){
         const part=div().id(index?`panel-packet-tail-${id}-${index}`:`panel-packet-${id}`).absolute()
-          .left(x-size/2).top(y-size/2).size(size).bg(tint).opacity(packet.phase==='ping'?0:opacity);
-        part.transition('left',{duration:ms,delay,easing}).transition('top',{duration:ms,delay,easing})
+          .left(x-size/2).top(y-size/2).size(size).rounded(size/2).bg(tint).opacity(packet.phase==='ping'?0:opacity);
+        part.transition('left',{duration:dx,delay,easing}).transition('top',{duration:dy,delay,easing})
           .transition('opacity',{duration:120,easing:'ease-out'});
         base.child(part);
       }
     }
-    if(motion){
-      // Zero-size and opaque until arrival, then one 14px square ping that fades.
-      const arriving=['ping','fade'].includes(packet.phase),size=arriving?14:0;
-      const ping=div().id(`panel-receiver-${id}`).absolute().left(targetX-size/2).top(end-size/2).w(size).h(size)
-        .border(1).border_color(color).opacity(arriving?0:1);
-      for(const property of ['width','height','left','top','opacity'])ping.transition(property,{duration:420,easing:'ease-out'});
-      base.child(ping);
-    }
-    if(packet.phase==='fade')base.opacity(0).when(motion,e=>e.transition('opacity',460));
+    const arriving=['ping','fade'].includes(packet.phase),size=arriving?14:0;
+    const ping=div().id(`panel-receiver-${id}`).absolute().left(targetX-size/2).top(end-size/2).w(size).h(size)
+      .border(1).border_color(color).opacity(arriving?0:1);
+    for(const property of ['width','height','left','top','opacity'])ping.transition(property,{duration:420,easing:'ease-out'});
+    base.child(ping);
+    if(packet.phase==='fade')base.opacity(0).transition('opacity',390);
     return base;
   }
   if(dashed){
@@ -307,15 +316,23 @@ export function route(id,a,b,color,{dashed=false,packet=null,motion=false,relati
 
 export function panelFlowLayer(feed,layout,state,color,t,motion,width,gutter=null){
   const flow=messageFlowGeometry(gutter);
-  const drawRoute=(id,a,b,tone,options={})=>route(id,a,b,tone,{...options,flow});
+  const remoteId=(a,b)=>{
+    const local=feed.spaces.find(space=>space.nav?.machine===null)?.computer||feed.computers[0]?.id;
+    return a.computer!==local?a.computer:b.computer;
+  };
+  const drawRoute=(id,a,b,tone,options={})=>route(id,a,b,tone,{...options,
+    flow:a.computer!==b.computer?computerFlow(feed,remoteId(a,b),flow):flow});
+  const remoteTone=(a,b)=>color(`computer:${remoteId(a,b)}`);
   const layer=div().absolute().left(0).top(0).w_full().h(layout.height);
   // A filtered-out source still keeps its computer-to-computer connection.
   // Only its workspace/session rows disappear from the selected list.
+  const computerPairs=new Set();
   for(const space of feed.spaces){
-    if(!space.share||layout.cards.some(card=>card.space.id===space.id))continue;
+    if(!space.share)continue;
     const a=layout.anchors.get(space.computer),b=layout.anchors.get(space.share.computer);
     if(!a||!b)continue;
-    const tone=color(space.bundle||space.id);
+    const pair=[a.computer,b.computer].sort().join('|');if(computerPairs.has(pair))continue;computerPairs.add(pair);
+    const tone=remoteTone(a,b);
     layer.child(drawRoute(`share-computers-${space.id}`,a,b,tone,{dashed:true,motion}));
     for(const [index,end] of [a,b].entries())layer.child(div().id(`panel-share-end-${space.id}-${index}`).absolute().right(flow.gutter-3).top(end.y-3)
       .when(space.share.kind==='agent',e=>e.size(6).rounded(3).bg(tone))
@@ -325,12 +342,13 @@ export function panelFlowLayer(feed,layout,state,color,t,motion,width,gutter=nul
     const s=card.space;if(!s.share)continue;
     const from=layout.anchors.get(s.share.kind==='agent'?s.share.agent_id:s.id),to=layout.anchors.get(s.share.computer);
     if(!from||!to)continue;
-    layer.child(drawRoute(`share-${s.id}`,from,to,color(s.bundle||s.id),{dashed:true,motion}));
-    layer.child(div().absolute().right(flow.gutter-3).top(from.y-3).when(s.share.kind==='agent',e=>e.size(6).rounded(3).bg(color(s.bundle||s.id)))
-      .when(s.share.kind==='space',e=>e.child(square(color(s.bundle||s.id),false))));
+    const tone=remoteTone(from,to);
+    layer.child(drawRoute(`share-${s.id}`,from,to,tone,{dashed:true,motion}));
+    layer.child(div().absolute().right(flow.gutter-3).top(from.y-3).when(s.share.kind==='agent',e=>e.size(6).rounded(3).bg(tone))
+      .when(s.share.kind==='space',e=>e.child(square(tone,false))));
     layer.child(div().id(`panel-share-computer-${s.id}`).absolute().right(flow.gutter-3).top(to.y-3)
-      .when(s.share.kind==='agent',e=>e.size(6).rounded(3).bg(color(s.bundle||s.id)))
-      .when(s.share.kind==='space',e=>e.child(square(color(s.bundle||s.id),false))));
+      .when(s.share.kind==='agent',e=>e.size(6).rounded(3).bg(tone))
+      .when(s.share.kind==='space',e=>e.child(square(tone,false))));
   }
   for(const link of feed.links){
     const a=layout.anchors.get(link.a),b=layout.anchors.get(link.b);if(!a||!b)continue;
@@ -338,7 +356,7 @@ export function panelFlowLayer(feed,layout,state,color,t,motion,width,gutter=nul
       layer.child(drawRoute(`collaboration-${link.a}-${link.b}`,a,b,'#c3a6ff').opacity(0.55));
       for(const [index,end] of [a,b].entries())layer.child(div().id(`panel-collaboration-end-${link.a}-${link.b}-${index}`)
         .absolute().right(flow.gutter-3).top(end.y-3).child(square('#c3a6ff',false)).bg(t.chrome));
-    }else if(link.kind==='task')layer.child(drawRoute(`task-${link.a}-${link.b}`,{...a,x:-8},{...b,x:-8},t.dim,{relation:true}));
+    }else if(link.kind==='task')layer.child(drawRoute(`task-${link.a}-${link.b}`,{...a,x:0},{...b,x:0},t.dim,{relation:true}));
   }
   for(const packet of state.packets){
     const endpoints=packet.kind==='message'?panelMessageAnchors(feed,layout,packet):[panelFlowAnchor(feed,layout,packet.from),panelFlowAnchor(feed,layout,packet.to)];
@@ -348,12 +366,11 @@ export function panelFlowLayer(feed,layout,state,color,t,motion,width,gutter=nul
       if(target)b={...b,x:panelHeaderMetrics(target,width).memoryAnchorX};
     }
     if(a&&b){
-      const tone=a.computer===b.computer?(paletteMode(t)==='light'?'#006C77':'#8FEFFF'):color(feed.spaces.find(s=>s.id===a.space)?.bundle);
-      if(a.computer!==b.computer)layer.child(drawRoute(`remote-${packet.id}`,a,b,tone,{dashed:true,motion:false}));
+      const tone=a.computer===b.computer?(paletteMode(t)==='light'?'#006C77':'#79D1DC'):remoteTone(a,b);
       layer.child(drawRoute(packet.id,a,b,tone,{packet,motion}));
     }
   }
-  if(!motion)for(const event of state.connections){
+  if(!motion)for(const event of state.connections.filter(event=>event.kind!=='message')){
     const [a,b]=event.kind==='message'?panelMessageAnchors(feed,layout,event):[panelFlowAnchor(feed,layout,event.from),panelFlowAnchor(feed,layout,event.to)];if(a&&b)layer.child(drawRoute(event.id,a,b,t.dim,{packet:event.kind==='message'?{...event,phase:'static'}:null}));
   }
   return layer;
@@ -378,7 +395,7 @@ export function renderPanelTracking(view,t,cx,{macTitlebar=false}={}){
   view.rowMeta=new Map([...grouped.values()].flatMap(group=>[...group.rowMeta]));
   view.toggleIssues=id=>{view.expandedIssueSpaces.has(id)?view.expandedIssueSpaces.delete(id):view.expandedIssueSpaces.add(id);cx.notify();};
   view.toggleChildren=id=>{view.expandedParents.has(id)?view.expandedParents.delete(id):view.expandedParents.add(id);cx.notify();};
-  const colors=groupColors(feed.spaces.map(s=>s.bundle||s.id),paletteMode(t));
+  const colors=groupColors([...feed.spaces.map(s=>s.bundle||s.id),...feed.computers.map(c=>`computer:${c.id}`)],paletteMode(t));
   const color=key=>colors.get((key||'').trim().toLowerCase())?.color||t.accent;
   const names=new Map(feed.computers.map(c=>[c.id,c.name]));
   view.names=names;

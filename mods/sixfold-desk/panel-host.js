@@ -1,5 +1,5 @@
 // Join display records only through explicit native navigation identities.
-export const PANEL_FLOW=Object.freeze({gutter:72,right:8,width:64,message:22,messageNext:32,collaboration:44,computer:60,endpoint:0});
+export const PANEL_FLOW=Object.freeze({gutter:72,right:8,width:64,message:20,messageNext:24,collaboration:30,computer:40,endpoint:0});
 
 // Only filtered remote endpoints project to their explicitly identified
 // computer. Hidden local rows must not acquire an invented route.
@@ -55,23 +55,33 @@ export function taskComputerAnchors(feed, rows, listHeight, headingHeight) {
   return result;
 }
 
-// Inter-space sends attach to workspace headers; a remote endpoint attaches
-// only to its known computer. No names or approximate identity matching.
+// Explicit row endpoints stay on those rows, even across spaces. Space-wide
+// sends use headers, and a filtered remote endpoint uses its known computer.
 export function panelMessageAnchors(feed,layout,event){
- const owner=id=>feed.spaces.find(space=>space.id===id||space.agents.some(agent=>agent.id===id));
- const from=owner(event.from),to=owner(event.to);
- if(from&&to&&from.id!==to.id&&from.computer===to.computer)return [layout.anchors.get(from.id),layout.anchors.get(to.id)];
  return [panelFlowAnchor(feed,layout,event.from),panelFlowAnchor(feed,layout,event.to)];
 }
 
-// Keep a readable 312px sidebar content area and the original 41px card margin. A wider
-// layout slot reserves a separate canvas-coloured lane beside that panel.
+// All flow lanes share the existing right gutter; no separate canvas strip
+// takes width away from workspace names.
 export function sidebarGeometry(width){
- const total=Math.max(180,Number(width)||312),lane=Math.max(0,Math.min(120,total-312));
- return {total,lane,content:total-lane,cardMargin:41+lane};
+ const total=Math.max(180,Number(width)||312);
+ return {total,lane:0,content:total,cardMargin:PANEL_FLOW.gutter};
 }
 export function messageFlowGeometry(gutter){
  if(!Number.isFinite(gutter))return PANEL_FLOW;
  const width=Math.max(25,gutter-8);
  return {...PANEL_FLOW,gutter,width,computer:Math.min(PANEL_FLOW.computer,width-5),collaboration:Math.min(PANEL_FLOW.collaboration,width-12)};
+}
+
+// The cubic control width is 12 + 8% of the row distance, capped at32px.
+// Its midpoint is three quarters of that width. A second queued lane remains
+// inside the same 24px message band instead of crossing static links.
+export function messageCurveReach(distance,lane=0){
+ return .75*Math.max(8,Math.min(32,12+Math.abs(distance)*.08)-Math.min(1,Math.max(0,lane))*4);
+}
+
+export function computerFlow(feed,computer,flow=PANEL_FLOW){
+ const local=taskComputerRecord(feed,null)?.id||feed.computers[0]?.id;
+ const index=Math.max(0,feed.computers.filter(item=>item.id!==local).findIndex(item=>item.id===computer));
+ return {...flow,computer:Math.min(flow.width,flow.computer+index*8)};
 }

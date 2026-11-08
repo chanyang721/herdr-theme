@@ -66,3 +66,9 @@ test('branch folds follow visible nested descendants and expansion preserves eve
   const expanded=projectTaskBranches(entries,{...options,expandedParents:new Set(['root'])});
   assert.equal(expanded.rows.length,entries.length);assert.equal(expanded.folds[0].hidden,0);assert.equal(expanded.folds[0].expanded,true);assert.equal(expanded.folds[0].after,'child4');
 });
+
+test('the fourth child is folded until explicitly expanded',()=>{
+ const entries=[{id:'root'},...Array.from({length:4},(_,i)=>({id:`child${i}`,parent:'root'}))],options={parentOf:x=>x.parent};
+ const folded=projectTaskBranches(entries,options);assert.deepEqual(ids(folded.rows),['root','child0','child1','child2']);
+ assert.equal(folded.folds[0].hidden,1);assert.equal(projectTaskBranches(entries,{...options,expandedParents:new Set(['root'])}).rows.length,5);
+});

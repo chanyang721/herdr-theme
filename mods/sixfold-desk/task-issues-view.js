@@ -1,4 +1,4 @@
-import {div} from 'gpui-kit';
+import {div,svg} from 'gpui-kit';
 import {h_flex,v_flex,Popover} from 'gpui-base';
 
 export const ISSUE_SCOPES=Object.freeze([
@@ -19,8 +19,9 @@ export function issuePopover(model,t){
   if(!open)return popover;
   // The trigger ends inside the card. Keep the supplied route gutter outside
   // the surface; margin participates in native window-edge clamping.
-  const body=v_flex().id(`task-issues-body-${id}`).w(440).ml(model.leadingGap||0).max_h(700).gap(8).p(12)
+  const body=v_flex().id(`task-issues-body-${id}`).relative().w(440).ml(model.leadingGap||0).max_h(700).gap(8).p(12)
     .rounded(10).border(1).border_color(t.border).bg(t.popover||t.surface).text_color(t.foreground);
+  body.child(svg('mods/sixfold-desk/icons/popover-tail.svg').absolute().left(-9).top(22).size(10).text_color(t.popover||t.surface));
   const heading=h_flex().gap(8).items_center();
   if(model.icon)heading.child(model.icon);
   body.child(heading
@@ -77,5 +78,6 @@ export function issuePopover(model,t){
     .child(text(model.scopeNote||'이번 주와 직접 가져온 이슈가 공간에 표시됩니다',t.dim,10).flex_1());
   if(model.onExternal)footer.child(text(`${model.toolLabel||'도구'}에서 열기 ↗`,t.accent,10).font_bold()
     .cursor_pointer().on_click(change(model.onExternal)));
+  else footer.child(text('도구 링크 없음',t.dim,10).tooltip('연결 도구의 URL이 제공되지 않았습니다'));
   return popover.content(body.child(footer));
 }

@@ -20,7 +20,7 @@ const theme={surface:'#151a22',chrome:'#10151e',popover:'#1c2330',foreground:'#e
 const rows=Array.from({length:3},(_,i)=>({key:`DEMO-${i+1}`,title:`Demo issue ${i+1}`,state:['working','review','blocked'][i]}));
 let serial=0;
 async function renderer(){
-  globalThis.__issueView={div:()=>element(),h_flex:()=>element('row'),v_flex:()=>element('column'),Popover:{new:id=>element('popover',id)}};
+  globalThis.__issueView={div:()=>element(),svg:value=>element('svg',value),h_flex:()=>element('row'),v_flex:()=>element('column'),Popover:{new:id=>element('popover',id)}};
   const source=(await readFile(new URL('../mods/sixfold-desk/task-issues-view.js',import.meta.url),'utf8'))
     .replace(/import \{([^}]+)\} from '(?:gpui-kit|gpui-base)';/g,'const {$1}=globalThis.__issueView;');
   return import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}#${serial++}`);

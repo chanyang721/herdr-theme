@@ -156,6 +156,7 @@ export function createRetainedPanel(cx,{macTitlebar=false,onClassic=null,onDispo
       projectLabel:space.name,toolLabel:space.work?.tool==='jira'?'Jira':space.work?.tool==='linear'?'Linear':space.work?.tool||'업무 도구',
       icon:state?.open?toolIcon(space.work?.tool,t).size(24):null,
       updatedLabel:cache?.label,emptyLabel:cache?.emptyLabel,
+      onExternal:space.work?.url?context=>context?.open_url?.(space.work.url):null,
       canImport:Boolean(onIssueRequest&&space.issue_catalog?.import_request),busyKeys:new Set(state?.pending.keys()||[]),error:state?.error,
       search:state?.input?Input.new(state.input).w_full().h(30):null,
       onOpen:(open)=>{
@@ -166,6 +167,7 @@ export function createRetainedPanel(cx,{macTitlebar=false,onClassic=null,onDispo
           c.issueStates.set(space.id,current);
           input.on('change',()=>{current.query=input.value();c.notify(c.cards.get(space.id));});
         }
+        if(open)for(const [id,other] of c.issueStates)if(id!==space.id&&other.open){other.open=false;c.notify(c.cards.get(id));}
         current.open=open;c.notify(c.cards.get(space.id));
       },
       onScope:scope=>{if(state&&state.scope!==scope){state.scope=scope;c.notify(c.cards.get(space.id));}},
@@ -210,9 +212,10 @@ export function createRetainedPanel(cx,{macTitlebar=false,onClassic=null,onDispo
     c.agentSpaces=new Map(native.flatMap(space=>space.agents.map(agent=>[agent.id,space])));
     c.rowMeta=new Map([...c.projection.groups.values()].flatMap(group=>[...group.rowMeta]));
     c.names=new Map(c.feed.computers.map(computer=>[computer.id,computer.name]));
-    const paletteKey=signature([c.feed.spaces.map(space=>space.bundle||space.id),paletteMode(theme())]);
+    const paletteKeys=[...c.feed.spaces.map(space=>space.bundle||space.id),...c.feed.computers.map(computer=>`computer:${computer.id}`)];
+    const paletteKey=signature([paletteKeys,paletteMode(theme())]);
     if(paletteKey!==c.paletteKey){
-      c.paletteKey=paletteKey;c.palette=groupColors(c.feed.spaces.map(space=>space.bundle||space.id),paletteMode(theme()));
+      c.paletteKey=paletteKey;c.palette=groupColors(paletteKeys,paletteMode(theme()));
       c.color=value=>c.palette.get((value||'').trim().toLowerCase())?.color||theme().accent;
     }
     const topology=c.feed.spaces.map(space=>{
@@ -226,9 +229,10 @@ export function createRetainedPanel(cx,{macTitlebar=false,onClassic=null,onDispo
     for(const space of c.feed.spaces){
       for(const agent of space.agents){
         if(!c.rows.has(agent.id))c.rows.set(agent.id,make(PanelRow,agent.id));
-        const tag=c.events.tags.get(agent.id),ping=c.events.packets.some(event=>event.to===agent.id&&event.phase==='ping');
+        const tag=c.events.tags.get(agent.id),ping=c.events.packets.some(event=>event.to===agent.id&&event.phase==='ping')
+          ||!c.motion&&c.events.connections.some(event=>event.kind==='message'&&event.to===agent.id);
         const born=c.events.spawning.has(agent.id);
-        const revealed=c.motion&&born&&c.events.active.some(event=>event.to===agent.id&&(event.kind==='spawn'||event.allocation?.kind==='new')&&event.elapsed>=PANEL_TIMING.startMs);
+        const revealed=c.motion&&born&&c.events.active.some(event=>event.to===agent.id&&(event.kind==='spawn'||event.allocation?.kind==='new')&&event.elapsed>=PANEL_TIMING.packetMs);
         const rowKey=signature([agent,c.rowMeta.get(agent.id),tag?.id||null,tag?.label||null,ping,born,revealed,c.motion,c.panelWidth<420,c.panelWidth<300,c.panelWidth<260,c.themeRevision]);
         if(c.rowKeys.get(agent.id)!==rowKey){c.rowKeys.set(agent.id,rowKey);c.notify(c.rows.get(agent.id));}
       }
