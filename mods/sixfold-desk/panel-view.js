@@ -4,7 +4,7 @@ import {spaces, panes, shared, setShared, run, settings} from 'herdr';
 import {agentGroups, agentState, panelEventStates, panelSpaces, panelSpacePartners} from './panel-model.js';
 import {groupColors, paletteMode} from './collab-flow.js';
 import {rowDetailParts} from './task-row-details.js';
-import {PANEL_FLOW, panelFlowAnchor, panelMessageAnchors} from './panel-host.js';
+import {PANEL_FLOW, panelFlowAnchor, panelMessageAnchors, messageFlowGeometry} from './panel-host.js';
 
 const MARK={working:'●',idle:'○',blocked:'!',done:'✓'};
 const STAGES=['배분','작업','검수','수락 대기'];
@@ -205,17 +205,17 @@ function routePath(from,to,lane,endX,origin=0,startX=0){
     .cubic_bezier_to(origin+lane-r,to,origin+lane,to,origin+lane,to)
     .line_to(origin+endX,to).build();
 }
-export function route(id,a,b,color,{dashed=false,packet=null,motion=false,relation=false}={}){
+export function route(id,a,b,color,{dashed=false,packet=null,motion=false,relation=false,flow=PANEL_FLOW}={}){
   const remote=a.computer&&b.computer&&a.computer!==b.computer;
   const top=Math.min(a.y,b.y),height=Math.max(2,Math.abs(b.y-a.y));
-  const lane=relation?6:dashed?PANEL_FLOW.computer:packet?(packet.routeLane?PANEL_FLOW.messageNext:PANEL_FLOW.message):PANEL_FLOW.collaboration;
-  const startX=a.x??(packet?PANEL_FLOW.endpoint:0),endX=b.x??(packet?PANEL_FLOW.endpoint:0);
-  const base=div().id(`panel-route-${id}`).absolute().right(PANEL_FLOW.right).top(top).w(PANEL_FLOW.width).h(height+3);
+  const lane=relation?6:dashed?flow.computer:packet?(packet.routeLane?flow.messageNext:flow.message):flow.collaboration;
+  const startX=a.x??(packet?flow.endpoint:0),endX=b.x??(packet?flow.endpoint:0);
+  const base=div().id(`panel-route-${id}`).absolute().right(flow.right).top(top).w(flow.width).h(height+3);
   if(packet?.kind==='message'){
     const start=a.y-top,end=b.y-top;
-    const sourceX=a.kind==='computer'?PANEL_FLOW.computer:startX;
-    const targetX=b.kind==='computer'?PANEL_FLOW.computer:endX;
-    const reach=Math.min(PANEL_FLOW.width-4-(packet.routeLane?0:4),Math.max(40,height*0.22+40));
+    const sourceX=a.kind==='computer'?flow.computer:startX;
+    const targetX=b.kind==='computer'?flow.computer:endX;
+    const reach=Math.min(flow.width-4-(packet.routeLane?0:4),Math.max(40,flow.width-24+(packet.routeLane?8:0),height*0.22+40));
     const ease=t=>t<0.5?4*t*t*t:1-(-2*t+2)**3/2;
     // Keep the native horizontal easing policy constant through the turn.
     // Changing easing while a transition is live resamples its old leg with
@@ -233,7 +233,7 @@ export function route(id,a,b,color,{dashed=false,packet=null,motion=false,relati
       }
       return p.build();
     };
-    const shape=(stroke,tint)=>window.paint_path(path(stroke),tint).absolute().left(0).top(0).w(PANEL_FLOW.width+8).h(height+8);
+    const shape=(stroke,tint)=>window.paint_path(path(stroke),tint).absolute().left(0).top(0).w(flow.width+8).h(height+8);
     base.child(shape(9,color+'22')).child(shape(5,color+'BB')).child(shape(3,color+'44'));
     if(motion&&['start','travel','ping'].includes(packet.phase)){
       const initial=packet.phase==='start',turn=packet.elapsed>=495;
@@ -267,13 +267,13 @@ export function route(id,a,b,color,{dashed=false,packet=null,motion=false,relati
     const elbows=PathBuilder.stroke(1).move_to(lane-radius,0)
       .cubic_bezier_to(lane,radius,lane,0,lane,0)
       .move_to(lane,height-radius).cubic_bezier_to(lane-radius,height,lane,height,lane,height).build();
-    base.child(window.paint_path(elbows,color).absolute().left(0).top(0).w(PANEL_FLOW.width).h(height+3));
+    base.child(window.paint_path(elbows,color).absolute().left(0).top(0).w(flow.width).h(height+3));
     if(motion&&!relation)base.child(div().id(`panel-link-dot-${id}`).absolute().left(lane-1).size(3).rounded(2).bg(color)
       .loop('top',{from:0,to:height,period:16000,easing:'linear'}));
   }else{
     const origin=Math.max(0,-startX,-endX);
     const path=routePath(a.y-top,b.y-top,lane,endX,origin,startX);
-    base.child(window.paint_path(path,color).absolute().left(-origin).top(0).w(PANEL_FLOW.width+origin).h(height+3));
+    base.child(window.paint_path(path,color).absolute().left(-origin).top(0).w(flow.width+origin).h(height+3));
     if(packet&&motion&&['start','travel'].includes(packet.phase)){
       const elapsed=packet.elapsed;
       const point=elapsed<40?{x:startX,y:a.y-top,ms:1}
@@ -311,7 +311,9 @@ export function route(id,a,b,color,{dashed=false,packet=null,motion=false,relati
   return base;
 }
 
-export function panelFlowLayer(feed,layout,state,color,t,motion,width){
+export function panelFlowLayer(feed,layout,state,color,t,motion,width,gutter=null){
+  const flow=messageFlowGeometry(gutter);
+  const drawRoute=(id,a,b,tone,options={})=>route(id,a,b,tone,{...options,flow});
   const layer=div().absolute().left(0).top(0).w_full().h(layout.height);
   // A filtered-out source still keeps its computer-to-computer connection.
   // Only its workspace/session rows disappear from the selected list.
@@ -320,8 +322,8 @@ export function panelFlowLayer(feed,layout,state,color,t,motion,width){
     const a=layout.anchors.get(space.computer),b=layout.anchors.get(space.share.computer);
     if(!a||!b)continue;
     const tone=color(space.bundle||space.id);
-    layer.child(route(`share-computers-${space.id}`,a,b,tone,{dashed:true,motion}));
-    for(const [index,end] of [a,b].entries())layer.child(div().id(`panel-share-end-${space.id}-${index}`).absolute().right(RIGHT-3).top(end.y-3)
+    layer.child(drawRoute(`share-computers-${space.id}`,a,b,tone,{dashed:true,motion}));
+    for(const [index,end] of [a,b].entries())layer.child(div().id(`panel-share-end-${space.id}-${index}`).absolute().right(flow.gutter-3).top(end.y-3)
       .when(space.share.kind==='agent',e=>e.size(6).rounded(3).bg(tone))
       .when(space.share.kind==='space',e=>e.child(square(tone,false))));
   }
@@ -329,20 +331,20 @@ export function panelFlowLayer(feed,layout,state,color,t,motion,width){
     const s=card.space;if(!s.share)continue;
     const from=layout.anchors.get(s.share.kind==='agent'?s.share.agent_id:s.id),to=layout.anchors.get(s.share.computer);
     if(!from||!to)continue;
-    layer.child(route(`share-${s.id}`,from,to,color(s.bundle||s.id),{dashed:true,motion}));
-    layer.child(div().absolute().right(RIGHT-3).top(from.y-3).when(s.share.kind==='agent',e=>e.size(6).rounded(3).bg(color(s.bundle||s.id)))
+    layer.child(drawRoute(`share-${s.id}`,from,to,color(s.bundle||s.id),{dashed:true,motion}));
+    layer.child(div().absolute().right(flow.gutter-3).top(from.y-3).when(s.share.kind==='agent',e=>e.size(6).rounded(3).bg(color(s.bundle||s.id)))
       .when(s.share.kind==='space',e=>e.child(square(color(s.bundle||s.id),false))));
-    layer.child(div().id(`panel-share-computer-${s.id}`).absolute().right(RIGHT-3).top(to.y-3)
+    layer.child(div().id(`panel-share-computer-${s.id}`).absolute().right(flow.gutter-3).top(to.y-3)
       .when(s.share.kind==='agent',e=>e.size(6).rounded(3).bg(color(s.bundle||s.id)))
       .when(s.share.kind==='space',e=>e.child(square(color(s.bundle||s.id),false))));
   }
   for(const link of feed.links){
     const a=layout.anchors.get(link.a),b=layout.anchors.get(link.b);if(!a||!b)continue;
     if(link.kind==='collaboration'){
-      layer.child(route(`collaboration-${link.a}-${link.b}`,a,b,'#c3a6ff').opacity(0.55));
+      layer.child(drawRoute(`collaboration-${link.a}-${link.b}`,a,b,'#c3a6ff').opacity(0.55));
       for(const [index,end] of [a,b].entries())layer.child(div().id(`panel-collaboration-end-${link.a}-${link.b}-${index}`)
-        .absolute().right(RIGHT-3).top(end.y-3).child(square('#c3a6ff',false)).bg(t.chrome));
-    }else if(link.kind==='task')layer.child(route(`task-${link.a}-${link.b}`,{...a,x:-8},{...b,x:-8},t.dim,{relation:true}));
+        .absolute().right(flow.gutter-3).top(end.y-3).child(square('#c3a6ff',false)).bg(t.chrome));
+    }else if(link.kind==='task')layer.child(drawRoute(`task-${link.a}-${link.b}`,{...a,x:-8},{...b,x:-8},t.dim,{relation:true}));
   }
   for(const packet of state.packets){
     const endpoints=packet.kind==='message'?panelMessageAnchors(feed,layout,packet):[panelFlowAnchor(feed,layout,packet.from),panelFlowAnchor(feed,layout,packet.to)];
@@ -353,12 +355,12 @@ export function panelFlowLayer(feed,layout,state,color,t,motion,width){
     }
     if(a&&b){
       const tone=a.computer===b.computer?(paletteMode(t)==='light'?'#006C77':'#8FEFFF'):color(feed.spaces.find(s=>s.id===a.space)?.bundle);
-      if(a.computer!==b.computer)layer.child(route(`remote-${packet.id}`,a,b,tone,{dashed:true,motion:false}));
-      layer.child(route(packet.id,a,b,tone,{packet,motion}));
+      if(a.computer!==b.computer)layer.child(drawRoute(`remote-${packet.id}`,a,b,tone,{dashed:true,motion:false}));
+      layer.child(drawRoute(packet.id,a,b,tone,{packet,motion}));
     }
   }
   if(!motion)for(const event of state.connections){
-    const [a,b]=event.kind==='message'?panelMessageAnchors(feed,layout,event):[panelFlowAnchor(feed,layout,event.from),panelFlowAnchor(feed,layout,event.to)];if(a&&b)layer.child(route(event.id,a,b,t.dim,{packet:event.kind==='message'?{...event,phase:'static'}:null}));
+    const [a,b]=event.kind==='message'?panelMessageAnchors(feed,layout,event):[panelFlowAnchor(feed,layout,event.from),panelFlowAnchor(feed,layout,event.to)];if(a&&b)layer.child(drawRoute(event.id,a,b,t.dim,{packet:event.kind==='message'?{...event,phase:'static'}:null}));
   }
   return layer;
 }

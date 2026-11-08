@@ -26,7 +26,7 @@ import {reconcilePanelFeed} from './panel-model.js';
 import {TASK_FEED_FILE,createTaskFeedSource} from './task-feed-source.js';
 import {issueRequest,saveIssueRequest} from './task-issue-state.js';
 import {createRetainedPanel} from './panel-retained.js';
-import {taskComputerAnchors,taskComputerRecord} from './panel-host.js';
+import {taskComputerAnchors,taskComputerRecord,sidebarGeometry} from './panel-host.js';
 import {subscribeJsonFile,readJsonSnapshot,fileDelivery,FILE_CHANGED_COMMAND} from './panel-io.js';
 import {watchSidebarFiles} from './sidebar-files.js';
 import {subscribeLiveEvents} from './live-events.js';
@@ -567,6 +567,8 @@ export default class SixfoldDesk extends View {
     // Task rows extend the native computer navigator. They never replace its
     // computer selection, workspace actions, documents or local card sections.
     const taskPanel=role==='sidebar'&&this.panelTrackingActive?this.panelRetained:null;
+    const sidebarSize=sidebarGeometry(this.sidebarWidth),extraLane=role==='sidebar'?sidebarSize.lane:0;
+    const LINK_MARGIN=41+extraLane;
     const list = agents().filter(a => workspaceIds.has(a.space));
     const local = all.filter(p => p.tab === f?.tab);
     const total = counts(list);
@@ -704,7 +706,7 @@ export default class SixfoldDesk extends View {
     const laneOf = (from, to) => lanes.find(lane => !lane.gone && lane.link.machines.includes(from) && lane.link.machines.includes(to));
     // Link lanes sit in a fixed right margin of the computer list (LINK_MARGIN), drawn
     // over it: rows keep their width whether or not a link shows. Offsets are from the right.
-    const laneRight = slot => 4 + slot * 4;
+    const laneRight = slot => extraLane + 4 + slot * 4;
     const sendNote = this.lang()==='ko' ? '전송 이벤트 · 읽음 확인 아님' : 'Send event, not a read receipt';
     const computerItems = (typeof herdrNative.machines === 'function' ? herdrNative.machines() : [{name:null,layout:'ready'}]).map(machine => {
       const name = machine.name;
@@ -983,11 +985,11 @@ export default class SixfoldDesk extends View {
     });
     const workspaceTree=v_flex().relative().flex_none().children(spaceRows)
       .when(Boolean(taskPanel?.feed),e=>e.child(taskPanel.hostFlows(taskEntries,
-        taskComputerAnchors(taskPanel.feed,activeComputers,this.computerBlockHeight??(activeComputers.length*39+3),this.spaceSectionHeight??31))))
+        taskComputerAnchors(taskPanel.feed,activeComputers,this.computerBlockHeight??(activeComputers.length*39+3),this.spaceSectionHeight??31),LINK_MARGIN)))
       .children(paths.filter(flow => positions[flow.source] !== undefined && positions[flow.target] !== undefined).map(flow => {
         const from=positions[flow.source], to=positions[flow.target];
         return pipeline({id:flow.id,width:8+(flow.lane%2)*10,inset:14,from,to,color:workspaceFlowColor(flow),phase:flow.phase,packets:flow.packets,motion})
-          .right(46-(flow.lane%2)*10);
+          .right(LINK_MARGIN-26-(flow.lane%2)*10);
       }))
       // The far end is on another computer: run the pipe up to the top of this list,
       // just under the computer rows (the far computer's row is marked there).
@@ -995,21 +997,22 @@ export default class SixfoldDesk extends View {
         const outgoing = positions[route.source] !== undefined;
         const row = outgoing ? positions[route.source] : positions[route.target];
         return pipeline({id:`${route.id}-hop`,width:8+(route.lane%2)*10,inset:14,from:outgoing?row:0,to:outgoing?0:row,color:workspaceFlowColor(route),phase:route.phase,packets:route.packets,motion})
-          .right(46-(route.lane%2)*10);
+          .right(LINK_MARGIN-26-(route.lane%2)*10);
       }));
-    return v_flex().id('sixfold-sidebar').size_full().bg(t.chrome).text_color(t.foreground)
-      .on_size_change((size,cx)=>this.panelRetained?.resize(size.width/(settings().zoom||1),cx))
+    return v_flex().id('sixfold-sidebar').relative().size_full().bg(t.chrome)
+      .when(extraLane>0,e=>e.child(div().id('sf-message-gutter').absolute().right(0).top(0).bottom(0).w(extraLane).bg(t.canvas||t.background).border_l(1).border_color(t.border))).text_color(t.foreground)
+      .on_size_change((size,cx)=>{const width=size.width/(settings().zoom||1);if(Math.abs((this.sidebarWidth??224)-width)>1){this.sidebarWidth=width;this.panelRetained?.resize(sidebarGeometry(width).content,cx);this.invalidateSidebar?this.invalidateSidebar():cx.notify();}})
       .on_mouse_up('left',(_e,cx)=>{
         if(this.dragSpace){this.dragSpace=null;this.overSpace=null;cx.notify();}
       })
-      .child(v_flex().h(58).flex_none()
+      .child(v_flex().h(58).mr(extraLane).flex_none()
         .child(h_flex().h(30).flex_none().pl(window()?.platform==='macos'?76:12).pr(8).items_center().gap(4)
           .child(div().flex_1().min_w(0).truncate().font_bold().text_size(14).child('Herdr Theme'))
           .child(this.button('sf-language',w.language,()=>run('sixfold-desk.language'),t)))
         .child(h_flex().h(24).flex_none().px(8).items_center().gap(4)
           .when(Boolean(this.panelState?.feed),e=>e.child(this.button('sf-tracking',taskPanel?'작업 켜짐':'작업',()=>setShared('sixfold.panel.enabled',!this.panelTrackingActive),t)))
           .child(this.button('sf-motion',motion?'Motion on':'Motion off',()=>setShared('sixfold.motion',shared('sixfold.motion')===false),t))))
-      .child(h_flex().px(12).py(11).gap(16).flex_none().justify_center().font_bold().children(['blocked','done','working'].map(s => this.badge(s,String(total[s]),t,14))))
+      .child(h_flex().mr(extraLane).px(12).py(11).gap(16).flex_none().justify_center().font_bold().children(['blocked','done','working'].map(s => this.badge(s,String(total[s]),t,14))))
       .child(v_flex().id('sf-scroll').flex_1().min_h(0).overflow_y_scroll()
         .child(computerSection)
         .child(v_flex().relative().flex_none().pl(7).pr(LINK_MARGIN).pb(6).gap(3).children(computerRows)
@@ -1067,7 +1070,7 @@ export default class SixfoldDesk extends View {
         .tooltip(this.queuedRoutes.map(item=>`${item.project} · ${item.error || (item.hold?'전달 보류':'수신 pane 대기')}`).join('\n'))
         .child(div().text_size(10).text_color(this.queuedRoutes.some(item=>item.hold||item.error)?t.blocked:t.muted)
           .child(this.lang()==='ko'?`전달 대기 ${this.queuedRoutes.length} · 오류/보류 ${this.queuedRoutes.filter(item=>item.hold||item.error).length}`:`Queued ${this.queuedRoutes.length} · Error/held ${this.queuedRoutes.filter(item=>item.hold||item.error).length}`))))
-      .child(h_flex().h(38).flex_none().px(7).items_center()
+      .child(h_flex().h(38).mr(extraLane).flex_none().px(7).items_center()
         .child(this.button('sf-settings',w.settings,()=>run('app.settings'),t))
         .child(div().flex_1())
         .when(!discoveryOnly,e=>e.child(this.button('sf-new-space','+ Space',()=>this.newWorkspace(selectedMachine),t))));

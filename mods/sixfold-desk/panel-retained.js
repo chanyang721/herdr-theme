@@ -124,7 +124,7 @@ export function createRetainedPanel(cx,{macTitlebar=false,onClassic=null,onDispo
   c.notify=entity=>{if(entity&&!c.disposed){c.stats.notifications++;c.cx.notify(entity);}};
   c.taskFor=space=>nativeTaskSpace(c.feed,space);
   c.bodyFor=space=>c.cards.get(c.taskFor(space)?.id)||null;
-  c.hostFlows=(entries,computerAnchors)=>panelFlowLayer(c.feed,hostedTaskLayout(c.layout,entries,computerAnchors),c.events,c.color,theme(),c.motion,c.panelWidth);
+  c.hostFlows=(entries,computerAnchors,gutter=null)=>panelFlowLayer(c.feed,hostedTaskLayout(c.layout,entries,computerAnchors),c.events,c.color,theme(),c.motion,c.panelWidth,gutter);
   c.toggleIssues=id=>{c.expandedIssueSpaces.has(id)?c.expandedIssueSpaces.delete(id):c.expandedIssueSpaces.add(id);c.apply(c.input);};
   c.toggleChildren=id=>{c.expandedParents.has(id)?c.expandedParents.delete(id):c.expandedParents.add(id);c.apply(c.input);};
   c.settleIssue=id=>{

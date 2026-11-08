@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {nativeTaskSpace,hostedTaskLayout,taskComputerAnchors,panelFlowAnchor,PANEL_FLOW,taskComputerRecord} from '../mods/sixfold-desk/panel-host.js';
+import {nativeTaskSpace,hostedTaskLayout,taskComputerAnchors,panelFlowAnchor,PANEL_FLOW,taskComputerRecord,sidebarGeometry,messageFlowGeometry} from '../mods/sixfold-desk/panel-host.js';
 
 test('task rows join the selected computer by explicit identity, never by workspace name',()=>{
   const local={id:'local',name:'Demo',nav:{space_id:'sp1',machine:null}};
@@ -47,4 +47,16 @@ test('flow lanes stay outside cards in ordered bands; only proven remote endpoin
  assert.equal(PANEL_FLOW.endpoint,0);assert(PANEL_FLOW.message<PANEL_FLOW.messageNext);assert(PANEL_FLOW.messageNext<PANEL_FLOW.collaboration);assert(PANEL_FLOW.collaboration<PANEL_FLOW.computer);
  assert.equal(taskComputerRecord(feed,'worker').id,'remote');assert.equal(taskComputerRecord(feed,null).id,'local');
  assert.equal(taskComputerRecord(feed,'name-only'),null);
+});
+
+
+test('external gutter preserves original card width while placing the apex beyond the visible panel',()=>{
+ const original=sidebarGeometry(224),wide=sidebarGeometry(344),narrow=sidebarGeometry(280);
+ assert.equal(original.cardMargin,41);assert.equal(wide.content,224);assert.equal(wide.lane,120);
+ for(const geometry of [wide,narrow]){
+  assert.equal(geometry.total-geometry.cardMargin,224-41);
+  const flow=messageFlowGeometry(geometry.cardMargin),origin=geometry.total-geometry.cardMargin;
+  assert(origin+flow.width-24>geometry.content,'pipe enters the separate gap beyond the panel');
+  assert(origin+flow.width+flow.right===geometry.total,'gap ends before terminal content');
+ }
 });

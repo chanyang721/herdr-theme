@@ -331,3 +331,13 @@ test('retired collaboration evidence removes the bracket and both partner chips 
  const after=r.renderPanelTracking(view,t,r.cx);assert(!byId(after,`panel-route-collaboration-${edge.a}-${edge.b}`));
  for(const space of view.panelState.feed.spaces){assert(!byId(after,`panel-local-partner-${space.id}`));for(const agent of space.agents)assert(byId(after,`panel-agent-${agent.id}`));}
 });
+
+
+test('hosted message tube uses the external gutter without narrowing the original card',async()=>{
+ const r=await renderer(true),view=viewFor(makePanelFixture()),feed=view.panelState.feed;
+ r.renderPanelTracking(view,t,r.cx);const layout=r.panelLayout(feed,view.panelEvents),[a,b]=feed.spaces[0].agents;
+ const state={...view.panelEvents,packets:[{id:'external',kind:'message',from:a.id,to:b.id,phase:'travel',elapsed:120}]};
+ const tree=r.panelFlowLayer(feed,layout,state,()=>t.accent,t,true,224,161),head=byId(tree,'panel-packet-external');
+ const route=byId(tree,'panel-route-external');assert.equal(call(route,'w')[1],153);
+ const x=344-161+call(head,'left')[1]+4.5;assert(x>304&&x<344,'orb reaches deep into gap beyond224px panel without entering CLI');
+});
