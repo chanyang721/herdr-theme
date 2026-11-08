@@ -1,8 +1,9 @@
 # Local integrations
 
 The theme reads optional files under the app home's `data/sixfold/` directory.
-An external tool owns these files and their policy. Missing or malformed inputs
-quietly hide the corresponding display. No tool is discovered or installed by
+An external tool owns these files and their policy. Missing inputs quietly hide
+the corresponding display. Invalid updates keep the last valid display until
+a valid snapshot or confirmed deletion arrives. No tool is discovered or installed by
 the theme, and there is no fallback to another application's data directory.
 
 ## Cards and a configured command

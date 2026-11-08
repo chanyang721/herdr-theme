@@ -37,7 +37,11 @@ fn running_native_helper_child() {
             .open(path)
             .unwrap()
     });
-    fs::write(directory.join("ready"), json!({"pid":std::process::id(),"image_sha256":hash(fs::read(std::env::current_exe().unwrap()).unwrap()),"locked_target":std::env::var_os("HERDR_TEST_LOCK_TARGET").map(PathBuf::from)}).to_string()).unwrap();
+    // Readers use existence as the readiness signal. Publish only after the
+    // whole record is written; create-then-write exposes an empty JSON file.
+    let ready = directory.join("ready.pending");
+    fs::write(&ready, json!({"pid":std::process::id(),"image_sha256":hash(fs::read(std::env::current_exe().unwrap()).unwrap()),"locked_target":std::env::var_os("HERDR_TEST_LOCK_TARGET").map(PathBuf::from)}).to_string()).unwrap();
+    fs::rename(ready, directory.join("ready")).unwrap();
     let begin = Instant::now();
     while !directory.join("release").exists() && begin.elapsed() < Duration::from_secs(45) {
         std::thread::sleep(Duration::from_millis(20));

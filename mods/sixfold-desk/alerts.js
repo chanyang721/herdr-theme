@@ -1,6 +1,8 @@
 import { div } from 'gpui-kit';
 import { h_flex, v_flex } from 'gpui-base';
 import { run, readTextFile, writeTextFile, appHome, setShared, openOverlay } from 'herdr';
+import {createHash} from 'crypto';
+import {readJsonSnapshot,subscribeJsonFile,subscribeFileChanges} from './panel-io.js';
 
 const SHOWN = new Set(['needs-you']);  // Only what a person must decide; the rest stays in the project.
 const MARKS = { 'needs-you': '!', info: '✓', processing: '●' };
@@ -15,11 +17,17 @@ function popupEvents(mentions, read) {
   return events;
 }
 
-async function notifyNewPopupEvents(events) {
+async function ledgerSnapshot(path,empty){
+  const typed=await readJsonSnapshot(path);
+  const raw=await readTextFile(path).catch(()=>null);
+  if(typed.status==='missing'&&raw===null)return {value:empty,raw:null,firstRun:true};
+  if(typed.status!=='ready'||typeof raw!=='string'||createHash('sha256').update(raw).digest('hex')!==typed.hash)throw new Error('File changed while reading its typed snapshot');
+  return {value:typed.value,raw,firstRun:false};
+}
+
+async function notifyNewPopupEvents(events,allowed=()=>true) {
   const path = `${appHome()}/data/sixfold/slack-popup-events.json`;
-  const text = await readTextFile(path).catch(() => null);
-  const firstRun = text === null;
-  const ledger = firstRun ? {schema: 1, seen: []} : JSON.parse(text);
+  const {value:ledger,raw:text,firstRun}=await ledgerSnapshot(path,{schema:1,seen:[]});
   if (ledger?.schema !== 1 || !Array.isArray(ledger.seen) || !ledger.seen.every(key => typeof key === 'string')) {
     throw new Error('Invalid Slack popup event ledger');
   }
@@ -30,6 +38,7 @@ async function notifyNewPopupEvents(events) {
   // Seed existing history silently on first run. Later writes use the exact
   // previous contents as a compare-and-swap guard across multiple views.
   const next = {schema: 1, seen: [...ledger.seen, ...fresh.map(event => event.key)]};
+  if(!allowed())throw new Error('View no longer displays alerts');
   await writeTextFile(path, JSON.stringify(next), text);
   return firstRun ? null : fresh.find(event => event.popup) ?? null;
 }
@@ -40,48 +49,70 @@ export function visibleAlerts(items, limit = 6) {
 }
 
 export function watchAlerts(view, cx) {
-  let loading = false;
-  let previous;
-  const refresh = cx => {
-    if (loading) return;
+  view.stopAlerts?.();
+  const base=`${appHome()}/data/sixfold`;
+  const inputs=[['legacy','alerts.json',()=>({items:[]})],['tracked','project-alerts.json',()=>({items:[]})],['read','slack-alerts-read.json',()=>({})],['mentions','slack-mentions.json',()=>({items:[]})],['health','slack-live-health.json',()=>({})],['workflows','slack-workflows.json',()=>({jobs:{}})]];
+  const cached=new Map(),subscriptions=[];
+  let loading=false,previous,disposed=false,scheduled=null,dirty=false,version=0;
+  const allowed=()=>!disposed&&view.sidebarVisible!==false;
+  const schedule=()=>{
+    dirty=true;
+    if(!allowed()||loading||scheduled||cached.size!==inputs.length)return;
+    scheduled=cx.timer.after(20,()=>{scheduled=null;refresh(cx);});
+  };
+  const refresh = context => {
+    if(!allowed()||cached.size!==inputs.length)return;
+    if(loading){dirty=true;return;}
+    dirty=false;
+    const signature=JSON.stringify(inputs.map(([key])=>cached.get(key).token));
+    if(signature===previous)return;
     loading = true;
-    cx.spawn(async cx => {
+    (context??cx).spawn(async cx => {
       try {
-        const legacy = await readTextFile(`${appHome()}/data/sixfold/alerts.json`).catch(()=>'{"items":[]}');
-        const tracked = await readTextFile(`${appHome()}/data/sixfold/project-alerts.json`).catch(()=>'{"items":[]}');
-        const readText = await readTextFile(`${appHome()}/data/sixfold/slack-alerts-read.json`).catch(()=>'{}');
-        const mentions=await readTextFile(`${appHome()}/data/sixfold/slack-mentions.json`).catch(()=>'{"items":[]}');
-        const health=await readTextFile(`${appHome()}/data/sixfold/slack-live-health.json`).catch(()=>'{}');
-        const workflows=await readTextFile(`${appHome()}/data/sixfold/slack-workflows.json`).catch(()=>'{"jobs":{}}');
-        const text=JSON.stringify([legacy,tracked,readText,mentions,health,workflows]);
-        if (text === previous) return;
-        const feed=JSON.parse(tracked || '{}');
+        const get=key=>cached.get(key).value;
+        const legacy=get('legacy'),feed=get('tracked'),read=get('read'),mentions=get('mentions'),health=get('health'),workflows=get('workflows');
         const items = feed.items ?? [];
-        const read=JSON.parse(readText || '{}');
-        const tagged=JSON.parse(mentions || '{}').items ?? [];
-        const states=JSON.parse(workflows || '{}').jobs ?? {};
-        const event=await notifyNewPopupEvents(popupEvents(tagged,read));
-        setShared('sixfold.slackHealth',JSON.parse(health || '{}'));
+        const tagged=mentions.items ?? [];
+        const states=workflows.jobs ?? {};
+        const event=await notifyNewPopupEvents(popupEvents(tagged,read),allowed);
+        if(!allowed())return;
+        setShared('sixfold.slackHealth',health);
         setShared('sixfold.slackWorkflows',states);
         if(event)openOverlay({mod:'sixfold-slack-inbox',kind:'window',key:'slack-mentions',keep:true,width:1040,height:800,props:{window:true,review:Boolean(event.review)}});
         setShared('sixfold.alertItems',items);
         setShared('sixfold.alertRead',read);
         setShared('sixfold.alertProjects',feed.projects ?? []);
-        view.alerts = JSON.parse(legacy || '{}').items ?? [];
-        previous = text;
+        view.alerts = legacy.items ?? [];
+        previous = signature;
         cx.notify();
-      } catch { /* Missing folders and partial writes are retried on the next tick. */ }
-      finally { loading = false; }
+      } catch { /* Retry after the next input/ledger change or classic-view activation. */ }
+      finally { loading = false;if(dirty)schedule(); }
     });
   };
-  refresh(cx);
-  cx.timer.every(2000, refresh);
+  for(const [key,name,fallback] of inputs){
+    subscriptions.push(subscribeJsonFile(cx,`${base}/${name}`,snapshot=>{
+      if(disposed)return;
+      const last=cached.get(key);
+      if(snapshot.status==='missing'){
+        if(!last){cached.set(key,{value:fallback(),hash:null,token:'missing'});schedule();}
+        return;
+      }
+      if(snapshot.status!=='ready'||!snapshot.value||typeof snapshot.value!=='object'||Array.isArray(snapshot.value))return;
+      const hash=typeof snapshot.hash==='string'?snapshot.hash:null;
+      if(last&&((hash!==null&&hash===last.hash)||(hash===null&&snapshot.value===last.value)))return;
+      cached.set(key,{value:snapshot.value,hash,token:hash??`value-${++version}`});schedule();
+    }));
+  }
+  subscriptions.push(subscribeFileChanges(cx,`${base}/slack-popup-events.json`,()=>{if(!disposed)schedule();}));
+  const stop=()=>{if(disposed)return;disposed=true;scheduled?.cancel?.();scheduled=null;subscriptions.forEach(unsubscribe=>unsubscribe());};
+  view.refreshAlerts=refresh;view.stopAlerts=stop;(view.fileSubscriptions??=[]).push(stop);
+  return stop;
 }
 
 async function dismiss(id) {
   const path = `${appHome()}/data/sixfold/alerts-dismissed.json`;
-  const old = await readTextFile(path);
-  const ids = old ? JSON.parse(old) : [];
+  const {value:ids,raw:old}=await ledgerSnapshot(path,[]);
+  if(!Array.isArray(ids)||!ids.every(value=>typeof value==='string'))throw new Error('Invalid dismissed alerts ledger');
   await writeTextFile(path, JSON.stringify([...ids, id]), old);
 }
 

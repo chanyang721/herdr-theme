@@ -1,10 +1,11 @@
 import { div } from 'gpui-kit';
 import { v_flex } from 'gpui-base';
-import { appHome, readTextFile, run } from 'herdr';
+import { appHome, run } from 'herdr';
+import {subscribeJsonFile,readJsonSnapshot} from './panel-io.js';
 
 export function parseReports(text) {
   let data;
-  try { data = JSON.parse(text || 'null'); } catch { return []; }
+  try { data = typeof text === 'string' ? JSON.parse(text || 'null') : text; } catch { return []; }
   if (data?.schema !== 1 || !Array.isArray(data.reports)) return [];
   const seen = new Set();
   return data.reports.filter(row => {
@@ -16,20 +17,36 @@ export function parseReports(text) {
     terminal: typeof row.terminal === 'string' ? row.terminal : null}));
 }
 export function watchReports(view, cx) {
-  view.sessionReports = [];
-  let loading = false, previous = '';
-  const refresh = cx => {
-    if (loading) return;
-    loading = true;
-    cx.spawn(async cx => {
-      try {
-        const reports = parseReports(await readTextFile(`${appHome()}/data/sixfold/session-reports.json`).catch(() => null));
-        const signature = JSON.stringify(reports);
-        if (signature !== previous) { view.sessionReports = reports; previous = signature; cx.notify(); }
-      } finally { loading = false; }
-    });
+  view.stopReports?.();view.sessionReports=[];
+  const path=`${appHome()}/data/sixfold/session-reports.json`;
+  let stopped=false,active=true,previous=JSON.stringify([]),pendingNotify=false,loading=null,version=0;
+  const notify=()=>{if(!stopped&&pendingNotify&&active&&view.sidebarVisible!==false){pendingNotify=false;cx.notify();}};
+  const accept=snapshot=>{
+    if(stopped)return;version++;
+    let reports;
+    if(snapshot.status==='missing')reports=[];
+    else if(snapshot.status==='ready'&&Object.hasOwn(snapshot,'value')){
+      const value=snapshot.value;
+      if(value?.schema!==1||!Array.isArray(value.reports))return;
+      reports=parseReports(value);
+    }else return;
+    const signature=JSON.stringify(reports);
+    if(signature!==previous){previous=signature;view.sessionReports=reports;pendingNotify=true;}
+    notify();
   };
-  refresh(cx); cx.timer.every(5000, refresh);
+  const release=subscribeJsonFile(cx,path,accept);
+  const stop=()=>{if(stopped)return;stopped=true;release();};
+  view.stopReports=stop;
+  view.refreshReports=(context=cx)=>{
+    notify();if(stopped||loading)return loading;
+    const observed=version;
+    loading=(context??cx).spawn(async()=>{
+      try{const snapshot=await readJsonSnapshot(path).catch(()=>({status:'invalid'}));if(!stopped&&version===observed)accept(snapshot);}
+      finally{loading=null;}
+    });return loading;
+  };
+  view.setReportsActive=value=>{active=value!==false;notify();};
+  return stop;
 }
 export function reportsSection(view, t) {
   return v_flex().id('sf-session-reports').flex_none().px(10).py(8).gap(4).border_t(1).border_color(t.border)

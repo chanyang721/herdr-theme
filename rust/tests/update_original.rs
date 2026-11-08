@@ -369,7 +369,20 @@ fn test_recovery_mod_clones_and_escaping_targets_are_refused() {
 fn test_script_destination_matches_initial_installer() {
     let mut f = Fixture::new();
     put(&f.repo.join("scripts/workspace.py"), "updated helper");
-    f.install(&["scripts/workspace.py"], false).unwrap();
+    // This path case writes and rechecks a complete native test executable,
+    // rather than the original small helper text. Keep production's one-second
+    // clean interval while allowing filesystem overhead in this fixture.
+    update::update_with_runtime(
+        &f.repo,
+        &f.home,
+        &["scripts/workspace.py".into()],
+        "fake-herdr",
+        5.0,
+        false,
+        &[],
+        &mut f.cli,
+    )
+    .unwrap();
     let destination = f.home.join("scripts/sixfold").join(install::native_name());
     assert_eq!(
         fs::read(destination).unwrap(),

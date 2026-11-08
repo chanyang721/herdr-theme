@@ -11,7 +11,7 @@ const absolute = value => /^(?:\/|[A-Za-z]:[\\/]|\\\\)/.test(value);
 
 export function bridgeFrom(source) {
   let data;
-  try { data = JSON.parse(source || 'null'); } catch { return null; }
+  try { data = typeof source === 'string' ? JSON.parse(source || 'null') : source; } catch { return null; }
   if (!text(data?.python) || !text(data?.script) || !absolute(data.script)) return null;
   if (data.args !== undefined && (!Array.isArray(data.args) || data.args.some(a => typeof a !== 'string' || a.includes('\0')))) return null;
   return { python: data.python, script: data.script, args: [...(data.args ?? [])] };
@@ -30,7 +30,7 @@ export function actionsOf(card) {
 }
 export function parseAsks(source) {
   let data;
-  try { data = JSON.parse(source || 'null'); } catch { return null; }
+  try { data = typeof source === 'string' ? JSON.parse(source || 'null') : source; } catch { return null; }
   if (data?.schema !== 1 || !Array.isArray(data.cards)) return null;
   const seen = new Set();
   return { cards: data.cards.filter(card => {

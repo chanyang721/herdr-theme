@@ -127,6 +127,22 @@ Local and connected/connecting computers are shown by default. Disconnected remo
 
 From the main computer, `hc send worker/t7 "message"` sends to that computer's terminal (use the qualified address from `hc ls`). A successful send is not a read receipt. The theme does not configure SSH, Tailscale, firewall rules or agent credentials.
 
+### Local task tracking
+
+An optional [local task feed](docs/panel-feed.md) shows one-line tasks, four-stage bars, parent/child trees, issue groups, sharing links, message packets and four closing stages. Issue groups and large child lists expand with **+N**. Completed tasks show a check; blocked work, missing reports, unread messages, remote work and usage limits have separate indicators.
+
+Rows display the supplied work title. Producers should supply the current task or subtask name. Completed child tasks leave both their tree and its **+N** count; independent root tasks keep their own closing lifecycle.
+
+Click the Linear or Jira area to open an issue popover on the right. Search **이번 주** (this week), **마일스톤** (milestones) or **전체** (all), then bring individual cached issues into the workspace. Local requests change the displayed issue selection. The theme does not accept work or close sessions. Task rows appear inside the selected computer's native workspace cards, alongside workspace badges, document controls and local question cards. **작업** toggles the task rows while preserving computer navigation. Motion off and the supplied system reduced-motion preference keep state updates without movement.
+
+Explicit same-computer space partners show matching name chips and a stationary purple bracket with square endpoints. Same-task agent brackets are stationary gray; dashed sharing routes identify other computers.
+
+New messages arc through a dedicated outer gutter with brighter packets, a fading tail and square departure/arrival pings. Concurrent sends are staggered. Remote packets curve toward the computer's dashed lane; missing endpoints are skipped. Delivery counters explicitly marked as counts are not network rates. Initial history is never replayed after reload.
+
+See the [native fixture gallery and measurements](docs/panel-validation.md) for 24 combinations (4 sharing modes × 3 tool choices × 2 Slack states), each captured in dark and light themes: 48 matrix images, plus interaction examples and update checks.
+
+![Task panel and issue popover rendered by the app with synthetic local data](docs/images/panel-feed/issues-milestone.png)
+
 ### Shared work across computers
 
 Workspaces belong to the same project when their names match; a trailing `(computer name)` naming the workspace's own computer is ignored, so `Docs (worker)` on `worker` matches `Docs` here. Unnamed workspaces (`~`) are skipped.

@@ -7,6 +7,7 @@ pub mod legacy_text;
 pub mod locking;
 pub mod notices;
 pub mod observers;
+pub mod panel_feed;
 pub mod python_unicode;
 pub mod tls;
 pub mod voice;

@@ -1,0 +1,509 @@
+{
+  "caption": "Native app rendering of the current computer navigator with synthetic local task data, Studio/Worker inventory and simulated tool responses. Registered handlers were invoked programmatically; physical pointer and keyboard input were not exercised. Lossless rectangular crops only.",
+  "matrix": {
+    "combinations": 24,
+    "themes": [
+      "dark",
+      "light"
+    ],
+    "images": 48
+  },
+  "files": [
+    {
+      "file": "children-active-titles.png",
+      "bytes": 23331,
+      "sha256": "464750f915cf10e08fb8c15c0f4c3df92a409fa28982b8946b73e16b183f7056"
+    },
+    {
+      "file": "children-completed-removed.png",
+      "bytes": 25053,
+      "sha256": "04a3d0f551eeaa919272c4194c0e488b58b3d36902ffff89b456fb93b37fad35"
+    },
+    {
+      "file": "closing-memory-1.png",
+      "bytes": 41064,
+      "sha256": "e803ca506d127634bc3c6cb59afd55cc2e8633f91ae4964cace800617251e315"
+    },
+    {
+      "file": "closing-memory-2.png",
+      "bytes": 41126,
+      "sha256": "a3bd79b5253d34654f2fb7f5180cd3eb4bd0300ea7d0bba221f089103683b2a3"
+    },
+    {
+      "file": "closing-memory-3.png",
+      "bytes": 41122,
+      "sha256": "54b7b45e7d7f63fb12ce250b20a0546430177d65a47e17c6508087d8250f18a6"
+    },
+    {
+      "file": "closing-memory-4-hidden.png",
+      "bytes": 38290,
+      "sha256": "1f2e0708519dbd1c13af5a331ca28d14e9cb4ba202457f417810cf5f38af22ac"
+    },
+    {
+      "file": "closing-memory-4-tag.png",
+      "bytes": 41517,
+      "sha256": "783320cb095cc340dd1e472eef308a556c6ae489ccfd292a85dfc3c742f0775a"
+    },
+    {
+      "file": "complete.png",
+      "bytes": 41126,
+      "sha256": "a3bd79b5253d34654f2fb7f5180cd3eb4bd0300ea7d0bba221f089103683b2a3"
+    },
+    {
+      "file": "event-accept.png",
+      "bytes": 35418,
+      "sha256": "8ce86ef834223e9c40554ddb65bf532f4574675a1dbe3aaa80bb988f4aa76c05"
+    },
+    {
+      "file": "event-blocked-close.png",
+      "bytes": 35671,
+      "sha256": "3c75e38a2f52c75e24144a0c9161c06041c185c2a7f9c117b9d87b41659c952f"
+    },
+    {
+      "file": "event-close-1.png",
+      "bytes": 35290,
+      "sha256": "cdb30c666e9a29102e7404730dc4776f6c3928362d7adf9a992d7e93483ac778"
+    },
+    {
+      "file": "event-close-2.png",
+      "bytes": 35485,
+      "sha256": "8d8aee225cad408c46ad48d78f3dbe2f83b1c2f21bd0c05577aae9d1dad7ea02"
+    },
+    {
+      "file": "event-close-3.png",
+      "bytes": 35479,
+      "sha256": "33a0c912d14e2824e8add304e5d055169e6937516878c038c74050aa3cc081c0"
+    },
+    {
+      "file": "event-close-4.png",
+      "bytes": 29601,
+      "sha256": "e19bf22e1bd785aae985c91f483efb5303014da9e3444aef11be1d15aaa8e104"
+    },
+    {
+      "file": "event-dispatch-existing.png",
+      "bytes": 28968,
+      "sha256": "5f265c64bcf7139ad658e5d76d44b954ebe4772bca5964e05ddf866fcf2d7a02"
+    },
+    {
+      "file": "event-memory.png",
+      "bytes": 35711,
+      "sha256": "6e0378e80a5c51dceffcbb1b8660a8876e738dbe0c808e19b914b2854ec0493f"
+    },
+    {
+      "file": "event-message.png",
+      "bytes": 35936,
+      "sha256": "4d9562c8b7d8ed48cd39ef2a5dabdfcb15a0476f53d921f7a67631641d685b8e"
+    },
+    {
+      "file": "event-message-computer.png",
+      "bytes": 35131,
+      "sha256": "4a23b20979abce22ed8c10627e2b6822503cbec1e32535908442bfe3b3cf719c"
+    },
+    {
+      "file": "event-message-space.png",
+      "bytes": 42125,
+      "sha256": "7853e81d5ae1054244dd17bd574643d672418b218c22ed3009499fa7ba030bf3"
+    },
+    {
+      "file": "event-review_request.png",
+      "bytes": 35338,
+      "sha256": "4020a86c642f8339a6f6ca053dd4eda2df669a3b57313717698f060b5f9955b1"
+    },
+    {
+      "file": "event-spawn.png",
+      "bytes": 34665,
+      "sha256": "6f4a2d77df94c55a2b5fde8a277fc96de7c2fb79da28a71d7c1b25d024d96458"
+    },
+    {
+      "file": "event-verdict.png",
+      "bytes": 35782,
+      "sha256": "6939c3ec0253a534fc7a2f8ae8b7aea0e08367ba684efe4c3ccd3bce01416687"
+    },
+    {
+      "file": "issues-all.png",
+      "bytes": 82782,
+      "sha256": "309015b8376bc208d605cb8a0bea557c1052317d65291073f6005c0d2fa673b4"
+    },
+    {
+      "file": "issues-cache-stale.png",
+      "bytes": 82898,
+      "sha256": "689c64db7a1d9bb712f5b7d25e88ad11c052a0d52dd32e544d6ff7490e1de4c9"
+    },
+    {
+      "file": "issues-expanded-five.png",
+      "bytes": 38431,
+      "sha256": "6094901dc7b938e68671e85f6353e7c65cd031c9647d439783b1fc95c1878093"
+    },
+    {
+      "file": "issues-explicit-unpinned.png",
+      "bytes": 82061,
+      "sha256": "acf659a3dfc7d1ec999865b547c86d6cdd36081a61303315df5a8e5e32f0952f"
+    },
+    {
+      "file": "issues-import-pending.png",
+      "bytes": 82774,
+      "sha256": "f1284cfa1152bd7140c759a2a84d03d433b32026877b3a639ee9c728bf63a67f"
+    },
+    {
+      "file": "issues-imported.png",
+      "bytes": 79476,
+      "sha256": "6e30c887fa6445ac700b56129da4fc11e7f583b13b1034d47bfc96b0583059c5"
+    },
+    {
+      "file": "issues-milestone.png",
+      "bytes": 87107,
+      "sha256": "17bb8ca21453ed458d93e080422f0e7632e568d810b9ea07c91816d61a4a7ddb"
+    },
+    {
+      "file": "issues-missing-cache.png",
+      "bytes": 60492,
+      "sha256": "4fde88339051a7bb80538231c2a2dac704f3d2704013fcccdc4c3a854c7d0f1a"
+    },
+    {
+      "file": "issues-missing-milestone.png",
+      "bytes": 84536,
+      "sha256": "266dee9896e79a6886140d0a8ab87c8f995727bb433334bebc0ec05831e41923"
+    },
+    {
+      "file": "issues-removed.png",
+      "bytes": 82866,
+      "sha256": "b8714777df242cff10a9660d7b161f8a598f40e2d0c71adbb8c76c21eb4abbcd"
+    },
+    {
+      "file": "issues-search.png",
+      "bytes": 64010,
+      "sha256": "8932a54d5db338322729d115d189e890ff3b681c07667d75b03adec61a995c76"
+    },
+    {
+      "file": "issues-week.png",
+      "bytes": 68505,
+      "sha256": "5d178fac8b3059be3ea05878e1265b9e80d6412b08fbb5d20c64dd9177da1f02"
+    },
+    {
+      "file": "issues-week-required.png",
+      "bytes": 81290,
+      "sha256": "9fb0fcf5f759cd800cd0cd8446b87dd0d52aad1969e5291c26ad21a65cac0a51"
+    },
+    {
+      "file": "lanes-after-224.png",
+      "bytes": 39065,
+      "sha256": "8be18834a0266426143edd35029038419ae2f9baa945fb4500bbec6152b500b5"
+    },
+    {
+      "file": "lanes-after-340.png",
+      "bytes": 45061,
+      "sha256": "402e0ba53f9f5b397307c0bb0b36d79006c0203d629e66eec64b342411c03c8d"
+    },
+    {
+      "file": "light-complete.png",
+      "bytes": 40901,
+      "sha256": "ef1b0347386901b97eb622a583e18fd8970d722f955cf34d42e3ebaeb03379c3"
+    },
+    {
+      "file": "light-issues.png",
+      "bytes": 83167,
+      "sha256": "0aee4903431ddfa5a8836f71fa191f1044d3a1a8ed4df6bec21a7ec3d0a174b4"
+    },
+    {
+      "file": "local-arrival.png",
+      "bytes": 43054,
+      "sha256": "7b6972355914fbc5fd8f56a665541efb549039f276c35dfa631f9e28cbc778c5"
+    },
+    {
+      "file": "local-collaboration.png",
+      "bytes": 42096,
+      "sha256": "d5d11740d6155b96107c34ef22e8eebfbbeb1428ebbe180948f3e24f4c2421f3"
+    },
+    {
+      "file": "local-message.png",
+      "bytes": 43459,
+      "sha256": "3328827457fc73702598cb9b07d9d994e500fd417cd8e95b8d4ac64bca1d0c16"
+    },
+    {
+      "file": "matrix-agent-jira-no-slack.png",
+      "bytes": 28747,
+      "sha256": "81cb598ec40b24c362877af86d47f93cbae44ffb75e7868570a87fd3b8afaa8b"
+    },
+    {
+      "file": "matrix-agent-jira-no-slack-light.png",
+      "bytes": 28634,
+      "sha256": "30c7a79a3748091dabbc5f07160661f7e6e5b42f9d50a6e7284f2a9aeddd9a8a"
+    },
+    {
+      "file": "matrix-agent-jira-slack.png",
+      "bytes": 28477,
+      "sha256": "6c73bf55083eb876832395298ede5f3d636c4ea9da4ebd6188273c1191724a23"
+    },
+    {
+      "file": "matrix-agent-jira-slack-light.png",
+      "bytes": 28354,
+      "sha256": "c20675056b884b4666c815bf2bd6ac224c79d3109e26a550da50900874a9afed"
+    },
+    {
+      "file": "matrix-agent-linear-no-slack.png",
+      "bytes": 28668,
+      "sha256": "e9f64e36ae15b861039334849d37bd58fa4705aafc9bb55021c3664c28fbc20b"
+    },
+    {
+      "file": "matrix-agent-linear-no-slack-light.png",
+      "bytes": 28596,
+      "sha256": "ec9290ed38eacb7cebd6d1099a1d4e24b3368e365e53b3625775129edf5d92f7"
+    },
+    {
+      "file": "matrix-agent-linear-slack.png",
+      "bytes": 28389,
+      "sha256": "9abb980bec3db6b5d3deda635f0e3653533695c573ab96eec7007f6d548322db"
+    },
+    {
+      "file": "matrix-agent-linear-slack-light.png",
+      "bytes": 28290,
+      "sha256": "8b729bef016482e0c3314b2898aac78ffd9947d020048fe1304a6a122829907e"
+    },
+    {
+      "file": "matrix-agent-none-no-slack.png",
+      "bytes": 22416,
+      "sha256": "46459ffcfb6d4578a5b8e80270bf5875d55b056afaa521625151741bd97f4ad7"
+    },
+    {
+      "file": "matrix-agent-none-no-slack-light.png",
+      "bytes": 22252,
+      "sha256": "4493eada6442d7491d05706179dd31742fb8aae8513c6601e5776203f93bc477"
+    },
+    {
+      "file": "matrix-agent-none-slack.png",
+      "bytes": 22756,
+      "sha256": "44540fb3e97067d535d801b1ee0fbe43486c5906015ee087f2b9be011747170c"
+    },
+    {
+      "file": "matrix-agent-none-slack-light.png",
+      "bytes": 22581,
+      "sha256": "030bfab7cbe0e507042591dcb862d0c4c002326d007edf886638bf9913da2722"
+    },
+    {
+      "file": "matrix-local-jira-no-slack.png",
+      "bytes": 42826,
+      "sha256": "43789a314c067a60efffe2242db8a0e3832b42be260247c6d2d8949b71cf23f7"
+    },
+    {
+      "file": "matrix-local-jira-no-slack-light.png",
+      "bytes": 42670,
+      "sha256": "a60f749a6c4bd9c9c445c5b1b279e589069a7aae2569183f8c1ab91c3386fc9a"
+    },
+    {
+      "file": "matrix-local-jira-slack.png",
+      "bytes": 42266,
+      "sha256": "3e274d08b76d86562aab0e7cc8feeda1c35163074b86753a95aeb3b9dfb74571"
+    },
+    {
+      "file": "matrix-local-jira-slack-light.png",
+      "bytes": 42086,
+      "sha256": "6ab42ba85d85e084edf674aa0ae69261b6be2a984a85e7b19cfd9e98b0eb0df2"
+    },
+    {
+      "file": "matrix-local-linear-no-slack.png",
+      "bytes": 42681,
+      "sha256": "7aa0c98b52a299e62eb47514e0ebfa00e52599b749da08e3f4da5e15a0586a97"
+    },
+    {
+      "file": "matrix-local-linear-no-slack-light.png",
+      "bytes": 42586,
+      "sha256": "e5d57eb069a36e068891235d45a52c3178019470d8590cf26be3b847adefabc8"
+    },
+    {
+      "file": "matrix-local-linear-slack.png",
+      "bytes": 42096,
+      "sha256": "d5d11740d6155b96107c34ef22e8eebfbbeb1428ebbe180948f3e24f4c2421f3"
+    },
+    {
+      "file": "matrix-local-linear-slack-light.png",
+      "bytes": 41949,
+      "sha256": "3ede3dfc345da3e499613ce53d12ae1e69ed5ef01e9068ad23b717cb54820a85"
+    },
+    {
+      "file": "matrix-local-none-no-slack.png",
+      "bytes": 31144,
+      "sha256": "fe964754eafcdc6d7073f802ecf0dc3baf16fc130bf0641ffa91057e679fe536"
+    },
+    {
+      "file": "matrix-local-none-no-slack-light.png",
+      "bytes": 30915,
+      "sha256": "bfd4aa1c950b4442d7ccfaa4084d0fbe5c49413d9c5dcf2121e400a89453b034"
+    },
+    {
+      "file": "matrix-local-none-slack.png",
+      "bytes": 31828,
+      "sha256": "21b804faf2771020bd8d65d1bbbb54cf3fa97561165ca4f20697809c17462068"
+    },
+    {
+      "file": "matrix-local-none-slack-light.png",
+      "bytes": 31583,
+      "sha256": "d6155e3c6e1fffeb465ccabc084a3132537a1424b4604b10b06e21e841318a40"
+    },
+    {
+      "file": "matrix-none-jira-no-slack.png",
+      "bytes": 28494,
+      "sha256": "287acfc3345548e49b00f20c33c29b55e591b10ef8d80a49491ee0ee3b1f3053"
+    },
+    {
+      "file": "matrix-none-jira-no-slack-light.png",
+      "bytes": 28384,
+      "sha256": "5c2056175faa9fd8d3ccc1365a07a89982976514f18055cc167e705e21ebed5a"
+    },
+    {
+      "file": "matrix-none-jira-slack.png",
+      "bytes": 28219,
+      "sha256": "e2c2f38ac028748839689ad701a3ef6f067ccfeae73b01f508305c8e95358e41"
+    },
+    {
+      "file": "matrix-none-jira-slack-light.png",
+      "bytes": 28100,
+      "sha256": "0618365528093e13d2c229b0660f625b7a833ecbc05dc1bd6e90e467bf9d3e6e"
+    },
+    {
+      "file": "matrix-none-linear-no-slack.png",
+      "bytes": 28421,
+      "sha256": "c834092a5e3ad51d76e62c47182104f4e7e3beb4ad363e49c82be0c1ed07e687"
+    },
+    {
+      "file": "matrix-none-linear-no-slack-light.png",
+      "bytes": 28351,
+      "sha256": "d46e0a4d444d6344f32c9e0f8be9819c65e8b984849dc6780c267bdd09a8e38c"
+    },
+    {
+      "file": "matrix-none-linear-slack.png",
+      "bytes": 28137,
+      "sha256": "80304d71a5c75af2fd124950708bc56986c27ba9277d96c735404df4166fc2ce"
+    },
+    {
+      "file": "matrix-none-linear-slack-light.png",
+      "bytes": 28044,
+      "sha256": "d5e05658fa0cd295a53e485b267726da9f94b32b8ac9e4096fe62bd40a850cc0"
+    },
+    {
+      "file": "matrix-none-none-no-slack.png",
+      "bytes": 22182,
+      "sha256": "a00bc5e2bbb7f74b2aca77542d2323daf5dd6f47baac120f7299423a7597c2fa"
+    },
+    {
+      "file": "matrix-none-none-no-slack-light.png",
+      "bytes": 22012,
+      "sha256": "03b79cae671c4581f643e705b71a5f9432a705eb25bc3dee5c8cdd93df0b571e"
+    },
+    {
+      "file": "matrix-none-none-slack.png",
+      "bytes": 22512,
+      "sha256": "5f060204d31442efc0e7a6b3232f92781f25585a8393c2b1d6921e35ad4386d4"
+    },
+    {
+      "file": "matrix-none-none-slack-light.png",
+      "bytes": 22332,
+      "sha256": "cc3ae131771d26fc1210e8f098f795ef306c984ee2bc4ad40f2b0c5c802a308b"
+    },
+    {
+      "file": "matrix-space-jira-no-slack.png",
+      "bytes": 28630,
+      "sha256": "562a29995271e33905eaab17b3f6ccca5e6d1788570647fa2a10954beb84b415"
+    },
+    {
+      "file": "matrix-space-jira-no-slack-light.png",
+      "bytes": 28548,
+      "sha256": "9a3eceaa2e04c721ba16a37883eddfc2bd19c7604c13722f37c7e7fb293be145"
+    },
+    {
+      "file": "matrix-space-jira-slack.png",
+      "bytes": 28359,
+      "sha256": "9e37ca0d6aa6b0a2dbec0a1930a8f505afff3c572565d5187ca18b8e39e54cb3"
+    },
+    {
+      "file": "matrix-space-jira-slack-light.png",
+      "bytes": 28264,
+      "sha256": "b5e6b8e582191905772bbf9fb05c43074046f8e20b53f7affc95860d1afe0416"
+    },
+    {
+      "file": "matrix-space-linear-no-slack.png",
+      "bytes": 28557,
+      "sha256": "dca3654c5ab5310232f6c8de5b340abc1d32798f2ad0db98ad5bf2320c8e4554"
+    },
+    {
+      "file": "matrix-space-linear-no-slack-light.png",
+      "bytes": 28512,
+      "sha256": "be2b171334fc857dc31673bbbba843de081afaddf5dc32b43e0d83d70258d81f"
+    },
+    {
+      "file": "matrix-space-linear-slack.png",
+      "bytes": 28276,
+      "sha256": "898c1578a43c349605b425f7329fc0bb63cf602750c02b1a7f2714e896c95162"
+    },
+    {
+      "file": "matrix-space-linear-slack-light.png",
+      "bytes": 28206,
+      "sha256": "17be3fb44d67e7bde6141c773b21fd139a3be16bc3be65bd2cf53f7ccce0d2b4"
+    },
+    {
+      "file": "matrix-space-none-no-slack.png",
+      "bytes": 22322,
+      "sha256": "4fc7788db53131a427c41fab589c2cb2aab45e476c20a8d1f6772a8fb7599f12"
+    },
+    {
+      "file": "matrix-space-none-no-slack-light.png",
+      "bytes": 22176,
+      "sha256": "5d2a7e120d9b14b9c0e689144724578d2fb19c889230eb7aaff22ac17deceec6"
+    },
+    {
+      "file": "matrix-space-none-slack.png",
+      "bytes": 22655,
+      "sha256": "b30f330253e936475099af3122ffa0301a4b37d9d22bdad44a750161ebe1370d"
+    },
+    {
+      "file": "matrix-space-none-slack-light.png",
+      "bytes": 22496,
+      "sha256": "609e23cd5cb7bd074f91c20935d2ed347069faf5555be5508b7ca5c9dbe999c3"
+    },
+    {
+      "file": "motion-off.png",
+      "bytes": 41126,
+      "sha256": "a3bd79b5253d34654f2fb7f5180cd3eb4bd0300ea7d0bba221f089103683b2a3"
+    },
+    {
+      "file": "scenario-cross-computer.png",
+      "bytes": 26661,
+      "sha256": "aada227afa530501c032b59fea3501c5bc687a2efa99a306d2656a7d3f500931"
+    },
+    {
+      "file": "scenario-cross-space.png",
+      "bytes": 32668,
+      "sha256": "36f74d7f2d5f345aac8ef6d7c61bde9a6da6de9a3f93deb71dca506a74dccc22"
+    },
+    {
+      "file": "scenario-no-issue.png",
+      "bytes": 27681,
+      "sha256": "2ee41716dbf9bcc2200e95795b7aab2f3be5b17ca502d8fe5014da9a70035236"
+    },
+    {
+      "file": "scenario-overflow.png",
+      "bytes": 34609,
+      "sha256": "9a6b3c267df1af171e46005b58cf818791831b8ec0f4e3c607c602fcc50caafc"
+    },
+    {
+      "file": "scenario-sorting.png",
+      "bytes": 31896,
+      "sha256": "e959f4cc242949e30c2addd531334ca425771597874eab072ca199a23a30807a"
+    },
+    {
+      "file": "task-static.png",
+      "bytes": 22182,
+      "sha256": "a00bc5e2bbb7f74b2aca77542d2323daf5dd6f47baac120f7299423a7597c2fa"
+    },
+    {
+      "file": "tree-expanded.png",
+      "bytes": 42187,
+      "sha256": "888e2a6a053cdc9a9d6c48dd14ac874253a904592742db2259b26c7d86494f59"
+    },
+    {
+      "file": "tree-folded.png",
+      "bytes": 41126,
+      "sha256": "a3bd79b5253d34654f2fb7f5180cd3eb4bd0300ea7d0bba221f089103683b2a3"
+    }
+  ],
+  "renderer_source_tree": "15108ebea07754f9f0f63eb3b9f55b0207f45def"
+}

@@ -1,45 +1,69 @@
 import { div } from 'gpui-kit';
 import { h_flex, v_flex } from 'gpui-base';
-import { run, exec, readTextFile, writeTextFile, appHome, watchFolder } from 'herdr';
-import { KIND_WORDS, bridgeFrom, parseAsks, questionsOf, actionsOf, choose, complete, actionRequest, requestPath, acceptedReceipt, detailOf, touchesCards, selectionOf } from './ask-model.js';
+import { run, exec, readTextFile, writeTextFile, appHome } from 'herdr';
+import { KIND_WORDS, bridgeFrom, parseAsks, questionsOf, actionsOf, choose, complete, actionRequest, requestPath, acceptedReceipt, detailOf, selectionOf } from './ask-model.js';
+
+import {subscribeJsonFile,readJsonSnapshot} from './panel-io.js';
 
 const ROOT = '/data/sixfold';
-const SAFETY_MS = 5000;
 let sequence = 0;
 export function watchAsks(view, cx) {
+  view.stopAsks?.();
   view.asks = null; view.askChoices = Object.create(null); view.askBusy = Object.create(null); view.askErrors = Object.create(null); view.askBridge = null;
-  let loading = false, previous;
-  const refresh = cx => {
-    if (loading) return;
-    loading = true;
-    cx.spawn(async cx => {
-      try {
-        const directory = `${appHome()}${ROOT}`;
-        const bridge = bridgeFrom(await readTextFile(`${directory}/bridge.json`).catch(() => null));
-        const parsed = bridge ? parseAsks(await readTextFile(`${directory}/cards.json`).catch(() => null)) : null;
-        const cards = parsed?.cards ?? null;
-        view.askBridge = bridge;
-        const signature = JSON.stringify([bridge, cards]);
-        if (signature === previous) return;
-        previous = signature;
-        const live = new Set((cards ?? []).map(card => `${card.id}:${card.revision}`));
-        for (const old of view.asks ?? []) if (!live.has(`${old.id}:${old.revision}`)) {
-          delete view.askChoices[old.id]; delete view.askErrors[old.id];
-        }
-        view.asks = cards;
-        cx.notify();
-      } finally { loading = false; }
-    });
-  };
-  refresh(cx); cx.timer.every(SAFETY_MS, refresh);
-  cx.spawn(async cx => {
-    for (;;) {
-      const directory = `${appHome()}${ROOT}`;
-      try { if (touchesCards(await watchFolder(directory), directory)) refresh(cx); }
-      catch { await cx.sleep(2000); }
+  const directory=`${appHome()}${ROOT}`,inputs=[['bridge',bridgeFrom],['cards',parseAsks]];
+  const cached=new Map(),seen=new Set(),subscriptions=[];
+  let stopped=false,active=true,previous,pendingNotify=false,loading=null,version=0;
+  const apply=()=>{
+    if(stopped||seen.size!==inputs.length)return;
+    const bridge=cached.get('bridge')??null,cards=bridge?(cached.get('cards')?.cards??null):null;
+    const signature=JSON.stringify([bridge,cards]);
+    if(signature!==previous){
+      previous=signature;view.askBridge=bridge;
+      const live=new Set((cards??[]).map(card=>`${card.id}:${card.revision}`));
+      for(const old of view.asks??[])if(!live.has(`${old.id}:${old.revision}`)){
+        delete view.askChoices[old.id];delete view.askErrors[old.id];
+      }
+      view.asks=cards;pendingNotify=true;
     }
-  });
-  view.refreshAsks = refresh;
+    if(pendingNotify&&active&&view.sidebarVisible!==false){pendingNotify=false;cx.notify();}
+  };
+  const accept=(key,parse,snapshot)=>{
+    if(stopped)return;
+    seen.add(key);version++;
+    if(snapshot.status==='missing')cached.set(key,null);
+    else if(snapshot.status==='ready'&&Object.hasOwn(snapshot,'value')){
+      const value=parse(snapshot.value);
+      if(value!==null)cached.set(key,value);
+    }
+    // Invalid or failed reads keep the last valid display. Only a confirmed
+    // missing bridge disables actions; sendAction rechecks its current bytes.
+    apply();
+  };
+  for(const [key,parse] of inputs)subscriptions.push(subscribeJsonFile(cx,`${directory}/${key==='cards'?'cards':'bridge'}.json`,snapshot=>accept(key,parse,snapshot)));
+  const refresh=(context=cx)=>{
+    apply();if(stopped||loading)return loading;
+    const observed=version;
+    loading=(context??cx).spawn(async()=>{
+      try{
+        const values=await Promise.all(inputs.map(([key])=>readJsonSnapshot(`${directory}/${key}.json`).catch(()=>({status:'invalid'}))));
+        if(stopped||version!==observed)return;
+        // Commit both refreshed inputs together, rather than briefly mixing
+        // the newly configured command with the previous cards envelope.
+        for(let i=0;i<inputs.length;i++){
+          const [key,parse]=inputs[i],snapshot=values[i];seen.add(key);
+          if(snapshot.status==='missing')cached.set(key,null);
+          else if(snapshot.status==='ready'&&Object.hasOwn(snapshot,'value')){
+            const value=parse(snapshot.value);if(value!==null)cached.set(key,value);
+          }
+        }
+        version++;apply();
+      }finally{loading=null;}
+    });return loading;
+  };
+  const stop=()=>{if(stopped)return;stopped=true;for(const release of subscriptions.splice(0))release();};
+  view.stopAsks=stop;view.refreshAsks=refresh;
+  view.setAsksActive=value=>{active=value!==false;apply();};
+  return stop;
 }
 export function sendAction(view, card, action, cx) {
   const bridge = view.askBridge;
