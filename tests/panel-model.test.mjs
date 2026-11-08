@@ -228,7 +228,7 @@ test('delayed polling starts a new packet at observation time without changing s
   assert.equal(state.packets[0].phase, 'start');
   assert.equal(state.packets[0].at, NOW + 1000);
   assert.equal(state.packets[0].sourceAt, NOW - 1000);
-  assert.equal(state.nextAt, NOW + 1040);
+  assert.equal(state.nextAt, NOW + 1120);
   assert.equal(JSON.stringify(value), before);
 });
 
@@ -770,7 +770,7 @@ test('message travel lasts750ms and its pipe settles within1460ms',()=>{
  const value=normalize({events:[{id:'pipe',at:stamp(NOW),kind:'message',from,to:'worker'}]});
  let state=advance(value,previous,0);assert.equal(state.packets[0].phase,'start');assert.equal(state.packets[0].travelMs,750);
  state=advance(value,state,789);assert.equal(state.packets[0].phase,'travel');
- state=advance(value,state,790);assert.equal(state.packets[0].phase,'ping');
+ state=advance(value,state,870);assert.equal(state.packets[0].phase,'ping');
  state=advance(value,state,1000);assert.equal(state.packets[0].phase,'fade');
  state=advance(value,state,1460);assert.equal(state.packets.length,0);assert.equal(state.nextAt,null);
 });

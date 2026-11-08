@@ -1,7 +1,7 @@
 import { projectTaskBranches } from './task-tree.js';
 
 // Display data only. The producer owns task interpretation and lifecycle policy.
-export const MESSAGE_TIMING=Object.freeze({startMs:40,packetMs:790,pingMs:210,coolMs:460});
+export const MESSAGE_TIMING=Object.freeze({startMs:120,packetMs:870,pingMs:130,coolMs:460});
 export const PANEL_TIMING = Object.freeze({ tagMs: 1700, startMs: 40, packetMs: 1640, pingMs: 460, coolMs: 900 });
 const MAX = Object.freeze({ computers: 64, spaces: 128, agents: 256, issues: 128, links: 512, events: 256, bytes: 2 * 1024 * 1024 });
 const STATUSES = new Set(['working', 'idle', 'blocked', 'done']);

@@ -216,21 +216,32 @@ export function route(id,a,b,color,{dashed=false,packet=null,motion=false,relati
     const sourceX=a.kind==='computer'?PANEL_FLOW.computer:startX;
     const targetX=b.kind==='computer'?PANEL_FLOW.computer:endX;
     const reach=Math.min(PANEL_FLOW.width-4-(packet.routeLane?0:4),Math.max(40,height*0.22+40));
-    const middle=(start+end)/2;
-    // These two cubics match the native ease-out/ease-in horizontal halves
-    // and the single full-length ease-in-out vertical transition exactly.
-    const path=stroke=>PathBuilder.stroke(stroke).move_to(sourceX,start)
-      .cubic_bezier_to(reach,middle,reach,start,reach,start)
-      .cubic_bezier_to(targetX,end,reach,end,reach,end).build();
+    const ease=t=>t<0.5?4*t*t*t:1-(-2*t+2)**3/2;
+    // Keep the native horizontal easing policy constant through the turn.
+    // Changing easing while a transition is live resamples its old leg with
+    // the new policy and causes a visible jump. The spline follows exactly
+    // the same two horizontal halves and one full vertical interpolation.
+    const points=Array.from({length:25},(_,i)=>{const t=i/24;return {
+      x:t<=0.5?sourceX+(reach-sourceX)*ease(t*2):reach+(targetX-reach)*ease(t*2-1),
+      y:start+(end-start)*ease(t),
+    };});
+    const path=stroke=>{
+      const p=PathBuilder.stroke(stroke).move_to(sourceX,start);
+      for(let i=0;i<points.length-1;i++){
+        const a=points[Math.max(0,i-1)],b=points[i],c=points[i+1],d=points[Math.min(points.length-1,i+2)];
+        p.cubic_bezier_to(c.x,c.y,b.x+(c.x-a.x)/6,b.y+(c.y-a.y)/6,c.x-(d.x-b.x)/6,c.y-(d.y-b.y)/6);
+      }
+      return p.build();
+    };
     const shape=(stroke,tint)=>window.paint_path(path(stroke),tint).absolute().left(0).top(0).w(PANEL_FLOW.width+8).h(height+8);
     base.child(shape(9,color+'22')).child(shape(5,color+'BB')).child(shape(3,color+'44'));
     if(motion&&['start','travel','ping'].includes(packet.phase)){
-      const initial=packet.phase==='start',turn=packet.elapsed>=415;
-      const x=initial?sourceX:turn?targetX:reach,y=initial?start:end;
+      const initial=packet.phase==='start',turn=packet.elapsed>=495;
+      const x=initial?sourceX:turn?targetX+0.001:reach,y=initial?start:end;
       for(const [index,size,opacity,delay] of [[3,3,0.2,90],[2,4,0.4,60],[1,6,0.7,30],[0,9,1,0]]){
         const part=div().id(index?`panel-packet-tail-${id}-${index}`:`panel-packet-${id}`).absolute()
           .left(x-size/2).top(y-size/2).size(size).rounded(size/2).bg(color).opacity(packet.phase==='ping'?0:opacity);
-        part.transition('left',{duration:initial?1:375,delay,easing:turn?'ease-in':'ease-out'})
+        part.transition('left',{duration:initial?1:375,delay,easing:'ease-in-out'})
           .transition('top',{duration:initial?1:750,delay,easing:'ease-in-out'})
           .transition('opacity',{duration:120,easing:'ease-out'});
         if(!index)part.child(div().absolute().left(3).top(3).size(3).rounded(2).bg('#FFFFFF'));
@@ -358,7 +369,7 @@ export function renderPanelTracking(view,t,cx,{macTitlebar=false}={}){
   const now=Date.now();
   const state=panelEventStates(feed,now,{previous:view.panelEvents,motion});view.panelEvents=state;
   let nextAt=state.nextAt;
-  for(const packet of state.packets)for(const offset of (packet.kind==='message'?[415]:[300,1400])){
+  for(const packet of state.packets)for(const offset of (packet.kind==='message'?[495]:[300,1400])){
     const at=packet.at+offset;if(at>now&&(nextAt===null||at<nextAt))nextAt=at;
   }
   if(view.panelWakeAt!==nextAt){

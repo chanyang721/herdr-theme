@@ -305,19 +305,19 @@ test('curved packet targets bow outward, stay in the gutter and reverse with sen
  const down=samples(a.id,b.id),up=samples(b.id,a.id);
  assert(Math.max(...down.map(p=>p.x))>down[0].x+10);assert(down.every(p=>p.x>=0&&p.x<=96));
  assert(down[0].y<down.at(-1).y);assert(up[0].y>up.at(-1).y);
- assert.equal(down[0].x,down.at(-1).x);assert.equal(up[0].x,up.at(-1).x);
+ assert(Math.abs(down[0].x-down.at(-1).x)<0.01);assert(Math.abs(up[0].x-up.at(-1).x)<0.01);
 });
 
 
 test('a message pipe has an outlined translucent tube and only one native horizontal turn',async()=>{
  const r=await renderer(true),view=viewFor(makePanelFixture()),feed=view.panelState.feed;
  r.renderPanelTracking(view,t,r.cx);const layout=r.panelLayout(feed,view.panelEvents),[a,b]=feed.spaces[0].agents;
- for(const elapsed of [40,415]){
+ for(const elapsed of [120,495]){
   const packet={id:'tube',kind:'message',from:a.id,to:b.id,phase:'travel',elapsed};
   const tree=r.panelFlowLayer(feed,layout,{...view.panelEvents,packets:[packet]},()=>t.accent,t,true,340),head=byId(tree,'panel-packet-tube');
   assert.equal(call(head,'size')[1],9);
   const left=head.calls.find(c=>c[0]==='transition'&&c[1]==='left')[2],top=head.calls.find(c=>c[0]==='transition'&&c[1]==='top')[2];
-  assert.equal(left.duration,375);assert.equal(left.easing,elapsed===40?'ease-out':'ease-in');assert.equal(top.duration,750);
+  assert.equal(left.duration,375);assert.equal(left.easing,'ease-in-out');assert.equal(top.duration,750);
   assert(r.paths.some(args=>args[1]==='#8FEFFFBB'));assert(r.paths.some(args=>args[1]==='#8FEFFF44'));
  }
 });
