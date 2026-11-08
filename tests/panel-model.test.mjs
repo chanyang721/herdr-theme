@@ -756,10 +756,21 @@ test('unresolved messages are quiet; new messages stagger in two bounded native 
  const queued=advance(value,prior,10),pending=queued.pending.map(([,event])=>event);
  assert.equal(pending.filter(event=>event.drawRoute).length,8);assert.equal(queued.packets.length,1);
  const moving=pending.filter(event=>event.drawRoute);
- for(let i=1;i<moving.length;i++)assert(moving[i].routeAt-moving[i-1].routeAt>=480);
- for(const lane of [0,1]){const own=moving.filter(event=>event.routeLane===lane);for(let i=1;i<own.length;i++)assert(own[i].routeAt-own[i-1].routeAt>=2100);}
+ for(let i=1;i<moving.length;i++)assert(moving[i].routeAt-moving[i-1].routeAt>=260);
+ for(const lane of [0,1]){const own=moving.filter(event=>event.routeLane===lane);for(let i=1;i<own.length;i++)assert(own[i].routeAt-own[i-1].routeAt>=1000);}
  const done=advance(value,queued,20000);assert.equal(done.nextAt,null);assert.equal(done.pending.length,0);
  const reload=panelEventStates(value,NOW+30000);assert.equal(reload.packets.length,0);assert.equal(reload.nextAt,null);
  const changed={...value,events:value.events.map(event=>({...event,animate:false}))};
  const revoked=advance(changed,queued,20);assert.equal(revoked.packets.length,0);assert.equal(revoked.connections.length,0);
+});
+
+
+test('message travel lasts750ms and its pipe settles within1460ms',()=>{
+ const initial=normalize(),previous=boot(initial),from=initial.spaces[0].agents[0].id;
+ const value=normalize({events:[{id:'pipe',at:stamp(NOW),kind:'message',from,to:'worker'}]});
+ let state=advance(value,previous,0);assert.equal(state.packets[0].phase,'start');assert.equal(state.packets[0].travelMs,750);
+ state=advance(value,state,789);assert.equal(state.packets[0].phase,'travel');
+ state=advance(value,state,790);assert.equal(state.packets[0].phase,'ping');
+ state=advance(value,state,1000);assert.equal(state.packets[0].phase,'fade');
+ state=advance(value,state,1460);assert.equal(state.packets.length,0);assert.equal(state.nextAt,null);
 });

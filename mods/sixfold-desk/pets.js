@@ -7,8 +7,8 @@ const PET_BOX={width:24,height:22};
 export const RUN_FRAMES=5;
 export const RUN_FRAME_MS=110;
 const LABELS={working:'작업 중',blocked:'확인 필요',done:'완료 · 미확인',idle:'대기'};
-// Idle breathing and the "needs you" fidget are native loops; running is a native frame cycle.
-const MOTION={blocked:{axis:'left',from:0,to:2,period:220},idle:{axis:'top',from:0,to:1,period:3200}};
+// Idle sleeping is stationary; only active work and needs-you states animate.
+const MOTION={blocked:{axis:'left',from:0,to:2,period:220}};
 
 export function panePetState(status){
   const known=['working','blocked','done','idle'].includes(status)?status:'idle';

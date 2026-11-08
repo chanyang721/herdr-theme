@@ -1,5 +1,5 @@
 // Join display records only through explicit native navigation identities.
-export const PANEL_FLOW=Object.freeze({gutter:72,right:8,width:64,message:22,messageNext:32,collaboration:44,computer:60,endpoint:14});
+export const PANEL_FLOW=Object.freeze({gutter:112,right:8,width:104,message:78,messageNext:90,collaboration:44,computer:100,endpoint:0});
 
 // Only filtered remote endpoints project to their explicitly identified
 // computer. Hidden local rows must not acquire an invented route.
@@ -53,4 +53,13 @@ export function taskComputerAnchors(feed, rows, listHeight, headingHeight) {
     result.push([computer.id,{kind:'computer',computer:computer.id,y:index*39+18-listHeight-headingHeight}]);
   }
   return result;
+}
+
+// Inter-space sends attach to workspace headers; a remote endpoint attaches
+// only to its known computer. No names or approximate identity matching.
+export function panelMessageAnchors(feed,layout,event){
+ const owner=id=>feed.spaces.find(space=>space.id===id||space.agents.some(agent=>agent.id===id));
+ const from=owner(event.from),to=owner(event.to);
+ if(from&&to&&from.id!==to.id&&from.computer===to.computer)return [layout.anchors.get(from.id),layout.anchors.get(to.id)];
+ return [panelFlowAnchor(feed,layout,event.from),panelFlowAnchor(feed,layout,event.to)];
 }

@@ -1,6 +1,7 @@
 import { projectTaskBranches } from './task-tree.js';
 
 // Display data only. The producer owns task interpretation and lifecycle policy.
+export const MESSAGE_TIMING=Object.freeze({startMs:40,packetMs:790,pingMs:210,coolMs:460});
 export const PANEL_TIMING = Object.freeze({ tagMs: 1700, startMs: 40, packetMs: 1640, pingMs: 460, coolMs: 900 });
 const MAX = Object.freeze({ computers: 64, spaces: 128, agents: 256, issues: 128, links: 512, events: 256, bytes: 2 * 1024 * 1024 });
 const STATUSES = new Set(['working', 'idle', 'blocked', 'done']);
@@ -380,11 +381,11 @@ export function panelEventStates(feed, now, { previous = null, motion = true } =
     if(!route&&!label)continue;
     let routeAt=now,routeLane=0,drawRoute=Boolean(route);
     if(event.kind==='message'&&route&&animate){
-      const queued=[...pending.values()].filter(item=>item.kind==='message'&&item.drawRoute&&item.routeAt+3000>now);
+      const queued=[...pending.values()].filter(item=>item.kind==='message'&&item.drawRoute&&item.routeAt+1460>now);
       if(queued.length>=8)drawRoute=false;
       else {
-        const last=queued.at(-1);routeAt=Math.max(now,last?last.routeAt+480:now);
-        const free=[0,1].map(lane=>Math.max(now,...queued.filter(item=>item.routeLane===lane).map(item=>item.routeAt+2100)));
+        const last=queued.at(-1);routeAt=Math.max(now,last?last.routeAt+260:now);
+        const free=[0,1].map(lane=>Math.max(now,...queued.filter(item=>item.routeLane===lane).map(item=>item.routeAt+1000)));
         routeLane=free[0]<=free[1]?0:1;routeAt=Math.max(routeAt,free[routeLane]);
       }
     }
@@ -395,8 +396,9 @@ export function panelEventStates(feed, now, { previous = null, motion = true } =
   const wake = at => { if (at > now && (nextAt === null || at < nextAt)) nextAt = at; };
   for (const [key, event] of pending) {
     const elapsed = now - event.at;
+    const timing=event.kind==='message'?MESSAGE_TIMING:PANEL_TIMING;
     const routeAt=event.routeAt??event.at,routeElapsed=now-routeAt;
-    const end = Math.max(event.at+PANEL_TIMING.tagMs,routeAt + PANEL_TIMING.packetMs + PANEL_TIMING.pingMs + PANEL_TIMING.coolMs);
+    const end = Math.max(event.label?event.at+PANEL_TIMING.tagMs:0,routeAt + timing.packetMs + timing.pingMs + timing.coolMs);
     if (now >= end) { pending.delete(key); continue; }
     if (elapsed < 0) { wake(event.at); continue; }
     active.push({ ...event, elapsed });
@@ -414,9 +416,9 @@ export function panelEventStates(feed, now, { previous = null, motion = true } =
       if(routeElapsed<0){wake(routeAt);wake(end);continue;}
       connections.push({ ...event, at:routeAt,elapsed:routeElapsed, phase: 'static' });
       if (animate) {
-        const phase = routeElapsed < PANEL_TIMING.startMs ? 'start' : routeElapsed < PANEL_TIMING.packetMs ? 'travel' : routeElapsed < PANEL_TIMING.packetMs + PANEL_TIMING.pingMs ? 'ping' : 'fade';
-        packets.push({ ...event, observedAt:event.at,at:routeAt,elapsed:routeElapsed,phase, travelMs: PANEL_TIMING.packetMs - PANEL_TIMING.startMs, progress: Math.max(0, Math.min(1, (routeElapsed - PANEL_TIMING.startMs) / (PANEL_TIMING.packetMs - PANEL_TIMING.startMs))) });
-        wake(phase === 'start' ? routeAt + PANEL_TIMING.startMs : phase === 'travel' ? routeAt + PANEL_TIMING.packetMs : phase === 'ping' ? routeAt + PANEL_TIMING.packetMs + PANEL_TIMING.pingMs : end);
+        const phase = routeElapsed < timing.startMs ? 'start' : routeElapsed < timing.packetMs ? 'travel' : routeElapsed < timing.packetMs + timing.pingMs ? 'ping' : 'fade';
+        packets.push({ ...event, observedAt:event.at,at:routeAt,elapsed:routeElapsed,phase, travelMs: timing.packetMs - timing.startMs, progress: Math.max(0, Math.min(1, (routeElapsed - timing.startMs) / (timing.packetMs - timing.startMs))) });
+        wake(phase === 'start' ? routeAt + timing.startMs : phase === 'travel' ? routeAt + timing.packetMs : phase === 'ping' ? routeAt + timing.packetMs + timing.pingMs : end);
       }
     }
     wake(end);

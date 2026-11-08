@@ -52,7 +52,7 @@ test('the header cat gallops natively while working and rests otherwise',async()
    module.panePet({pane:'p1',terminal:'t1',status},palette,on);
    assert.equal(glyphs[0].path.split('/').pop(),pose,status);
   }
-  assert.ok(loops.some(l=>l.axis==='top'&&l.period===3200),'idle breathes slowly');
+  assert.ok(!loops.some(l=>l.axis==='top'),'idle sleeping is stationary and schedules no native redraw');
   glyphs.length=0;frames.length=0;
   module.panePet({pane:'p1',terminal:'t1',status:'working'},palette,key=>key!=='sixfold.motion');
   assert.deepEqual(glyphs.map(g=>g.path.split('/').pop()),['run-0.svg'],'motion off holds one frame');

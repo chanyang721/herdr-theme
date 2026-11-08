@@ -4,7 +4,7 @@ import {spaces, panes, shared, setShared, run, settings} from 'herdr';
 import {agentGroups, agentState, panelEventStates, panelSpaces, panelSpacePartners} from './panel-model.js';
 import {groupColors, paletteMode} from './collab-flow.js';
 import {rowDetailParts} from './task-row-details.js';
-import {PANEL_FLOW, panelFlowAnchor} from './panel-host.js';
+import {PANEL_FLOW, panelFlowAnchor, panelMessageAnchors} from './panel-host.js';
 
 const MARK={working:'●',idle:'○',blocked:'!',done:'✓'};
 const STAGES=['배분','작업','검수','수락 대기'];
@@ -96,7 +96,7 @@ function stageBar(agent,tag,color,t,motion,width){
   const slot=h_flex().w(width<300?64:120).h(18).flex_none().gap(2).items_center().justify_end().tooltip(tag?.label||tip);
   if(tag)return slot.child(text(tag.label,tone,9).flex_1());
   return slot.children(STAGES.map((_,index)=>div().id(`panel-stage-${agent.id}-${index}`).w(9).h(3).flex_none()
-    .bg(index<=active?tone:t.border).when(index===active&&agent.status!=='done'&&!blocked&&motion,e=>e.loop('opacity',{from:0.4,to:1,period:2200,easing:'ease-in-out'}))));
+    .bg(index<=active?tone:t.border)));
 }
 export function agentRow(view,agent,space,tag,state,color,t,motion){
   const compact=(view.panelWidth||224)<420;
@@ -215,46 +215,36 @@ export function route(id,a,b,color,{dashed=false,packet=null,motion=false,relati
     const start=a.y-top,end=b.y-top;
     const sourceX=a.kind==='computer'?PANEL_FLOW.computer:startX;
     const targetX=b.kind==='computer'?PANEL_FLOW.computer:endX;
-    const remote=a.kind==='computer'||b.kind==='computer';
-    const reach=remote?PANEL_FLOW.computer:Math.min(PANEL_FLOW.collaboration-5,sourceX+Math.min(24,10+height*0.08+(packet.routeLane||0)*6));
-    const sign=end>=start?1:-1,throwHeight=Math.min(height*0.45,80);
-    const path=stroke=>{
-      const p=PathBuilder.stroke(stroke).move_to(sourceX,start);
-      if(b.kind==='computer')return p.cubic_bezier_to(targetX,start+sign*throwHeight,reach,start,reach,start+sign*throwHeight).line_to(targetX,end).build();
-      if(a.kind==='computer')return p.line_to(sourceX,end-sign*throwHeight).cubic_bezier_to(targetX,end,reach,end-sign*throwHeight,reach,end).build();
-      return p.cubic_bezier_to(targetX,end,reach*4/3,start,reach*4/3,end).build();
-    };
-    const shape=(stroke,tint)=>window.paint_path(path(stroke),tint).absolute().left(0).top(0).w(PANEL_FLOW.width+4).h(height+4);
-    base.child(shape(1,color));
-    if(motion&&['start','travel'].includes(packet.phase)){
-      // Eight finite targets approximate the Bezier with native interpolation.
-      // Global eased progress accelerates then decelerates; there is no
-      // per-frame JS callback or permanent animation timer.
-      const step=packet.phase==='start'?0:Math.min(8,Math.floor((packet.elapsed-40)/200)+1);
-      const u=(1-Math.cos(Math.PI*step/8))/2;
-      const cubic=(p0,p1,p2,p3,t)=>(1-t)**3*p0+3*(1-t)**2*t*p1+3*(1-t)*t*t*p2+t**3*p3;
-      let point;
-      if(b.kind==='computer')point=u<0.45?{x:cubic(sourceX,reach,reach,targetX,u/0.45),y:cubic(start,start,start+sign*throwHeight,start+sign*throwHeight,u/0.45)}
-        :{x:targetX,y:start+sign*throwHeight+(end-start-sign*throwHeight)*(u-0.45)/0.55};
-      else if(a.kind==='computer')point=u<0.55?{x:sourceX,y:start+(end-sign*throwHeight-start)*u/0.55}
-        :{x:cubic(sourceX,reach,reach,targetX,(u-0.55)/0.45),y:cubic(end-sign*throwHeight,end-sign*throwHeight,end,end,(u-0.55)/0.45)};
-      else point={x:cubic(sourceX,reach*4/3,reach*4/3,targetX,u),y:cubic(start,start,end,end,u)};
-      for(const [index,size,opacity,delay] of [[4,3,0.2,160],[3,4,0.4,120],[2,5,0.6,80],[1,6,0.8,40],[0,8,1,0]]){
+    const reach=Math.min(PANEL_FLOW.width-8-(packet.routeLane?0:10),Math.max(58,height*0.22+58));
+    const middle=(start+end)/2;
+    // These two cubics match the native ease-out/ease-in horizontal halves
+    // and the single full-length ease-in-out vertical transition exactly.
+    const path=stroke=>PathBuilder.stroke(stroke).move_to(sourceX,start)
+      .cubic_bezier_to(reach,middle,reach,start,reach,start)
+      .cubic_bezier_to(targetX,end,reach,end,reach,end).build();
+    const shape=(stroke,tint)=>window.paint_path(path(stroke),tint).absolute().left(0).top(0).w(PANEL_FLOW.width+8).h(height+8);
+    base.child(shape(9,color+'22')).child(shape(5,color+'BB')).child(shape(3,color+'44'));
+    if(motion&&['start','travel','ping'].includes(packet.phase)){
+      const initial=packet.phase==='start',turn=packet.elapsed>=415;
+      const x=initial?sourceX:turn?targetX:reach,y=initial?start:end;
+      for(const [index,size,opacity,delay] of [[3,3,0.2,90],[2,4,0.4,60],[1,6,0.7,30],[0,9,1,0]]){
         const part=div().id(index?`panel-packet-tail-${id}-${index}`:`panel-packet-${id}`).absolute()
-          .left(point.x-size/2).top(point.y-size/2).size(size).rounded(1).bg(color).opacity(opacity);
-        for(const property of ['left','top'])part.transition(property,{duration:step?200:1,delay,easing:'linear'});
-        if(!index)part.child(div().absolute().left(3).top(3).size(2).bg('#FFFFFF'));
+          .left(x-size/2).top(y-size/2).size(size).rounded(size/2).bg(color).opacity(packet.phase==='ping'?0:opacity);
+        part.transition('left',{duration:initial?1:375,delay,easing:turn?'ease-in':'ease-out'})
+          .transition('top',{duration:initial?1:750,delay,easing:'ease-in-out'})
+          .transition('opacity',{duration:120,easing:'ease-out'});
+        if(!index)part.child(div().absolute().left(3).top(3).size(3).rounded(2).bg('#FFFFFF'));
         base.child(part);
       }
     }
-    if(motion)for(const [suffix,x,y,expanded] of [['sender',sourceX,start,packet.phase!=='start'],['receiver',targetX,end,['ping','fade'].includes(packet.phase)]]){
+    if(motion)for(const [suffix,x,y,expanded] of [['sender',Math.max(14,sourceX),start,packet.phase!=='start'],['receiver',Math.max(14,targetX),end,['ping','fade'].includes(packet.phase)]]){
       const size=expanded?24:0;
       const ring=div().id(`panel-${suffix}-${id}`).absolute().left(x-size/2).top(y-size/2).w(size).h(size)
         .rounded(1).border(1).border_color(color).opacity(expanded?0:1);
       for(const property of ['width','height','left','top','opacity'])ring.transition(property,{duration:460,easing:'ease-out'});
       base.child(ring);
     }
-    if(packet.phase==='fade')base.opacity(0.2).when(motion,e=>e.transition('opacity',900));
+    if(packet.phase==='fade')base.opacity(0).when(motion,e=>e.transition('opacity',460));
     return base;
   }
   if(dashed){
@@ -262,7 +252,7 @@ export function route(id,a,b,color,{dashed=false,packet=null,motion=false,relati
     // travels slowly in one direction; it is not a message packet.
     const radius=Math.min(6,height/2);
     for(let y=radius;y<height-radius;y+=8)base.child(div().absolute().left(lane).top(y).w(1).h(Math.min(3,height-radius-y)).bg(color));
-    for(const y of [0,height])base.child(div().absolute().left(0).top(y).w(lane-radius).h(1).border_t(1).border_dashed().border_color(color));
+    for(const y of [0,height])for(let x=0;x<lane-radius;x+=7)base.child(div().absolute().left(x).top(y).w(Math.min(4,lane-radius-x)).h(2).bg(color));
     const elbows=PathBuilder.stroke(1).move_to(lane-radius,0)
       .cubic_bezier_to(lane,radius,lane,0,lane,0)
       .move_to(lane,height-radius).cubic_bezier_to(lane-radius,height,lane,height,lane,height).build();
@@ -344,7 +334,8 @@ export function panelFlowLayer(feed,layout,state,color,t,motion,width){
     }else if(link.kind==='task')layer.child(route(`task-${link.a}-${link.b}`,{...a,x:-8},{...b,x:-8},t.dim,{relation:true}));
   }
   for(const packet of state.packets){
-    const a=panelFlowAnchor(feed,layout,packet.from);let b=panelFlowAnchor(feed,layout,packet.to);
+    const endpoints=packet.kind==='message'?panelMessageAnchors(feed,layout,packet):[panelFlowAnchor(feed,layout,packet.from),panelFlowAnchor(feed,layout,packet.to)];
+    const a=endpoints[0];let b=endpoints[1];
     if(b&&packet.kind==='memory'){
       const target=feed.spaces.find(space=>space.id===packet.to);
       if(target)b={...b,x:panelHeaderMetrics(target,width).memoryAnchorX};
@@ -356,7 +347,7 @@ export function panelFlowLayer(feed,layout,state,color,t,motion,width){
     }
   }
   if(!motion)for(const event of state.connections){
-    const a=panelFlowAnchor(feed,layout,event.from),b=panelFlowAnchor(feed,layout,event.to);if(a&&b)layer.child(route(event.id,a,b,t.dim,{dashed:a.computer!==b.computer}));
+    const [a,b]=event.kind==='message'?panelMessageAnchors(feed,layout,event):[panelFlowAnchor(feed,layout,event.from),panelFlowAnchor(feed,layout,event.to)];if(a&&b)layer.child(route(event.id,a,b,t.dim,{packet:event.kind==='message'?{...event,phase:'static'}:null}));
   }
   return layer;
 }
@@ -367,7 +358,7 @@ export function renderPanelTracking(view,t,cx,{macTitlebar=false}={}){
   const now=Date.now();
   const state=panelEventStates(feed,now,{previous:view.panelEvents,motion});view.panelEvents=state;
   let nextAt=state.nextAt;
-  for(const packet of state.packets)for(const offset of (packet.kind==='message'?[240,440,640,840,1040,1240,1440]:[300,1400])){
+  for(const packet of state.packets)for(const offset of (packet.kind==='message'?[415]:[300,1400])){
     const at=packet.at+offset;if(at>now&&(nextAt===null||at<nextAt))nextAt=at;
   }
   if(view.panelWakeAt!==nextAt){

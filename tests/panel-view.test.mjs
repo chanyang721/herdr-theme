@@ -241,9 +241,9 @@ test('local message packets use teal ease and a delayed fading native tail; moti
   const packet={id:'local-message',from:a.id,to:b.id,kind:'message',phase:'travel',elapsed:350};
   const state={...view.panelEvents,packets:[packet]};
   const tree=r.panelFlowLayer(feed,layout,state,()=>t.accent,t,true,224),head=byId(tree,'panel-packet-local-message');
-  assert(head);assert(r.paths.some(args=>args[1]==='#8FEFFF'));
-  assert.equal(head.calls.find(c=>c[0]==='transition'&&c[1]==='top')[2].easing,'linear');
-  for(const [index,delay,opacity] of [[1,40,0.8],[2,80,0.6],[3,120,0.4],[4,160,0.2]]){
+  assert(head);assert.equal(call(head,'bg')[1],'#8FEFFF');
+  assert.equal(head.calls.find(c=>c[0]==='transition'&&c[1]==='top')[2].easing,'ease-in-out');
+  for(const [index,delay,opacity] of [[1,30,0.7],[2,60,0.4],[3,90,0.2]]){
     const tail=byId(tree,`panel-packet-tail-local-message-${index}`);assert(tail);
     assert.equal(call(tail,'opacity')[1],opacity);
     assert.equal(tail.calls.find(c=>c[0]==='transition'&&c[1]==='top')[2].delay,delay);
@@ -289,8 +289,8 @@ test('filtered remote messages retain a computer dash and bright packet; departu
  assert(byId(tree,'panel-route-remote-remote-message'));assert(byId(tree,'panel-packet-remote-message'));
  const sender=byId(tree,'panel-sender-remote-message');assert(sender);assert.equal(call(sender,'left')[1],2);assert.equal(call(sender,'w')[1],24);
  const arrival=r.panelFlowLayer(feed,layout,{...view.panelEvents,packets:[{...packet,phase:'ping'}]},()=>t.accent,t,true,224);
- assert.equal(call(byId(arrival,'panel-receiver-remote-message'),'left')[1],48);
- const route=byId(tree,'panel-route-remote-message');assert.equal(call(route,'right')[1],8);assert.equal(call(route,'w')[1],64);
+ assert.equal(call(byId(arrival,'panel-receiver-remote-message'),'left')[1],88);
+ const route=byId(tree,'panel-route-remote-message');assert.equal(call(route,'right')[1],8);assert.equal(call(route,'w')[1],104);
 });
 
 
@@ -300,10 +300,34 @@ test('curved packet targets bow outward, stay in the gutter and reverse with sen
  const samples=(from,to)=>[0,40,240,440,640,840,1040,1240,1440].map(elapsed=>{
   const packet={id:'arc',kind:'message',from,to,phase:elapsed?'travel':'start',elapsed};
   const tree=r.panelFlowLayer(feed,layout,{...view.panelEvents,packets:[packet]},()=>t.accent,t,true,224),head=byId(tree,'panel-packet-arc');
-  return {x:call(head,'left')[1]+4,y:call(head,'top')[1]+4};
+  return {x:call(head,'left')[1]+4.5,y:call(head,'top')[1]+4.5};
  });
  const down=samples(a.id,b.id),up=samples(b.id,a.id);
- assert(Math.max(...down.map(p=>p.x))>down[0].x+10);assert(down.every(p=>p.x>=0&&p.x<=39));
+ assert(Math.max(...down.map(p=>p.x))>down[0].x+10);assert(down.every(p=>p.x>=0&&p.x<=96));
  assert(down[0].y<down.at(-1).y);assert(up[0].y>up.at(-1).y);
  assert.equal(down[0].x,down.at(-1).x);assert.equal(up[0].x,up.at(-1).x);
+});
+
+
+test('a message pipe has an outlined translucent tube and only one native horizontal turn',async()=>{
+ const r=await renderer(true),view=viewFor(makePanelFixture()),feed=view.panelState.feed;
+ r.renderPanelTracking(view,t,r.cx);const layout=r.panelLayout(feed,view.panelEvents),[a,b]=feed.spaces[0].agents;
+ for(const elapsed of [40,415]){
+  const packet={id:'tube',kind:'message',from:a.id,to:b.id,phase:'travel',elapsed};
+  const tree=r.panelFlowLayer(feed,layout,{...view.panelEvents,packets:[packet]},()=>t.accent,t,true,340),head=byId(tree,'panel-packet-tube');
+  assert.equal(call(head,'size')[1],9);
+  const left=head.calls.find(c=>c[0]==='transition'&&c[1]==='left')[2],top=head.calls.find(c=>c[0]==='transition'&&c[1]==='top')[2];
+  assert.equal(left.duration,375);assert.equal(left.easing,elapsed===40?'ease-out':'ease-in');assert.equal(top.duration,750);
+  assert(r.paths.some(args=>args[1]==='#8FEFFFBB'));assert(r.paths.some(args=>args[1]==='#8FEFFF44'));
+ }
+});
+
+
+test('retired collaboration evidence removes the bracket and both partner chips without changing rows',async()=>{
+ const r=await renderer(false),view=viewFor(makePanelFixture({share:'local'}));
+ const before=r.renderPanelTracking(view,t,r.cx),edge=view.panelState.feed.links.find(link=>link.kind==='collaboration');
+ assert(byId(before,`panel-route-collaboration-${edge.a}-${edge.b}`));
+ view.panelState.feed={...view.panelState.feed,links:view.panelState.feed.links.filter(link=>link.kind!=='collaboration')};
+ const after=r.renderPanelTracking(view,t,r.cx);assert(!byId(after,`panel-route-collaboration-${edge.a}-${edge.b}`));
+ for(const space of view.panelState.feed.spaces){assert(!byId(after,`panel-local-partner-${space.id}`));for(const agent of space.agents)assert(byId(after,`panel-agent-${agent.id}`));}
 });

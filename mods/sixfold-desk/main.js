@@ -61,7 +61,7 @@ const LINK_FLOW_MS = 4000;
 const MAX_ACTIVE_FLOWS = 64;
 // Right margin kept beside the computer and workspace lists alike: message curves
 // and computer links draw in it, so both lists end on the same line.
-const LINK_MARGIN = 72;
+const LINK_MARGIN = 112;
 // Computer rows match the workspace header rows now that they hold one status line.
 const COMPUTER_ROW = 36;
 
@@ -623,7 +623,7 @@ export default class SixfoldDesk extends View {
         : program?.icon ? (program.tint ? svg(program.icon).size(14).text_color(color) : image(program.icon).w(14).h(14)) : div().size(14);
       return div().relative().size(16).flex_none()
         .child(glyph.absolute().left(1).top(0)
-          .when(active && shared('sixfold.motion')!==false,e=>e.loop('top',{from:0,to:2,period:900})));
+          );
     };
     const section = text => div().px(12).pt(13).pb(6).text_size(10).font_bold().text_color(t.dim).child(text);
     const agentList = agents(), spaceList = spaces();
