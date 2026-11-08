@@ -235,21 +235,22 @@ test('explicit local collaboration has purple solid bracket, two square ends and
   assert.equal(byId(unrelated,`panel-local-partner-${first.id}`),undefined,'same computer alone never infers collaboration');
 });
 
-test('local message packets use teal ease and a delayed fading native tail; motion off has no animations',async()=>{
+test('local message packets are a white head with two teal tail pieces on one axis at a time; motion off has no animations',async()=>{
   const r=await renderer(true),view=viewFor(makePanelFixture()),feed=view.panelState.feed;
   r.renderPanelTracking(view,t,r.cx);const layout=r.panelLayout(feed,view.panelEvents),[a,b]=feed.spaces[0].agents;
   const packet={id:'local-message',from:a.id,to:b.id,kind:'message',phase:'travel',elapsed:350};
   const state={...view.panelEvents,packets:[packet]};
   const tree=r.panelFlowLayer(feed,layout,state,()=>t.accent,t,true,224),head=byId(tree,'panel-packet-local-message');
-  assert(head);assert.equal(call(head,'bg')[1],'#8FEFFF');
-  assert.equal(head.calls.find(c=>c[0]==='transition'&&c[1]==='top')[2].easing,'ease-in-out');
-  for(const [index,delay,opacity] of [[1,30,0.7],[2,60,0.4],[3,90,0.2]]){
+  assert(head);assert.equal(call(head,'bg')[1],'#E9FBFF');assert.equal(call(head,'size')[1],4);
+  assert.equal(head.calls.find(c=>c[0]==='transition'&&c[1]==='top')[2].easing,'linear');
+  for(const [index,delay,opacity] of [[1,25,0.75],[2,50,0.3]]){
     const tail=byId(tree,`panel-packet-tail-local-message-${index}`);assert(tail);
-    assert.equal(call(tail,'opacity')[1],opacity);
+    assert.equal(call(tail,'bg')[1],'#8FEFFF');assert.equal(call(tail,'opacity')[1],opacity);
     assert.equal(tail.calls.find(c=>c[0]==='transition'&&c[1]==='top')[2].delay,delay);
   }
+  assert(!byId(tree,'panel-packet-tail-local-message-3'));assert(!byId(tree,'panel-sender-local-message'));
   const arrival=byId(r.panelFlowLayer(feed,layout,{...state,packets:[{...packet,phase:'ping'}]},()=>t.accent,t,true,224),'panel-receiver-local-message');
-  assert.equal(call(arrival,'w')[1],24);assert.equal(call(arrival,'opacity')[1],0);
+  assert.equal(call(arrival,'w')[1],14);assert.equal(call(arrival,'opacity')[1],0);
   assert(arrival.calls.some(c=>c[0]==='transition'&&c[1]==='width'));
   const still=r.panelFlowLayer(feed,layout,{...state,packets:[],connections:[packet]},()=>t.accent,t,false,224);
   assert.equal(all(still).filter(n=>call(n,'transition')||call(n,'loop')).length,0);
@@ -279,17 +280,17 @@ test('only explicit current native pane navigation can focus an agent, including
 });
 
 
-test('filtered remote messages retain a computer dash and bright packet; departure and arrival clear the card edge',async()=>{
+test('filtered remote messages ride the computer pipe lane and ping at the remote end',async()=>{
  const r=await renderer(true),view=viewFor(makePanelFixture({share:'space'})),feed=view.panelState.feed;
  r.renderPanelTracking(view,t,r.cx);const layout=r.panelLayout(feed,view.panelEvents);
  const local=feed.spaces[0],remoteComputer=feed.computers.find(computer=>computer.id!==local.computer);
  feed.spaces.push({id:'remote-space',computer:remoteComputer.id,agents:[{id:'remote-agent'}]});
- const packet={id:'remote-message',from:local.agents[0].id,to:'remote-agent',kind:'message',phase:'travel',elapsed:350};
+ const packet={id:'remote-message',from:local.agents[0].id,to:'remote-agent',kind:'message',phase:'travel',elapsed:500};
  const tree=r.panelFlowLayer(feed,layout,{...view.panelEvents,packets:[packet]},()=>t.accent,t,true,224);
- assert(byId(tree,'panel-route-remote-remote-message'));assert(byId(tree,'panel-packet-remote-message'));
- const sender=byId(tree,'panel-sender-remote-message');assert(sender);assert.equal(call(sender,'left')[1],2);assert.equal(call(sender,'w')[1],24);
+ assert(byId(tree,'panel-route-remote-remote-message'));
+ const head=byId(tree,'panel-packet-remote-message');assert.equal(call(head,'left')[1]+2,60,'the packet runs in the computer pipe lane');
  const arrival=r.panelFlowLayer(feed,layout,{...view.panelEvents,packets:[{...packet,phase:'ping'}]},()=>t.accent,t,true,224);
- assert.equal(call(byId(arrival,'panel-receiver-remote-message'),'left')[1],48);
+ assert.equal(call(byId(arrival,'panel-receiver-remote-message'),'left')[1],60-7);
  const route=byId(tree,'panel-route-remote-message');assert.equal(call(route,'right')[1],8);assert.equal(call(route,'w')[1],64);
 });
 
@@ -309,17 +310,18 @@ test('curved packet targets bow outward, stay in the gutter and reverse with sen
 });
 
 
-test('a message pipe has an outlined translucent tube and only one native horizontal turn',async()=>{
+test('a message line is one thin right-angle stroke and every packet leg moves along one axis',async()=>{
  const r=await renderer(true),view=viewFor(makePanelFixture()),feed=view.panelState.feed;
  r.renderPanelTracking(view,t,r.cx);const layout=r.panelLayout(feed,view.panelEvents),[a,b]=feed.spaces[0].agents;
- for(const elapsed of [120,495]){
-  const packet={id:'tube',kind:'message',from:a.id,to:b.id,phase:'travel',elapsed};
-  const tree=r.panelFlowLayer(feed,layout,{...view.panelEvents,packets:[packet]},()=>t.accent,t,true,340),head=byId(tree,'panel-packet-tube');
-  assert.equal(call(head,'size')[1],9);
-  const left=head.calls.find(c=>c[0]==='transition'&&c[1]==='left')[2],top=head.calls.find(c=>c[0]==='transition'&&c[1]==='top')[2];
-  assert.equal(left.duration,375);assert.equal(left.easing,'ease-in-out');assert.equal(top.duration,750);
-  assert(r.paths.some(args=>args[1]==='#8FEFFFBB'));assert(r.paths.some(args=>args[1]==='#8FEFFF44'));
- }
+ const points=[0,150,500,800].map(elapsed=>{
+  const packet={id:'line',kind:'message',from:a.id,to:b.id,phase:elapsed?'travel':'start',elapsed};
+  r.paths.length=0;
+  const tree=r.panelFlowLayer(feed,layout,{...view.panelEvents,packets:[packet]},()=>t.accent,t,true,340),head=byId(tree,'panel-packet-line');
+  assert.deepEqual(r.paths.map(args=>args[1]).filter(tint=>tint.startsWith('#8FEFFF')),['#8FEFFF99'],'one translucent line, no glow layers');
+  return {x:call(head,'left')[1]+2,y:call(head,'top')[1]+2};
+ });
+ for(let i=1;i<points.length;i++)assert(points[i].x===points[i-1].x||points[i].y===points[i-1].y,'a leg never cuts a corner');
+ assert.equal(points[1].x,22);assert.equal(points[2].x,22);assert(points[2].y>points[1].y);assert.equal(points[3].x,points[0].x);
 });
 
 
@@ -333,11 +335,11 @@ test('retired collaboration evidence removes the bracket and both partner chips 
 });
 
 
-test('hosted message tube uses the external gutter without narrowing the original card',async()=>{
+test('hosted message line uses the external gutter without narrowing the original card',async()=>{
  const r=await renderer(true),view=viewFor(makePanelFixture()),feed=view.panelState.feed;
  r.renderPanelTracking(view,t,r.cx);const layout=r.panelLayout(feed,view.panelEvents),[a,b]=feed.spaces[0].agents;
- const state={...view.panelEvents,packets:[{id:'external',kind:'message',from:a.id,to:b.id,phase:'travel',elapsed:120}]};
+ const state={...view.panelEvents,packets:[{id:'external',kind:'message',from:a.id,to:b.id,phase:'travel',elapsed:500}]};
  const tree=r.panelFlowLayer(feed,layout,state,()=>t.accent,t,true,224,161),head=byId(tree,'panel-packet-external');
  const route=byId(tree,'panel-route-external');assert.equal(call(route,'w')[1],153);
- const x=432-161+call(head,'left')[1]+4.5;assert(x>392&&x<432,'orb reaches deep into gap beyond312px panel without entering CLI');
+ const x=432-161+call(head,'left')[1]+2;assert(x>=432-161&&x<432,'the packet stays in the gap beside the card, never in the CLI');
 });

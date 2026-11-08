@@ -2,6 +2,10 @@ import { projectTaskBranches } from './task-tree.js';
 
 // Display data only. The producer owns task interpretation and lifecycle policy.
 export const MESSAGE_TIMING=Object.freeze({startMs:120,packetMs:870,pingMs:130,coolMs:460});
+// A message packet moves out to its lane, along it, then into the receiver.
+// Each leg changes one axis, so the packet never leaves the drawn line.
+export const MESSAGE_LEGS=Object.freeze([120,232,757]);
+export const messageLeg=elapsed=>MESSAGE_LEGS.filter(at=>elapsed>=at).length;
 export const PANEL_TIMING = Object.freeze({ tagMs: 1700, startMs: 40, packetMs: 1640, pingMs: 460, coolMs: 900 });
 const MAX = Object.freeze({ computers: 64, spaces: 128, agents: 256, issues: 128, links: 512, events: 256, bytes: 2 * 1024 * 1024 });
 const STATUSES = new Set(['working', 'idle', 'blocked', 'done']);

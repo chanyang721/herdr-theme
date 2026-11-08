@@ -1,7 +1,7 @@
 import {View,div,svg} from 'gpui-kit';
 import {h_flex,v_flex,InputState,Input} from 'gpui-base';
 import {theme,spaces,shared,setShared,settings,window} from 'herdr';
-import {projectPanelFeed,panelEventStates,panelSpaces,panelSpacePartners,PANEL_TIMING} from './panel-model.js';
+import {projectPanelFeed,panelEventStates,panelSpaces,panelSpacePartners,PANEL_TIMING,MESSAGE_LEGS,messageLeg} from './panel-model.js';
 import {panelLayout,cardView,agentRow,panelFlowLayer,panelCounts,PANEL_GEOMETRY,toolIcon} from './panel-view.js';
 import {groupColors,paletteMode} from './collab-flow.js';
 import {issuePopover} from './task-issues-view.js';
@@ -251,13 +251,13 @@ export function createRetainedPanel(cx,{macTitlebar=false,onClassic=null,onDispo
     if(summaryKey!==c.summaryKey){c.summaryKey=summaryKey;c.notify(c.summary);}
     const hostKey=signature([c.layoutKey,c.feed.computers,c.feed.spaces.map(space=>[space.id,space.nav,space.memory,space.share,panelSpacePartners(c.feed,space.id),panelCounts({spaces:[space]})]),c.status]);
     if(c.embedded&&hostKey!==c.hostKey){c.hostKey=hostKey;c.onHostChange?.();}
-    const flowsKey=signature([c.layoutKey,c.feed.spaces.map(space=>[space.share,space.memory]),c.feed.links,c.events.packets.map(event=>[event.id,event.phase,event.kind==='message'?(event.elapsed<120?0:event.elapsed<495?1:2):(event.elapsed<40?0:event.elapsed<300?1:event.elapsed<1400?2:3)]),c.events.connections.map(event=>event.id),c.motion,c.panelWidth,c.themeRevision]);
+    const flowsKey=signature([c.layoutKey,c.feed.spaces.map(space=>[space.share,space.memory]),c.feed.links,c.events.packets.map(event=>[event.id,event.phase,event.kind==='message'?messageLeg(event.elapsed):(event.elapsed<40?0:event.elapsed<300?1:event.elapsed<1400?2:3)]),c.events.connections.map(event=>event.id),c.motion,c.panelWidth,c.themeRevision]);
     if(flowsKey!==c.flowsKey){c.flowsKey=flowsKey;c.notify(c.flows);if(c.embedded)c.onHostChange?.();}
     if(!oldFeed||oldMotion!==c.motion||themeChanged)c.notify(c.entity);
     c.wake?.cancel();c.wake=null;c.wakeAt=null;
     if(c.visible&&c.hostVisible&&c.enabled){
       let at=c.events.nextAt;const now=Date.now();
-      for(const packet of c.events.packets)for(const offset of (packet.kind==='message'?[495]:[300,1400])){
+      for(const packet of c.events.packets)for(const offset of (packet.kind==='message'?MESSAGE_LEGS:[300,1400])){
         const boundary=packet.at+offset;if(boundary>now&&(at===null||boundary<at))at=boundary;
       }
       if(at!==null){c.wakeAt=at;c.wake=c.cx.timer.after(Math.max(1,at-now),()=>{c.wake=null;c.wakeAt=null;c.apply(c.input);});}

@@ -1,7 +1,7 @@
 import {div, svg, image, PathBuilder} from 'gpui-kit';
 import {h_flex, v_flex} from 'gpui-base';
 import {spaces, panes, shared, setShared, run, settings} from 'herdr';
-import {agentGroups, agentState, panelEventStates, panelSpaces, panelSpacePartners} from './panel-model.js';
+import {agentGroups, agentState, panelEventStates, panelSpaces, panelSpacePartners, MESSAGE_LEGS, messageLeg} from './panel-model.js';
 import {groupColors, paletteMode} from './collab-flow.js';
 import {rowDetailParts} from './task-row-details.js';
 import {PANEL_FLOW, panelFlowAnchor, panelMessageAnchors, messageFlowGeometry} from './panel-host.js';
@@ -11,6 +11,7 @@ const STAGES=['배분','작업','검수','수락 대기'];
 const CLOSE=['보고 작성','경험·결정 저장','기억함 제안','닫힘'];
 const ISSUE={blocked:'막힘',working:'진행 중',review:'검수',waiting:'대기',done:'완료'};
 const RIGHT=PANEL_FLOW.gutter, ROW=28;
+const MESSAGE_TAIL_MS=113;
 export const PANEL_GEOMETRY=Object.freeze({header:34,meta:26,issue:18,row:ROW,child:20,border:1,bottom:4,gap:4,padding:7,rightGutter:RIGHT,popoverGap:10});
 export function panelCounts(feed){
   const counts={working:0,idle:0,blocked:0,done:0,total:0};
@@ -212,48 +213,41 @@ export function route(id,a,b,color,{dashed=false,packet=null,motion=false,relati
   const startX=a.x??(packet?flow.endpoint:0),endX=b.x??(packet?flow.endpoint:0);
   const base=div().id(`panel-route-${id}`).absolute().right(flow.right).top(top).w(flow.width).h(height+3);
   if(packet?.kind==='message'){
+    // ㉑/㉒: a message rides the line that already joins its ends — the
+    // computer pipe for another computer, the collaboration lane between
+    // spaces — and otherwise the inner message lane beside the card. Same
+    // right angle and rounded corners as every other flow line.
     const start=a.y-top,end=b.y-top;
+    const remoteEnd=a.kind==='computer'||b.kind==='computer';
+    const laneX=remoteEnd?flow.computer:a.kind==='space'&&b.kind==='space'?flow.collaboration:packet.routeLane?flow.messageNext:flow.message;
     const sourceX=a.kind==='computer'?flow.computer:startX;
     const targetX=b.kind==='computer'?flow.computer:endX;
-    const reach=Math.min(flow.width-4-(packet.routeLane?0:4),Math.max(40,flow.width-24+(packet.routeLane?8:0),height*0.22+40));
-    const ease=t=>t<0.5?4*t*t*t:1-(-2*t+2)**3/2;
-    // Keep the native horizontal easing policy constant through the turn.
-    // Changing easing while a transition is live resamples its old leg with
-    // the new policy and causes a visible jump. The spline follows exactly
-    // the same two horizontal halves and one full vertical interpolation.
-    const points=Array.from({length:25},(_,i)=>{const t=i/24;return {
-      x:t<=0.5?sourceX+(reach-sourceX)*ease(t*2):reach+(targetX-reach)*ease(t*2-1),
-      y:start+(end-start)*ease(t),
-    };});
-    const path=stroke=>{
-      const p=PathBuilder.stroke(stroke).move_to(sourceX,start);
-      for(let i=0;i<points.length-1;i++){
-        const a=points[Math.max(0,i-1)],b=points[i],c=points[i+1],d=points[Math.min(points.length-1,i+2)];
-        p.cubic_bezier_to(c.x,c.y,b.x+(c.x-a.x)/6,b.y+(c.y-a.y)/6,c.x-(d.x-b.x)/6,c.y-(d.y-b.y)/6);
-      }
-      return p.build();
-    };
-    const shape=(stroke,tint)=>window.paint_path(path(stroke),tint).absolute().left(0).top(0).w(flow.width+8).h(height+8);
-    base.child(shape(9,color+'22')).child(shape(5,color+'BB')).child(shape(3,color+'44'));
+    const r=Math.min(6,Math.abs(end-start)/2),sign=end>=start?1:-1;
+    const pb=PathBuilder.stroke(1.5).move_to(sourceX,start);
+    if(r)pb.line_to(laneX-r,start).cubic_bezier_to(laneX,start+sign*r,laneX,start,laneX,start)
+      .line_to(laneX,end-sign*r).cubic_bezier_to(laneX-r,end,laneX,end,laneX,end);
+    base.child(window.paint_path(pb.line_to(targetX,end).build(),color+'99').absolute().left(0).top(0).w(flow.width+4).h(height+4));
     if(motion&&['start','travel','ping'].includes(packet.phase)){
-      const initial=packet.phase==='start',turn=packet.elapsed>=495;
-      const x=initial?sourceX:turn?targetX+0.001:reach,y=initial?start:end;
-      for(const [index,size,opacity,delay] of [[3,3,0.2,90],[2,4,0.4,60],[1,6,0.7,30],[0,9,1,0]]){
+      const leg=packet.phase==='start'?0:messageLeg(packet.elapsed);
+      const [x,y,ms,easing]=[[sourceX,start,1,'linear'],[sourceX,start,1,'linear'],
+        [laneX,start,MESSAGE_LEGS[1]-MESSAGE_LEGS[0],'ease-in'],
+        [laneX,end,MESSAGE_LEGS[2]-MESSAGE_LEGS[1],'linear'],
+        [targetX,end,MESSAGE_TAIL_MS,'ease-out']][Math.min(4,leg+1)];
+      for(const [index,size,tint,opacity,delay] of [[2,2,color,0.3,50],[1,3,color,0.75,25],[0,4,'#E9FBFF',1,0]]){
         const part=div().id(index?`panel-packet-tail-${id}-${index}`:`panel-packet-${id}`).absolute()
-          .left(x-size/2).top(y-size/2).size(size).rounded(size/2).bg(color).opacity(packet.phase==='ping'?0:opacity);
-        part.transition('left',{duration:initial?1:375,delay,easing:'ease-in-out'})
-          .transition('top',{duration:initial?1:750,delay,easing:'ease-in-out'})
+          .left(x-size/2).top(y-size/2).size(size).bg(tint).opacity(packet.phase==='ping'?0:opacity);
+        part.transition('left',{duration:ms,delay,easing}).transition('top',{duration:ms,delay,easing})
           .transition('opacity',{duration:120,easing:'ease-out'});
-        if(!index)part.child(div().absolute().left(3).top(3).size(3).rounded(2).bg('#FFFFFF'));
         base.child(part);
       }
     }
-    if(motion)for(const [suffix,x,y,expanded] of [['sender',Math.max(14,sourceX),start,packet.phase!=='start'],['receiver',Math.max(14,targetX),end,['ping','fade'].includes(packet.phase)]]){
-      const size=expanded?24:0;
-      const ring=div().id(`panel-${suffix}-${id}`).absolute().left(x-size/2).top(y-size/2).w(size).h(size)
-        .rounded(1).border(1).border_color(color).opacity(expanded?0:1);
-      for(const property of ['width','height','left','top','opacity'])ring.transition(property,{duration:460,easing:'ease-out'});
-      base.child(ring);
+    if(motion){
+      // Zero-size and opaque until arrival, then one 14px square ping that fades.
+      const arriving=['ping','fade'].includes(packet.phase),size=arriving?14:0;
+      const ping=div().id(`panel-receiver-${id}`).absolute().left(targetX-size/2).top(end-size/2).w(size).h(size)
+        .border(1).border_color(color).opacity(arriving?0:1);
+      for(const property of ['width','height','left','top','opacity'])ping.transition(property,{duration:420,easing:'ease-out'});
+      base.child(ping);
     }
     if(packet.phase==='fade')base.opacity(0).when(motion,e=>e.transition('opacity',460));
     return base;
@@ -371,7 +365,7 @@ export function renderPanelTracking(view,t,cx,{macTitlebar=false}={}){
   const now=Date.now();
   const state=panelEventStates(feed,now,{previous:view.panelEvents,motion});view.panelEvents=state;
   let nextAt=state.nextAt;
-  for(const packet of state.packets)for(const offset of (packet.kind==='message'?[495]:[300,1400])){
+  for(const packet of state.packets)for(const offset of (packet.kind==='message'?MESSAGE_LEGS:[300,1400])){
     const at=packet.at+offset;if(at>now&&(nextAt===null||at<nextAt))nextAt=at;
   }
   if(view.panelWakeAt!==nextAt){
