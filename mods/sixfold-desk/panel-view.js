@@ -13,6 +13,8 @@ const STAGES=['배분','작업','검수','수락 대기'];
 const CLOSE=['보고 작성','경험·결정 저장','기억함 제안','닫힘'];
 const ISSUE={blocked:'막힘',working:'진행 중',review:'검수',waiting:'대기',done:'완료'};
 const RIGHT=PANEL_FLOW.gutter, ROW=28, REASON=14;
+// A flow pulse on a 1px pipe: as wide as the line, this long (px).
+export const LINK_PULSE=5;
 export const PANEL_GEOMETRY=Object.freeze({header:34,meta:26,issue:18,row:ROW,reason:REASON,child:20,border:1,bottom:4,gap:4,padding:7,rightGutter:RIGHT,popoverGap:10});
 // A root row with a producer reason gets one fixed extra line (mockup 26).
 export const agentRowHeight=(agent,child=false)=>child?PANEL_GEOMETRY.child:ROW+(agentHasReason(agent)?REASON:0);
@@ -289,8 +291,9 @@ export function route(id,a,b,color,{dashed=false,packet=null,motion=false,relati
     return base;
   }
   if(dashed){
-    // Dashes remain visible for the lifetime of a connection. The dim dot
-    // travels slowly in one direction; it is not a message packet.
+    // Dashes remain visible for the lifetime of a connection. A short pulse,
+    // exactly as wide as the line, travels slowly down it and stops short of
+    // the far stub, so nothing sticks out of the pipe; it is not a message packet.
     const radius=Math.min(6,height/2);
     for(let y=radius;y<height-radius;y+=8)base.child(div().absolute().left(lane).top(y).w(1).h(Math.min(3,height-radius-y)).bg(color));
     for(const y of [0,height])for(let x=0;x<lane-radius;x+=7)base.child(div().absolute().left(x).top(y).w(Math.min(4,lane-radius-x)).h(2).bg(color));
@@ -298,8 +301,8 @@ export function route(id,a,b,color,{dashed=false,packet=null,motion=false,relati
       .cubic_bezier_to(lane,radius,lane,0,lane,0)
       .move_to(lane,height-radius).cubic_bezier_to(lane-radius,height,lane,height,lane,height).build();
     base.child(window.paint_path(elbows,color).absolute().left(0).top(0).w(flow.width).h(height+3));
-    if(motion&&!relation)base.child(div().id(`panel-link-dot-${id}`).absolute().left(lane-1).size(3).rounded(2).bg(color)
-      .loop('top',{from:0,to:height,period:16000,easing:'linear'}));
+    if(motion&&!relation&&height>LINK_PULSE)base.child(div().id(`panel-link-dot-${id}`).absolute().left(lane).w(1).h(LINK_PULSE).bg(color)
+      .loop('top',{from:0,to:height-LINK_PULSE,period:16000,easing:'linear'}));
   }else{
     const origin=Math.max(0,-startX,-endX);
     const path=routePath(a.y-top,b.y-top,lane,endX,origin,startX);

@@ -91,7 +91,8 @@ function element() {
     if (key === 'child') return node => { target.nodes.push(node); return proxy; };
     if (key === 'children') return nodes => { target.nodes.push(...nodes); return proxy; };
     if (key === 'top') return value => { target.topValue = value; return proxy; };
-    if (key === 'nodes' || key === 'rowId' || key === 'topValue') return target[key];
+    if (key === 'w' || key === 'size') return value => { target[key + 'Value'] = value; return proxy; };
+    if (key === 'nodes' || key === 'rowId' || key === 'topValue' || key === 'wValue' || key === 'sizeValue') return target[key];
     return () => proxy;
   } });
   return proxy;
@@ -121,6 +122,11 @@ test('two same-way sends between computers each get a packet, and the link sched
     visit(view.render());
     assert(rows.has('sf-link-send-a') && rows.has('sf-link-send-b'), 'one packet per send');
     assert.notEqual(rows.get('sf-link-send-a').topValue, rows.get('sf-link-send-b').topValue, 'the later send starts from the sender while the first travels');
+    for (const id of ['sf-link-send-a', 'sf-link-send-b']) {
+      // 2026-11-09: a 5px dot stuck out of the 1px pipe; a packet is as wide as the line.
+      assert.equal(rows.get(id).wValue, 1, `${id} stays inside the pipe`);
+      assert.equal(rows.get(id).sizeValue, undefined, `${id} is not a round dot`);
+    }
     assert.equal(view.linkWake, at + 500 + LINK_SEND_MS, 'the link is due to end five minutes after the last send');
   } finally { delete globalThis.__linkRuntime; }
 });

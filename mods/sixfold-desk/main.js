@@ -58,6 +58,9 @@ const invokeHelper = (configured, command, args=[]) => {
 const marks = { blocked: '!', done: '✓', working: '●', idle: '○' };
 // One slow pass of the dot along a link pipe while computers work together.
 const LINK_FLOW_MS = 4000;
+// Flow marks on the 1px computer pipes are as wide as the line (panel-view LINK_PULSE too).
+const LINK_PULSE = 5;   // the slow "working together" pulse
+const SEND_PULSE = 8;   // one send between computers: longer than the idle pulse
 // Bound the three finite host timers per packet, preserving the installed limit.
 const MAX_ACTIVE_FLOWS = 64;
 // Right margin kept beside the computer and workspace lists alike: message curves
@@ -1048,8 +1051,9 @@ export default class SixfoldDesk extends View {
             const fade = el => el.opacity(lane.gone ? 0 : 1).when(motion, e => e.transition('opacity', 600));
             const parts = [fade(div().id(`sf-link-${lane.link.key}`).absolute().right(right).top(top).w(2).h(bottom - top).border_r(1).border_dashed().border_color(color).tooltip(tip))];
             for (const row of rows) parts.push(fade(div().id(`sf-link-${lane.link.key}-${row}`).absolute().right(right).top(rowY(row)).w(LINK_MARGIN - right).h(2).border_t(1).border_dashed().border_color(color)));
-            if (lane.link.working && motion && !lane.gone) parts.push(div().id(`sf-link-flow-${lane.link.key}`).absolute().right(right - 1).size(3).rounded(2).bg(color)
-              .top((this.linkFlowEnd ? bottom : top) - 1).transition('top', { duration: LINK_FLOW_MS - 200, easing: 'linear' }));
+            // A pulse as wide as the 1px pipe, kept between its two ends, so it never sticks out.
+            if (lane.link.working && motion && !lane.gone && bottom - top > LINK_PULSE) parts.push(div().id(`sf-link-flow-${lane.link.key}`).absolute().right(right).w(1).h(LINK_PULSE).bg(color)
+              .top(this.linkFlowEnd ? bottom - LINK_PULSE + 1 : top).transition('top', { duration: LINK_FLOW_MS - 200, easing: 'linear' }));
             return parts;
           }))
           // One packet per send: a route merges same-way sends, each still moves on its own.
@@ -1059,7 +1063,9 @@ export default class SixfoldDesk extends View {
             if (!lane || from < 0 || to < 0) return [];
             return (route.packets?.length ? route.packets : [{ id: route.id, phase: route.phase }]).map(packet => {
               const y = packet.phase === 'start' && motion ? rowY(from) : rowY(to);
-              return div().id(`sf-link-send-${packet.id}`).absolute().right(laneRight(lane.slot) - 2).top(y - 2).size(5).rounded(3).bg(lane.link.name ? groupColor(lane.link.name) : lane.colors.packet)
+              const other = y === rowY(from) ? rowY(to) : rowY(from);
+              // On the pipe itself: as wide as the line, and inside it at the lower end.
+              return div().id(`sf-link-send-${packet.id}`).absolute().right(laneRight(lane.slot)).top(y > other ? y - SEND_PULSE + 1 : y).w(1).h(SEND_PULSE).bg(lane.link.name ? groupColor(lane.link.name) : lane.colors.packet)
                 .opacity(packet.phase === 'arrived' ? 0.4 : 1)
                 .when(motion, el => el.transition('top', { duration: packet.travelMs ?? 1600, easing: 'linear' }));
             });
