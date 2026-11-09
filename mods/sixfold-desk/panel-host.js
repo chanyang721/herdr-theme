@@ -36,7 +36,12 @@ export function hostedTaskLayout(layout, entries, computerAnchors=[]) {
       const next={...card,top:y,rows:card.rows.map(row=>({...row,y:row.y+delta}))};
       cards.push(next);
       anchors.set(card.space.id,{...layout.anchors.get(card.space.id),y:y+18});
-      for(const row of next.rows)if(row.kind==='agent')anchors.set(row.agent.id,{...layout.anchors.get(row.agent.id),y:row.y+row.height/2});
+      // Shift each route anchor with its row. panelLayout already placed it
+      // on the title line, which is not the middle of a two-line reason row.
+      for(const row of next.rows)if(row.kind==='agent'){
+        const anchor=layout.anchors.get(row.agent.id);
+        anchors.set(row.agent.id,{...anchor,y:Number.isFinite(anchor?.y)?anchor.y+delta:row.y+row.height/2});
+      }
     }
     y+=entry.height+12;
   }

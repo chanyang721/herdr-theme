@@ -266,3 +266,19 @@ test('a cleanup countdown wakes only at its minute boundary and re-renders just 
     assert.equal(reason(),'정리 대기 · 다음 정리 때 닫힘');assert.equal(r.controller.wake,null,'no timer after the deadline');
   }finally{r?.controller.dispose();Date.now=original;}
 });
+
+test('a root reason row that gains a parent in place re-lays its height and route anchor',async()=>{
+  const r=await runtime(),raw=makePanelFixture({now:Date.now()});
+  try{
+    const [,parent,row]=raw.spaces[0].agents;row.keep_reason='검수 대기';
+    r.controller.apply(cleanPanelFeed(raw),'ready');r.flush();
+    const card=()=>r.controller.layout.cards[0],find=()=>card().rows.find(item=>item.agent?.id===row.id);
+    assert.equal(find().height,42);
+    // Same order and no fold: only the parent relation changes.
+    row.parent_id=parent.id;
+    r.controller.apply(cleanPanelFeed(raw),'ready');r.flush();
+    assert.equal(find().height,20);
+    assert.equal(r.controller.layout.anchors.get(row.id).y,find().y+10);
+    assert.equal(card().height,find().y+20-card().top+5);
+  }finally{r.controller.dispose();}
+});

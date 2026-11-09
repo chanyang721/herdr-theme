@@ -1,8 +1,8 @@
 import {View,div,svg} from 'gpui-kit';
 import {h_flex,v_flex,InputState,Input} from 'gpui-base';
 import {theme,spaces,shared,setShared,settings,window} from 'herdr';
-import {projectPanelFeed,panelEventStates,panelSpaces,panelSpacePartners,PANEL_TIMING,MESSAGE_LEGS,messageLeg,agentHasReason,agentReason} from './panel-model.js';
-import {panelLayout,cardView,agentRow,panelFlowLayer,panelCounts,PANEL_GEOMETRY,toolIcon,panelReasonWake} from './panel-view.js';
+import {projectPanelFeed,panelEventStates,panelSpaces,panelSpacePartners,PANEL_TIMING,MESSAGE_LEGS,messageLeg,agentReason} from './panel-model.js';
+import {panelLayout,cardView,agentRow,panelFlowLayer,panelCounts,PANEL_GEOMETRY,toolIcon,panelReasonWake,agentRowHeight} from './panel-view.js';
 import {groupColors,paletteMode} from './collab-flow.js';
 import {issuePopover} from './task-issues-view.js';
 import {issueScopeData,issueCacheLabel} from './task-issue-state.js';
@@ -222,9 +222,13 @@ export function createRetainedPanel(cx,{macTitlebar=false,onClassic=null,onDispo
       const group=c.projection.groups.get(space.id);
       return [space.id,group.grouped,group.grouped?group.groups.map(g=>[g.issue?.key,g.agents.map(a=>a.id),g.folds]):[group.agents.map(a=>a.id),group.folds],group.issueHidden,group.issuesExpanded];
     });
-    // Rows with a reason line are taller, so their set is part of the layout.
-    const reasonRows=c.feed.spaces.flatMap(space=>space.agents.filter(agentHasReason).map(agent=>agent.id));
-    c.layoutKey=signature([c.feed.computers.map(computer=>computer.id),topology,reasonRows]);
+    // Row height depends on the parent relation (child rows are 20px) and on a
+    // reason line, so both belong to the layout key even when order is unchanged.
+    const rowHeights=c.feed.spaces.flatMap(space=>space.agents.map(agent=>{
+      const parent=c.rowMeta.get(agent.id)?.parent||null;
+      return [agent.id,parent,agentRowHeight(agent,Boolean(parent))];
+    }));
+    c.layoutKey=signature([c.feed.computers.map(computer=>computer.id),topology,rowHeights]);
     if(c.layoutKey!==oldLayoutKey)c.layout=panelLayout(c.feed,c.events,spaces(),c.projection.groups);
     else if(c.layout)c.layout={...c.layout,cards:c.layout.cards.map(card=>({...card,space:c.spaceMap.get(card.space.id)}))};
     let structure=false;

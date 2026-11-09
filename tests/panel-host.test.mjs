@@ -36,6 +36,17 @@ test('hosted routes use selected native order and measured document/card heights
   assert.equal(host.height,436);
 });
 
+test('hosted routes keep each row anchor on its title line, also for two-line reason rows',()=>{
+  const space={id:'a'},top=100,y=top+61;
+  // panelLayout puts root anchors at row+14 (title line) and child anchors at the middle of a 20px row.
+  const rows=[{kind:'agent',agent:{id:'reason'},y,height:42},{kind:'agent',agent:{id:'child'},y:y+42,height:20}];
+  const layout={cards:[{space,top,rows}],anchors:new Map([['a',{kind:'space',space:'a',y:top+18}],['reason',{kind:'agent',space:'a',y:y+14}],['child',{kind:'agent',space:'a',y:y+42+10}]])};
+  const host=hostedTaskLayout(layout,[{task:space,height:200,alertHeight:0}]);
+  const [reason,child]=host.cards[0].rows;
+  assert.equal(host.anchors.get('reason').y,reason.y+14);
+  assert.equal(host.anchors.get('child').y,child.y+10);
+});
+
 
 test('flow lanes stay outside cards in ordered bands; only proven remote endpoints use computer anchors',()=>{
  const feed={computers:[{id:'local'},{id:'remote'}],spaces:[{id:'one',computer:'local',nav:{machine:null},agents:[{id:'a'}]},{id:'two',computer:'remote',nav:{machine:'worker'},agents:[{id:'b'}]}]};
