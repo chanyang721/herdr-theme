@@ -16,7 +16,7 @@ This README describes the current `main` branch. The bundled helper is the nativ
 
 | Part | What it shows |
 | --- | --- |
-| Sidebar (this repo) | Computers with per-computer status, workspaces and their agents, unread messages, animated sends, shared work across computers, subagent trees |
+| Sidebar (this repo) | Computers with per-computer status, workspaces and their agents, unread messages, animated sends, shared work across computers, subagent trees, [pixel-art row states](#row-states-and-their-pixel-effects) |
 | [Project documents](#project-documents) | Workspace document search and an optional persistent **문서** tab, with pins and previews |
 | [System Metrics](#system-metrics) | CPU and RAM with recent-sample bars |
 | [MCP Status](#mcp-status) | Each MCP server's connection, Claude and Codex merged |
@@ -133,15 +133,43 @@ An optional [local task feed](docs/panel-feed.md) shows one-line tasks, four-sta
 
 Rows display the supplied work title. Producers should supply the current task or subtask name. Completed child tasks leave both their tree and its **+N** count; independent root tasks keep their own closing lifecycle.
 
+The stage bar follows the task and the status mark follows the pane's own observed state, so a pane can still read as working after its task is complete. A changed stage or a new event (a dispatch, review request, verdict, acceptance or closing step) shows the event's label in place of the bar for 1.7 seconds without moving the title.
+
 Click the Linear or Jira area to open an issue popover on the right. Search **이번 주** (this week), **마일스톤** (milestones) or **전체** (all), then bring individual cached issues into the workspace. Local requests change the displayed issue selection. The theme does not accept work or close sessions. Task rows appear inside the selected computer's native workspace cards, alongside workspace badges, document controls and local question cards. **작업** toggles the task rows while preserving computer navigation. Motion off and the supplied system reduced-motion preference keep state updates without movement.
 
 Explicit same-computer space partners show matching name chips and a stationary purple bracket with square endpoints. Same-task agent brackets are stationary gray; dashed sharing routes identify other computers.
 
-New messages arc through a dedicated outer gutter with brighter packets, a fading tail and square departure/arrival pings. Concurrent sends are staggered. Remote packets curve toward the computer's dashed lane; missing endpoints are skipped. Delivery counters explicitly marked as counts are not network rates. Initial history is never replayed after reload.
+A new message rides the line that already joins its two ends: the computer's dashed pipe for another computer, the collaboration lane between partner spaces, and otherwise the inner message lane. All of these lines share one fixed 72 px gutter on the right of the sidebar. Each is a thin right-angle stroke with rounded corners. The packet, a small white head with two teal tail pieces, moves out, along, then in, so it never leaves the drawn line, and it lands with a single square ping. Bursts are staggered over two lanes, with at most eight routes scheduled; missing endpoints are skipped. Delivery counters explicitly marked as counts are not network rates. Initial history is never replayed after reload.
 
 See the [native fixture gallery and measurements](docs/panel-validation.md) for 24 combinations (4 sharing modes × 3 tool choices × 2 Slack states), each captured in dark and light themes: 48 matrix images, plus interaction examples and update checks.
 
 ![Task panel and issue popover rendered by the app with synthetic local data](docs/images/panel-feed/issues-milestone.png)
+
+#### Row states and their pixel effects
+
+![The seven row-state images enlarged five times, in the dark and light palettes](docs/images/session-states.gif)
+
+When the feed gives a row an optional `state`, the row's status mark becomes one of seven small pixel-art images. Each state has its own shape, so colour is never the only difference.
+
+| `state` | Label | Image | Effect |
+| --- | --- | --- | --- |
+| `working` | 작업 중 | ring of eight dots | a bright dot circles the ring (0.8 s loop) |
+| `idle` | 쉬는 중 | empty ring | still |
+| `needs_human` | 확인 필요 | orange diamond with `!` | swells with a glow once, then holds (1.6 s loop) |
+| `unseen_result` | 결과 안 봄 | check mark with a new-result dot | a light sweeps along the check (2.4 s loop) |
+| `cleanup_wait` | 정리 대기 | moon | a `z` rises and fades (3 s loop) |
+| `closing` | 닫는 중 | open tray | a drop falls into the tray and splashes (1.2 s loop) |
+| `closed` | 닫힘 | closed box | still; the row is dimmed |
+
+How they play:
+
+- The images are packaged files in [`mods/sixfold-desk/icons/status/`](mods/sixfold-desk/icons/status): a still PNG and a lossless animated WebP per state, at 12 and 16 px, for dark and light palettes. `manifest.json` lists each file's frame count, timing and hash. The app's native image decoder plays the WebP; the theme runs no renderer and no script timer for them.
+- **Motion off**, the feed's `reduced_motion` or a hidden window shows the still PNG. While an event label is showing on that row (the 1.7 seconds above), the image also holds still.
+- An error (`!`) or usage-limit (`◷`) mark takes the slot first. Child rows keep their small dot. A row without a known `state` keeps the earlier four-status mark, so older producers render as before.
+- A second line under the title gives the reason: the producer's `keep_reason`, the closing step (보고 작성 → 경험·결정 저장 → 기억함 제안 → 닫힘), or, for `cleanup_wait` and `unseen_result` rows with `cleanup` data, a countdown such as `30분 쉬면 닫힘 (남은 12분)`. The minutes are counted from the producer's `due_at` on the local clock, and only that row redraws, once a minute; after `due_at` it reads `다음 정리 때 닫힘`.
+- All of it is display only. The theme never decides whether a session is kept or closed. Field details are in the [feed contract](docs/panel-feed.md).
+
+The frames were rendered with [pixelfx](https://github.com/patch-gg/pixelfx) (MIT; see the folder's [NOTICE](mods/sixfold-desk/icons/status/NOTICE.md)). The GIF above is built from the shipped 16 px files with their own frame timings, enlarged five times.
 
 ### Shared work across computers
 
