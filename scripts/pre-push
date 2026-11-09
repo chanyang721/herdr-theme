@@ -21,7 +21,8 @@ checks() {
   run_rust_tests
 }
 run_rust_tests() {
-  out=$($CARGO test --manifest-path rust/Cargo.toml --locked --jobs 1 -- --test-threads=1 2>&1); rc=$?
+  # Tests stay one at a time (some set process environment); compiling uses CARGO_BUILD_JOBS below.
+  out=$($CARGO test --manifest-path rust/Cargo.toml --locked -- --test-threads=1 2>&1); rc=$?
   printf '%s\n' "$out" >&2
   [ "$rc" -eq 0 ] || return "$rc"
   n=$(printf '%s\n' "$out" | sed -n 's/^test result: ok\. \([0-9][0-9]*\) passed;.*/\1/p' | awk '{n+=$1} END {print n+0}')
@@ -43,7 +44,8 @@ if [ "${SKIP_PREPUSH_TESTS:-}" = 1 ]; then
   exit 0
 fi
 CARGO=cargo  # @tool-cargo
-CARGO_BUILD_JOBS=1
+# Four compile jobs: several times faster than one, while memory stays bounded next to running agents.
+CARGO_BUILD_JOBS=4
 export CARGO_BUILD_JOBS
 CYG=cygpath  # @tool-cygpath
 MKTEMP=mktemp  # @tool-mktemp
@@ -60,6 +62,10 @@ done
 top=$(git rev-parse --show-toplevel) || exit 1
 head=$(git rev-parse -q --verify HEAD 2>/dev/null || true)
 common=$(git rev-parse --path-format=absolute --git-common-dir) || exit 1
+# One build folder per clone, kept between pushes: a throwaway worktree would otherwise rebuild every
+# crate from nothing. Cargo locks it, so two pushes at once wait for each other instead of clashing.
+CARGO_TARGET_DIR="$common/prepush-target"
+export CARGO_TARGET_DIR
 tmp=''
 cleanup() { [ -n "$tmp" ] && git worktree remove --force "$tmp" >/dev/null 2>&1; tmp=''; }
 trap 'cleanup; exit 130' INT TERM
