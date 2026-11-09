@@ -199,6 +199,46 @@ fn test_without_the_option_the_one_session_is_the_engines_explicit_high() {
     );
 }
 #[test]
+fn test_a_site_that_sets_claude_high_itself_keeps_it() {
+    // null = the person chose the CLI default for high: kept as it is (and dispatch will not prove it)
+    let f = Creation::new(json!({"model_tiers":{"claude":{"high":null}}}));
+    let launches = f.successful(&[]);
+    assert_eq!(
+        launches[0]["argv"],
+        json!(launch_argv(vec!["claude".into()]).unwrap())
+    );
+    let f =
+        Creation::new(json!({"model_tiers":{"claude":{"high":{"model":"m-x","effort":"max"}}}}));
+    let launches = f.successful(&[]);
+    let argv = launches[0]["argv"].as_array().unwrap();
+    assert_eq!(
+        &argv[argv.len() - 4..],
+        &[
+            json!("--model"),
+            json!("m-x"),
+            json!("--effort"),
+            json!("max")
+        ]
+    );
+}
+#[test]
+fn test_first_pane_entry_only_fills_a_missing_high() {
+    let low = json!({"model":"claude-haiku-5-5","effort":null});
+    assert_eq!(tiers::first_pane_entry(&json!({}), "low", low.clone()), low);
+    assert_eq!(
+        tiers::first_pane_entry(&json!({}), "high", Value::Null),
+        json!({"model":"claude-opus-5-5","effort":"high"})
+    );
+    assert_eq!(
+        tiers::first_pane_entry(
+            &json!({"model_tiers":{"claude":{"high":null}}}),
+            "high",
+            Value::Null
+        ),
+        Value::Null
+    );
+}
+#[test]
 fn test_tiers_argument_picks_the_one_sessions_model_and_is_recorded() {
     let f = Creation::new(json!({}));
     let launches = f.successful(&["--tiers", "low"]);
