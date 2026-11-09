@@ -264,6 +264,6 @@ cargo test --manifest-path rust/Cargo.toml --locked --jobs 1 -- --test-threads=1
 herdr-app check ~/.config/herdr-app/mods/sixfold-desk
 ```
 
-Run `sh scripts/install-git-hooks.sh` once per clone: every `git push` then runs `npm test` and the `node --check` lines first, and a failure stops the push (skip on purpose with `git push --no-verify`). The macOS voice tests run by hand or weekly (`Voice (macOS)` workflow), not on every push.
+Run `sh scripts/install-git-hooks.sh` once per clone: every `git push` then runs the `node --check` lines, `cargo fmt --check`, `cargo test` and then `npm test` against the executable that `cargo test` built, and a failure stops the push (skip on purpose with `git push --no-verify`). The build output stays in `.git/prepush-target` between pushes and is emptied when it is over 8 GiB; pushes from the same clone run their checks one at a time (`.git/prepush-lock`; a lock left by a push that is no longer running is taken over). The macOS voice tests run by hand or weekly (`Voice (macOS)` workflow), not on every push.
 
 `herdr-app check` writes `gpui-kit.d.ts` and `jsconfig.json` next to a mod; do not commit them. Verify layout changes on the real screen, not only with tests. To move to a newer Workspace Mods release, change `commit` (and `tag`) in `workspace-mods.lock.json` and run the updater. Work on a short branch from `main`; the installed copy tracks `main`. [RECIPE.md](RECIPE.md) is the design brief. Apache-2.0.

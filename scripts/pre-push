@@ -3,6 +3,9 @@
 # Install once per clone: sh scripts/install-git-hooks.sh
 # Skip on purpose:         git push --no-verify   (or SKIP_PREPUSH_TESTS=1 git push)
 # Shared hook runner; each repository supplies its own checks().
+# Build output goes to one folder per clone, .git/prepush-target, kept between pushes. It is emptied when
+# it is over 8 GiB (checked before and after each run). One push per clone runs its checks at a time
+# (.git/prepush-lock), so the JavaScript tests run the executable built from the commit being checked.
 
 # Zero tests (or far fewer than expected) must not pass: that is what a test runner that runs nothing looks like.
 run_npm_tests() {
@@ -24,19 +27,23 @@ checks() {
   export HERDR_THEME_BIN &&
   run_npm_tests
 }
+# The herdr-theme executable that cargo reports it built in this run (not the test-mode one). A guessed
+# debug/ path would pick up an older executable when CARGO_BUILD_TARGET or build.target moves the output.
 native_bin() {
-  for f in "$CARGO_TARGET_DIR/debug/herdr-theme.exe" "$CARGO_TARGET_DIR/debug/herdr-theme"; do
-    [ -f "$f" ] && { printf '%s\n' "$f"; return 0; }
-  done
-  echo "pre-push: cargo test built no herdr-theme executable in $CARGO_TARGET_DIR/debug" >&2
+  f=$(printf '%s\n' "$cargo_out" | grep '^{"reason":"compiler-artifact"' | grep '"kind":\["bin"\]' |
+    grep '"name":"herdr-theme"' | grep '"profile":{[^}]*"test":false' |
+    sed -n 's/.*"executable":"\([^"]*\)".*/\1/p' | sed 's|\\\\|/|g' | tail -1)
+  [ -n "$f" ] && [ -f "$f" ] && { printf '%s\n' "$f"; return 0; }
+  echo "pre-push: cargo test built no herdr-theme executable" >&2
   return 1
 }
 run_rust_tests() {
   # Tests stay one at a time (some set process environment); compiling uses CARGO_BUILD_JOBS below.
-  out=$($CARGO test --manifest-path rust/Cargo.toml --locked -- --test-threads=1 2>&1); rc=$?
-  printf '%s\n' "$out" >&2
+  # JSON messages name the executables; rustc diagnostics are still rendered as text.
+  cargo_out=$($CARGO test --manifest-path rust/Cargo.toml --locked --message-format=json-render-diagnostics -- --test-threads=1 2>&1); rc=$?
+  printf '%s\n' "$cargo_out" | grep -v '^{"reason":' >&2
   [ "$rc" -eq 0 ] || return "$rc"
-  n=$(printf '%s\n' "$out" | sed -n 's/^test result: ok\. \([0-9][0-9]*\) passed;.*/\1/p' | awk '{n+=$1} END {print n+0}')
+  n=$(printf '%s\n' "$cargo_out" | sed -n 's/^test result: ok\. \([0-9][0-9]*\) passed;.*/\1/p' | awk '{n+=$1} END {print n+0}')
   if [ "$n" -lt 50 ]; then echo "pre-push: $n Rust tests passed, at least 50 expected" >&2; return 1; fi
 }
 
@@ -62,6 +69,8 @@ CYG=cygpath  # @tool-cygpath
 MKTEMP=mktemp  # @tool-mktemp
 MKDIR=mkdir  # @tool-mkdir
 NPM=npm  # @tool-npm
+TARGET_CAP_KIB=8388608  # @tool-target-cap  (8 GiB)
+LOCK_WAIT_S=3600  # @tool-lock-wait  (a cold build and both suites take minutes, not an hour)
 
 shas=''
 while read -r _ lsha _ _; do
@@ -72,14 +81,62 @@ done
 
 top=$(git rev-parse --show-toplevel) || exit 1
 head=$(git rev-parse -q --verify HEAD 2>/dev/null || true)
-common=$(git rev-parse --path-format=absolute --git-common-dir) || exit 1
+common=$(git rev-parse --path-format=absolute --git-common-dir) && [ -n "$common" ] || exit 1
 # One build folder per clone, kept between pushes: a throwaway worktree would otherwise rebuild every
-# crate from nothing. Cargo locks it, so two pushes at once wait for each other instead of clashing.
+# crate from nothing. The clone lock below keeps it to one push at a time.
 CARGO_TARGET_DIR="$common/prepush-target"
 export CARGO_TARGET_DIR
+lock="$common/prepush-lock"
+locked=''
 tmp=''
 cleanup() { [ -n "$tmp" ] && git worktree remove --force "$tmp" >/dev/null 2>&1; tmp=''; }
-trap 'cleanup; exit 130' INT TERM
+# Never let the build folder grow without bound: past the cap, empty it (the next build starts cold).
+trim_target() {
+  [ -d "$CARGO_TARGET_DIR" ] || return 0
+  kib=$(du -sk "$CARGO_TARGET_DIR" 2>/dev/null | awk 'END {print $1+0}')
+  if [ "$kib" -gt "$TARGET_CAP_KIB" ]; then
+    echo "pre-push: build folder is $((kib / 1024)) MiB, over the $((TARGET_CAP_KIB / 1024)) MiB limit; emptying $CARGO_TARGET_DIR" >&2
+    rm -rf "$CARGO_TARGET_DIR"
+  fi
+}
+finish() {
+  cleanup
+  if [ -n "$locked" ]; then
+    trim_target
+    [ "$(cat "$lock/pid" 2>/dev/null)" = "$$" ] && rm -rf "$lock"
+    locked=''
+  fi
+}
+# Every way out removes the temporary worktree and releases the lock, including an early exit 1.
+trap 'rc=$?; finish; exit $rc' EXIT
+trap 'exit 130' INT TERM
+
+# Cargo's own lock covers only the build: another push could rebuild the shared executable between this
+# push's Rust and JavaScript tests. So the whole run holds a clone lock (mkdir is atomic everywhere).
+waited=0
+until $MKDIR "$lock" 2>/dev/null; do
+  owner=$(cat "$lock/pid" 2>/dev/null || true)
+  if [ -n "$owner" ] && ! kill -0 "$owner" 2>/dev/null; then
+    # Its push is gone (killed, machine restarted). Move it aside first so only one waiter takes over,
+    # and put it back if a new holder had already replaced it.
+    if mv "$lock" "$lock.stale-$$" 2>/dev/null; then
+      if [ "$(cat "$lock.stale-$$/pid" 2>/dev/null)" = "$owner" ]; then
+        echo "pre-push: removed the lock of a push that is no longer running (pid $owner)" >&2
+      else mv "$lock.stale-$$" "$lock" 2>/dev/null; fi
+      rm -rf "$lock.stale-$$"
+    fi
+    continue
+  fi
+  [ "$waited" -eq 0 ] && echo "pre-push: waiting for another push of this clone (pid ${owner:-?}) to finish its checks" >&2
+  if [ "$waited" -ge "$LOCK_WAIT_S" ]; then
+    echo "pre-push: $lock held for over $LOCK_WAIT_S s; if no push is running, remove that folder" >&2
+    exit 1
+  fi
+  sleep 1; waited=$((waited + 1))
+done
+locked=1
+echo "$$" > "$lock/pid"
+trim_target
 
 for sha in $shas; do
   # Check exactly what is pushed: in place when it is the clean HEAD, else in a throwaway worktree.
