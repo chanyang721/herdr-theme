@@ -14,7 +14,8 @@ function sandbox(t){mkdirSync(join(root,'artifacts'),{recursive:true});const bas
 function init(repo,hook){mkdirSync(join(repo,'scripts'),{recursive:true});writeFileSync(join(repo,'scripts/pre-push'),hook);git(repo,['init','-q']);git(repo,['add','-A']);git(repo,['-c','core.hooksPath=.no-hooks','-c','user.name=t','-c','user.email=t@example.invalid','commit','-qm','fixture']);return git(repo,['rev-parse','HEAD']);}
 // The fakes log to one absolute file, so a run checked in a throwaway worktree still records its calls.
 // Fake cargo reports its executables the way cargo's JSON does: the right one, a test-mode build of the
-// same binary and the fixture binary, with Windows-style escaped separators.
+// same binary and the fixture binary, with Windows-style escaped separators. The JSON line is printed with
+// printf: dash's echo (Linux sh) would turn each \\ into \ and the hook could not convert the path back.
 const fakeCargo=String.raw`echo "cargo $*" >> "$HOOK_LOG"
 [ "$1" = test ] || exit 0
 lock=$(dirname "$CARGO_TARGET_DIR")/prepush-lock
@@ -29,7 +30,7 @@ d=$CARGO_TARGET_DIR/debug
 mkdir -p "$d/deps" && : > "$d/herdr-theme" && : > "$d/deps/herdr_theme-1" && : > "$d/herdr-theme-test-fixture"
 [ "$HOOK_FAKE_MODE" = big ] && head -c 8192 /dev/zero > "$d/big"
 j() { printf '%s' "$1" | sed 's|/|\\\\|g'; }
-a() { echo "{\"reason\":\"compiler-artifact\",\"target\":{\"kind\":[\"bin\"],\"crate_types\":[\"bin\"],\"name\":\"$1\",\"test\":true},\"profile\":{\"debuginfo\":2,\"test\":$2},\"executable\":\"$(j "$3")\",\"fresh\":false}"; }
+a() { printf '%s\n' "{\"reason\":\"compiler-artifact\",\"target\":{\"kind\":[\"bin\"],\"crate_types\":[\"bin\"],\"name\":\"$1\",\"test\":true},\"profile\":{\"debuginfo\":2,\"test\":$2},\"executable\":\"$(j "$3")\",\"fresh\":false}"; }
 a herdr-theme false "$d/herdr-theme"
 a herdr-theme true "$d/deps/herdr_theme-1"
 a herdr-theme-test-fixture false "$d/herdr-theme-test-fixture"
