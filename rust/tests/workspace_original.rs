@@ -110,14 +110,20 @@ fn test_default_opens_exactly_one_claude_session_and_no_splits() {
     let f = Creation::new(json!({}));
     let launches = f.successful(&[]);
     let argv = launches[0]["argv"].as_array().unwrap();
-    let expected = launch_argv(vec!["claude".into()]).unwrap();
+    let expected = launch_argv(engine_high_argv()).unwrap();
     assert_eq!(argv, &json!(expected).as_array().unwrap().clone());
     // The original extra POSIX marker assertion fails on original Windows:
     // docs/native-baseline-windows.md records that pre-existing test defect.
     #[cfg(unix)]
     assert!(argv.contains(&json!("CLAUDE_CODE_CHILD_SESSION")));
     #[cfg(windows)]
-    assert_eq!(argv, &vec![json!("claude")]);
+    assert_eq!(argv, &json!(engine_high_argv()).as_array().unwrap().clone());
+}
+/// `claude` with the flags the harness dispatch gives a high pane (engine roles.json model_tiers).
+fn engine_high_argv() -> Vec<String> {
+    ["claude", "--model", "claude-opus-5-5", "--effort", "high"]
+        .map(String::from)
+        .to_vec()
 }
 #[test]
 fn test_shells_open_one_plain_shell() {
@@ -164,12 +170,32 @@ fn test_duplicate_name_does_not_create_more_terminals() {
     assert!(f.launches().is_empty());
 }
 #[test]
-fn test_without_the_option_the_one_session_is_the_cli_default() {
+fn test_without_the_option_the_one_session_is_the_engines_explicit_high() {
+    // A bare `claude` (CLI default) never proves high to dispatch, so the first pane was never
+    // reused; it now carries the same model and effort flags a dispatch-opened high pane has.
     let f = Creation::new(json!({}));
     let launches = f.successful(&[]);
     assert_eq!(
         launches[0]["argv"],
-        json!(launch_argv(vec!["claude".into()]).unwrap())
+        json!(launch_argv(engine_high_argv()).unwrap())
+    );
+    let book: Value =
+        serde_json::from_slice(&fs::read(f.app.join("data/sixfold/space-tiers.json")).unwrap())
+            .unwrap();
+    let pane = &book["new-space"]["panes"][0];
+    assert_eq!(
+        (
+            &pane["tier"],
+            &pane["tier_used"],
+            &pane["model"],
+            &pane["effort"]
+        ),
+        (
+            &json!("high"),
+            &json!("high"),
+            &json!("claude-opus-5-5"),
+            &json!("high")
+        )
     );
 }
 #[test]
