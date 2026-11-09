@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { cleanPanelFeed, reconcilePanelFeed, panelSpaces, panelSpacePartners, agentGroups, agentState, panelEventStates, projectPanelFeed, createPanelProjection, PANEL_TIMING } from '../mods/sixfold-desk/panel-model.js';
+import { cleanPanelFeed, reconcilePanelFeed, panelSpaces, panelSpacePartners, agentGroups, agentState, panelEventStates, projectPanelFeed, createPanelProjection, PANEL_TIMING, MESSAGE_TIMING } from '../mods/sixfold-desk/panel-model.js';
+const T = PANEL_TIMING, M = MESSAGE_TIMING, AFTER = T.packetMs + T.pingMs + T.coolMs + 100;
 import { makePanelFixture, makePanelMatrix, makePanelLoadFixture, PANEL_IDS, eventSequence, makePanelScenario, localCollaborationMessage } from './panel-fixtures.mjs';
 
 const NOW = 1780000000000;
@@ -19,8 +20,8 @@ test('allocation metadata supplies finite default tags and distinguishes new row
     const playing=advance(next,prior,0);
     assert.equal(playing.spawning.has(from),kind==='new');
     assert.equal(playing.tags.get(from).label,'일 나누기 · 2개');
-    assert(!advance(next,playing,1700).tags.has(from));
-    assert.equal(advance(next,playing,3000).nextAt,null);
+    assert(!advance(next,playing,T.tagMs).tags.has(from));
+    assert.equal(advance(next,playing,AFTER).nextAt,null);
   }
 });
 
@@ -31,7 +32,7 @@ test('unlabeled final close remains visible for its finite default label only',(
   const playing=advance(next,prior,0);
   assert.equal(playing.tags.get(from).label,'닫힘');
   assert.equal(agentGroups(next.spaces[0],{includeClosedIds:new Set(playing.tags.keys())}).agents.length,1);
-  assert.equal(agentGroups(next.spaces[0],{includeClosedIds:new Set(advance(next,playing,1700).tags.keys())}).agents.length,0);
+  assert.equal(agentGroups(next.spaces[0],{includeClosedIds:new Set(advance(next,playing,T.tagMs).tags.keys())}).agents.length,0);
 });
 
 test('all 24 space combinations retain independent local or remote collaboration, tool and Slack facts', () => {
@@ -188,25 +189,26 @@ test('distribution, review, verdict, acceptance and closing labels occupy the sa
   for (const kind of ['dispatch', 'review_request', 'verdict', 'accept', 'close_step', 'memory']) {
     const value = normalize({ events: [{ id: `event-${kind}`, at: NOW, kind, from: 'one-agent', to: 'one', label: `Label ${kind}` }] });
     const started = advance(value, boot(normalize({ events: [] })), 0);
-    assert.equal(started.tags.get('one-agent').label, kind==='dispatch'?'일 나누기':`Label ${kind}`);
-    assert.equal(advance(value, started, 1699).tags.has('one-agent'), true);
-    assert.equal(advance(value, started, 1700).tags.size, 0);
+    assert.equal(started.tags.get('one-agent').label, `Label ${kind}`, 'one dispatch keeps the producer label');
+    assert.equal(advance(value, started, T.tagMs - 1).tags.has('one-agent'), true);
+    assert.equal(advance(value, started, T.tagMs).tags.size, 0);
     assert.equal(value.spaces[0].agents[0].title, 'Task one-agent', 'a tag never rewrites the task title');
   }
 });
 
-test('dispatch/new session, packet arrival and fade have finite boundaries, tags stay 1700ms', () => {
+test('dispatch/new session, packet arrival and fade have finite boundaries, tags stay tagMs', () => {
   const value = normalize({ events: [{ id: 'spawn', at: NOW, kind: 'spawn', from: 'one', to: 'one-agent', label: 'New task' }] });
   let state = boot(normalize({ events: [] }));
-  const checks = [[0, 'start', 40], [40, 'travel', 1640], [1640, 'ping', 1700], [1700, 'ping', 2100], [2100, 'fade', 3000]];
+  const pinged = T.packetMs + T.pingMs, gone = pinged + T.coolMs;
+  const checks = [[0, 'start', T.startMs], [T.startMs, 'travel', T.packetMs], [T.packetMs, 'ping', T.tagMs], [T.tagMs, 'ping', pinged], [pinged, 'fade', gone]];
   for (const [at, phase, next] of checks) {
     state = advance(value, state, at);
     assert.equal(state.packets[0].phase, phase);
     assert.equal(state.nextAt, NOW + next);
-    assert.equal(state.tags.has('one-agent'), at < 1700);
-    assert.equal(state.spawning.has('one-agent'), at < 1700);
+    assert.equal(state.tags.has('one-agent'), at < T.tagMs);
+    assert.equal(state.spawning.has('one-agent'), at < T.tagMs);
   }
-  assert.equal(advance(value, state, 3000).nextAt, null);
+  assert.equal(advance(value, state, gone).nextAt, null);
 });
 
 test('motion off keeps tags, static connections and terminal state but emits no moving packets', () => {
@@ -215,8 +217,8 @@ test('motion off keeps tags, static connections and terminal state but emits no 
   assert.equal(state.packets.length, 0);
   assert.equal(state.connections.length, 1);
   assert.equal(state.tags.get('one-agent').label, 'Sent');
-  assert.equal(state.nextAt, NOW + 1900);
-  const end = advance(value, state, 1900, false);
+  assert.equal(state.nextAt, NOW + 200 + T.tagMs);
+  const end = advance(value, state, 200 + T.tagMs, false);
   assert.equal(end.tags.size, 0);
   assert.equal(end.packets.length, 0);
 });
@@ -765,23 +767,23 @@ test('unresolved messages are quiet; new messages stagger in two bounded native 
 });
 
 
-test('message travel lasts one second and its curve settles within1600ms',()=>{
+test('message travel lasts its paced time and its curve settles after ping and cool-down',()=>{
  const previous=boot(normalize({events:[]}));
  const value=normalize({events:[{id:'pipe',kind:'message',at:NOW,from:'one-agent',to:'one',label:''}]});
- let state=advance(value,previous,0);assert.equal(state.packets[0].phase,'start');assert.equal(state.packets[0].travelMs,1000);
+ let state=advance(value,previous,0);assert.equal(state.packets[0].phase,'start');assert.equal(state.packets[0].travelMs,M.packetMs-M.startMs);
  state=advance(value,state,40);assert.equal(state.packets[0].phase,'travel');
- state=advance(value,state,1040);assert.equal(state.packets[0].phase,'ping');
- state=advance(value,state,1210);assert.equal(state.packets[0].phase,'fade');
- state=advance(value,state,1600);assert.equal(state.packets.length,0);assert.equal(state.nextAt,null);
+ state=advance(value,state,M.packetMs);assert.equal(state.packets[0].phase,'ping');
+ state=advance(value,state,M.packetMs+M.pingMs);assert.equal(state.packets[0].phase,'fade');
+ state=advance(value,state,M.packetMs+M.pingMs+M.coolMs);assert.equal(state.packets.length,0);assert.equal(state.nextAt,null);
 });
 
-test('a real stage transition without an event shows its label once and releases its timer at1700ms',()=>{
+test('a real stage transition without an event shows its label once and releases its timer at tagMs',()=>{
  const initial=normalize(),previous=boot(initial);
  const next=normalize({spaces:[space('one',{agents:[agent('one-agent',{stage:3})]})]});
  const changing=advance(next,previous,100,false);
  assert.equal(changing.tags.get('one-agent').label,'검수 중');assert.equal(changing.packets.length,0);
- assert.equal(changing.nextAt,NOW+1800);assert.equal(advance(next,changing,1799,false).tags.size,1);
- const settled=advance(next,changing,1800,false);assert.equal(settled.tags.size,0);assert.equal(settled.nextAt,null);
+ assert.equal(changing.nextAt,NOW+100+T.tagMs);assert.equal(advance(next,changing,99+T.tagMs,false).tags.size,1);
+ const settled=advance(next,changing,100+T.tagMs,false);assert.equal(settled.tags.size,0);assert.equal(settled.nextAt,null);
  assert.equal(panelEventStates(next,NOW+4000).tags.size,0,'a new instance consumes current stages as its watermark');
 });
 
@@ -795,8 +797,8 @@ test('new allocation labels the coordinator while the destination owns the new-r
 test('a proven remote send labels its receiving row at arrival, while motion-off keeps only receipt information',()=>{
  const initial=normalize(),event={id:'remote',at:NOW,kind:'message',from:'worker',to:'one-agent',label:''};
  const value=normalize({events:[event]});let state=advance(value,boot(initial),0);
- assert(!state.tags.has('one-agent'));state=advance(value,state,1040);assert.equal(state.tags.get('one-agent').label,'← Worker');
- state=advance(value,state,2740);assert(!state.tags.has('one-agent'));assert.equal(state.nextAt,null);
+ assert(!state.tags.has('one-agent'));state=advance(value,state,M.packetMs);assert.equal(state.tags.get('one-agent').label,'← Worker');
+ state=advance(value,state,M.packetMs+T.tagMs);assert(!state.tags.has('one-agent'));assert.equal(state.nextAt,null);
  const still=advance(value,boot(initial),0,false);assert.equal(still.packets.length,0);assert.equal(still.tags.get('one-agent').label,'← Worker');
  const unresolved=normalize({events:[{...event,animate:false}]});assert.equal(advance(unresolved,boot(initial),0).tags.size,0);
 });

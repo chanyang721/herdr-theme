@@ -1,12 +1,19 @@
 import { projectTaskBranches } from './task-tree.js';
 
 // Display data only. The producer owns task interpretation and lifecycle policy.
-export const MESSAGE_TIMING=Object.freeze({startMs:40,packetMs:1040,pingMs:170,coolMs:390});
+// Every event effect runs at this pace (2026-11-09: the person found 1x too fast to follow).
+// 1 = the original timing: a message crossed in 1 s, a task event in 1.6 s.
+export const PACE=1.5;
+const paced=ms=>Math.round(ms*PACE);
+export const MESSAGE_TIMING=Object.freeze({startMs:40,packetMs:40+paced(1000),pingMs:paced(170),coolMs:paced(390)});
 // Finite native targets: departure, remote vertical leg, local curve turn,
 // remote arrival leg. There is no JavaScript animation-frame timer.
-export const MESSAGE_LEGS=Object.freeze([40,190,540,890]);
+export const MESSAGE_LEGS=Object.freeze([40,40+paced(150),40+paced(500),40+paced(850)]);
 export const messageLeg=elapsed=>MESSAGE_LEGS.filter(at=>elapsed>=at).length;
-export const PANEL_TIMING = Object.freeze({ tagMs: 1700, startMs: 40, packetMs: 1640, pingMs: 460, coolMs: 900 });
+export const PANEL_TIMING = Object.freeze({ tagMs: 60+paced(1640), startMs: 40, packetMs: 40+paced(1600), pingMs: paced(460), coolMs: paced(900) });
+// A task-event packet's corners: leave the row, run down the lane, enter the target row.
+export const PANEL_LEGS=Object.freeze([40,40+paced(260),40+paced(1360)]);
+export const panelLeg=elapsed=>PANEL_LEGS.filter(at=>elapsed>=at).length;
 const MAX = Object.freeze({ computers: 64, spaces: 128, agents: 256, issues: 128, links: 512, events: 256, bytes: 2 * 1024 * 1024 });
 const STATUSES = new Set(['working', 'idle', 'blocked', 'done']);
 const STATES = ['blocked', 'working', 'review', 'waiting', 'done'];
@@ -412,7 +419,9 @@ export function createPanelProjection() {
 }
 
 export function panelEventLabel(event){
-  if(event.kind==='dispatch')return `일 나누기${event.allocation?.count>1?` · ${event.allocation.count}개`:''}`;
+  // Mockup ㉑: «일 나누기 · N개» only when one task is split into several; one dispatch
+  // keeps the producer's own words («일 맡김»).
+  if(event.kind==='dispatch')return event.allocation?.count>1?`일 나누기 · ${event.allocation.count}개`:event.label||'일 맡김';
   if(event.kind==='spawn')return '새 에이전트';
   if(event.label)return event.label;
   if(event.allocation?.kind==='new')return '조정: 새로 열어 맡김';

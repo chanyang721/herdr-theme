@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {makePanelMatrix,makePanelFixture,PANEL_IDS,eventSequence} from './panel-fixtures.mjs';
-import {cleanPanelFeed} from '../mods/sixfold-desk/panel-model.js';
+import {cleanPanelFeed,MESSAGE_LEGS,MESSAGE_TIMING} from '../mods/sixfold-desk/panel-model.js';
 
 function node(kind='div',value=null){
   const data={kind,value,nodes:[],calls:[]};let proxy;
@@ -317,8 +317,8 @@ test('curved packet targets bow outward, stay in the gutter and reverse with sen
 test('local messages paint a thin curve, bow inside24px and return to the receiver edge',async()=>{
  const r=await renderer(true),view=viewFor(makePanelFixture()),feed=view.panelState.feed;
  r.renderPanelTracking(view,t,r.cx);const layout=r.panelLayout(feed,view.panelEvents),[a,b]=feed.spaces[0].agents;
- const points=[0,40,540,1040].map(elapsed=>{
-  const packet={id:'line',kind:'message',from:a.id,to:b.id,phase:elapsed===0?'start':elapsed>=1040?'ping':'travel',elapsed};r.paths.length=0;
+ const points=[0,MESSAGE_LEGS[0],MESSAGE_LEGS[2],MESSAGE_TIMING.packetMs].map(elapsed=>{
+  const packet={id:'line',kind:'message',from:a.id,to:b.id,phase:elapsed===0?'start':elapsed>=MESSAGE_TIMING.packetMs?'ping':'travel',elapsed};r.paths.length=0;
   const tree=r.panelFlowLayer(feed,layout,{...view.panelEvents,packets:[packet]},()=>t.accent,t,true,340),head=byId(tree,'panel-packet-line');
   assert.deepEqual(r.paths.map(args=>args[1]).filter(tint=>tint.startsWith('#79D1DC')),['#79D1DC99'],'one translucent path, no wide glow layers');
   assert(r.paths[0][0].filter(step=>step[0]==='cubic_bezier_to').length>1,'curve is continuous native cubic segments');

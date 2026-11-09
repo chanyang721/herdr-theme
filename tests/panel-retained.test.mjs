@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {makePanelLoadFixture,makePanelFixture,eventSequence} from './panel-fixtures.mjs';
-import {cleanPanelFeed} from '../mods/sixfold-desk/panel-model.js';
+import {cleanPanelFeed,PANEL_TIMING} from '../mods/sixfold-desk/panel-model.js';
 
 function element(){let value;value=new Proxy({nodes:[],calls:[]},{get(target,key){
   if(key==='then')return undefined;if(key in target)return target[key];
@@ -153,7 +153,7 @@ test('a newborn placeholder hides its content until the finite packet arrival bo
     const id=[...r.controller.events.spawning][0],entity=r.controller.rows.get(id);
     const opacity=()=>{const walk=n=>[n,...n.nodes.filter(x=>x&&typeof x==='object').flatMap(walk)];return walk(entity.tree).find(n=>n.calls.some(c=>c[0]==='id'&&c[1]===`panel-agent-content-${id}`)).calls.find(c=>c[0]==='opacity')[1];};
     assert.equal(opacity(),0);assert.equal(r.controller.wakeAt,now+40);
-    const renders=r.controller.stats.renders[`row:${id}`];now+=1640;r.controller.wake.fn();r.flush();
+    const renders=r.controller.stats.renders[`row:${id}`];now+=PANEL_TIMING.packetMs;r.controller.wake.fn();r.flush();
     assert.equal(opacity(),1);assert.equal(r.controller.stats.renders[`row:${id}`],renders+1);
   }finally{r?.controller.dispose();Date.now=original;}
 });

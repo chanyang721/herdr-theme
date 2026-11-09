@@ -30,9 +30,9 @@ Agent stages 1–4 fill the distribution, work, review and acceptance slots. Sta
 0 is unstarted; stage 5 completes the task bar. The observed session `status`
 is separate: a pane can still be working after its last task reached stage 5.
 A changed stage or a new
-event replaces that bar with a label for 1.7 seconds without moving the task
+event replaces that bar with a label for about 2.5 seconds without moving the task
 title. Initial history is not replayed. A local message has a white head, two
-teal tail pieces and a thin right-side curve; it travels for one second and
+teal tail pieces and a thin right-side curve; it travels for 1.5 seconds and
 finishes with a square arrival ping. All lines occupy the same 72px gutter:
 message curves extend at most 24px beyond the card, stationary purple links
 use 30px, and remote-computer pipes start at 40px with 8px spacing. Explicit

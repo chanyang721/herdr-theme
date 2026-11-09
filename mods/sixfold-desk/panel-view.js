@@ -1,7 +1,7 @@
 import {div, svg, image, PathBuilder} from 'gpui-kit';
 import {h_flex, v_flex} from 'gpui-base';
 import {spaces, panes, shared, setShared, run, settings} from 'herdr';
-import {agentGroups, panelEventStates, panelSpaces, panelSpacePartners, PANEL_TIMING, MESSAGE_LEGS, messageLeg, agentRowState, agentHasReason, agentReason} from './panel-model.js';
+import {agentGroups, panelEventStates, panelSpaces, panelSpacePartners, PANEL_TIMING, MESSAGE_TIMING, MESSAGE_LEGS, PANEL_LEGS, messageLeg, panelLeg, agentRowState, agentHasReason, agentReason} from './panel-model.js';
 import {SESSION_STATES, sessionStatusGlyph} from './session-status.js';
 import {groupColors, paletteMode} from './collab-flow.js';
 import {rowDetailParts} from './task-row-details.js';
@@ -103,13 +103,15 @@ const text=(value,color,size=10)=>div().min_w(0).truncate().text_size(size).text
 function stageBar(agent,tag,color,t,motion,width){
   const closing=agent.closing;
   const blocked=agent.status==='blocked'||Boolean(closing?.blocked_reason);
-  const tone=blocked?t.blocked:closing?(t.ansi6||t.accent):color;
+  const tone=closing?(t.ansi6||t.accent):color;
   const active=closing?closing.step-1:Math.max(-1,Math.min(4,agent.stage-1));
   const tip=closing?closing.blocked_reason||CLOSE[active]:agent.stage===5?'완료':STAGES[active]||'대기·계획';
   const slot=h_flex().w(width<300?64:120).h(18).flex_none().gap(2).items_center().justify_end().tooltip(tag?.label||tip);
-  if(tag)return slot.child(text(tag.label,tone,9).flex_1());
+  if(tag)return slot.child(text(tag.label,blocked?t.blocked:tone,9).flex_1());
+  // Mockup ㉑: a blocked task paints only the stage it is stuck on; finished stages keep their colour.
+  const stuck=blocked?Math.max(0,active):-1;
   return slot.children(STAGES.map((_,index)=>div().id(`panel-stage-${agent.id}-${index}`).w(9).h(3).flex_none()
-    .bg(index<=active?tone:t.border)));
+    .bg(index===stuck?t.blocked:index<=active?tone:t.border)));
 }
 export function agentRow(view,agent,space,tag,state,color,t,motion){
   const compact=(view.panelWidth||224)<420;
@@ -264,13 +266,15 @@ export function route(id,a,b,color,{dashed=false,packet=null,motion=false,relati
       const initial=packet.phase==='start';let x,y,dx,dy,easing;
       if(remote){
         const elapsed=packet.elapsed;
+        const [,out,,back]=MESSAGE_LEGS;
         [x,y,dx,easing]=initial?[sourceX,start,1,'linear']
-          :elapsed<190?[flow.computer,start,150,'ease-in']
-          :elapsed<890?[flow.computer,end,700,'linear']
-          :[targetX,end,150,'ease-out'];dy=dx;
+          :elapsed<out?[flow.computer,start,out-MESSAGE_LEGS[0],'ease-in']
+          :elapsed<back?[flow.computer,end,back-out,'linear']
+          :[targetX,end,MESSAGE_TIMING.packetMs-back,'ease-out'];dy=dx;
       }else{
-        x=initial?sourceX:packet.elapsed>=540?targetX+.001:reach;y=initial?start:end;
-        dx=initial?1:500;dy=initial?1:1000;easing='ease-in-out';
+        const turn=MESSAGE_LEGS[2],travel=MESSAGE_TIMING.packetMs-MESSAGE_TIMING.startMs;
+        x=initial?sourceX:packet.elapsed>=turn?targetX+.001:reach;y=initial?start:end;
+        dx=initial?1:turn-MESSAGE_LEGS[0];dy=initial?1:travel;easing='ease-in-out';
       }
       // Stable native policies across the curve turn avoid reversal jumps.
       // Two delayed copies form the tail; only finite target changes wake JS.
@@ -309,10 +313,11 @@ export function route(id,a,b,color,{dashed=false,packet=null,motion=false,relati
     base.child(window.paint_path(path,color).absolute().left(-origin).top(0).w(flow.width+origin).h(height+3));
     if(packet&&motion&&['start','travel'].includes(packet.phase)){
       const elapsed=packet.elapsed;
-      const point=elapsed<40?{x:startX,y:a.y-top,ms:1}
-        :elapsed<300?{x:lane,y:a.y-top,ms:260}
-        :elapsed<1400?{x:lane,y:b.y-top,ms:1100}
-        :{x:endX,y:b.y-top,ms:240};
+      const [leave,down,enter]=PANEL_LEGS;
+      const point=elapsed<leave?{x:startX,y:a.y-top,ms:1}
+        :elapsed<down?{x:lane,y:a.y-top,ms:down-leave}
+        :elapsed<enter?{x:lane,y:b.y-top,ms:enter-down}
+        :{x:endX,y:b.y-top,ms:PANEL_TIMING.packetMs-enter};
       // Native delayed copies form a real fading tail, following the same
       // finite corner targets as the head. No per-frame JavaScript runs.
       for(const [index,size,opacity,delay] of [[1,6,0.8,40],[2,5,0.6,80],[3,4,0.4,120],[4,3,0.2,160]])
@@ -414,7 +419,7 @@ export function renderPanelTracking(view,t,cx,{macTitlebar=false}={}){
   const state=panelEventStates(feed,now,{previous:view.panelEvents,motion});view.panelEvents=state;view.now=now;
   let nextAt=state.nextAt;
   const reasonAt=panelReasonWake(feed,now);if(reasonAt!==null&&(nextAt===null||reasonAt<nextAt))nextAt=reasonAt;
-  for(const packet of state.packets)for(const offset of (packet.kind==='message'?MESSAGE_LEGS:[300,1400])){
+  for(const packet of state.packets)for(const offset of (packet.kind==='message'?MESSAGE_LEGS:PANEL_LEGS.slice(1))){
     const at=packet.at+offset;if(at>now&&(nextAt===null||at<nextAt))nextAt=at;
   }
   if(view.panelWakeAt!==nextAt){
