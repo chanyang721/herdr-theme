@@ -13,12 +13,23 @@ run_npm_tests() {
   if [ -z "$n" ] || [ "$n" -lt 100 ]; then echo "pre-push: ${n:-0} tests passed, at least 100 expected" >&2; return 1; fi
 }
 
+# Rust first: the JavaScript install tests run the debug executable that cargo test builds, and a fresh
+# worktree has none, so running them first failed every push from a throwaway checkout.
 checks() {
-  run_npm_tests &&
   node --check mods/sixfold-desk/main.js &&
   node --check mods/sixfold-new-space/main.js &&
   $CARGO fmt --manifest-path rust/Cargo.toml --all -- --check &&
-  run_rust_tests
+  run_rust_tests &&
+  HERDR_THEME_BIN=$(native_bin) &&
+  export HERDR_THEME_BIN &&
+  run_npm_tests
+}
+native_bin() {
+  for f in "$CARGO_TARGET_DIR/debug/herdr-theme.exe" "$CARGO_TARGET_DIR/debug/herdr-theme"; do
+    [ -f "$f" ] && { printf '%s\n' "$f"; return 0; }
+  done
+  echo "pre-push: cargo test built no herdr-theme executable in $CARGO_TARGET_DIR/debug" >&2
+  return 1
 }
 run_rust_tests() {
   # Tests stay one at a time (some set process environment); compiling uses CARGO_BUILD_JOBS below.
