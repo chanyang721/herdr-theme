@@ -76,6 +76,23 @@ pub fn model_for(agent: &str, tier: &str, models: &Value) -> Result<(String, Val
     }
     Ok(("high".into(), Value::Null))
 }
+/// The model and effort the harness engine's coordination/roles.json names for Claude high.
+pub const ENGINE_CLAUDE_HIGH: (&str, &str) = ("claude-opus-5-5", "high");
+/// The workspace's first Claude pane: a high pane with no model here (the CLI default) is launched
+/// on the engine's explicit high instead, so it carries the same `--model/--effort` flags a pane the
+/// harness dispatch opens for high does. Dispatch proves a tier only from an explicit model and
+/// effort, so a bare `claude` was never reused and every task opened a new pane (2026-11-09).
+/// A site.local.json that sets `model_tiers.claude.high` itself (even to null) is kept as it is.
+pub fn first_pane_entry(site: &Value, used: &str, entry: Value) -> Value {
+    let chosen = site["model_tiers"]["claude"]
+        .as_object()
+        .is_some_and(|t| t.contains_key("high"));
+    if entry.is_null() && used == "high" && !chosen {
+        json!({"model":ENGINE_CLAUDE_HIGH.0,"effort":ENGINE_CLAUDE_HIGH.1})
+    } else {
+        entry
+    }
+}
 pub fn flags(agent: &str, entry: &Value) -> Vec<String> {
     if entry.is_null() {
         return vec![];

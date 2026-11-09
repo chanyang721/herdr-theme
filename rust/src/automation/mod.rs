@@ -228,6 +228,7 @@ fn workspace(args: &[String]) -> Result<()> {
     let mut launched = vec![];
     if let Some(tier) = tier {
         let (used, entry) = tiers::model_for("claude", &tier, &tiers::mapping(&site))?;
+        let entry = tiers::first_pane_entry(&site, &used, entry);
         launched.push(json!({"kind":"claude","tier":tier,"tier_used":used,"model":entry["model"],"effort":entry["effort"]}));
         let mut argv = vec!["claude".into()];
         argv.extend(tiers::flags("claude", &entry));
