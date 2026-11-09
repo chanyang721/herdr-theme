@@ -70,6 +70,19 @@ before the row disappears; a supplied blocking reason keeps the row visible.
 Optional closing `memory` data distinguishes pending storage, saved memory and
 proposals; a separate memory event carries its packet to the workspace badge.
 
+Optional agent `state` names one of seven row states: `working`, `idle`,
+`needs_human`, `unseen_result`, `cleanup_wait`, `closing` or `closed`. Each has
+its own shape (dot ring, empty ring, diamond with `!`, check, moon, open box,
+closed box), so colour is never the only difference; motion off shows still
+frames. A row without a known `state` keeps the four-status mark. Optional
+`keep_reason` is one producer sentence on why the session stays open or when it
+closes, shown verbatim on a second line under the title. Optional `cleanup`
+(`{idle_since, limit_s, due_at}`, absolute times) adds a countdown to
+`cleanup_wait` and `unseen_result` rows: the sidebar counts the remaining
+minutes on its own clock and redraws only that row once a minute. After
+`due_at` it reads "다음 정리 때 닫힘". All three fields are display data only;
+the sidebar never decides whether a session is kept or closed.
+
 The Linear/Jira metadata opens a native right-side issue popover. Its three tabs
 read `issue_catalog.week`, `.milestone` and `.all`; search filters those local
 lists. The producer supplies the workspace's current-week and explicitly selected

@@ -46,7 +46,22 @@ const issueExtras = issue => ({
   ...(owns(issue, 'pinned') ? { pinned: issue.pinned === true } : {}),
   ...(owns(issue, 'milestone_id') ? { milestone_id: id(issue.milestone_id) || null } : {}),
 });
+// Optional producer row state (docs/panel-feed.md). Display only: the
+// panel never derives a state, a keep reason or a close deadline by itself.
+export const ROW_STATES = Object.freeze(['working', 'idle', 'needs_human', 'unseen_result', 'cleanup_wait', 'closing', 'closed']);
+const MAX_CLEANUP_S = 7 * 24 * 3600;
+function cleanCleanup(value) {
+  if (!object(value)) return null;
+  const since = time(value.idle_since), due = time(value.due_at), limit = value.limit_s;
+  if (since === null || due === null || !Number.isInteger(limit) || limit <= 0 || limit > MAX_CLEANUP_S || due < since) return null;
+  return { idle_since: since, limit_s: limit, due_at: due };
+}
 const agentExtras = agent => ({
+  // An unknown state is dropped, not kept as null, so the row falls back to the
+  // four-status mark exactly as an older feed does.
+  ...(ROW_STATES.includes(agent.state) ? { state: agent.state } : {}),
+  ...(owns(agent, 'keep_reason') ? { keep_reason: text(agent.keep_reason, 120) || null } : {}),
+  ...(owns(agent, 'cleanup') ? { cleanup: cleanCleanup(agent.cleanup) } : {}),
   ...(owns(agent, 'unread') ? { unread: integer(agent.unread) } : {}),
   ...(owns(agent, 'report_missing') ? { report_missing: agent.report_missing === true } : {}),
   ...(owns(agent, 'error') ? { error: text(agent.error, 300) || null } : {}),
@@ -213,6 +228,44 @@ export function agentState(agent) {
   if (agent.stage === 3) return 'review';
   if (agent.stage === 4) return 'waiting';
   return agent.status === 'working' ? 'working' : 'waiting';
+}
+// The producer's seven-state value, or null when the feed predates it. A null
+// row keeps the four-status mark; nothing here guesses the missing state.
+export const agentRowState = agent => ROW_STATES.includes(agent?.state) ? agent.state : null;
+const CLOSE_STEPS = ['보고 작성', '경험·결정 저장', '기억함 제안', '닫힘'];
+const span = seconds => seconds >= 3600 && seconds % 3600 === 0 ? `${seconds / 3600}시간` : seconds >= 60 ? `${Math.round(seconds / 60)}분` : `${seconds}초`;
+const cleanupTimer = agent => {
+  const state = agentRowState(agent);
+  return agent?.cleanup && (state === 'cleanup_wait' || state === 'unseen_result') ? agent.cleanup : null;
+};
+// True when the row carries a reason line. It does not depend on the clock, so
+// row heights and layout stay fixed while the countdown changes.
+export function agentHasReason(agent) {
+  const state = agentRowState(agent);
+  return Boolean(agent?.keep_reason || cleanupTimer(agent)
+    || state === 'closing' && agent.closing && !agent.closing.blocked_reason
+    || state === 'closed' && agent.closing?.memory?.state === 'saved');
+}
+// Reason text without the state label, and the next time the countdown text
+// changes. Remaining minutes are counted on this clock from the producer's
+// absolute `due_at`; the feed carries no pre-counted seconds.
+export function agentReason(agent, now = Date.now()) {
+  if (!agentHasReason(agent)) return { text: '', nextAt: null };
+  const state = agentRowState(agent), timer = cleanupTimer(agent), parts = [];
+  if (agent.keep_reason) parts.push(agent.keep_reason);
+  else if (state === 'closing' && agent.closing) parts.push(CLOSE_STEPS[agent.closing.step - 1]);
+  else if (state === 'closed') parts.push('기억함에 저장됨');
+  let nextAt = null;
+  if (timer) {
+    const left = timer.due_at - now;
+    if (left > 0) {
+      const minutes = Math.ceil(left / 60000);
+      if (!agent.keep_reason) parts.push(`${span(timer.limit_s)} 쉬면 닫힘`);
+      parts[parts.length - 1] += ` (남은 ${minutes}분)`;
+      nextAt = timer.due_at - (minutes - 1) * 60000;
+    } else if (!parts.some(part => part.includes('다음 정리 때 닫힘'))) parts.push('다음 정리 때 닫힘');
+  }
+  return { text: parts.join(' · '), nextAt };
 }
 // The producer supplies recent-first arrays. Stable sorting keeps that order
 // within each display state; opaque IDs and extra fields carry no date meaning.

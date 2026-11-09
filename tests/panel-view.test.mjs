@@ -33,6 +33,10 @@ async function renderer(motion=true,{nativeSpaces=[],nativePanes=[]}={}){
   const details=(await readFile(new URL('../mods/sixfold-desk/task-row-details.js',import.meta.url),'utf8'))
     .replace(/import \{([^}]+)\} from 'gpui-kit';/,'const {$1}=globalThis.__panelView;');
   source=source.replace("'./task-row-details.js'",JSON.stringify(`data:text/javascript;base64,${Buffer.from(details).toString('base64')}#${serial}`));
+  const status=(await readFile(new URL('../mods/sixfold-desk/session-status.js',import.meta.url),'utf8'))
+    .replace(/import \{([^}]+)\} from 'gpui-kit';/,'const {$1}=globalThis.__panelView;')
+    .replace("'./collab-flow.js'",JSON.stringify(new URL('../mods/sixfold-desk/collab-flow.js',import.meta.url).href));
+  source=source.replace("'./session-status.js'",JSON.stringify(`data:text/javascript;base64,${Buffer.from(status).toString('base64')}#${serial}`));
   const mod=await import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}#${serial++}`);
   const timers=[],cx={notify(){},timer:{after:(ms,fn)=>{timers.push({ms,fn});return {cancel(){}};}}};
   return {...mod,cx,timers,commands,paths,store};
@@ -380,4 +384,64 @@ test('closing warnings do not replace the observed working marker or summary',as
  assert(words(byId(row,'panel-status-'+agent.id)).includes(String.fromCodePoint(0x25cf)));
  assert(call(row,'tooltip')[1].includes(agent.closing.blocked_reason));
  assert.deepEqual(r.panelCounts({spaces:[{agents:[agent]}]}),{working:1,idle:0,blocked:0,done:0,total:1});
+});
+
+// Mockup 26: producer row state, keep reason and cleanup countdown.
+const stateRow=async(fields,{motion=false,now=Date.parse('2026-11-09T05:00:00Z'),tag=null}={})=>{
+ const r=await renderer(motion),raw=makePanelFixture();Object.assign(raw.spaces[0].agents[0],{stage:2,status:'idle',closing:null},fields);
+ const view=viewFor(raw);view.now=now;const space=view.panelState.feed.spaces[0],agent=space.agents[0];
+ const state={packets:[],connections:[],spawning:new Set(),active:[]};
+ return {r,view,space,agent,row:r.agentRow(view,agent,space,tag,state,t.accent,t,motion)};
+};
+const reasonOf=(row,agent)=>words(byId(row,`panel-reason-${agent.id}`)||{nodes:[]}).join('');
+
+test('a seven-state row draws the packaged glyph and its reason with the live countdown',async()=>{
+ const cleanup={idle_since:'2026-11-09T04:42:00Z',limit_s:1800,due_at:'2026-11-09T05:12:00Z'};
+ const {agent,row}=await stateRow({status:'idle',state:'cleanup_wait',cleanup},{motion:true});
+ const glyph=all(byId(row,`panel-status-${agent.id}`)).find(n=>n.kind==='image');
+ assert.equal(glyph.value,'mods/sixfold-desk/icons/status/cleanup_wait-12-dark.webp');
+ assert.equal(reasonOf(row,agent),'정리 대기 · 30분 쉬면 닫힘 (남은 12분)');
+ assert.equal(call(row,'h')[1],28+14);
+ assert(call(row,'tooltip')[1].includes('남은 12분'));
+});
+
+test('keep reasons are shown verbatim, needs_human maps to its asset and motion-off uses stills',async()=>{
+ let {agent,row}=await stateRow({status:'blocked',state:'needs_human',keep_reason:'사람 확인 기다림 · 닫지 않음'});
+ assert.equal(all(byId(row,`panel-status-${agent.id}`)).find(n=>n.kind==='image').value,'mods/sixfold-desk/icons/status/needs_input-12-dark.png');
+ assert.equal(reasonOf(row,agent),'확인 필요 · 사람 확인 기다림 · 닫지 않음');
+ ({agent,row}=await stateRow({status:'done',state:'unseen_result',keep_reason:'수락 대기라 유지'}));
+ assert.equal(call(row,'opacity')[1],1,'an unseen result is not dimmed');assert.equal(reasonOf(row,agent),'결과 안 봄 · 수락 대기라 유지');
+ ({agent,row}=await stateRow({status:'idle',state:'closed',closing:{step:4,blocked_reason:'',memory:{state:'saved',proposals:0}}}));
+ assert.equal(call(row,'opacity')[1],0.52);assert.equal(reasonOf(row,agent),'닫힘 · 기억함에 저장됨');
+ ({agent,row}=await stateRow({status:'idle',state:'closing',closing:{step:2,blocked_reason:''}}));
+ assert.equal(reasonOf(row,agent),'닫는 중 · 경험·결정 저장');
+});
+
+test('an event tag freezes the glyph, and an expired timer says the next cleanup closes it',async()=>{
+ const cleanup={idle_since:'2026-11-09T04:00:00Z',limit_s:1800,due_at:'2026-11-09T04:30:00Z'};
+ const {agent,row}=await stateRow({state:'cleanup_wait',cleanup},{motion:true,tag:{id:'x',label:'검수 요청'}});
+ assert(all(row).find(n=>n.kind==='image').value.endsWith('cleanup_wait-12-dark.png'));
+ assert.equal(reasonOf(row,agent),'정리 대기 · 다음 정리 때 닫힘');
+});
+
+test('a feed without state keeps the four-status mark, one-line height and no reason line',async()=>{
+ const {agent,row}=await stateRow({status:'working'});
+ assert(words(byId(row,`panel-status-${agent.id}`)).includes('●'));assert(!all(row).some(n=>n.kind==='image'));
+ assert.equal(byId(row,`panel-reason-${agent.id}`),undefined);assert.equal(call(row,'h')[1],28);
+ const unknown=await stateRow({status:'working',state:'paused',cleanup:{idle_since:'x',limit_s:-1,due_at:'y'}});
+ assert(words(byId(unknown.row,`panel-status-${unknown.agent.id}`)).includes('●'));assert.equal(byId(unknown.row,`panel-reason-${unknown.agent.id}`),undefined);
+ const kept=await stateRow({status:'working',keep_reason:'하위 작업 2개 있어 유지'});
+ assert.equal(reasonOf(kept.row,kept.agent),'작업 중 · 하위 작업 2개 있어 유지','a keep reason without state uses the four-status label');
+});
+
+test('two-line rows grow the card while routes stay on the title line, and the countdown wakes once a minute',async()=>{
+ const now=Date.now(),r=await renderer(false),raw=makePanelFixture();
+ Object.assign(raw.spaces[0].agents[0],{status:'idle',state:'cleanup_wait',cleanup:{idle_since:new Date(now-60000).toISOString(),limit_s:1800,due_at:new Date(now+90500).toISOString()}});
+ const view=viewFor(raw),plain=viewFor(makePanelFixture());
+ const layout=r.panelLayout(view.panelState.feed,{tags:new Map()}),before=r.panelLayout(plain.panelState.feed,{tags:new Map()});
+ const id=view.panelState.feed.spaces[0].agents[0].id,row=layout.cards[0].rows.find(item=>item.agent?.id===id);
+ assert.equal(layout.cards[0].height,before.cards[0].height+14);
+ assert.equal(layout.anchors.get(id).y,row.y+14);
+ r.renderPanelTracking(view,t,r.cx);
+ const wake=r.timers.at(-1).ms;assert(wake>25000&&wake<=30600,`wakes at the next minute boundary, got ${wake}`);
 });

@@ -1,8 +1,8 @@
 import {View,div,svg} from 'gpui-kit';
 import {h_flex,v_flex,InputState,Input} from 'gpui-base';
 import {theme,spaces,shared,setShared,settings,window} from 'herdr';
-import {projectPanelFeed,panelEventStates,panelSpaces,panelSpacePartners,PANEL_TIMING,MESSAGE_LEGS,messageLeg} from './panel-model.js';
-import {panelLayout,cardView,agentRow,panelFlowLayer,panelCounts,PANEL_GEOMETRY,toolIcon} from './panel-view.js';
+import {projectPanelFeed,panelEventStates,panelSpaces,panelSpacePartners,PANEL_TIMING,MESSAGE_LEGS,messageLeg,agentHasReason,agentReason} from './panel-model.js';
+import {panelLayout,cardView,agentRow,panelFlowLayer,panelCounts,PANEL_GEOMETRY,toolIcon,panelReasonWake} from './panel-view.js';
 import {groupColors,paletteMode} from './collab-flow.js';
 import {issuePopover} from './task-issues-view.js';
 import {issueScopeData,issueCacheLabel} from './task-issue-state.js';
@@ -194,7 +194,7 @@ export function createRetainedPanel(cx,{macTitlebar=false,onClassic=null,onDispo
     const nextTheme=signature(theme());
     c.hostVisible=typeof window!=='function'||window()?.visible!==false;
     c.preferenceKey=signature([shared('sixfold.motion'),c.enabled,c.visible,c.hostVisible,panelWidthClass(c.panelWidth),nextTheme]);
-    c.input=input;c.status=status;
+    c.input=input;c.status=status;c.now=Date.now();
     if(!c.visible||!c.hostVisible||!c.enabled){
       c.motion=false;c.events=panelEventStates(input,Date.now(),{motion:false});
       c.wake?.cancel();c.wake=null;c.wakeAt=null;
@@ -222,7 +222,9 @@ export function createRetainedPanel(cx,{macTitlebar=false,onClassic=null,onDispo
       const group=c.projection.groups.get(space.id);
       return [space.id,group.grouped,group.grouped?group.groups.map(g=>[g.issue?.key,g.agents.map(a=>a.id),g.folds]):[group.agents.map(a=>a.id),group.folds],group.issueHidden,group.issuesExpanded];
     });
-    c.layoutKey=signature([c.feed.computers.map(computer=>computer.id),topology]);
+    // Rows with a reason line are taller, so their set is part of the layout.
+    const reasonRows=c.feed.spaces.flatMap(space=>space.agents.filter(agentHasReason).map(agent=>agent.id));
+    c.layoutKey=signature([c.feed.computers.map(computer=>computer.id),topology,reasonRows]);
     if(c.layoutKey!==oldLayoutKey)c.layout=panelLayout(c.feed,c.events,spaces(),c.projection.groups);
     else if(c.layout)c.layout={...c.layout,cards:c.layout.cards.map(card=>({...card,space:c.spaceMap.get(card.space.id)}))};
     let structure=false;
@@ -233,7 +235,7 @@ export function createRetainedPanel(cx,{macTitlebar=false,onClassic=null,onDispo
           ||!c.motion&&c.events.connections.some(event=>event.kind==='message'&&event.to===agent.id);
         const born=c.events.spawning.has(agent.id);
         const revealed=c.motion&&born&&c.events.active.some(event=>event.to===agent.id&&(event.kind==='spawn'||event.allocation?.kind==='new')&&event.elapsed>=PANEL_TIMING.packetMs);
-        const rowKey=signature([agent,c.rowMeta.get(agent.id),tag?.id||null,tag?.label||null,ping,born,revealed,c.motion,panelWidthClass(c.panelWidth),c.themeRevision]);
+        const rowKey=signature([agent,agentReason(agent,c.now).text,c.rowMeta.get(agent.id),tag?.id||null,tag?.label||null,ping,born,revealed,c.motion,panelWidthClass(c.panelWidth),c.themeRevision]);
         if(c.rowKeys.get(agent.id)!==rowKey){c.rowKeys.set(agent.id,rowKey);c.notify(c.rows.get(agent.id));}
       }
       if(!c.cards.has(space.id)){c.cards.set(space.id,make(PanelSpace,space.id));structure=true;}
@@ -261,6 +263,8 @@ export function createRetainedPanel(cx,{macTitlebar=false,onClassic=null,onDispo
     c.wake?.cancel();c.wake=null;c.wakeAt=null;
     if(c.visible&&c.hostVisible&&c.enabled){
       let at=c.events.nextAt;const now=Date.now();
+      // Countdown text changes once a minute at most; only rows with a timer wake.
+      const reasonAt=panelReasonWake(c.feed,now);if(reasonAt!==null&&(at===null||reasonAt<at))at=reasonAt;
       for(const packet of c.events.packets)for(const offset of (packet.kind==='message'?MESSAGE_LEGS:[300,1400])){
         const boundary=packet.at+offset;if(boundary>now&&(at===null||boundary<at))at=boundary;
       }

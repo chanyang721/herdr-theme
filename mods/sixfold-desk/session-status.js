@@ -3,14 +3,15 @@ import {paletteMode} from './collab-flow.js';
 
 // Display states are supplied by a producer. This module does not decide
 // whether a session may be kept, closed, or given an idle deadline.
+// Keys follow the panel feed's `state` names; `asset` is the packaged file stem.
 export const SESSION_STATES=Object.freeze({
-  working:{label:'작업 중',shape:'spinner',animated:true},
-  idle:{label:'쉬는 중',shape:'ring',animated:false},
-  needs_input:{label:'사람 확인 필요',shape:'diamond',animated:true},
-  unseen_result:{label:'안 본 결과',shape:'check',animated:true},
-  cleanup_wait:{label:'정리 대기',shape:'moon',animated:true},
-  closing:{label:'닫는 중',shape:'tray',animated:true},
-  closed:{label:'닫힘',shape:'box',animated:false},
+  working:{label:'작업 중',shape:'spinner',animated:true,asset:'working'},
+  idle:{label:'쉬는 중',shape:'ring',animated:false,asset:'idle'},
+  needs_human:{label:'확인 필요',shape:'diamond',animated:true,asset:'needs_input'},
+  unseen_result:{label:'결과 안 봄',shape:'check',animated:true,asset:'unseen_result'},
+  cleanup_wait:{label:'정리 대기',shape:'moon',animated:true,asset:'cleanup_wait'},
+  closing:{label:'닫는 중',shape:'tray',animated:true,asset:'closing'},
+  closed:{label:'닫힘',shape:'box',animated:false,asset:'closed'},
 });
 const text=value=>typeof value==='string'?value.replace(/[\u0000-\u001f\u007f]/g,' ').trim().slice(0,240):'';
 export function sessionDisplay(value){
@@ -25,7 +26,7 @@ export function sessionStatusAsset(value,t,{size=12,motion=true,visible=true,eve
   const state=sessionDisplay(value);if(!state)return null;
   const pixels=size===16?16:12;
   const animated=state.animated&&motion&&visible&&!eventActive;
-  return {path:`mods/sixfold-desk/icons/status/${state.state}-${pixels}-${paletteMode(t)}.${animated?'webp':'png'}`,size:pixels,animated};
+  return {path:`mods/sixfold-desk/icons/status/${state.asset}-${pixels}-${paletteMode(t)}.${animated?'webp':'png'}`,size:pixels,animated};
 }
 export function sessionStatusGlyph(value,t,options={}){
   const asset=sessionStatusAsset(value,t,options);if(!asset)return null;

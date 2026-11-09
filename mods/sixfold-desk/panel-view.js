@@ -1,17 +1,27 @@
 import {div, svg, image, PathBuilder} from 'gpui-kit';
 import {h_flex, v_flex} from 'gpui-base';
 import {spaces, panes, shared, setShared, run, settings} from 'herdr';
-import {agentGroups, panelEventStates, panelSpaces, panelSpacePartners, PANEL_TIMING, MESSAGE_LEGS, messageLeg} from './panel-model.js';
+import {agentGroups, panelEventStates, panelSpaces, panelSpacePartners, PANEL_TIMING, MESSAGE_LEGS, messageLeg, agentRowState, agentHasReason, agentReason} from './panel-model.js';
+import {SESSION_STATES, sessionStatusGlyph} from './session-status.js';
 import {groupColors, paletteMode} from './collab-flow.js';
 import {rowDetailParts} from './task-row-details.js';
 import {PANEL_FLOW, panelFlowAnchor, panelMessageAnchors, messageFlowGeometry, messageCurveReach, computerFlow} from './panel-host.js';
 
 const MARK={working:'●',idle:'○',blocked:'!',done:'✓'};
+const STATUS_LABEL={working:'작업 중',idle:'쉬는 중',blocked:'막힘',done:'완료'};
 const STAGES=['배분','작업','검수','수락 대기'];
 const CLOSE=['보고 작성','경험·결정 저장','기억함 제안','닫힘'];
 const ISSUE={blocked:'막힘',working:'진행 중',review:'검수',waiting:'대기',done:'완료'};
-const RIGHT=PANEL_FLOW.gutter, ROW=28;
-export const PANEL_GEOMETRY=Object.freeze({header:34,meta:26,issue:18,row:ROW,child:20,border:1,bottom:4,gap:4,padding:7,rightGutter:RIGHT,popoverGap:10});
+const RIGHT=PANEL_FLOW.gutter, ROW=28, REASON=14;
+export const PANEL_GEOMETRY=Object.freeze({header:34,meta:26,issue:18,row:ROW,reason:REASON,child:20,border:1,bottom:4,gap:4,padding:7,rightGutter:RIGHT,popoverGap:10});
+// A root row with a producer reason gets one fixed extra line (mockup 26).
+export const agentRowHeight=(agent,child=false)=>child?PANEL_GEOMETRY.child:ROW+(agentHasReason(agent)?REASON:0);
+// Wake time for the earliest countdown text change among the feed's rows.
+export function panelReasonWake(feed,now){
+  let at=null;
+  for(const agent of (feed?.spaces||[]).flatMap(space=>space.agents)){const next=agentReason(agent,now).nextAt;if(next!==null&&next>now&&(at===null||next<at))at=next;}
+  return at;
+}
 export function panelCounts(feed){
   const counts={working:0,idle:0,blocked:0,done:0,total:0};
   for(const agent of (feed?.spaces||[]).flatMap(space=>space.agents)){
@@ -57,8 +67,9 @@ export function panelLayout(feed, eventState, nativeSpaces=[],groupMap=null) {
     for(const group of groupRows){
       if(groups.grouped){card.rows.push({kind:'issue',group,y:row});row+=PANEL_GEOMETRY.issue;}
       for(const agent of group.agents){
-        const height=groups.rowMeta?.get(agent.id)?.parent?PANEL_GEOMETRY.child:ROW;
-        anchors.set(agent.id,{y:row+height/2,kind:'agent',space:space.id,computer:space.computer});
+        const child=Boolean(groups.rowMeta?.get(agent.id)?.parent),height=agentRowHeight(agent,child);
+        // Routes meet the title line, which stays at the top of a two-line row.
+        anchors.set(agent.id,{y:row+(child?height:ROW)/2,kind:'agent',space:space.id,computer:space.computer});
         card.rows.push({kind:'agent',agent,y:row,height});row+=height;
         for(const fold of group.folds||[])if(fold.after===agent.id){card.rows.push({kind:'children-more',fold,y:row});row+=22;}
       }
@@ -108,6 +119,12 @@ export function agentRow(view,agent,space,tag,state,color,t,motion){
   // Task/closing warnings remain in the stage bar and tooltip; the status mark
   // follows the producer's observed pane status.
   const status=agent.status;
+  // Mockup 26: the producer's seven-state glyph replaces the four-status mark
+  // when present; an older feed keeps the mark. The reason sits on a second line.
+  const rowState=agentRowState(agent);
+  const reasonText=child?'':agentReason(agent,view.now??Date.now()).text;
+  const stateLabel=rowState?SESSION_STATES[rowState].label:STATUS_LABEL[status]||'';
+  const reasonLine=reasonText?(reasonText.startsWith(stateLabel)?reasonText:[stateLabel,reasonText].filter(Boolean).join(' · ')):'';
   const pulse=state.packets.some(event=>event.to===agent.id&&event.phase==='ping')
     ||!motion&&state.connections?.some(event=>event.kind==='message'&&event.to===agent.id);
   const born=state.spawning.has(agent.id);
@@ -116,11 +133,12 @@ export function agentRow(view,agent,space,tag,state,color,t,motion){
   const stacked=view.embedded&&(view.panelWidth||224)<260&&!child;
   const line=h_flex().id(`panel-agent-content-${agent.id}`).w_full().min_w(0).gap(5).items_center().opacity(ghost?0:1)
     .when(born&&motion,e=>e.transition('opacity',{duration:180,easing:'ease-out'}));
-  const row=h_flex().id(`panel-agent-${agent.id}`).relative().h(child?PANEL_GEOMETRY.child:ROW).flex_none().pl(child?30+(depth-1)*16:7).pr(7).gap(5).items_center().rounded(3)
-    .opacity(status==='done'||agent.report_missing?0.52:1)
+  const dimmed=rowState?rowState==='closed':status==='done';
+  const row=h_flex().id(`panel-agent-${agent.id}`).relative().h(child?PANEL_GEOMETRY.child:ROW+(reasonLine?REASON:0)).flex_none().pl(child?30+(depth-1)*16:7).pr(7).gap(5).items_center().rounded(3)
+    .opacity(dimmed||agent.report_missing?0.52:1)
     .when(born,e=>e.border(1).border_dashed().border_color(color))
     .when(pulse,e=>e.border(1).border_color(color))
-    .tooltip([agent.title,agent.tooltip_addr,agent.closing?.blocked_reason,detail.tooltip].filter(Boolean).join('\n'))
+    .tooltip([agent.title,agent.tooltip_addr,agent.closing?.blocked_reason,reasonLine,detail.tooltip].filter(Boolean).join('\n'))
     .when(Boolean(agent.nav)&&agent.closing?.step!==4,e=>e.cursor_pointer().hover(h=>h.bg(t.hover))
       .on_click((_event,cx)=>{cx.stop_propagation();navigatePanelAgent(agent);}));
   line
@@ -134,12 +152,20 @@ export function agentRow(view,agent,space,tag,state,color,t,motion){
   const showStage=!child&&(agent.closing||tag||agent.stage!==5&&status!=='done');
   if(showStage&&!stacked)line.child(stageBar(agent,tag,color,t,motion,view.panelWidth||224));
   const remembered=agent.closing?.memory;
-  if(!child||detail.statusMark)line.child(div().id(`panel-status-${agent.id}`).w(9).flex_none().text_size(10)
+  // Error and quota marks still take the slot; otherwise a producer state draws
+  // its glyph, held still during an event tag on this row.
+  const glyph=!detail.statusMark&&rowState&&!child?sessionStatusGlyph({state:rowState,reason:reasonText},t,{id:agent.id,size:12,motion,eventActive:Boolean(tag)}):null;
+  if(glyph)line.child(div().id(`panel-status-${agent.id}`).w(12).flex_none().child(glyph));
+  else if(!child||detail.statusMark)line.child(div().id(`panel-status-${agent.id}`).w(9).flex_none().text_size(10)
     .text_color(detail.statusColor|| (status==='blocked'?t.blocked:status==='working'?color:t.dim))
     .tooltip(remembered?`${remembered.state==='pending'?'기억 저장 대기':remembered.state==='saved'?'기억함에 저장됨':'기억 제안'}${remembered.proposals?` ${remembered.proposals}`:''}`:status)
     .child(detail.statusMark||(remembered?(remembered.state==='pending'?'◌':'◈'):MARK[status])||'?'));
+  const reason=reasonLine?div().id(`panel-reason-${agent.id}`).h(REASON).flex_none().pl(18).min_w(0).truncate().text_size(10).text_color(t.muted)
+    .tooltip(reasonLine).accessibility_label(reasonLine).child(reasonLine):null;
   if(stacked)row.child(v_flex().id(`panel-stacked-${agent.id}`).w_full().min_w(0).child(line)
-    .when(Boolean(showStage),e=>e.child(stageBar(agent,tag,color,t,motion,224).h(tag?10:7).ml(18).w(52).justify_start().opacity(ghost?0:1))));
+    .when(Boolean(showStage),e=>e.child(stageBar(agent,tag,color,t,motion,224).h(tag?10:7).ml(18).w(52).justify_start().opacity(ghost?0:1)))
+    .when(Boolean(reason),e=>e.child(reason)));
+  else if(reason)row.child(v_flex().id(`panel-lines-${agent.id}`).w_full().min_w(0).child(line.h(ROW-2)).child(reason));
   else row.child(line);
   return row;
 }
@@ -382,8 +408,9 @@ export function renderPanelTracking(view,t,cx,{macTitlebar=false}={}){
   const feed=view.panelState.feed;
   const motion=shared('sixfold.motion')!==false&&feed.reduced_motion!==true&&view.panelReducedMotion!==true;
   const now=Date.now();
-  const state=panelEventStates(feed,now,{previous:view.panelEvents,motion});view.panelEvents=state;
+  const state=panelEventStates(feed,now,{previous:view.panelEvents,motion});view.panelEvents=state;view.now=now;
   let nextAt=state.nextAt;
+  const reasonAt=panelReasonWake(feed,now);if(reasonAt!==null&&(nextAt===null||reasonAt<nextAt))nextAt=reasonAt;
   for(const packet of state.packets)for(const offset of (packet.kind==='message'?MESSAGE_LEGS:[300,1400])){
     const at=packet.at+offset;if(at>now&&(nextAt===null||at<nextAt))nextAt=at;
   }

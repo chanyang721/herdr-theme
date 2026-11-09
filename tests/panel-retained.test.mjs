@@ -26,6 +26,9 @@ async function runtime(motion=false,options={}){
   const detailsUrl=await localModule('task-row-details'),issuesUrl=await localModule('task-issues-view');
   let view=transform(await readFile(new URL('../mods/sixfold-desk/panel-view.js',import.meta.url),'utf8'));
   view=view.replace("'./task-row-details.js'",JSON.stringify(detailsUrl));
+  const statusSource=transform(await readFile(new URL('../mods/sixfold-desk/session-status.js',import.meta.url),'utf8'))
+    .replace("'./collab-flow.js'",JSON.stringify(new URL('../mods/sixfold-desk/collab-flow.js',import.meta.url).href));
+  view=view.replace("'./session-status.js'",JSON.stringify(`data:text/javascript;base64,${Buffer.from(statusSource).toString('base64')}#${loads++}`));
   for(const name of ['panel-model','collab-flow','panel-host'])view=view.replace(`'./${name}.js'`,JSON.stringify(new URL(`../mods/sixfold-desk/${name}.js`,import.meta.url).href));
   const viewUrl=`data:text/javascript;base64,${Buffer.from(view).toString('base64')}#${loads++}`;
   let source=transform(await readFile(new URL('../mods/sixfold-desk/panel-retained.js',import.meta.url),'utf8'));
@@ -243,4 +246,23 @@ test('opening another space closes the previous issue popup and only its retaine
   assert(!r.controller.issueStates.get(a.id).open);assert(r.controller.issueStates.get(b.id).open);
   assert.equal(r.controller.issueStates.size,2,'local search/pending state is retained when another popup opens');
  }finally{r.controller.dispose();}
+});
+
+test('a cleanup countdown wakes only at its minute boundary and re-renders just that row',async()=>{
+  const original=Date.now;let now=1780000000000;Date.now=()=>now;let r;
+  try{
+    r=await runtime(false);const raw=makePanelFixture({now});
+    Object.assign(raw.spaces[0].agents[0],{status:'idle',state:'cleanup_wait',cleanup:{idle_since:new Date(now-60000).toISOString(),limit_s:1800,due_at:new Date(now+90000).toISOString()}});
+    r.controller.apply(cleanPanelFeed(raw),'ready');r.flush();
+    const id=raw.spaces[0].agents[0].id,entity=r.controller.rows.get(id);
+    const reason=()=>{const walk=n=>[n,...n.nodes.filter(x=>x&&typeof x==='object').flatMap(walk)];
+      return walk(entity.tree).find(n=>n.calls.some(c=>c[0]==='id'&&c[1]===`panel-reason-${id}`)).nodes.join('');};
+    assert.equal(reason(),'정리 대기 · 30분 쉬면 닫힘 (남은 2분)');assert.equal(r.controller.wakeAt,now+30000);
+    const renders={...r.controller.stats.renders};now+=30000;r.controller.wake.fn();r.flush();
+    assert.equal(reason(),'정리 대기 · 30분 쉬면 닫힘 (남은 1분)');
+    const changed=Object.keys(r.controller.stats.renders).filter(key=>r.controller.stats.renders[key]!==renders[key]);
+    assert.deepEqual(changed,[`row:${id}`]);
+    now+=60000;r.controller.wake.fn();r.flush();
+    assert.equal(reason(),'정리 대기 · 다음 정리 때 닫힘');assert.equal(r.controller.wake,null,'no timer after the deadline');
+  }finally{r?.controller.dispose();Date.now=original;}
 });
