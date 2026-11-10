@@ -25,6 +25,19 @@ test('fuzzy matching ranks prefix, word start, substring and scattered letters i
   assert.deepEqual(names(docsView(items,{query:'없는말',now:NOW}).rows),[]);
 });
 
+test('path pieces, a parent folder the label leaves out and a pasted full path all find the file; scattered letters in a path do not',()=>{
+  const path='/work/Alpha/docs/sub/guide.md';
+  const items=prepareDocs(group([{path,name:'guide.md',folder:'/work/Alpha/docs/sub',sourceRoot:'/work/Alpha/docs',mtime:NOW},
+    file('/r/Reports/sub-guide-notes.md'),{path:'C:\\Users\\me\\Beta\\plan.md',name:'plan.md',folder:'C:\\Users\\me\\Beta',sourceRoot:'C:\\Users\\me',mtime:NOW}]));
+  for(const query of ['sub/guide','Alpha','alpha docs',path,'docs/sub/guide.md'])
+    assert.deepEqual(docsView(items,{query,now:NOW}).rows.map(row=>row.path).filter(p=>p===path),[path],query);
+  assert.deepEqual(docsView(items,{query:'sub/guide',now:NOW}).rows.map(row=>row.path),[path],'a slash piece matches only real paths');
+  assert.deepEqual(docsView(items,{query:'beta\\plan',now:NOW}).rows.map(row=>row.name),['plan.md'],'Windows separators match either way');
+  assert.deepEqual(docsView(items,{query:'beta/plan',now:NOW}).rows.map(row=>row.name),['plan.md']);
+  assert.deepEqual(docsView(items,{query:'wkapd',now:NOW}).rows,[],'scattered letters across the path are not a match');
+  assert.deepEqual(docsView(items,{query:'guide',now:NOW}).rows.map(row=>row.name),['guide.md','sub-guide-notes.md'],'a name hit still ranks by the name');
+});
+
 test('NFC and NFD names and queries match each other, case-insensitively',()=>{
   for(const nameForm of ['NFC','NFD'])for(const queryForm of ['NFC','NFD']){
     const items=prepareDocs(group([file(`/r/Reports/${'프로젝트비-Report.md'.normalize(nameForm)}`),file('/r/Reports/other.md')]));
@@ -100,21 +113,20 @@ test('keyboard selection wraps and the opened record keeps the newest 200 valid 
   assert.equal(openedFromJson(null).size,0);
 });
 
-test('thousands of documents: preparing once and filtering per keystroke stay well inside a frame budget',()=>{
-  const files=Array.from({length:5000},(_,i)=>file(`/r/Reports/${['고객사','ops','herdr','자료/아카이브'][i%4]}/2026${String(1+i%12).padStart(2,'0')}${String(1+i%28).padStart(2,'0')}_${['주간보고','설계','회의록','검토결과','decision'][i%5]}_${i}.${['md','md','pdf','html'][i%4]}`,NOW-i*3600000));
-  const g=group(files);
-  let started=performance.now();const items=prepareDocs(g);const prepareMs=performance.now()-started;
+test('thousands of documents: one keystroke over 5000 files filters and sorts well inside a 50ms input budget',()=>{
+  const make=()=>group(Array.from({length:5000},(_,i)=>file(`/r/Reports/${['고객사','ops','herdr','자료/아카이브'][i%4]}/2026${String(1+i%12).padStart(2,'0')}${String(1+i%28).padStart(2,'0')}_${['주간보고','설계','회의록','검토결과','decision'][i%5]}_${i}.${['md','md','pdf','html'][i%4]}`,NOW-i*3600000)));
+  // A keystroke's cost is the work, not what else the machine runs: each case is timed five times
+  // and its fastest run is compared, so a parallel test run or a busy CPU cannot fail it.
+  const fastest=(fn,runs=5)=>{let best=Infinity;for(let i=0;i<runs;i++){const at=performance.now();fn();best=Math.min(best,performance.now()-at);}return best;};
+  const prepare=fastest(()=>prepareDocs(make()),3);
+  const g=make(),items=prepareDocs(g);
   assert.equal(prepareDocs(g),items,'prepared once per index snapshot');
-  const queries=['ㄱ','고','고객','고객사 ','고객사','고객사 주','고객사 주간','설계','dec','2026'];
-  // Timing under a parallel test run is noisy: the median keystroke is the budget, the worst only a guard.
-  const times=[];
-  for(const query of queries){started=performance.now();const view=docsView(items,{query,now:NOW});times.push(performance.now()-started);assert.ok(view.rows.length>=0);}
-  started=performance.now();docsView(items,{sort:'name',archive:true,now:NOW});const sortMs=performance.now()-started;
-  times.sort((a,b)=>a-b);const median=times[Math.floor(times.length/2)],worst=times.at(-1);
-  assert.ok(prepareMs<500,`prepare ${prepareMs.toFixed(1)}ms`);
-  assert.ok(median<30,`median keystroke ${median.toFixed(1)}ms`);
-  assert.ok(worst<200,`worst keystroke ${worst.toFixed(1)}ms`);
-  assert.ok(sortMs<200,`name sort ${sortMs.toFixed(1)}ms`);
+  const cases=['ㄱ','고','고객','고객사 ','고객사 주간','설계','dec','2026','ops/2026','자료/아카이브','/r/Reports/herdr/2026'].map(query=>({query}));
+  cases.push({sort:'name',archive:true},{kind:'pdf',period:'month'},{tab:'opened',opened:new Map([[items[0].key,NOW]])});
+  const times=cases.map(options=>[JSON.stringify(options),fastest(()=>docsView(items,{now:NOW,...options}))]);
+  const worst=times.reduce((a,b)=>b[1]>a[1]?b:a);
+  assert.ok(prepare<500,`prepare ${prepare.toFixed(1)}ms`);
+  assert.ok(worst[1]<50,`slowest keystroke ${worst[0]} ${worst[1].toFixed(1)}ms`);
 });
 
 // ---- The popover against a recording UI runtime ----
