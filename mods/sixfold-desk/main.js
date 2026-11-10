@@ -134,9 +134,15 @@ export default class SixfoldDesk extends View {
     if (props()?.role !== 'sidebar') return;
     const fileReceiver=fileDelivery(cx);
     this.sidebarVisible=typeof window!=='function'||window()?.visible!==false;
-    this.invalidateSidebar=()=>fileReceiver.enqueue(()=>cx.notify());
-    this.refreshPanelPreferences=()=>fileReceiver.enqueue(()=>this.panelRetained?.preferences());
-    this.refreshPanelNavigation=()=>fileReceiver.enqueue(()=>this.panelRetained?.navigation());
+    // The receiver keeps one entry per callback until a FILE_CHANGED command flushes it, and a
+    // hidden or retired receiver may never get that command. A fresh arrow per call would add an
+    // entry every time; these fixed callbacks keep at most one pending entry each.
+    const notifySidebar=()=>cx.notify();
+    const panelPreferences=()=>this.panelRetained?.preferences();
+    const panelNavigation=()=>this.panelRetained?.navigation();
+    this.invalidateSidebar=()=>fileReceiver.enqueue(notifySidebar);
+    this.refreshPanelPreferences=()=>fileReceiver.enqueue(panelPreferences);
+    this.refreshPanelNavigation=()=>fileReceiver.enqueue(panelNavigation);
     this.classicCards=createRetainedCards(cx);
     this.panelState={feed:null,status:'missing'};
     this.panelEvents=null;

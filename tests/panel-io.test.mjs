@@ -268,3 +268,16 @@ test('hidden subscription churn removes queued dead callbacks without losing a l
   assert.equal(f.commands.length,before+50,'each new subscription lifetime can wake after its predecessor is released');
   receiver.flush();assert.equal(dead.length,0);assert.equal(rows.length,1);peer();
 });
+
+test('a receiver that never gets its command keeps one entry per callback, and the sidebar passes fixed callbacks',async()=>{
+  // A hidden or retired receiver never consumes FILE_CHANGED, so nothing flushes the queue.
+  const f=await fixture(),cx=f.context(),receiver=f.io.fileDelivery(cx),state=globalThis.__sixfoldFileDeliveries.get(cx);
+  const fixed=()=>{};
+  for(let i=0;i<1000;i++)receiver.enqueue(fixed,i);
+  assert.equal(state.queue.length,1);assert.equal(state.queue[0][1],999);
+  for(let i=0;i<10;i++)receiver.enqueue(()=>{},i);
+  assert.equal(state.queue.length,11,'a fresh arrow per call adds an entry each time');
+  receiver.flush();assert.equal(state.queue.length,0);
+  const main=await readFile(new URL('../mods/sixfold-desk/main.js',import.meta.url),'utf8');
+  assert.doesNotMatch(main,/fileReceiver\.enqueue\(\(\)=>/,'main.js must not enqueue a new arrow per call');
+});
