@@ -36,6 +36,7 @@ class PanelSpace extends View{
     const groups=c.projection.groups.get(this.id);
     const rows=geometry.rows.map(row=>row.kind==='agent'?{...row,agent:c.projection.agents.get(row.agent.id)}
       :row.kind==='issue'?{...row,group:groups.groups.find(group=>group.issue?.key===row.group.issue?.key)}:row);
+    c.alertMarks?.set(this.id,c.alertMark(space));   // what this render shows; alertsChanged redraws only when it differs
     return cardView(c,{...geometry,space,groups,rows},c.events,c.color(space.bundle||space.id),c.names,theme(),c.motion,c.rows,{bodyOnly:c.embedded});
   }
 }
@@ -129,14 +130,17 @@ export function createRetainedPanel(cx,{macTitlebar=false,onClassic=null,onDispo
   // New alerts redraw a card only when what it shows changed: its meta-line counts, and the
   // alerted issues of an open issue search. Bounded by the number of cards; no timer.
   c.alertMarks=new Map();
+  c.alertMark=space=>{
+    const state=c.issueStates.get(space.id);
+    return JSON.stringify([c.cardAlerts?.(space)||null,state?.open?issueAlertSignature(shared('sixfold.linearItems')??[],space.name):'',shared('sixfold.alertPopover')?.space===space.name?shared('sixfold.alertPopover'):null]);
+  };
+  // A card not drawn yet has no mark and is skipped: its first render reads the current alerts.
   c.alertsChanged=()=>{
     if(c.disposed)return;
     for(const [id,space] of c.spaceMap){
-      const state=c.issueStates.get(id);
-      const mark=JSON.stringify([c.cardAlerts?.(space)||null,state?.open?issueAlertSignature(shared('sixfold.linearItems')??[],space.name):'',shared('sixfold.alertPopover')?.space===space.name?shared('sixfold.alertPopover'):null]);
-      if(c.alertMarks.get(id)===mark)continue;
-      const first=!c.alertMarks.has(id);c.alertMarks.set(id,mark);
-      if(!first||mark!==JSON.stringify([null,'',null]))c.notify(c.cards.get(id));
+      if(!c.alertMarks.has(id))continue;
+      const mark=c.alertMark(space);
+      if(c.alertMarks.get(id)!==mark){c.alertMarks.set(id,mark);c.notify(c.cards.get(id));}
     }
     for(const id of c.alertMarks.keys())if(!c.spaceMap.has(id))c.alertMarks.delete(id);
   };

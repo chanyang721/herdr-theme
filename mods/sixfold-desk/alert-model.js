@@ -61,7 +61,7 @@ export function issueAlerts(items, space, key, limit = ISSUE_ALERT_LINES) {
 }
 // Changes only when an issue's unread alerts change: part of the card key.
 export const issueAlertSignature = (items, space) => linearScoped(items, space).filter(i => !i.read && i.issue)
-  .map(i => JSON.stringify([i.issue, i.id, i.subtitle || '', i.changed_at || i.at || '', i.changes || [], i.comments?.[0]?.body || '', i.url || '', i.issue_title || ''])).sort().join(',');
+  .map(i => JSON.stringify([i.issue, i.id, i.subtitle || '', i.changed_at || i.at || '', i.changes || [], i.comments?.[0]?.body || '', i.url || '', i.issue_title || '', i.title || ''])).sort().join(',');
 
 // The issues of a space with unread Linear alerts, for the shared "알림 온 이슈"
 // group of the issue search: every tab shows the same group, whether or not the
@@ -69,10 +69,12 @@ export const issueAlertSignature = (items, space) => linearScoped(items, space).
 export const ALERTED_ISSUES = 5;
 export function alertedIssues(items, space, query = '', limit = ALERTED_ISSUES) {
   const needle = String(query ?? '').normalize('NFC').trim().toLocaleLowerCase();
-  const keys = new Map();
+  // The title comes from the issue's newest alert, so a renamed issue shows its new title.
+  const keys = new Map(), newest = new Map();
   for (const item of linearScoped(items, space)) {
-    const key = String(item.issue || '').toUpperCase();
-    if (key && !item.read && !keys.has(key)) keys.set(key, item.issue_title || item.title || '');
+    const key = String(item.issue || '').toUpperCase(), at = String(item.changed_at || item.at || '');
+    if (!key || item.read || (newest.has(key) && newest.get(key) >= at)) continue;
+    newest.set(key, at); keys.set(key, item.issue_title || item.title || '');
   }
   return [...keys].filter(([key, title]) => !needle || `${key} ${title}`.normalize('NFC').toLocaleLowerCase().includes(needle))
     .map(([key, title]) => { const alerts = issueAlerts(items, space, key); return {key, title, at: alerts.lines[0]?.at || '', alerts}; })

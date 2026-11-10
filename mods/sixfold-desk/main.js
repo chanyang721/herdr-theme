@@ -14,7 +14,7 @@ import { breathingBorder, borderComet } from './collab-flow-view.js';
 import { workflowNodes, delegationEvents, workflowStatus, sessionChildren, activeWorkflow } from './workflow.js';
 import { watchDocs, currentDocs, docsSection, prepareDocsInput } from './docs.js';
 import { watchAlerts, alertSection, visibleAlerts } from './alerts.js';
-import { workspaceAlertsRow, hasWorkspaceAlerts, hasLinearAlerts, openInbox, cardAlertCounts, slackAlertsChip } from './alert-inbox.js';
+import { workspaceAlertsRow, hasWorkspaceAlerts, openInbox, cardAlertCounts, slackAlertsChip, alertsOnMetaLine } from './alert-inbox.js';
 import { startAlertArrivals, alertArrivalLayer, alertCardSignature } from './alert-arrivals.js';
 import { panePet } from './pets.js';
 import { paneUsage } from './session-usage.js';
@@ -143,7 +143,8 @@ export default class SixfoldDesk extends View {
     this.panelRetained=typeof cx.new==='function'?createRetainedPanel(cx,{macTitlebar:window()?.platform==='macos',embedded:true,
       onHostChange:()=>this.invalidateSidebar(),
       schedule:fn=>fileReceiver.enqueue(fn),
-      cardAlerts:(space,motion)=>cardAlertCounts(space.name,motion),slackAlerts:slackAlertsChip,
+      // Counts on the meta line only when it carries the alerts; otherwise the alerts row has them (never both).
+      cardAlerts:(space,motion)=>alertsOnMetaLine(space,space.name)?cardAlertCounts(space.name,motion):null,slackAlerts:slackAlertsChip,
       onIssueRequest:(space,key,desired)=>{
         const serial=globalThis.__sixfoldIssueRequestSerial=(globalThis.__sixfoldIssueRequestSerial||0)+1;
         const id=`request-${Date.now().toString(36)}-${serial.toString(36)}-${Math.random().toString(36).slice(2,14)}`;
@@ -861,7 +862,7 @@ export default class SixfoldDesk extends View {
       return this.fileBadges?.[key]?.length||shared('sixfold.workspace.badges')?.[key]?.length?20:0;
     };
     // A task card with a meta line carries Slack and Linear alerts there; the separate alerts row is for other cards.
-    const mergedAlerts=s=>{const task=taskPanel?.taskFor(s);return Boolean(task&&taskPanel?.bodyFor(s)&&(task.slack||task.work)&&(task.work?.tool==='linear'||!hasLinearAlerts(s.name)));};
+    const mergedAlerts=s=>Boolean(taskPanel?.bodyFor(s)&&alertsOnMetaLine(taskPanel.taskFor(s),s.name));
     const alertRowHeight=s=>hasWorkspaceAlerts(s.name)&&!mergedAlerts(s)?26:0;
     const positions={};let offset=0;
     for(const {s,members} of groups){

@@ -42,6 +42,10 @@ export function workspaceAlertsRow(space,t,{motion=true}={}) {
     .child(alertPopover({id:space.id,project:space.name,trigger:row,t,hasSlack:hasSlackAlerts(space.name),hasLinear:hasLinearAlerts(space.name),
       onAll:source=>source==='linear'?openLinearInbox({project:space.name}):openInbox({project:space.name})}));
 }
+// A task card carries its alerts on its meta line when that line can show both
+// sources (a Linear chip, or no Linear alerts); otherwise the alerts row stays.
+// Exactly one of the two is drawn, so one alerts popover belongs to a card.
+export const alertsOnMetaLine = (task, name) => Boolean(task && (task.slack || task.work) && (task.work?.tool === 'linear' || !hasLinearAlerts(name)));
 // A task card shows Slack and Linear on its one meta line: the Slack part opens the
 // Slack alerts, the Linear chip (key · issues · unread) opens the issue search.
 export function cardAlertCounts(name, motion = true) {
@@ -51,6 +55,7 @@ export function cardAlertCounts(name, motion = true) {
     delay: delay ? delay.hours : 0, delayAt: delay?.at || ''};
 }
 export function slackAlertsChip(space, trigger, t) {
+  if (!alertsOnMetaLine(space, space.name)) return trigger;   // the alerts row has the popover for this card
   const stop = (_e, cx) => cx.stop_propagation();
   return div().id(`sf-slack-chip-wrap-${space.id}`).flex_1().min_w(0).on_mouse_down('left', stop).on_mouse_up('left', stop)
     .child(alertPopover({id: `meta-${space.id}`, project: space.name, trigger, t, hasSlack: true, hasLinear: false,

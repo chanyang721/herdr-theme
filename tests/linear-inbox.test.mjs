@@ -251,3 +251,13 @@ test('the Slack chip says the copy is delayed once its newest message is older t
   assert.equal(slackCopyDelay({}, now), null);
   assert.equal(slackCopyDelay(null, now), null);
 });
+
+test('the alerted-issues group takes the title of the newest alert, and a renamed title changes the signature', async () => {
+  const {alertedIssues, issueAlertSignature} = await import('../mods/sixfold-desk/alert-model.js');
+  const items = [
+    {id: 'a', workspace: 'Alpha', issue: 'ABC-7', title: 'Old title', read: false, at: '2026-11-10T04:24:00Z'},
+    {id: 'b', workspace: 'Alpha', issue: 'ABC-7', title: 'New title', read: false, at: '2026-11-10T04:45:00Z'}];
+  assert.equal(alertedIssues(items, 'Alpha')[0].title, 'New title');
+  assert.equal(alertedIssues([...items].reverse(), 'Alpha')[0].title, 'New title');
+  assert.notEqual(issueAlertSignature([{...items[0], title: 'Renamed'}], 'Alpha'), issueAlertSignature([items[0]], 'Alpha'));
+});

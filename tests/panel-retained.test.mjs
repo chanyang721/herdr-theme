@@ -319,8 +319,9 @@ test('one meta line carries both tools: Slack unread on its part, Linear unread 
     assert(byId(`panel-tool-${raw.spaces[0].id}`),'issue chip');
     assert(!byId(`panel-tool-unread-${raw.spaces[0].id}`),'no unread: the chip is key · issues only');
     assert(chips.includes(raw.spaces[0].id),'the Slack part opens the Slack alerts');
-    r.controller.alertsChanged();r.flush();                    // first look: nothing to show, no redraw needed
     const before=r.objects.filter(o=>o.dirty).length;
+    r.controller.alertsChanged();
+    assert.equal(r.objects.filter(o=>o.dirty).length,before,'cards just drawn with these counts are not redrawn');
     counts.linear=2;counts.slack=1;r.controller.alertsChanged();
     assert.equal(card.dirty,true,'the card redraws for its new counts');
     assert.equal(r.objects.filter(o=>o.dirty).length,before+1,'only that card');
