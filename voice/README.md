@@ -137,6 +137,19 @@ Herdr Theme 의 음성 기능이다. herdr 플러그인(id `local.focus-queue`)�
 - 보고 있는 Codex pane 에 음성 대화 표시가 있으면, 작업 중이거나 잠시 말이 없어도 포커스를 옮기지 않는다.
 - 자동 전송과 목소리 확인은 Claude Code 받아쓰기에만 적용된다.
 
+### 칸 머리줄의 마이크 표시
+
+어느 칸이 듣고 있는지 footer 를 읽지 않고 볼 수 있게, 플러그인이 칸별 마이크 상태를 `~/.config/herdr-app/data/sixfold/voice-mic.json` 에 쓰고 sixfold-desk 가 칸 머리줄 맨 앞에 그린다. 파일은 상태가 바뀔 때만 다시 쓴다. 포커스가 바뀔 때마다 토스트를 띄우지 않는다.
+
+| 표시 | 뜻 | 보이는 칸 |
+|---|---|---|
+| `● 마이크 듣는 중` (빨강) | Claude `REC ·` 또는 Codex `voice ● listening` | 모든 칸. 두 칸에 보이면 그 자체가 이상 신호 |
+| `○ 마이크 멈춤 · 헤드셋 아님` / `· 다른 앱 사용 중` / `· 음소거` | 받아쓰기를 멈춘 이유 | 포커스된 칸만 |
+| `○ 마이크 꺼짐` / `· F8 무시됨` | REC 가 1.5초 넘게 없음(대화상자 등) / F8 두 번 무시로 60초 쉼 | 포커스된 칸만 |
+| `다른 목소리 · 버림` / `목소리 확인 안 됨 · 버림` / `헤드셋 아님 · 버림` / `전송 막힘 · 버림` | 받아쓰기를 보내지 않고 지움 | 그 칸, 8초 동안 |
+
+툴팁에 지운 글자 수와 이유가 나온다. 받아쓰기 리스너가 끝나면 그 칸 항목을 지우고, 리스너 없이 남은 항목은 다음 포커스 이벤트에서 정리한다. 좁은 칸(560px 미만)에서는 `듣는 중`·`버림`처럼 줄인다.
+
 ## 목소리 확인
 
 마이크에는 주변 사람 말도 들어온다. Claude Code 는 마이크를 직접 읽어서 소리를 걸러낼 수 없다. 그래서 `herdr-theme voicegate` 가 같은 마이크를 함께 듣고, 말 덩어리마다 이 기기 주인의 목소리인지 판정해 둔다. 녹음·받아쓰기·`REC` 표시는 지연되지 않는다.
@@ -236,6 +249,7 @@ focusq voice-crosscheck
 | `herdr-theme voice-check-other-device` | `voice-crosscheck` 본체 |
 | `~/.local/share/herdr-focus-queue/` | 설치된 플러그인(`plugin`), 네이티브 라이브러리(`native`), 모델(`models`), crosscheck 음성 캐시 |
 | `~/.config/herdr-app/data/sixfold/voice.local.json` | 사용자 설정 (마이크·보정값). `HERDR_VOICE_SETTINGS` 로 바꿀 수 있다 |
+| `~/.config/herdr-app/data/sixfold/voice-mic.json`, `rust/src/voice/queue/mic.rs` | 칸별 마이크 상태(머리줄 표시용)와 그 기록 규칙 |
 | `~/.local/state/herdr/plugins/local.focus-queue/` | 기록(`focus-queue.log`), 대기열 상태(`state.json`), 목소리 데이터 |
 
 ## 설정 바꾸기
