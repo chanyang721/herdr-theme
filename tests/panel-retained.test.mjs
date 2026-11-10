@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {linearReadsUrl} from './linear-reads-url.mjs';
 import {readFile} from 'node:fs/promises';
 import {makePanelLoadFixture,makePanelFixture,eventSequence} from './panel-fixtures.mjs';
 import {cleanPanelFeed,PANEL_TIMING} from '../mods/sixfold-desk/panel-model.js';
@@ -36,6 +37,7 @@ async function runtime(motion=false,options={}){
   for(const name of ['panel-model','collab-flow','panel-host'])source=source.replace(`'./${name}.js'`,JSON.stringify(new URL(`../mods/sixfold-desk/${name}.js`,import.meta.url).href));
   source=source.replace("'./panel-view.js'",JSON.stringify(viewUrl));
   source=source.replace("'./alert-model.js'",JSON.stringify(new URL('../mods/sixfold-desk/alert-model.js',import.meta.url).href));
+  source=source.replace("'./linear-reads.js'",JSON.stringify(await linearReadsUrl()));
   source=source.replace("'./task-issues-view.js'",JSON.stringify(issuesUrl)).replace("'./task-issue-state.js'",JSON.stringify(new URL('../mods/sixfold-desk/task-issue-state.js',import.meta.url).href));
   const mod=await import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}#${loads++}`);
   const controller=mod.createRetainedPanel(cx,options);

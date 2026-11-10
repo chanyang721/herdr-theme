@@ -103,3 +103,33 @@ test('issues with new alerts show in one group above the tabs; a tab row only ge
   const {issuePopover}=await renderer();
   assert(!byId(issuePopover(model({alerted:[]}),theme),'task-issues-alerted-demo'));   // no unread: no group
 });
+
+test('[읽음] on each alert line and [모두 읽음] on the group head; opening a row passes what it confirms; pending rows dim, errors show',async()=>{
+  const {issuePopover}=await renderer(),reads=[],opened=[],cx={stop_propagation(){}};
+  const link='https://linear.app/demo/issue/DEMO-9/x#comment-4e5f6a7b';
+  const lines=[{id:'n2',category:'댓글',text:'Kim replied: second',at:'2026-11-10T04:45:00Z',url:link},
+    {id:'comment:0a1b2c3d-0000-4000-8000-000000000000',local:true,category:'댓글',text:'Lee commented: here',at:'2026-11-10T04:24:00Z',url:link}];
+  const alerted=[{key:'DEMO-9',title:'T',at:lines[0].at,alerts:{unread:2,more:0,lines}}];
+  const base={alerted,readable:true,onRead:(alerts,context)=>{assert.equal(context,cx);reads.push(alerts.map(a=>a.id));},
+    onReadAll:context=>{assert.equal(context,cx);reads.push('all');},onLink:(url,context,alerts)=>{assert.equal(context,cx);opened.push([url,alerts.map(a=>a.id)]);},
+    issueTargets:()=>[{id:'n2'},{id:'n3'}],doneKeys:new Set(['DEMO-9'])};
+  let tree=issuePopover(model(base),theme);
+  assert.deepEqual(words(byId(tree,'task-issues-read-demo-DEMO-9-0')),['읽음']);
+  assert.deepEqual(words(byId(tree,'task-issues-read-demo-DEMO-9-1')),['확인']);          // linked-issue comment: this computer only
+  assert.deepEqual(words(byId(tree,'task-issues-read-all-demo')),['모두 읽음']);
+  assert.deepEqual(words(byId(tree,'task-issues-alerted-done-demo-DEMO-9')),['처리됨']);
+  click(byId(tree,'task-issues-read-demo-DEMO-9-0'),cx);click(byId(tree,'task-issues-read-all-demo'),cx);
+  click(byId(tree,'task-issues-alerted-line-demo-DEMO-9-0'),cx);click(byId(tree,'task-issues-alerted-head-demo-DEMO-9'),cx);
+  assert.deepEqual(reads,[['n2'],'all']);
+  assert.deepEqual(opened,[[link,['n2']],[link,['n2','n3']]]);                            // a head opens the issue: all its alerts
+  // Pending: dimmed, '처리 중', no second press; a failure line shows.
+  tree=issuePopover(model({...base,readPending:new Set(['n2']),readError:'읽음 처리 실패: busy'}),theme);
+  const row=byId(tree,'task-issues-alerted-line-demo-DEMO-9-0');
+  assert.equal(call(row,'opacity')[1],0.45);assert(!call(row,'on_click'));
+  assert.deepEqual(words(byId(tree,'task-issues-read-demo-DEMO-9-0')),['처리 중']);assert(!call(byId(tree,'task-issues-read-demo-DEMO-9-0'),'on_click'));
+  assert(words(byId(tree,'task-issues-alerted-demo')).includes('읽음 처리 실패: busy'));
+  // Linear writes off: no Linear [읽음] and no [모두 읽음]; the local [확인] stays.
+  tree=issuePopover(model({...base,readable:false}),theme);
+  assert(!byId(tree,'task-issues-read-demo-DEMO-9-0'));assert(byId(tree,'task-issues-read-demo-DEMO-9-1'));
+  assert(!byId(tree,'task-issues-read-all-demo'));assert(words(tree).includes('읽음은 Linear 기준'));
+});

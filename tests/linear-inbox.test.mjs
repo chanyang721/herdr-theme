@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
+import {linearReadsUrl} from './linear-reads-url.mjs';
 import {categoryLabel, linearLink, visibleItems, spacesOf, issueLine, buildRequest, requestId, resultLabel} from '../mods/sixfold-linear-inbox/model.js';
 import {linearUnread, linearScoped} from '../mods/sixfold-desk/alert-model.js';
 
@@ -91,7 +92,8 @@ test('new Linear alerts become arrivals into their space (Share otherwise); no s
   let source = await readFile(new URL('../mods/sixfold-desk/linear-feed.js', import.meta.url), 'utf8');
   source = source.replace(/\r\n/g, '\n').replace(/^import .* from '(herdr|crypto|\.\/panel-io\.js)';\n/gm, '')
     .replace("'./arrival-store.js'", `'${storeUrl}'`).replace("'./arrival-model.js'", `'${modelUrl}'`)
-    .replace("'./alert-model.js'", `'${new URL('../mods/sixfold-desk/alert-model.js', import.meta.url).href}'`);
+    .replace("'./alert-model.js'", `'${new URL('../mods/sixfold-desk/alert-model.js', import.meta.url).href}'`)
+    .replace("'./linear-reads.js'", `'${await linearReadsUrl()}'`);
   source = `const {${Object.keys(globalThis.__linearRuntime).join(',')}} = globalThis.__linearRuntime;\n` + source;
   const store = await import(storeUrl);
   const flush = async () => { for (let n = 0; n < 20; n++) { const due = [...timers]; timers.clear(); due.forEach(t => t.callback(cx)); await Promise.all(tasks.splice(0)); await Promise.resolve(); if (!timers.size && !tasks.length) return; } assert.fail('did not settle'); };
@@ -260,4 +262,64 @@ test('the alerted-issues group takes the title of the newest alert, and a rename
   assert.equal(alertedIssues(items, 'Alpha')[0].title, 'New title');
   assert.equal(alertedIssues([...items].reverse(), 'Alpha')[0].title, 'New title');
   assert.notEqual(issueAlertSignature([{...items[0], title: 'Renamed'}], 'Alpha'), issueAlertSignature([items[0]], 'Alpha'));
+});
+
+test('read requests: one per alert, Linear ones only when mark_read is on, a local comment only on this computer', async () => {
+  const {readRequest, issueReadTargets, groupReadTargets, READ_LIMIT} = await import('../mods/sixfold-desk/alert-model.js');
+  const now = new Date('2026-11-10T07:00:00Z'), random = () => 0.5;
+  const notice = {id: N, issue: 'ABC-1', read: false}, comment = {id: 'comment:0a1b2c3d-0000-4000-8000-000000000000', local: true, read: false};
+  assert.deepEqual(readRequest(notice, 'opened', ['mark_read'], {now, random}),
+    {v: 1, id: readRequest(notice, 'opened', ['mark_read'], {now, random}).id, requested_at: now.toISOString(), origin: 'opened', action: 'mark_read', notification: N, read: true});
+  assert.equal(readRequest(notice, 'opened', [], {now}), null);                    // writes off: no Linear request
+  assert.equal(readRequest({...notice, read: true}, 'opened', ['mark_read']), null);
+  assert.equal(readRequest({id: 'n2'}, 'all', ['mark_read']), null);                // not a Linear notification id
+  assert.equal(readRequest(notice, 'button', ['mark_read']), null);                 // only opened / all from the sidebar
+  assert.deepEqual([readRequest(comment, 'all', [], {now}).action, readRequest(comment, 'all', []).item], ['mark_seen', comment.id]);
+  const items = [{...notice, workspace: 'Alpha', at: '2'}, {id: 'b', issue: 'abc-1', workspace: 'Alpha', read: false, at: '1'},
+    {id: 'c', issue: 'ABC-1', workspace: 'Alpha', read: true, at: '3'}, {id: 'd', issue: 'ABC-2', workspace: 'Beta', read: false, at: '4'},
+    ...Array.from({length: 30}, (_, i) => ({id: `x${i}`, issue: `ABC-${10 + i}`, workspace: 'Alpha', read: false, at: String(100 + i)}))];
+  assert.deepEqual(issueReadTargets(items, 'Alpha', 'ABC-1').map(i => i.id), [N, 'b']);
+  const {alertedIssues} = await import('../mods/sixfold-desk/alert-model.js');
+  assert.equal(groupReadTargets(items, 'Alpha').length, alertedIssues(items, 'Alpha').reduce((n, e) => n + e.alerts.unread, 0));   // the group's issues only
+  assert.ok(groupReadTargets(items, 'Alpha').length <= READ_LIMIT);
+});
+
+test('sidebar read store: pending until the collector answers; success shows read before the next list; failure comes back with one error', async () => {
+  const {linearReadsUrl} = await import('./linear-reads-url.mjs');
+  const written = new Map(), results = new Map();
+  globalThis.__linearReads = {appHome: () => '/home', readTextFile: async () => null, writeTextFile: async () => {}};
+  const reads = await import(await linearReadsUrl());
+  let hooked = 0; reads.onReadConfirmed(() => hooked++);
+  const write = async (path, text, expected) => { assert.equal(expected, null); written.set(path, JSON.parse(text)); };
+  const read = async path => results.get(path.split('/').pop().replace('.json', '')) ?? null;
+  const now = new Date('2026-11-10T07:00:00Z');
+  const a = {id: N, read: false}, b = {id: '22222222-2222-4222-8222-222222222222', read: false};
+  assert.equal(await reads.requestReads([a, b, a], 'opened', ['mark_read'], {now, write, folder: '/f'}), 2);
+  assert.equal(await reads.requestReads([a], 'opened', ['mark_read'], {now, write, folder: '/f'}), 0);   // already asked
+  assert.deepEqual([...reads.readPendingIds()].sort(), [N, b.id].sort());
+  const [ra, rb] = [...written.values()];
+  results.set(ra.id, JSON.stringify({ok: true})); results.set(rb.id, JSON.stringify({ok: false, error: 'busy'}));
+  assert.equal(await reads.checkReads({read, folder: '/r', now: now.getTime()}), true);
+  assert.equal(hooked, 1);
+  assert.deepEqual([...reads.readPendingIds()], []);
+  assert.equal(reads.readState(N), 'done');
+  assert.equal(reads.lastReadError(now.getTime()), '읽음 처리 실패: busy');
+  assert.equal(reads.lastReadError(now.getTime() + 61_000), '');
+  assert.deepEqual(reads.withLocalReads([a, b]).map(i => i.read), [true, false]);     // failed one is unread again
+  assert.deepEqual(reads.withLocalReads([{...a, read: true}]).map(i => i.read), [true]);
+  assert.equal(reads.readState(N), '');                                               // the feed agrees: entry dropped
+  assert.equal(await reads.requestReads([b], 'all', ['mark_read'], {now, write, folder: '/f'}), 1);   // a failed one may be asked again
+  delete globalThis.__linearReads;
+});
+
+test('inbox window: opening the original and 모두 읽음 carry their origin; only the shown unread alerts', async () => {
+  const {buildRequest, readAllTargets, READ_ALL} = await import('../mods/sixfold-linear-inbox/model.js');
+  const now = new Date('2026-11-10T07:00:00Z');
+  assert.equal(buildRequest('mark_read', {id: N}, {origin: 'opened'}, {now, id: 'req-1'}).origin, 'opened');
+  assert.equal(buildRequest('mark_read', {id: N}, {origin: 'other'}, {now, id: 'req-1'}).origin, undefined);
+  assert.equal(buildRequest('comment', {issue: 'ABC-1'}, {body: 'x', origin: 'all'}, {now, id: 'req-1'}).origin, undefined);
+  const list = [{id: N, workspace: 'Alpha', read: false}, {id: 'c', local: true, workspace: 'Alpha', read: false}, {id: 'r', workspace: 'Alpha', read: true}];
+  assert.deepEqual(readAllTargets(list, 'Alpha', ['mark_read']).map(i => i.id), [N, 'c']);
+  assert.deepEqual(readAllTargets(list, 'Alpha', []).map(i => i.id), ['c']);
+  assert.ok(READ_ALL >= 5);
 });
