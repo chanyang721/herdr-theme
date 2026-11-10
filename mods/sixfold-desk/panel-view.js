@@ -5,7 +5,7 @@ import {agentGroups, panelEventStates, panelSpaces, panelSpacePartners, PANEL_TI
 import {SESSION_STATES, sessionStatusGlyph} from './session-status.js';
 import {groupColors, paletteMode} from './collab-flow.js';
 import {rowDetailParts} from './task-row-details.js';
-import {PACKET_PIXELS, pixelUnitFor, snap, centred, pixelBlock, pixelRoute as drawPixelRoute, pixelRing} from './pixel.js';
+import {PACKET_PIXELS, pixelUnitFor, snap, centred, pixelBlock, pixelRoute as drawPixelRoute, pixelRing, pixelArrival, ARRIVAL} from './pixel.js';
 import {PANEL_FLOW, panelFlowAnchor, panelMessageAnchors, messageFlowGeometry, computerFlow} from './panel-host.js';
 
 const MARK={working:'●',idle:'○',blocked:'!',done:'✓'};
@@ -14,6 +14,8 @@ const STAGES=['배분','작업','검수','수락 대기'];
 const CLOSE=['보고 작성','경험·결정 저장','기억함 제안','닫힘'];
 const ISSUE={blocked:'막힘',working:'진행 중',review:'검수',waiting:'대기',done:'완료'};
 const RIGHT=PANEL_FLOW.gutter, ROW=28, REASON=14;
+// Two blinks of the arrival row highlight fit in the ping phase.
+const ROW_BLINK_MS=Math.round(PANEL_TIMING.pingMs/2);
 // A flow pulse on a 1px pipe: as wide as the line, this long (px).
 export const LINK_PULSE=5;
 export const PANEL_GEOMETRY=Object.freeze({header:34,meta:26,issue:18,row:ROW,reason:REASON,child:20,border:1,bottom:4,gap:4,padding:7,rightGutter:RIGHT,popoverGap:10});
@@ -142,7 +144,6 @@ export function agentRow(view,agent,space,tag,state,color,t,motion){
   const row=h_flex().id(`panel-agent-${agent.id}`).relative().h(child?PANEL_GEOMETRY.child:ROW+(reasonLine?REASON:0)).flex_none().pl(child?30+(depth-1)*16:7).pr(7).gap(5).items_center().rounded(3)
     .opacity(dimmed||agent.report_missing?0.52:1)
     .when(born,e=>e.border(1).border_dashed().border_color(color))
-    .when(pulse,e=>e.border(1).border_color(color))
     .tooltip([agent.title,agent.tooltip_addr,agent.closing?.blocked_reason,reasonLine,detail.tooltip].filter(Boolean).join('\n'))
     .when(Boolean(agent.nav)&&agent.closing?.step!==4,e=>e.cursor_pointer().hover(h=>h.bg(t.hover))
       .on_click((_event,cx)=>{cx.stop_propagation();navigatePanelAgent(agent);}));
@@ -172,6 +173,13 @@ export function agentRow(view,agent,space,tag,state,color,t,motion){
     .when(Boolean(reason),e=>e.child(reason)));
   else if(reason)row.child(v_flex().id(`panel-lines-${agent.id}`).w_full().min_w(0).child(line.h(ROW-2)).child(reason));
   else row.child(line);
+  // The arrival ("done") highlight, made to be seen (2026-11-10): an overlay, so
+  // the row never shifts, with a 2px border in the foreground (>=8:1 on every
+  // sixfold surface), a tint of the event colour and two short blinks within
+  // the ping phase. Motion off keeps it steady.
+  if(pulse)row.child(div().id(`panel-arrival-${agent.id}`).absolute().left(0).top(0).right(0).bottom(0).rounded(3)
+    .border(ARRIVAL.thickness).border_color(t.foreground).bg(color+'33')
+    .when(motion,e=>e.loop('opacity',{from:0.35,to:1,period:ROW_BLINK_MS,easing:'ease-in-out'})));
   return row;
 }
 
@@ -239,8 +247,8 @@ function routePath(from,to,lane,endX,origin=0,startX=0){
 // Event lines and packets are pixel art (pixel.js), in whole device pixels at
 // the current zoom.
 export function pixelUnit(){return pixelUnitFor(settings()?.zoom);}
-export function pixelRoute(from,to,lane,startX,endX,color,u=pixelUnit()){return drawPixelRoute(from,to,lane,startX,endX,color,u);}
-export function route(id,a,b,color,{dashed=false,packet=null,motion=false,relation=false,flow=PANEL_FLOW}={}){
+export function pixelRoute(from,to,lane,startX,endX,color,u=pixelUnit(),id=null){return drawPixelRoute(from,to,lane,startX,endX,color,u,id);}
+export function route(id,a,b,color,{dashed=false,packet=null,motion=false,relation=false,flow=PANEL_FLOW,done=color}={}){
   const remote=a.computer&&b.computer&&a.computer!==b.computer;
   const top=Math.min(a.y,b.y),height=Math.max(2,Math.abs(b.y-a.y));
   const lane=relation?6:dashed?flow.computer:packet?(packet.routeLane?flow.messageNext:flow.message):flow.collaboration;
@@ -251,13 +259,12 @@ export function route(id,a,b,color,{dashed=false,packet=null,motion=false,relati
     // the pixel line, the pixel block, the same corner timing and the same
     // departure and arrival rings. Motion off draws nothing.
     if(!motion)return base;
-    if(remote){
-      // A remote send follows its dashed computer pipe and colour, never a
-      // second solid connection across the other lanes.
-      base.child(route(`${id}-pipe`,a,b,color,{dashed:true,flow}).right(0).top(0));
-    }else base.child(pixelRoute(a.y-top,b.y-top,lane,startX,endX,color));
-    packetMarks(base,id,packet,{startX,endX,lane:remote?flow.computer:lane,from:a.y-top,to:b.y-top},color);
-    if(packet.phase==='fade')base.opacity(0.2).transition('opacity',900);
+    // A remote send follows its dashed computer pipe and colour, never a
+    // second solid connection across the other lanes.
+    const line=remote?route(`${id}-pipe`,a,b,color,{dashed:true,flow}).right(0).top(0):pixelRoute(a.y-top,b.y-top,lane,startX,endX,color,undefined,`panel-line-${id}`);
+    // Only the line fades; the arrival mark stays lit for its own hold.
+    base.child(line.opacity(packet.phase==='fade'?0.2:1).transition('opacity',900));
+    packetMarks(base,id,packet,{startX,endX,lane:remote?flow.computer:lane,from:a.y-top,to:b.y-top},color,done);
     return base;
   }
   if(dashed){
@@ -273,9 +280,9 @@ export function route(id,a,b,color,{dashed=false,packet=null,motion=false,relati
     if(motion&&!relation&&height>LINK_PULSE)base.child(div().id(`panel-link-dot-${id}`).absolute().left(lane).w(1).h(LINK_PULSE).bg(color)
       .loop('top',{from:0,to:height-LINK_PULSE,period:16000,easing:'linear'}));
   }else if(packet){
-    base.child(pixelRoute(a.y-top,b.y-top,lane,startX,endX,color));
-    if(packet.phase==='fade')base.opacity(0.2).when(motion,e=>e.transition('opacity',900));
-    if(motion)packetMarks(base,id,packet,{startX,endX,lane,from:a.y-top,to:b.y-top},color);
+    base.child(pixelRoute(a.y-top,b.y-top,lane,startX,endX,color,undefined,`panel-line-${id}`)
+      .opacity(packet.phase==='fade'?0.2:1).when(motion,e=>e.transition('opacity',900)));
+    if(motion)packetMarks(base,id,packet,{startX,endX,lane,from:a.y-top,to:b.y-top},color,done);
   }else{
     // Stationary brackets keep their thin vector line.
     const origin=Math.max(0,-startX,-endX);
@@ -290,8 +297,9 @@ export function route(id,a,b,color,{dashed=false,packet=null,motion=false,relati
 // One event packet on its line, shared by messages and task events: a 3x3 pixel
 // block that leaves the source row, runs along the lane and enters the target
 // row, one finite native transition per corner, centred on the 1px line. A
-// square 1px ring opens at departure and at arrival. No per-frame JavaScript.
-function packetMarks(base,id,packet,{startX,endX,lane,from,to},color){
+// square 1px ring opens at departure; the arrival mark lights in `done`, a
+// colour that contrasts with the background. No per-frame JavaScript.
+function packetMarks(base,id,packet,{startX,endX,lane,from,to},color,done=color){
   const u=pixelUnit();[startX,endX,lane,from,to]=[startX,endX,lane,from,to].map(value=>snap(value,u));
   if(['start','travel'].includes(packet.phase)){
     const elapsed=packet.elapsed;
@@ -306,7 +314,7 @@ function packetMarks(base,id,packet,{startX,endX,lane,from,to},color){
       .transition('top',{duration:point.ms,easing:'ease-in-out'}));
   }
   base.child(pixelRing(`panel-sender-${id}`,startX,from,packet.phase!=='start',color,u));
-  base.child(pixelRing(`panel-receiver-${id}`,endX,to,['ping','fade'].includes(packet.phase),color,u));
+  base.children(pixelArrival(`panel-receiver-${id}`,endX,to,['ping','fade'].includes(packet.phase),done,u));
 }
 
 export function panelFlowLayer(feed,layout,state,color,t,motion,width,gutter=null){
@@ -363,7 +371,7 @@ export function panelFlowLayer(feed,layout,state,color,t,motion,width,gutter=nul
     }
     if(a&&b){
       const tone=a.computer===b.computer?(paletteMode(t)==='light'?'#006C77':'#79D1DC'):remoteTone(a,b);
-      layer.child(drawRoute(packet.id,a,b,tone,{packet,motion}));
+      layer.child(drawRoute(packet.id,a,b,tone,{packet,motion,done:t.foreground}));
     }
   }
   if(!motion)for(const event of state.connections.filter(event=>event.kind!=='message')){

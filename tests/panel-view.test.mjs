@@ -265,9 +265,52 @@ test('a local message rides the same pixel line, block and rings as a task event
   assert.equal(call(head,'left')[1]+1,20,'centred on the inner message lane');
   assert.equal(head.calls.find(c=>c[0]==='transition'&&c[1]==='top')[2].duration,PANEL_LEGS[2]-PANEL_LEGS[1]);
   const arrival=byId(draw('message','ping',PANEL_TIMING.packetMs).tree,'panel-receiver-p');
-  assert.equal(call(arrival,'w')[1],15);assert.equal(call(arrival,'opacity')[1],0);assert.equal(call(arrival,'border')[1],1);
+  assert.equal(call(arrival,'w')[1],15);assert.equal(call(arrival,'opacity')[1],0);assert.equal(call(arrival,'border')[1],2,'the done ring is 2px');
   const still=r.panelFlowLayer(feed,layout,{...view.panelEvents,packets:[],connections:[{id:'off',kind:'message',from:a.id,to:b.id}]},()=>t.accent,t,false,224);
   assert(!byId(still,'panel-route-off'));assert.equal(all(still).filter(n=>call(n,'transition')||call(n,'loop')).length,0);
+});
+
+test('the done mark is easy to see: a 2px foreground ring held lit, a second blink, a core block, and only the line fades',async()=>{
+  const r=await renderer(true),view=viewFor(makePanelFixture()),feed=view.panelState.feed;
+  r.renderPanelTracking(view,t,r.cx);const layout=r.panelLayout(feed,view.panelEvents),[a,b]=feed.spaces[0].agents;
+  const draw=(kind,phase)=>r.panelFlowLayer(feed,layout,{...view.panelEvents,packets:[{id:'d',kind,from:a.id,to:b.id,phase,elapsed:PANEL_TIMING.packetMs}]},()=>t.accent,t,true,224);
+  const policy=(node,property)=>node.calls.find(c=>c[0]==='transition'&&c[1]===property)?.[2];
+  for(const kind of ['message','dispatch']){
+    const ping=draw(kind,'ping');
+    const ring=byId(ping,'panel-receiver-d'),again=byId(ping,'panel-receiver-d-again'),core=byId(ping,'panel-receiver-d-core');
+    assert(ring&&again&&core,`${kind}: ring, second ring and core`);
+    for(const node of [ring,again]){assert.equal(call(node,'border')[1],2);assert.equal(call(node,'border_color')[1],t.foreground);assert.equal(call(node,'w')[1],15);}
+    assert.equal(call(core,'bg')[1],t.foreground);assert.equal(call(core,'w')[1],5);
+    assert(policy(ring,'opacity').delay>=900,'held lit before it fades');
+    assert(policy(again,'width').delay>=250,'the second ring blinks after the first');
+    assert(PANEL_TIMING.pingMs+PANEL_TIMING.coolMs>=policy(ring,'opacity').delay+policy(ring,'opacity').duration,'the whole mark fits before the packet is removed');
+    const fade=draw(kind,'fade');
+    assert.equal(call(byId(fade,'panel-route-d'),'opacity'),undefined,'the route itself is not dimmed');
+    assert.equal(call(byId(fade,'panel-line-d'),'opacity')[1],0.2,'only the line fades');
+    assert(!all(fade).some(n=>call(n,'rounded')),'square pixels only');
+  }
+  const L=hex=>{const c=[1,3,5].map(i=>parseInt(hex.slice(i,i+2),16)/255).map(x=>x<=0.03928?x/12.92:((x+0.055)/1.055)**2.4);return 0.2126*c[0]+0.7152*c[1]+0.0722*c[2];};
+  const ratio=(x,y)=>{const [hi,lo]=[L(x),L(y)].sort((p,q)=>q-p);return (hi+0.05)/(lo+0.05);};
+  for(const name of ['sixfold-night','sixfold-day']){
+    const theme=JSON.parse(await readFile(new URL(`../themes/${name}.json`,import.meta.url),'utf8'));
+    for(const surface of [theme.background,theme.colors.canvas,theme.colors.chrome,theme.colors.selected])
+      assert(ratio(theme.foreground,surface)>=4.5,`${name}: done mark ${theme.foreground} on ${surface}`);
+  }
+});
+
+test('a row an event arrives on gets a 2px foreground overlay that blinks twice without moving the row',async()=>{
+  const r=await renderer(false),view=viewFor(makePanelFixture()),space=view.panelState.feed.spaces[0],agent=space.agents[0];
+  const state={packets:[{id:'x',kind:'dispatch',to:agent.id,phase:'ping'}],spawning:new Set(),active:[]};
+  const row=r.agentRow(view,agent,space,null,state,'#79D1DC',t,true);
+  const overlay=byId(row,`panel-arrival-${agent.id}`);assert(overlay);
+  assert.equal(call(row,'border'),undefined,'the row border never changes, so nothing shifts');
+  assert.equal(call(overlay,'border')[1],2);assert.equal(call(overlay,'border_color')[1],t.foreground);
+  assert(call(overlay,'absolute'));assert.equal(call(overlay,'bg')[1],'#79D1DC33');
+  const blink=overlay.calls.find(c=>c[0]==='loop');assert.equal(blink?.[1],'opacity');assert(2*blink[2].period<=PANEL_TIMING.pingMs,'two blinks within the ping');
+  const still=r.agentRow(view,agent,space,null,state,'#79D1DC',t,false);
+  assert(byId(still,`panel-arrival-${agent.id}`));assert(!call(byId(still,`panel-arrival-${agent.id}`),'loop'),'motion off stays steady');
+  const quiet=r.agentRow(view,agent,space,null,{...state,packets:[]},'#79D1DC',t,true);
+  assert(!byId(quiet,`panel-arrival-${agent.id}`));
 });
 
 test('pixel lines are whole pixels with a stepped corner, and stay whole at any zoom',async()=>{

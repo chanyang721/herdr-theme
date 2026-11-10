@@ -15,9 +15,9 @@ export function pixelBlock(x, y, w, h, color, id = null) {
 
 // A 1px right-angle line out to `lane`, along it and back, whose corners are a
 // two-step pixel staircase. Returned as one absolutely placed group of blocks.
-export function pixelRoute(from, to, lane, startX, endX, color, u = 1) {
+export function pixelRoute(from, to, lane, startX, endX, color, u = 1, id = null) {
   [from, to, lane, startX, endX] = [from, to, lane, startX, endX].map(value => snap(value, u));
-  const line = div().absolute().left(0).top(0);
+  const line = (id ? div().id(id) : div()).absolute().left(0).top(0);
   const across = (x1, x2, y) => line.child(pixelBlock(Math.min(x1, x2), y, Math.abs(x2 - x1) + u, u, color));
   if (Math.abs(to - from) < 4 * u) { across(startX, endX, from); return line; }
   const sign = to > from ? 1 : -1;
@@ -30,12 +30,34 @@ export function pixelRoute(from, to, lane, startX, endX, color, u = 1) {
   return line;
 }
 
-// A square 1px ring keyed for the whole flight: zero-size until `open`, then it
-// opens to RING_PIXELS while fading out, natively.
-export function pixelRing(id, x, y, open, color, u = 1) {
+// A square ring keyed for the whole flight: zero-size until `open`, then it
+// opens to RING_PIXELS. `delay` holds it back, `hold` keeps it lit before it
+// fades, `thickness` is its border in pixels. All native, no timer.
+export function pixelRing(id, x, y, open, color, u = 1, { thickness = 1, delay = 0, hold = 0 } = {}) {
   const n = open ? RING_PIXELS : 1;
   const ring = div().id(id).absolute().left(x - centred(n, u)).top(y - centred(n, u))
-    .w(open ? n * u : 0).h(open ? n * u : 0).border(u).border_color(color).opacity(open ? 0 : 1);
-  for (const property of ['width', 'height', 'left', 'top', 'opacity']) ring.transition(property, { duration: 460, easing: 'ease-out' });
+    .w(open ? n * u : 0).h(open ? n * u : 0).border(thickness * u).border_color(color).opacity(open ? 0 : 1);
+  for (const property of ['width', 'height', 'left', 'top']) ring.transition(property, { duration: 300, delay, easing: 'ease-out' });
+  ring.transition('opacity', { duration: 460, delay: delay + hold, easing: 'ease-out' });
   return ring;
+}
+
+// The arrival ("done") mark, made to be seen (2026-11-10): a 5x5 block lights
+// on the receiving end, a 2px ring opens and stays lit, and a second ring opens
+// a moment later, so it blinks twice. `color` should contrast with the
+// background (the theme foreground). Every part is one native transition that
+// starts at the single arrival phase change.
+export const ARRIVAL = Object.freeze({ thickness: 2, hold: 900, second: 300, core: 5 });
+export function pixelArrival(id, x, y, open, color, u = 1) {
+  // Keyed like the rings: zero-size and opaque until arrival, then full size
+  // at once, lit for a moment, then faded.
+  const side = open ? ARRIVAL.core * u : 0, offset = open ? centred(ARRIVAL.core, u) : 0;
+  const flash = pixelBlock(x - offset, y - offset, side, side, color, `${id}-core`).opacity(open ? 0 : 1);
+  for (const property of ['width', 'height', 'left', 'top']) flash.transition(property, { duration: 60, easing: 'linear' });
+  flash.transition('opacity', { duration: 600, delay: ARRIVAL.hold - 300, easing: 'ease-in' });
+  return [
+    flash,
+    pixelRing(id, x, y, open, color, u, { thickness: ARRIVAL.thickness, hold: ARRIVAL.hold }),
+    pixelRing(`${id}-again`, x, y, open, color, u, { thickness: ARRIVAL.thickness, delay: ARRIVAL.second, hold: ARRIVAL.hold - ARRIVAL.second }),
+  ];
 }

@@ -1036,7 +1036,7 @@ export default class SixfoldDesk extends View {
         taskComputerAnchors(taskPanel.feed,activeComputers,this.computerBlockHeight??(activeComputers.length*39+3),this.spaceSectionHeight??31),LINK_MARGIN)))
       .children(paths.filter(flow => positions[flow.source] !== undefined && positions[flow.target] !== undefined).map(flow => {
         const from=positions[flow.source], to=positions[flow.target];
-        return pipeline({id:flow.id,width:8+(flow.lane%2)*10,inset:14,from,to,color:workspaceFlowColor(flow),phase:flow.phase,packets:flow.packets,motion,unit:1/(Number(settings()?.zoom)||1)})
+        return pipeline({id:flow.id,width:8+(flow.lane%2)*10,inset:14,from,to,color:workspaceFlowColor(flow),phase:flow.phase,packets:flow.packets,motion,unit:1/(Number(settings()?.zoom)||1),done:t.foreground})
           .right(LINK_MARGIN-26-(flow.lane%2)*10);
       }))
       // The far end is on another computer: run the pipe up to the top of this list,
@@ -1044,7 +1044,7 @@ export default class SixfoldDesk extends View {
       .children(remoteRoutes.filter(({route}) => (positions[route.source] === undefined) !== (positions[route.target] === undefined)).map(({route}) => {
         const outgoing = positions[route.source] !== undefined;
         const row = outgoing ? positions[route.source] : positions[route.target];
-        return pipeline({id:`${route.id}-hop`,width:8+(route.lane%2)*10,inset:14,from:outgoing?row:0,to:outgoing?0:row,color:workspaceFlowColor(route),phase:route.phase,packets:route.packets,motion,unit:1/(Number(settings()?.zoom)||1)})
+        return pipeline({id:`${route.id}-hop`,width:8+(route.lane%2)*10,inset:14,from:outgoing?row:0,to:outgoing?0:row,color:workspaceFlowColor(route),phase:route.phase,packets:route.packets,motion,unit:1/(Number(settings()?.zoom)||1),done:t.foreground})
           .right(LINK_MARGIN-26-(route.lane%2)*10);
       }));
     return v_flex().id('sixfold-sidebar').size_full().bg(t.chrome).text_color(t.foreground)

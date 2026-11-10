@@ -54,6 +54,15 @@ test('a workspace pipe packet leaves the sender, runs down the lane and enters t
   for(let ms=0;ms<=1600;ms+=40){const p=position(ms);assert(p.x>=14&&p.x<=22&&p.y>=0&&p.y<=90,`stays on the pipe at ${ms}ms`);}
   const ring=find(draw('arrived'),'sf-pipeline-receiver-one');
   assert.equal(call(ring,'left')+7,receiver.x,'the arrival ring opens on the receiving end');
+  const done=pipeline({...options,done:'#d8e3eb',phase:'arrived',packets:[{id:'one',phase:'arrived',travelMs:1600}]});
+  for(const id of ['sf-pipeline-receiver-one','sf-pipeline-receiver-one-again']){
+    const node=find(done,id);assert.equal(call(node,'border'),2,`${id} is 2px`);assert.equal(call(node,'border_color'),'#d8e3eb','in the contrasting done colour');
+  }
+  assert.equal(call(find(done,'sf-pipeline-receiver-one-core'),'bg'),'#d8e3eb');
+  assert.equal(call(find(done,'sf-route-route'),'opacity'),undefined,'the mark is never dimmed with the pipe');
+  assert.equal(call(find(done,'sf-pipe-route'),'opacity'),0.5,'only the pipe dims after arrival');
+  const hold=find(done,'sf-pipeline-receiver-one').calls.find(c=>c[0]==='transition'&&c[1]==='opacity')[2];
+  assert(hold.delay+hold.duration<=2140,'the mark finishes before the flow is removed (travel+2200 vs arrived at travel+60)');
   const [,,arrivedBlock]=chain(draw('arrived'),'one');
   assert.equal(call(arrivedBlock,'left'),call(block,'left'),'arrival keeps the final targets, so nothing moves back');
   assert.equal(legs.out+legs.down+legs.back,1600);
