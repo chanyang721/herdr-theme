@@ -1,5 +1,6 @@
 //! The production dictation transitions with explicit clock and pane I/O.
 //! These are the same boundaries mocked by the original Python voice tests.
+use super::mic::{Change, Mic, DROP_SHOWN};
 use super::*;
 
 #[derive(Clone, Copy)]
@@ -126,6 +127,58 @@ pub trait Backend {
     {
         press_with(self, id, key, on, seconds)
     }
+    /// Publish what the pane header shows. Test doubles see nothing by default;
+    /// only the runtime writes the shared record.
+    fn mic(&mut self, _id: &str, _change: Change) {}
+}
+/// The state this watcher last published, so a poll only writes on change.
+#[derive(Default)]
+struct MicView {
+    shown: Option<Option<Mic>>,
+    absent: Option<f64>,
+    dropped: Option<f64>,
+}
+/// A missing REC footer this long means the microphone is really off, not between
+/// a sent dictation and its re-arm.
+const OFF_AFTER: f64 = 1.5;
+impl MicView {
+    fn set<B: Backend>(&mut self, b: &mut B, id: &str, mic: Option<Mic>) {
+        if mic != Some(Mic::Off("not_ready")) {
+            self.absent = None;
+        }
+        if self.shown != Some(mic) {
+            self.shown = Some(mic);
+            if mic.is_none() {
+                self.dropped = None;
+            }
+            b.mic(id, Change::State(mic));
+        }
+    }
+    fn absent<B: Backend>(&mut self, b: &mut B, id: &str) {
+        let at = *self.absent.get_or_insert(b.clock());
+        if b.clock() - at >= OFF_AFTER {
+            self.set(b, id, Some(Mic::Off("not_ready")));
+        }
+    }
+    fn dropped<B: Backend>(&mut self, b: &mut B, id: &str, cause: &'static str, chars: usize) {
+        if chars > 0 {
+            self.dropped = Some(b.clock());
+            b.mic(id, Change::Dropped { cause, chars });
+        }
+    }
+    fn tick<B: Backend>(&mut self, b: &mut B, id: &str) {
+        if self.dropped.is_some_and(|at| b.clock() - at >= DROP_SHOWN) {
+            self.dropped = None;
+            b.mic(id, Change::ClearDropped);
+        }
+    }
+}
+fn drop_cause(speaker: &str) -> &'static str {
+    match speaker {
+        "other" => "other",
+        "me" => "headset",
+        _ => "unknown",
+    }
 }
 pub fn press_with<B: Backend>(
     b: &mut B,
@@ -145,7 +198,11 @@ pub fn press_with<B: Backend>(
     Ok(false)
 }
 pub struct Runtime;
-impl Backend for Runtime {}
+impl Backend for Runtime {
+    fn mic(&mut self, id: &str, change: Change) {
+        super::mic::publish(id, "claude", change)
+    }
+}
 fn box_text<B: Backend>(b: &mut B, id: &str) -> Result<String> {
     let text = b.screen(id)?;
     Ok(b.composer(&text))
@@ -179,6 +236,13 @@ pub fn clear_blocked<B: Backend>(id: &str, b: &mut B) -> Result<bool> {
     let text = box_text(b, id)?;
     if !text.is_empty() && b.clock() - at < 5. {
         erase(b, id, text.chars().count())?;
+        b.mic(
+            id,
+            Change::Dropped {
+                cause: "refused",
+                chars: text.chars().count(),
+            },
+        );
         b.report(&format!(
             "claude dictation refused {id} ({} chars)",
             text.chars().count()
@@ -315,8 +379,10 @@ pub fn listen_with<B: Backend>(id: &str, b: &mut B, t: Timing) -> Result<()> {
         spoken = false;
     }
     let mut gate_checked = 0.;
+    let mut view = MicView::default();
     while misses < 6 {
         b.pause(0.3);
+        view.tick(b, id);
         let pane = b.pane(id)?;
         if pane["focused"] != true || pane["agent"] != "claude" {
             if pane["agent"] == "claude"
@@ -332,9 +398,11 @@ pub fn listen_with<B: Backend>(id: &str, b: &mut B, t: Timing) -> Result<()> {
                     continue;
                 }
             }
+            view.set(b, id, None);
             return Ok(());
         }
         if clear_blocked(id, b)? {
+            view.dropped.get_or_insert(b.clock());
             last = None;
             started = None;
             spoken_since = None;
@@ -367,6 +435,11 @@ pub fn listen_with<B: Backend>(id: &str, b: &mut B, t: Timing) -> Result<()> {
         }
         let headset = b.headset();
         if !headset || !b.front()? {
+            view.set(
+                b,
+                id,
+                Some(Mic::Paused(if headset { "front" } else { "headset" })),
+            );
             if b.recording_footer(&text) && kept.is_empty() {
                 let speaker = b.speaker(b.recording_since(id), None).0;
                 b.press(
@@ -415,11 +488,9 @@ pub fn listen_with<B: Backend>(id: &str, b: &mut B, t: Timing) -> Result<()> {
                     b.confirm(spoken_since)?;
                     b.report(&format!("claude dictation sent {id} after recording ended ({} chars, {speaker} voice)",typed.chars().count()));
                 } else {
-                    erase(
-                        b,
-                        id,
-                        typed.chars().count().saturating_sub(kept.chars().count()),
-                    )?;
+                    let count = typed.chars().count().saturating_sub(kept.chars().count());
+                    erase(b, id, count)?;
+                    view.dropped(b, id, drop_cause(speaker), count);
                     b.report(&format!("claude dictation discarded {id} after recording ended ({} chars, {speaker} voice)",typed.chars().count().saturating_sub(kept.chars().count())));
                 }
                 last = None;
@@ -449,8 +520,10 @@ pub fn listen_with<B: Backend>(id: &str, b: &mut B, t: Timing) -> Result<()> {
                     if on { "" } else { " (no change)" }
                 ));
             }
+            view.absent(b, id);
             continue;
         }
+        view.set(b, id, Some(Mic::Recording));
         if started.is_none() {
             started = Some(b.clock());
             b.armed(id)?;
@@ -506,6 +579,12 @@ pub fn listen_with<B: Backend>(id: &str, b: &mut B, t: Timing) -> Result<()> {
                 .count()
                 .saturating_sub(kept.chars().count());
             erase(b, id, count)?;
+            view.dropped(
+                b,
+                id,
+                drop_cause(speaker),
+                typed.chars().count().saturating_sub(kept.chars().count()),
+            );
             b.report(&format!(
                 "claude dictation discarded {id} ({} chars, {speaker} voice)",
                 typed.chars().count().saturating_sub(kept.chars().count())
@@ -519,6 +598,7 @@ pub fn listen_with<B: Backend>(id: &str, b: &mut B, t: Timing) -> Result<()> {
             b.report(&format!("claude voice recycled {id}"));
         }
     }
+    view.set(b, id, Some(Mic::Off("key_ignored")));
     b.report(&format!("claude voice stopped re-arming {id}: F8 ignored"));
     Ok(())
 }
