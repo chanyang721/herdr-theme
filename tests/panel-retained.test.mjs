@@ -23,7 +23,8 @@ async function runtime(motion=false,options={}){
     window:()=>({active:false,visible:globalThis.__retainedHostVisible}),spaces:()=>globalThis.__retainedNativeSpaces,panes:()=>[],shared:key=>store.get(key),setShared:(key,value)=>store.set(key,value),run(){},settings:()=>({zoom:1})};
   globalThis.window={paint_path:element};
   const transform=source=>source.replace(/import \{([^}]+)\} from '(?:gpui-kit|gpui-base|herdr)';/g,'const {$1}=globalThis.__retainedRuntime;');
-  const localModule=async name=>`data:text/javascript;base64,${Buffer.from(transform(await readFile(new URL(`../mods/sixfold-desk/${name}.js`,import.meta.url),'utf8')).replace("'./alert-model.js'",JSON.stringify(new URL('../mods/sixfold-desk/alert-model.js',import.meta.url).href))).toString('base64')}#${loads++}`;
+  const localModule=async name=>`data:text/javascript;base64,${Buffer.from(transform(await readFile(new URL(`../mods/sixfold-desk/${name}.js`,import.meta.url),'utf8')).replace("'./alert-model.js'",JSON.stringify(new URL('../mods/sixfold-desk/alert-model.js',import.meta.url).href)).replace("'./issue-model.js'",JSON.stringify(new URL('../mods/sixfold-desk/issue-model.js',import.meta.url).href)).replace("'./issue-detail-view.js'",JSON.stringify(globalThis.__detailViewUrl||''))).toString('base64')}#${loads++}`;
+  globalThis.__detailViewUrl=await localModule('issue-detail-view');
   const detailsUrl=await localModule('task-row-details'),issuesUrl=await localModule('task-issues-view');
   let view=transform(await readFile(new URL('../mods/sixfold-desk/panel-view.js',import.meta.url),'utf8'));
   view=view.replace("'./task-row-details.js'",JSON.stringify(detailsUrl));
@@ -38,6 +39,8 @@ async function runtime(motion=false,options={}){
   source=source.replace("'./panel-view.js'",JSON.stringify(viewUrl));
   source=source.replace("'./alert-model.js'",JSON.stringify(new URL('../mods/sixfold-desk/alert-model.js',import.meta.url).href));
   source=source.replace("'./linear-reads.js'",JSON.stringify(await linearReadsUrl()));
+  source=source.replace("'./issue-model.js'",JSON.stringify(new URL('../mods/sixfold-desk/issue-model.js',import.meta.url).href));
+  source=source.replace("'./linear-cache.js'",JSON.stringify(await localModule('linear-cache')));
   source=source.replace("'./task-issues-view.js'",JSON.stringify(issuesUrl)).replace("'./task-issue-state.js'",JSON.stringify(new URL('../mods/sixfold-desk/task-issue-state.js',import.meta.url).href));
   const mod=await import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}#${loads++}`);
   const controller=mod.createRetainedPanel(cx,options);
@@ -104,6 +107,7 @@ test('native issue popover opens with retained input; completion returns via own
   assert.equal(r.controller.issueStates.get(space.id).open,true);r.flush();
   const state=r.controller.issueStates.get(space.id);state.scope='all';
   state.input.text='manual';state.input.events.get('change')();
+  state.hoverKey='DEMO-99';   // the pull button shows under the mouse
   popup=r.controller.issuePopover(card,element(),t);
   const body=popup.calls.find(call=>call[0]==='content')[1];
   assert.equal(body.calls.find(call=>call[0]==='ml')[1],66,'surface clears the route gutter and leaves ten pixels outside the sidebar');

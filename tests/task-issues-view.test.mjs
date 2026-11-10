@@ -21,9 +21,12 @@ const rows=Array.from({length:3},(_,i)=>({key:`DEMO-${i+1}`,title:`Demo issue ${
 let serial=0;
 async function renderer(){
   globalThis.__issueView={div:()=>element(),svg:value=>element('svg',value),h_flex:()=>element('row'),v_flex:()=>element('column'),Popover:{new:id=>element('popover',id)}};
-  const source=(await readFile(new URL('../mods/sixfold-desk/task-issues-view.js',import.meta.url),'utf8'))
+  const local=async name=>(await readFile(new URL(`../mods/sixfold-desk/${name}.js`,import.meta.url),'utf8'))
     .replace(/import \{([^}]+)\} from '(?:gpui-kit|gpui-base)';/g,'const {$1}=globalThis.__issueView;')
-    .replace("'./alert-model.js'",JSON.stringify(new URL('../mods/sixfold-desk/alert-model.js',import.meta.url).href));
+    .replace("'./alert-model.js'",JSON.stringify(new URL('../mods/sixfold-desk/alert-model.js',import.meta.url).href))
+    .replace("'./issue-model.js'",JSON.stringify(new URL('../mods/sixfold-desk/issue-model.js',import.meta.url).href));
+  const detailView=`data:text/javascript;base64,${Buffer.from(await local('issue-detail-view')).toString('base64')}#${serial++}`;
+  const source=(await local('task-issues-view')).replace("'./issue-detail-view.js'",JSON.stringify(detailView));
   return import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}#${serial++}`);
 }
 const model=overrides=>({id:'demo',open:true,trigger:element('icon'),rows,selected:new Set(),scope:'week',...overrides});
@@ -49,19 +52,25 @@ test('three scopes update local state and milestone groups retain due/progress l
 test('only explicit per-issue pull controls import or remove manual picks; natural week rows stay included',async()=>{
   const {issuePopover}=await renderer(),actions=[],cx={stop_propagation(){}};
   const items=rows.map((row,i)=>({...row,week:i===0,pinned:i===2}));
-  const tree=issuePopover(model({rows:items,canImport:true,onPull:(...args)=>actions.push(args)}),theme);
-  assert(!call(byId(tree,'task-issue-demo-DEMO-2'),'on_click'),'reading a row cannot post an import');
-  assert(!call(byId(tree,'task-issues-pull-demo-DEMO-1'),'on_click'),'natural week inclusion is not removable');
-  click(byId(tree,'task-issues-pull-demo-DEMO-2'),cx);click(byId(tree,'task-issues-pull-demo-DEMO-3'),cx);
+  const at=hoverKey=>issuePopover(model({rows:items,canImport:true,scope:'all',hoverKey,onPull:(...args)=>actions.push(args)}),theme);
+  assert(!call(byId(at(null),'task-issue-demo-DEMO-2'),'on_click'),'reading a row cannot post an import');
+  for(const key of ['DEMO-1','DEMO-2','DEMO-3'])assert(!byId(at(null),`task-issues-pull-demo-${key}`),'no button until the mouse is over the row');
+  assert(!byId(at('DEMO-1'),'task-issues-pull-demo-DEMO-1'),'natural week inclusion has no button');
+  const add=at('DEMO-2'),remove=at('DEMO-3');
+  click(byId(add,'task-issues-pull-demo-DEMO-2'),cx);click(byId(remove,'task-issues-pull-demo-DEMO-3'),cx);
   assert.deepEqual(actions,[['DEMO-2',true,cx],['DEMO-3',false,cx]]);
-  assert(words(tree).includes('가져오기'));assert(words(tree).includes('가져옴 ✓'));
+  assert(words(add).includes('이번 주에'));assert(words(remove).includes('빼기'));
+  // '이번 주' is the tab label once; the all tab adds the chip on the week issue, the week tab adds none.
+  assert.equal(words(at(null)).filter(w=>w==='이번 주').length,2,'all tab: tab label + the week chip');
+  assert.equal(words(issuePopover(model({rows:items,scope:'week'}),theme)).filter(w=>w==='이번 주').length,1,'week tab: no chip (the tab is the week)');
 });
 
 test('pending, unavailable and empty views cannot emit a pull request',async()=>{
   const {issuePopover}=await renderer();let imports=0;
   for(const state of [{busyKeys:new Set(['DEMO-1']),canImport:true},{canImport:false}]){
-    const tree=issuePopover(model({...state,onPull:()=>imports++}),theme);
-    assert(!call(byId(tree,'task-issues-pull-demo-DEMO-1'),'on_click'));
+    const tree=issuePopover(model({...state,hoverKey:'DEMO-1',onPull:()=>imports++}),theme);
+    const button=byId(tree,'task-issues-pull-demo-DEMO-1');
+    assert(!button||!call(button,'on_click'));
   }
   const empty=issuePopover(model({rows:[],toolLabel:'연결 없음',error:'이슈를 불러오지 못했습니다'}),theme);
   assert(words(empty).includes('이 범위에 표시할 이슈가 없습니다'));
