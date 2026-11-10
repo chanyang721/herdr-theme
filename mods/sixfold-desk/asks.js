@@ -1,6 +1,6 @@
 import { div } from 'gpui-kit';
 import { h_flex, v_flex } from 'gpui-base';
-import { exec, readTextFile, writeTextFile, appHome, shared, setShared, openOverlay, closeOverlay, props } from 'herdr';
+import { exec, writeTextFile, appHome, shared, setShared, openOverlay, closeOverlay, props } from 'herdr';
 import { KIND_WORDS, ASK_WORDS, SUMMARY_KEY, bridgeFrom, parseAsks, questionsOf, actionsOf, choose, complete, actionRequest, requestPath, acceptedReceipt, detailOf, selectionOf,
   askSummary, summaryFor, groupAsks, cardsFor, clampPage, reconcile, popupHeight, errorText } from './ask-model.js';
 
@@ -76,6 +76,10 @@ function publishSummary(cards) {
     if (JSON.stringify(shared(SUMMARY_KEY) ?? null) !== JSON.stringify(next)) setShared(SUMMARY_KEY, next);
   } catch { /* Display-only signal; the cards file stays authoritative. */ }
 }
+// Every read here goes through the same typed reader (and size bound) as the
+// sidebar watcher, so a card the sidebar shows is never too big to open.
+const snapshot = name => readJsonSnapshot(`${appHome()}${ROOT}/${name}.json`).catch(() => ({status: 'invalid'}));
+const valueOf = snap => snap?.status === 'ready' && Object.hasOwn(snap, 'value') ? snap.value : null;
 class ActionError extends Error { constructor(code) { super(code); this.code = code; } }
 // Error codes, not messages: command output never reaches the card.
 export function sendAction(view, card, action, cx) {
@@ -84,11 +88,11 @@ export function sendAction(view, card, action, cx) {
   view.askBusy[card.id] = true; delete view.askErrors[card.id]; cx.notify();
   cx.spawn(async cx => {
     try {
-      const current = bridgeFrom(await readTextFile(`${appHome()}${ROOT}/bridge.json`).catch(() => null));
+      const current = bridgeFrom(valueOf(await snapshot('bridge')));
       if (JSON.stringify(current) !== JSON.stringify(bridge)) throw new ActionError('changed');
       // The bridge validates the revision too; this only avoids sending an
       // answer to a card that is already gone or was revised on disk.
-      const live = parseAsks(await readTextFile(`${appHome()}${ROOT}/cards.json`).catch(() => null));
+      const live = parseAsks(valueOf(await snapshot('cards')));
       if (!live?.cards.some(item => item.id === card.id && item.revision === card.revision)) throw new ActionError('stale');
       const id = `${Date.now().toString(36)}-${(++sequence).toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
       let request;
@@ -170,15 +174,20 @@ function loadPopup(view, cx) {
         // Recorded first, so a failed read is retried on the next summary
         // change or explicit retry, never by every render.
         view.askLoadedV = shared(SUMMARY_KEY)?.v ?? '';
-        const [bridgeText, cardsText] = await Promise.all([`${appHome()}${ROOT}/bridge.json`, `${appHome()}${ROOT}/cards.json`]
-          .map(path => readTextFile(path).catch(() => undefined)));
-        if (bridgeText === undefined || cardsText === undefined) { view.askLoadFailed = true; continue; }
-        const bridge = bridgeFrom(bridgeText), parsed = bridge ? parseAsks(cardsText) : null;
-        // Only a missing bridge file hides cards. Unreadable or half-written
-        // bridge or cards bytes are a failed read: keep the last valid display.
-        if ((bridgeText !== null && bridge === null) || (bridge && cardsText !== null && parsed === null)) { view.askLoadFailed = true; continue; }
+        const [b, c] = await Promise.all([snapshot('bridge'), snapshot('cards')]);
+        const bridge = b.status === 'ready' ? bridgeFrom(valueOf(b)) : null;
+        const parsed = bridge && c.status === 'ready' ? parseAsks(valueOf(c)) : null;
+        // Only a missing bridge file hides cards. Unreadable, oversized or
+        // half-written bridge or cards files are a failed read: keep the last
+        // valid display and offer a retry.
+        if (![b, c].every(x => x.status === 'missing' || x.status === 'ready') || (b.status === 'ready' && !bridge)
+          || (bridge && c.status === 'ready' && parsed === null)) { view.askLoadFailed = true; continue; }
         const next = bridge ? cardsFor(parsed?.cards, terminal) : [];
-        const result = reconcile(view.asks, next, view.askChoices, view.askSent);
+        // A card that vanished after a send we could not confirm is not an
+        // expiry: keep saying the outcome is unconfirmed.
+        const unconfirmed = Object.keys(view.askErrors).filter(id => !next.some(card => card.id === id));
+        for (const id of unconfirmed) view.askUnconfirmed.push((view.asks ?? []).find(card => card.id === id)?.title ?? id);
+        const result = reconcile(view.asks, next, view.askChoices, new Set([...view.askSent, ...unconfirmed]));
         // Sticky until the person chooses again: a later re-read must not hide it.
         view.askChoices = result.choices; view.askRevised = Boolean(view.askRevised) || (view.asks !== null && result.revised);
         view.askExpired = (view.askExpired ?? 0) + (view.asks !== null ? result.expired : 0);
@@ -192,7 +201,7 @@ function loadPopup(view, cx) {
 export function askPopup(view, t, lang, cx) {
   if (!view.askPopupReady) {
     view.askPopupReady = true; view.asks = null; view.askChoices = Object.create(null); view.askBusy = Object.create(null);
-    view.askErrors = Object.create(null); view.askSent = new Set(); view.askPage = 0; view.askExpired = 0;
+    view.askErrors = Object.create(null); view.askSent = new Set(); view.askUnconfirmed = []; view.askPage = 0; view.askExpired = 0;
     view.refreshAsks = context => loadPopup(view, context ?? cx);
     loadPopup(view, cx);
   } else if ((shared(SUMMARY_KEY)?.v ?? '') !== view.askLoadedV && !view.askLoading) loadPopup(view, cx);
@@ -212,6 +221,7 @@ export function askPopup(view, t, lang, cx) {
   const notices = v_flex().gap(3).px(14)
     .when(Boolean(view.askRevised), e => e.child(div().text_size(11).text_color(t.blocked).child(more.revised)))
     .when(view.askExpired > 0, e => e.child(div().text_size(11).text_color(t.muted).child(`${more.expired}: ${view.askExpired}`)))
+    .children(view.askUnconfirmed.map((title, i) => div().id(`sf-ask-unconfirmed-${i}`).text_size(11).text_color(t.blocked).child(`${more.unconfirmed}: ${title}`)))
     .when(view.askSent.size > 0 && !card, e => e.child(div().text_size(11).text_color(t.done ?? t.accent).child(more.sent)))
     // A failed re-read keeps the last cards on screen but says so, with a retry.
     .when(view.asks !== null && Boolean(view.askLoadFailed), e => e.child(h_flex().gap(8).items_center()
@@ -226,7 +236,9 @@ export function askPopup(view, t, lang, cx) {
   else {
     const busy = Boolean(view.askBusy[card.id]), selected = view.askChoices[card.id] ?? {}, questions = questionsOf(card), actions = actionsOf(card);
     const error = view.askErrors[card.id];
-    body = v_flex().id(`sf-ask-body-${card.id}`).flex_1().min_h(0).overflow_y_scrollbar().gap(10).px(14).py(10)
+    // overflow_y_scroll, not ..._scrollbar: the popup sizes to its content, and the
+    // scrollbar variant collapses this body to zero height there (seen in a real render).
+    body = v_flex().id(`sf-ask-body-${card.id}`).flex_1().min_h(0).overflow_y_scroll().gap(10).px(14).py(10)
       .child(div().text_size(14).text_color(t.foreground).font_bold().child(card.title))
       .when(Boolean(detailOf(card)), e => e.child(div().px(10).py(8).rounded(4).bg(t.surface).border(1).border_color(t.border)
         .text_size(12).text_color(t.foreground).child(detailOf(card))))

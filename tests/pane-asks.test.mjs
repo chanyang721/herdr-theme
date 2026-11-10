@@ -68,7 +68,7 @@ function host(cards) {
   const files = new Map([['/demo/data/sixfold/bridge.json', JSON.stringify(bridge)], ['/demo/data/sixfold/cards.json', JSON.stringify({schema: 1, cards})]]);
   const store = new Map(), calls = [], overlays = [], closed = [], focus = [], listeners = new Map();
   let currentProps = {};
-  const snapshot = path => { const raw = files.get(path); if (raw === undefined) return {status: 'missing'}; return {status: 'ready', value: JSON.parse(raw)}; };
+  const snapshot = path => { const raw = files.get(path); if (raw === undefined) return {status: 'missing'}; try { return {status: 'ready', value: JSON.parse(raw)}; } catch { return {status: 'invalid'}; } };
   const h = {
     div: () => el('div'), h_flex: () => el('h_flex'), v_flex: () => el('v_flex'),
     appHome: () => '/demo', props: () => currentProps,
@@ -78,7 +78,7 @@ function host(cards) {
     openOverlay: spec => { overlays.push(spec); return `ov-${overlays.length}`; },
     closeOverlay: id => { closed.push(id); return null; },
     subscribeJsonFile(_cx, path, callback) { const set = listeners.get(path) ?? new Set(); set.add(callback); listeners.set(path, set); Promise.resolve().then(() => { if (set.has(callback)) callback(snapshot(path)); }); return () => set.delete(callback); },
-    readJsonSnapshot: async path => snapshot(path),
+    readJsonSnapshot: (...args) => impl.readJsonSnapshot(...args),
     readTextFile: (...args) => impl.readTextFile(...args),
     writeTextFile: async (path, value, expected) => { calls.push(['write', path]); if ((files.get(path) ?? null) !== expected) throw Error('File changed'); files.set(path, value); },
     exec: (...args) => impl.exec(...args),
@@ -87,6 +87,7 @@ function host(cards) {
   // Like the real bridge, an accepted action removes the card from cards.json.
   const impl = {
     readTextFile: async path => files.get(path) ?? null,
+    readJsonSnapshot: async path => snapshot(path),
     exec: async (program, args) => {
       calls.push(['exec', program, args]); const request = JSON.parse(files.get(args.at(-1)));
       const now = JSON.parse(files.get('/demo/data/sixfold/cards.json')).cards.filter(c => c.id !== request.cardId);
@@ -96,7 +97,7 @@ function host(cards) {
   };
   const emit = path => { for (const cb of listeners.get(path) ?? []) cb(snapshot(path)); };
   const setCards = next => { files.set('/demo/data/sixfold/cards.json', JSON.stringify({schema: 1, cards: next})); emit('/demo/data/sixfold/cards.json'); };
-  return {h, impl, files, store, calls, overlays, closed, focus, setCards, emit, setProps: p => { currentProps = p; }};
+  return {h, impl, snapshot, files, store, calls, overlays, closed, focus, setCards, emit, setProps: p => { currentProps = p; }};
 }
 const theme = new Proxy({}, {get: (_t, k) => `#${String(k).length.toString(16).padStart(6, '0')}`});
 
@@ -199,7 +200,7 @@ test('popup shows only its pane, pages through several cards, and keeps long opt
   assert.match(text(tree), /2\/3/); assert.match(text(tree), /Two questions/);
   assert.ok(find(tree, 'sf-ask-multi-q0-o1')); assert.ok(text(tree).includes(longLabel), 'full long label is rendered');
   walk(tree, node => { if (node.children.includes(longLabel)) assert.ok(!node.calls.includes('truncate'), 'long option is not truncated'); });
-  assert.ok(find(tree, 'sf-ask-body-multi').calls.includes('overflow_y_scrollbar'));
+  assert.ok(find(tree, 'sf-ask-body-multi').calls.includes('overflow_y_scroll'));
   click(tree, 'sf-ask-next', a.cx); tree = a.render();
   assert.match(text(tree), /line one\nline two/, 'detail keeps its original text');
   assert.equal(find(tree, 'sf-ask-next').click(event, a.cx), undefined); assert.equal(a.view.askPage, 2, 'last page stays');
@@ -259,10 +260,10 @@ test('closing answers nothing and a reopened popup shows the same card; read fai
   assert.deepEqual(f.closed, ['ov-1']); assert.deepEqual(f.calls.filter(c => c[0] !== 'setShared'), []);
   assert.match(text(p.render()), /닫아도 거절·답변되지 않습니다/);
   const again = await popup(f, mod, 'pane-a'); assert.equal(again.view.asks[0].id, 'a1');
-  f.impl.readTextFile = async () => { throw Error('io'); };
+  f.impl.readJsonSnapshot = async () => { throw Error('io'); };
   const failed = await popup(f, mod, 'pane-a');
   assert.match(text(failed.render()), /카드를 읽지 못했습니다/);
-  f.impl.readTextFile = async path => f.files.get(path) ?? null;
+  f.impl.readJsonSnapshot = async path => f.snapshot(path);
   click(failed.render(), 'sf-ask-retry', failed.cx); await failed.cx.settle();
   assert.equal(failed.view.asks[0].id, 'a1');
 });
@@ -277,12 +278,12 @@ test('a failed re-read while cards are shown says so, offers a retry, and recove
   const f = host([card('a1', 'pane-a')]), mod = await load(f.h), p = await popup(f, mod, 'pane-a');
   f.files.set('/demo/data/sixfold/cards.json', JSON.stringify({schema: 1, cards: [{...card('a1', 'pane-a'), revision: 'r2'}]}));
   f.store.set(SUMMARY_KEY, askSummary([{...card('a1', 'pane-a'), revision: 'r2'}]));
-  f.impl.readTextFile = async () => { throw Error('io'); };
+  f.impl.readJsonSnapshot = async () => { throw Error('io'); };
   p.render(); await p.cx.settle();
   let tree = p.render();
   assert.equal(p.view.asks[0].revision, 'r1'); assert.match(text(tree), /최신 내용을 읽지 못했습니다/); assert.ok(find(tree, 'sf-ask-reload'));
   p.render(); await p.cx.settle(); assert.equal(p.view.askLoading, false, 'no re-read loop on every render');
-  f.impl.readTextFile = async path => f.files.get(path) ?? null;
+  f.impl.readJsonSnapshot = async path => f.snapshot(path);
   click(tree, 'sf-ask-reload', p.cx); await p.cx.settle();
   tree = p.render();
   assert.equal(p.view.asks[0].revision, 'r2'); assert.doesNotMatch(text(tree), /최신 내용을 읽지 못했습니다/);
@@ -304,4 +305,28 @@ test('a half-written bridge file is a failed read, not a missing bridge: cards s
   assert.equal(p.view.asks[0].revision, 'r2'); assert.equal(p.view.askLoadFailed, false);
   f.files.delete('/demo/data/sixfold/bridge.json'); p.view.refreshAsks(p.cx); await p.cx.settle();
   assert.deepEqual(p.view.asks, [], 'a really missing bridge still hides the cards');
+});
+
+test('a send whose receipt cannot be confirmed stays reported after the card disappears', async () => {
+  const f = host([card('a1', 'pane-a'), card('a2', 'pane-a')]), mod = await load(f.h), p = await popup(f, mod, 'pane-a');
+  // The bridge removes the card but answers with a receipt for another request id.
+  f.impl.exec = async () => {
+    f.files.set('/demo/data/sixfold/cards.json', JSON.stringify({schema: 1, cards: [card('a2', 'pane-a')]}));
+    return {code: 0, stdout: JSON.stringify({schema: 1, id: 'someone-else', status: 'accepted'})};
+  };
+  click(p.render(), 'sf-ask-a1-action-0', p.cx); await p.cx.settle();
+  f.store.set(SUMMARY_KEY, askSummary([card('a2', 'pane-a')])); p.render(); await p.cx.settle();
+  const tree = p.render();
+  assert.deepEqual(p.view.asks.map(c => c.id), ['a2']);
+  assert.match(text(tree), /응답 접수를 확인하지 못함.*Title a1/); assert.equal(p.view.askExpired, 0, 'not counted as an expiry');
+  assert.doesNotMatch(text(tree), /응답을 접수했습니다/);
+});
+test('popup and pre-send checks use the same typed reader as the sidebar (no 1 MiB text read)', async () => {
+  const big = card('big', 'pane-a', {detail: 'x'.repeat(1_500_000)});
+  const f = host([big]), mod = await load(f.h);
+  f.impl.readTextFile = async () => { throw Error('readTextFile must not be used for cards or bridge'); };
+  const p = await popup(f, mod, 'pane-a');
+  assert.equal(p.view.asks[0].id, 'big');
+  click(p.render(), 'sf-ask-big-action-0', p.cx); await p.cx.settle();
+  assert.ok(f.calls.some(c => c[0] === 'exec'), 'the send went through');
 });

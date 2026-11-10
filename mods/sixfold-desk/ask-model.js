@@ -98,12 +98,12 @@ export const SUMMARY_KEY = 'sixfold.asks.summary';
 export const ASK_WORDS = {
   ko: {open: '열기', close: '닫기', closeHint: '닫아도 거절·답변되지 않습니다. 머리줄 버튼이나 왼쪽 목록에서 다시 열 수 있습니다.',
     none: '이 페인에 남은 확인 요청이 없습니다.', loading: '불러오는 중…', loadFailed: '카드를 읽지 못했습니다.', refreshFailed: '최신 내용을 읽지 못했습니다 — 아래는 마지막으로 읽은 내용입니다.', retry: '다시 읽기', sending: '전송 중…', sent: '응답을 접수했습니다.',
-    expired: '처리되었거나 만료된 요청', revised: '요청 내용이 바뀌어 선택을 초기화했습니다.', unassigned: '소속 미확인',
+    expired: '처리되었거나 만료된 요청', unconfirmed: '응답 접수를 확인하지 못함 — 에이전트 페인에서 결과를 확인하세요', revised: '요청 내용이 바뀌어 선택을 초기화했습니다.', unassigned: '소속 미확인',
     errors: {failed: '전송 실패 — 다시 시도하세요', changed: '연결 설정이 바뀌었습니다 — 다시 열어 주세요', stale: '요청이 바뀌었거나 만료되었습니다 — 최신 내용을 확인하세요', incomplete: '모든 질문에 답한 뒤 보내세요'},
     count: n => `${n}건`, more: n => `${n}개 페인 · 목록을 스크롤해 모두 보기`},
   en: {open: 'Open', close: 'Close', closeHint: 'Closing does not deny or answer. Reopen it from the pane header or the sidebar.',
     none: 'No requests left for this pane.', loading: 'Loading…', loadFailed: 'Could not read the cards.', refreshFailed: 'Could not read the latest — showing the last read.', retry: 'Retry', sending: 'Sending…', sent: 'Response accepted.',
-    expired: 'Handled or expired', revised: 'The request changed; choices were reset.', unassigned: 'Unassigned',
+    expired: 'Handled or expired', unconfirmed: 'Response not confirmed — check the agent pane', revised: 'The request changed; choices were reset.', unassigned: 'Unassigned',
     errors: {failed: 'Send failed — try again', changed: 'Connection changed — reopen the card', stale: 'The request changed or expired — check the latest', incomplete: 'Answer every question before sending'},
     count: n => `${n}`, more: n => `${n} panes · scroll the list for all`},
 };
