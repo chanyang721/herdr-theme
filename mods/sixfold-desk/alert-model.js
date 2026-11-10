@@ -19,11 +19,12 @@ const LINEAR_CATEGORY = {assignments: '배정', mentions: '멘션', comments: '�
 export const linearCategory = item => LINEAR_CATEGORY[item?.category] || '알림';
 
 // The space card popover: which card and source is open, set by a badge press
-// or by a new alert. An automatic open older than POPOVER_TTL is ignored, so a
-// stale shared value never reopens it later.
+// or by a new alert. Shared values persist across app restarts, so a state only
+// counts in the run that wrote it (`boot`) and for POPOVER_TTL.
 export const POPOVER_TTL = 30 * 60 * 1000;
-export function popoverOpen(state, space, source, now = Date.now()) {
-  return Boolean(state && projectKey(state.space) === projectKey(space) && state.source === source
+export function popoverOpen(state, space, source, boot, now = Date.now()) {
+  return Boolean(state && typeof boot === 'string' && state.boot === boot
+    && projectKey(state.space) === projectKey(space) && state.source === source
     && Number.isFinite(state.at) && now - state.at < POPOVER_TTL);
 }
 // Newest first, unread before read, at most `limit` rows for the small popover.

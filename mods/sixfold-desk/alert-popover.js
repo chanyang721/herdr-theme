@@ -8,10 +8,17 @@ import { scopedAlerts, alertVersion, linearScoped, changeLines, linearCategory, 
 // press away ("전체 보기"). Only display state lives here — nothing is written to
 // Slack or Linear, and opening it does not mark anything read.
 const STATE = 'sixfold.alertPopover';
+// One id per load of this mod: a value left over from an earlier run never opens.
+const BOOT = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 export const popoverState = () => shared(STATE) ?? null;
 export function showPopover(space, source, {auto = false} = {}) {
-  setShared(STATE, {space, source, auto, at: Date.now()});
+  setShared(STATE, {space, source, auto, boot: BOOT, at: Date.now()});
 }
+// Cards that drew a popover host recently. A new alert opens the popover only on
+// such a card; otherwise the caller falls back to its window. Bounded by spaces.
+const hosts = new Map();
+export const markHost = space => hosts.set(projectKey(space), Date.now());
+export const hasHost = (space, now = Date.now()) => now - (hosts.get(projectKey(space)) ?? -Infinity) < 10_000;
 export const hidePopover = () => setShared(STATE, {});
 
 const short = at => {
@@ -51,13 +58,14 @@ function linearRows(project, t) {
 
 // `trigger` is the whole alerts row of the card, so the surface opens beside the card.
 export function alertPopover({id, project, trigger, t, hasSlack, hasLinear, onAll}) {
+  markHost(project);
   const state = popoverState();
-  const source = popoverOpen(state, project, 'linear') ? 'linear' : popoverOpen(state, project, 'slack') ? 'slack' : null;
+  const source = popoverOpen(state, project, 'linear', BOOT) ? 'linear' : popoverOpen(state, project, 'slack', BOOT) ? 'slack' : null;
   const fallback = hasLinear && !hasSlack ? 'linear' : 'slack';
   const popover = Popover.new(`sf-alert-pop-${id}`).anchor('left_center').open(Boolean(source))
     .on_open_change((value, cx) => {
       // A badge press just chose its source; keep it rather than the fallback.
-      const fresh = state && projectKey(state.space) === projectKey(project) && Date.now() - state.at < 2000;
+      const fresh = state && state.boot === BOOT && projectKey(state.space) === projectKey(project) && Date.now() - state.at < 2000;
       value ? showPopover(project, fresh && state.source ? state.source : fallback) : hidePopover();
       cx.notify();
     }).trigger(trigger);

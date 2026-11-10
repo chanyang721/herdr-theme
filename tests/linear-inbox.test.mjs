@@ -29,11 +29,13 @@ test('changed fields read before → after; the card popover expires and ranks u
   assert.deepEqual(changeLines(item), ['상태 Todo → Done', '담당 없음 → Kim']);
   assert.deepEqual(deskLines(item), changeLines(item));   // the two copies stay identical
   assert.deepEqual(changeLines({}), []);
-  const now = 1_000_000_000;
-  assert.ok(popoverOpen({space: 'Alpha', source: 'linear', at: now}, 'alpha', 'linear', now + 1000));
-  assert.ok(!popoverOpen({space: 'Alpha', source: 'linear', at: now}, 'Alpha', 'slack', now));
-  assert.ok(!popoverOpen({space: 'Alpha', source: 'linear', at: now}, 'Alpha', 'linear', now + POPOVER_TTL));
-  assert.ok(!popoverOpen({}, 'Alpha', 'linear', now));
+  const now = 1_000_000_000, state = {space: 'Alpha', source: 'linear', boot: 'run-1', at: now};
+  assert.ok(popoverOpen(state, 'alpha', 'linear', 'run-1', now + 1000));
+  assert.ok(!popoverOpen(state, 'Alpha', 'linear', 'run-2', now + 1000));   // restored after a restart
+  assert.ok(!popoverOpen({...state, boot: undefined}, 'Alpha', 'linear', 'run-1', now));
+  assert.ok(!popoverOpen(state, 'Alpha', 'slack', 'run-1', now));
+  assert.ok(!popoverOpen(state, 'Alpha', 'linear', 'run-1', now + POPOVER_TTL));
+  assert.ok(!popoverOpen({}, 'Alpha', 'linear', 'run-1', now));
   const rows = popoverRows([{id: 1, read: true, at: '3'}, {id: 2, read: false, at: '1'}, {id: 3, read: false, at: '2'}], 2);
   assert.deepEqual(rows.map(r => r.id), [3, 2]);
 });
@@ -73,13 +75,14 @@ test('a new unread Linear assignment opens the Linear window once; history seeds
     },
     setShared: (key, value) => { shared[key] = value; },
     openOverlay: value => opens.push(value),
-    spaces: () => [{id: 's1', name: 'Alpha'}],
+    spaces: () => [{id: 's1', name: 'Alpha'}, {id: 's2', name: 'Bare'}],
+    hosts: new Set(['Alpha']),   // only Alpha's card draws a popover host
     run() {},
   };
   let source = await readFile(new URL('../mods/sixfold-desk/linear-feed.js', import.meta.url), 'utf8');
   source = source.replace(/\r\n/g, '\n')
     .replace(/^import .* from 'herdr';/m, 'const {appHome, readTextFile, writeTextFile, setShared, openOverlay, spaces} = globalThis.__linearRuntime;')
-    .replace(/^import \{ showPopover \} from .*$/m, 'const showPopover = (space, source, o) => globalThis.__linearRuntime.setShared("sixfold.alertPopover", {space, source, ...o});')
+    .replace(/^import \{ showPopover, hasHost \} from .*$/m, 'const showPopover = (space, source, o) => globalThis.__linearRuntime.setShared("sixfold.alertPopover", {space, source, ...o}); const hasHost = s => globalThis.__linearRuntime.hosts.has(s);')
     .replace(/^import \{ projectKey \} from .*$/m, 'const projectKey = n => String(n ?? "").toLowerCase();');
   try {
     const {watchLinear} = await import('data:text/javascript;base64,' + Buffer.from(source).toString('base64') + '#linear');
@@ -99,9 +102,12 @@ test('a new unread Linear assignment opens the Linear window once; history seeds
     refresh(cx); await tasks.at(-1);
     assert.equal(opens.length, 1);                       // no such card: the Linear window
     assert.equal(opens[0].mod, 'sixfold-linear-inbox');
-    feed([{id: 'other', read: false, category: 'mentions'}, {id: 'new', read: false, category: 'mentions'}, {id: 'old', read: true, category: 'assignments'}]);
+    feed([{id: 'bare', read: false, category: 'mentions', workspace: 'Bare'}, {id: 'other', read: false, category: 'mentions'}, {id: 'new', read: false, category: 'mentions'}, {id: 'old', read: false, category: 'assignments'}]);
     refresh(cx); await tasks.at(-1);
-    assert.equal(opens.length, 1);                       // the same notification never reopens it
-    assert.equal(shared['sixfold.linearItems'].length, 3);
+    assert.equal(opens.length, 2);                       // the space exists but its card has no popover: window
+    feed([{id: 'bare', read: false, category: 'mentions'}, {id: 'other', read: false, category: 'mentions'}, {id: 'new', read: false, category: 'mentions'}, {id: 'old', read: true, category: 'assignments'}]);
+    refresh(cx); await tasks.at(-1);
+    assert.equal(opens.length, 2);                       // the same notification never reopens it
+    assert.equal(shared['sixfold.linearItems'].length, 4);
   } finally { delete globalThis.__linearRuntime; }
 });

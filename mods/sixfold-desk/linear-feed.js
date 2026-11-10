@@ -1,5 +1,5 @@
 import { appHome, readTextFile, writeTextFile, setShared, openOverlay, spaces } from 'herdr';
-import { showPopover } from './alert-popover.js';
+import { showPopover, hasHost } from './alert-popover.js';
 import { projectKey } from './alert-model.js';
 
 // Linear inbox feed for the sidebar: data/sixfold/linear-alerts.json and
@@ -41,11 +41,12 @@ export function publishLinear(feed, health) {
   setShared('sixfold.linearHealth', health ?? {});
 }
 
-// A new alert opens the popover beside its space card; with no such card on
-// screen it falls back to the Linear window.
+// A new alert opens the popover beside its space card when that card drew a
+// popover host in the last few seconds; otherwise the Linear window opens, so an
+// alert is never dropped by a sidebar that has no popover.
 export function announceLinear(event) {
   const space = (spaces() ?? []).find(s => projectKey(s.name) === projectKey(event.workspace));
-  if (space) showPopover(space.name, 'linear', {auto: true});
+  if (space && hasHost(space.name)) showPopover(space.name, 'linear', {auto: true});
   else openLinearWindow();
 }
 
