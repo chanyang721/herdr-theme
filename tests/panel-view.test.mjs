@@ -25,7 +25,7 @@ async function renderer(motion=true,{nativeSpaces=[],nativePanes=[]}={}){
   const store=new Map([['sixfold.motion',motion]]),commands=[],paths=[];
   const path=(steps=[])=>new Proxy({},{get:(_target,key)=>key==='build'?()=>steps:(...args)=>{steps.push([key,...args]);return path(steps);}});
   globalThis.__panelView={div:()=>node(),svg:value=>node('svg',value),image:value=>node('image',value),h_flex:()=>node('row'),v_flex:()=>node('column'),
-    PathBuilder:{stroke:()=>path()},spaces:()=>nativeSpaces,panes:()=>nativePanes,settings:()=>({zoom:1}),shared:key=>store.get(key),setShared:(k,v)=>store.set(k,v),run:(...args)=>commands.push(args)};
+    PathBuilder:{stroke:()=>path()},spaces:()=>nativeSpaces,panes:()=>nativePanes,settings:()=>({zoom:globalThis.__panelZoom??1}),shared:key=>store.get(key),setShared:(k,v)=>store.set(k,v),run:(...args)=>commands.push(args)};
   globalThis.window={paint_path:(...args)=>{paths.push(args);return node('path',args[0]);}};
   let source=await readFile(new URL('../mods/sixfold-desk/panel-view.js',import.meta.url),'utf8');
   source=source.replace(/import \{([^}]+)\} from '(?:gpui-kit|gpui-base|herdr)';/g,'const {$1}=globalThis.__panelView;');
@@ -89,7 +89,7 @@ test('message paths have a finite native transition and a stationary task title'
   const titles=view.panelState.feed.spaces.flatMap(s=>s.agents.map(a=>a.title));
   for(const title of titles){assert(words(before).includes(title));assert(words(after).includes(title));}
   const packet=all(after).find(n=>{const id=call(n,'id')?.[1];return id?.startsWith('panel-packet-')&&!id.startsWith('panel-packet-tail-');});
-  assert(packet);assert.equal(call(packet,'size')[1],8);
+  assert(packet);assert.equal(call(packet,'w')[1],3);assert.equal(call(packet,'h')[1],3);
   assert(packet.calls.some(c=>c[0]==='transition'&&c[1]==='top'));
   assert(packet.calls.some(c=>c[0]==='transition'&&c[1]==='left'));
 });
@@ -193,8 +193,8 @@ test('header metrics share the exact memory endpoint and reserve nonoverlapping 
   const state={...view.panelEvents,packets:[{id:'memory-ping',from:space.agents[0].id,to:space.id,kind:'memory',phase:'ping'}]};
   const layer=r.panelFlowLayer(view.panelState.feed,layout,state,()=>t.accent,t,true,224);
   const ping=byId(layer,'panel-receiver-memory-ping');assert(ping);
-  assert.equal(call(ping,'left')[1],metrics.memoryAnchorX-12);assert.equal(call(ping,'w')[1],24);
-  assert.equal(call(ping,'h')[1],24);
+  assert.equal(call(ping,'left')[1],metrics.memoryAnchorX-7);assert.equal(call(ping,'w')[1],15);
+  assert.equal(call(ping,'h')[1],15);
 });
 
 test('summary counts exclude cleaned sessions and preserve observed pane status',async()=>{
@@ -239,29 +239,44 @@ test('explicit local collaboration has purple solid bracket, two square ends and
   assert.equal(byId(unrelated,`panel-local-partner-${first.id}`),undefined,'same computer alone never infers collaboration');
 });
 
-test('a local message rides the rounded lane with the same packet, tail and rings as a task event; motion off omits it',async()=>{
+test('a local message rides the same pixel line, block and rings as a task event; motion off omits it',async()=>{
   const r=await renderer(true),view=viewFor(makePanelFixture()),feed=view.panelState.feed;
   r.renderPanelTracking(view,t,r.cx);const layout=r.panelLayout(feed,view.panelEvents),[a,b]=feed.spaces[0].agents;
   const draw=(kind,phase,elapsed)=>{r.paths.length=0;
     const tree=r.panelFlowLayer(feed,layout,{...view.panelEvents,packets:[{id:'p',kind,from:a.id,to:b.id,phase,elapsed}]},()=>t.accent,t,true,224);
-    return {tree,paths:r.paths.map(([steps,tint])=>[steps,tint])};};
+    return {tree,paths:all(byId(tree,'panel-route-p')).filter(n=>n.kind==='path').length};};
   for(const elapsed of [0,PANEL_LEGS[0],PANEL_LEGS[1],PANEL_LEGS[2],PANEL_TIMING.packetMs-1]){
     const phase=elapsed<PANEL_TIMING.startMs?'start':'travel';
     const message=draw('message',phase,elapsed),task=draw('dispatch',phase,elapsed);
-    assert.deepEqual(message.paths,task.paths,'the same solid line with rounded corners, colour and width');
-    for(const id of ['panel-packet-p','panel-packet-tail-p-1','panel-packet-tail-p-4','panel-sender-p','panel-receiver-p']){
+    assert.equal(message.paths,0,'no vector stroke: the line is pixel blocks');assert.equal(task.paths,0);
+    const pixels=tree=>all(byId(tree,'panel-route-p')).filter(n=>!call(n,'id')).map(n=>n.calls);
+    assert.deepEqual(pixels(message.tree),pixels(task.tree),'the same pixel line');
+    for(const id of ['panel-packet-p','panel-sender-p','panel-receiver-p']){
       const m=byId(message.tree,id),k=byId(task.tree,id);assert(m,id);assert(k,id);
       assert.deepEqual(m.calls,k.calls,`${id} at ${elapsed}ms matches the task-event packet`);
     }
+    assert(!all(message.tree).some(n=>/^panel-packet-tail-/.test(call(n,'id')?.[1]||'')),'no tail');
+    assert(!all(message.tree).some(n=>call(n,'rounded')),'square pixels only');
   }
   const {tree}=draw('message','travel',PANEL_LEGS[1]+1),head=byId(tree,'panel-packet-p');
-  assert.equal(call(head,'size')[1],8);assert.equal(call(head,'bg')[1],'#79D1DC');assert.equal(head.nodes.length,1,'white core');
-  assert.equal(call(head,'left')[1]+4,20,'runs down the inner message lane');
+  assert.equal(call(head,'w')[1],3);assert.equal(call(head,'h')[1],3);assert.equal(call(head,'bg')[1],'#79D1DC');assert.equal(head.nodes.length,0);
+  assert.equal(call(head,'left')[1]+1,20,'centred on the inner message lane');
   assert.equal(head.calls.find(c=>c[0]==='transition'&&c[1]==='top')[2].duration,PANEL_LEGS[2]-PANEL_LEGS[1]);
   const arrival=byId(draw('message','ping',PANEL_TIMING.packetMs).tree,'panel-receiver-p');
-  assert.equal(call(arrival,'w')[1],24);assert.equal(call(arrival,'opacity')[1],0);
+  assert.equal(call(arrival,'w')[1],15);assert.equal(call(arrival,'opacity')[1],0);assert.equal(call(arrival,'border')[1],1);
   const still=r.panelFlowLayer(feed,layout,{...view.panelEvents,packets:[],connections:[{id:'off',kind:'message',from:a.id,to:b.id}]},()=>t.accent,t,false,224);
   assert(!byId(still,'panel-route-off'));assert.equal(all(still).filter(n=>call(n,'transition')||call(n,'loop')).length,0);
+});
+
+test('pixel lines are whole pixels with a stepped corner, and stay whole at any zoom',async()=>{
+  for(const zoom of [1,1.25,2]){
+    const r=await renderer(true);globalThis.__panelZoom=zoom;
+    const u=1/zoom,line=r.pixelRoute(10.4,60.2,20,0,0,'#79D1DC'),blocks=line.nodes.map(n=>Object.fromEntries(['left','top','w','h'].map(k=>[k,call(n,k)[1]])));
+    for(const block of blocks)for(const value of Object.values(block))assert(Math.abs(value/u-Math.round(value/u))<1e-9,`${value} is a whole device pixel at zoom ${zoom}`);
+    assert(blocks.some(b=>b.w===u&&b.h===u),'a one-pixel corner step');
+    assert(blocks.every(b=>b.w===u||b.h===u),'every run is one pixel thick');
+  }
+  delete globalThis.__panelZoom;
 });
 
 test('a message travels as long as a task event, and no leg is a jump',()=>{
@@ -303,28 +318,35 @@ test('filtered remote messages ride the computer pipe lane and ping at the remot
  const packet={id:'remote-message',from:local.agents[0].id,to:'remote-agent',kind:'message',phase:'travel',elapsed:500};
  const tree=r.panelFlowLayer(feed,layout,{...view.panelEvents,packets:[packet]},()=>t.accent,t,true,224);
  assert(byId(tree,'panel-route-remote-message-pipe'));assert(!byId(tree,'panel-route-remote-remote-message'));
- const head=byId(tree,'panel-packet-remote-message');assert.equal(call(head,'left')[1]+4,40,'the packet runs in the computer pipe lane');
- assert.equal(call(head,'size')[1],8);assert(byId(tree,'panel-sender-remote-message'));
+ const head=byId(tree,'panel-packet-remote-message');assert.equal(call(head,'left')[1]+1,40,'the packet runs in the computer pipe lane');
+ assert.equal(call(head,'w')[1],3);assert(byId(tree,'panel-sender-remote-message'));
  const arrival=r.panelFlowLayer(feed,layout,{...view.panelEvents,packets:[{...packet,phase:'ping'}]},()=>t.accent,t,true,224);
- assert.equal(call(byId(arrival,'panel-receiver-remote-message'),'left')[1],-12);
+ assert.equal(call(byId(arrival,'panel-receiver-remote-message'),'left')[1],-7);
  const route=byId(tree,'panel-route-remote-message');assert.equal(call(route,'right')[1],8);assert.equal(call(route,'w')[1],64);
 });
 
 
-test('a message packet follows the rounded lane down or up with the send direction',async()=>{
+test('a message packet follows the pixel lane down or up with the send direction',async()=>{
  const r=await renderer(true),view=viewFor(makePanelFixture()),feed=view.panelState.feed;
  r.renderPanelTracking(view,t,r.cx);const layout=r.panelLayout(feed,view.panelEvents),[a,b]=feed.spaces[0].agents;
  const samples=(from,to)=>[0,PANEL_LEGS[0],PANEL_LEGS[1],PANEL_LEGS[2]].map(elapsed=>{
   const packet={id:'arc',kind:'message',from,to,phase:elapsed<PANEL_TIMING.startMs?'start':'travel',elapsed};
   const tree=r.panelFlowLayer(feed,layout,{...view.panelEvents,packets:[packet]},()=>t.accent,t,true,224),head=byId(tree,'panel-packet-arc');
-  return {x:call(head,'left')[1]+4,y:call(head,'top')[1]+4};
+  return {x:call(head,'left')[1]+1,y:call(head,'top')[1]+1};
  });
  const down=samples(a.id,b.id),up=samples(b.id,a.id);
  for(const points of [down,up]){
-  assert.equal(points[1].x,20);assert.equal(points[2].x,20);assert(points.every(p=>p.x>=0&&p.x<=24));
+  assert.equal(points[1].x,20);assert.equal(points[2].x,20);assert(points.every(p=>p.x>=0&&p.x<=24&&Number.isInteger(p.x)&&Number.isInteger(p.y)));
   assert.equal(points[0].x,points[3].x);assert.equal(points[0].y,points[1].y);assert.equal(points[2].y,points[3].y);
  }
  assert(down[0].y<down[3].y);assert(up[0].y>up[3].y);
+});
+
+test('event pixels keep at least 3:1 contrast on dark and light backgrounds',()=>{
+ const lum=hex=>{const c=[1,3,5].map(i=>parseInt(hex.slice(i,i+2),16)/255).map(v=>v<=.03928?v/12.92:((v+.055)/1.055)**2.4);return .2126*c[0]+.7152*c[1]+.0722*c[2];};
+ const ratio=(a,b)=>{const [x,y]=[lum(a),lum(b)].sort((p,q)=>q-p);return (x+.05)/(y+.05);};
+ for(const [tone,background] of [['#79D1DC',t.background],['#79D1DC',t.chrome],['#006C77','#FFFFFF'],['#006C77','#F3F4F6']])
+  assert(ratio(tone,background)>=3,`${tone} on ${background}: ${ratio(tone,background).toFixed(2)}`);
 });
 
 test('retired collaboration evidence removes the bracket and both partner chips without changing rows',async()=>{
@@ -343,7 +365,7 @@ test('hosted message line uses the external gutter without narrowing the origina
  const state={...view.panelEvents,packets:[{id:'external',kind:'message',from:a.id,to:b.id,phase:'travel',elapsed:500}]};
  const tree=r.panelFlowLayer(feed,layout,state,()=>t.accent,t,true,224,161),head=byId(tree,'panel-packet-external');
  const route=byId(tree,'panel-route-external');assert.equal(call(route,'w')[1],153);
- const x=432-161+call(head,'left')[1]+4;assert(x>=432-161&&x<432,'the packet stays in the gap beside the card, never in the CLI');
+ const x=432-161+call(head,'left')[1]+1;assert(x>=432-161&&x<432,'the packet stays in the gap beside the card, never in the CLI');
 });
 
 test('an explicit remote share connects both computer headers and the shared card as one F topology',async()=>{
