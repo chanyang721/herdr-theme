@@ -85,7 +85,8 @@ export function milestoneList(project, catalog, unreadKeys = new Set()) {
   return source.filter(m => m?.id && m.name).map(m => {
     const list = [...(byMilestone.get(m.id)?.values() || [])];
     const progress = typeof m.progress === 'number' ? Math.max(0, Math.min(100, m.progress)) : null;
-    const count = Number.isInteger(m.issues) ? m.issues : list.length;
+    // Linear's milestones keep an unknown count unknown (null → '—'); the catalog fallback counts its rows.
+    const count = Number.isInteger(m.issues) ? m.issues : fromLinear ? null : list.length;
     const status = m.status || (progress === null ? 'planned' : progress >= 100 ? 'done' : progress > 0 ? 'started' : 'planned');
     return {id: m.id, name: m.name, target: m.target || m.due || '', progress, issues: count,
       counted: fromLinear ? m.counted === true : true, status, items: list,

@@ -97,7 +97,7 @@ export function milestoneRows(model,t){
       .when(m.unread>0,row=>row.child(div().id(`task-issues-milestone-unread-${id}-${m.id}`).h(16).px(5).flex_none().rounded(8).bg(t.accent)
         .text_color(t.accent_foreground||t.background).text_size(9).font_bold().flex().items_center().child(`미확인 ${m.unread}`)))
       .child(text(m.target?m.target.slice(5).replace('-','/'):'—',t.dim,10).w(40).flex_none())
-      .child(text(`${m.issues}건`,t.muted,10).w(36).flex_none())
+      .child(text(Number.isInteger(m.issues)?`${m.issues}건`:'—',t.muted,10).w(36).flex_none())
       .child(text(m.progress===null?'—':`${Math.round(m.progress)}%`,tone,10).w(34).flex_none().font_bold()
         .when(m.counted,c=>c.tooltip('Linear 값이 없어 이슈 상태로 계산한 값'))));
     if(open){

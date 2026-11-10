@@ -5,14 +5,19 @@ import { appHome, readTextFile, writeTextFile } from 'herdr';
 // drops a request file; the local collector's read-only runner answers into linear-cache/. Nothing
 // here calls Linear, and every map below is bounded.
 export const ISSUE_FRESH_MS = 5 * 60 * 1000, PROJECT_FRESH_MS = 10 * 60 * 1000;
-// WAIT_MS outlasts the collector's longest read (a project, 420 s) so a slow answer is still taken in.
-const ASKED_MS = 60 * 1000, WAIT_MS = 8 * 60 * 1000, KEEP = {issue: 30, project: 10};
+// WAIT_MS: how long '읽는 중' shows. WATCH_MS: how long the cache file is still checked for the answer —
+// the collector takes a request up to 10 min old and a read lasts up to 7 min, so a late answer still lands.
+const ASKED_MS = 60 * 1000, WAIT_MS = 8 * 60 * 1000, WATCH_MS = 18 * 60 * 1000, KEEP = {issue: 30, project: 10};
 export const CACHE_POLL_MS = 1500;
 const ISSUE_KEY = /^[A-Z][A-Z0-9]{0,9}-\d{1,7}$/;
 // File name of a space's cache: readable ASCII plus a hash of the whole name, so names that differ only
 // outside ASCII (가나 / 다라) never share a file. Same function in the collector (space_slug).
 const fnv = text => { let h = 0x811c9dc5; for (const byte of new TextEncoder().encode(text)) { h ^= byte; h = Math.imul(h, 0x01000193) >>> 0; } return h.toString(16).padStart(8, '0'); };
-export const projectSlug = space => `${String(space || '').toLowerCase().replace(/[^a-z0-9]/g, '-')}-${fnv(String(space || ''))}`;
+// ASCII-only lowering and one '-' per code point (the u flag), exactly as the collector's per-character pass.
+export const projectSlug = space => {
+  const name = String(space || '');
+  return `${name.replace(/[A-Z]/g, c => c.toLowerCase()).replace(/[^a-z0-9]/gu, '-')}-${fnv(name)}`;
+};
 const fileName = (kind, target) => kind === 'issue' ? `issue-${target}.json` : `project-${projectSlug(target)}.json`;
 const entries = {issue: new Map(), project: new Map()};   // target -> {value, at(read time), asked, waiting}
 let changedHook = null;
@@ -22,7 +27,7 @@ const entry = (kind, target) => {
   const map = entries[kind];
   let item = map.get(target);
   if (item) { map.delete(target); map.set(target, item); return item; }   // most recently used last
-  item = {value: null, asked: 0, waiting: 0, forced: 0};
+  item = {value: null, asked: 0, waiting: 0, watch: 0, forced: 0};
   map.set(target, item);
   while (map.size > KEEP[kind]) map.delete(map.keys().next().value);
   return item;
@@ -51,7 +56,7 @@ export async function ensure(kind, target, {force = false, now = Date.now(), rea
   const request = {v: 1, id: requestId(now, random), kind, requested_at: new Date(now).toISOString(),
     ...(kind === 'issue' ? {key: target} : {space: target}), ...(force ? {force: true} : {})};
   await write(`${home}/data/sixfold/linear-reads/${request.id}.json`, JSON.stringify(request), null);
-  item.asked = now; item.waiting = now;
+  item.asked = now; item.waiting = now; item.watch = now;
   if (force) item.forced = now;
   return item.value;
 }
@@ -65,7 +70,7 @@ async function load(kind, target, {read = readTextFile, home = appHome()} = {}) 
   if (value?.schema !== 1 || (kind === 'issue' ? value.key !== target : value.space !== target)) return false;
   const item = entry(kind, target), before = item.value?.at;
   item.value = value;
-  if (value.at !== before && Date.parse(value.at) >= item.waiting - 1000) item.waiting = 0;   // answered
+  if (value.at !== before && item.watch && Date.parse(value.at) >= item.watch - 1000) item.waiting = item.watch = 0;   // answered
   return value.at !== before;
 }
 
@@ -74,13 +79,15 @@ export async function checkCaches({read = readTextFile, home = appHome(), now = 
   let changed = false;
   for (const kind of Object.keys(entries)) {
     for (const [target, item] of [...entries[kind]]) {
-      if (!item.waiting) continue;
-      if (now - item.waiting >= WAIT_MS) { item.waiting = 0; changed = true; continue; }   // no answer: stop waiting
+      if (!item.watch) continue;
+      if (item.waiting && now - item.waiting >= WAIT_MS) { item.waiting = 0; changed = true; }   // '읽는 중' ends
+      if (now - item.watch >= WATCH_MS) { item.watch = 0; continue; }                             // no answer at all
       if (await load(kind, target, {read, home})) changed = true;
     }
   }
   if (changed) changedHook?.();
   return changed;
 }
-export const anyWaiting = (now = Date.now()) => Object.values(entries).some(map => [...map.values()].some(item => item.waiting && now - item.waiting < WAIT_MS));
+// True while any answer may still come (keeps the cache check running; it stops by itself after WATCH_MS).
+export const anyWaiting = (now = Date.now()) => Object.values(entries).some(map => [...map.values()].some(item => item.watch && now - item.watch < WATCH_MS));
 export const resetCaches = () => { for (const map of Object.values(entries)) map.clear(); };
