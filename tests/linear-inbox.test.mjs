@@ -242,3 +242,12 @@ test('the issue-search alert signature changes when an alert of the same id chan
   assert.notEqual(issueAlertSignature([{...base, changes: [{field: 'status', before: 'a', after: 'b'}]}], 'Alpha'), sig);
   assert.equal(issueAlertSignature([{...base}], 'Alpha'), sig);
 });
+
+test('the Slack chip says the copy is delayed once its newest message is older than the limit', async () => {
+  const {slackCopyDelay} = await import('../mods/sixfold-desk/alert-model.js');
+  const now = Date.parse('2026-11-10T05:40:00Z');
+  assert.deepEqual(slackCopyDelay({mirror_latest_at: '2026-11-07T01:16:11Z', mirror_stale_hours: 6}, now), {hours: 76, at: '2026-11-07T01:16:11Z'});
+  assert.equal(slackCopyDelay({mirror_latest_at: '2026-11-10T04:00:00Z'}, now), null);
+  assert.equal(slackCopyDelay({}, now), null);
+  assert.equal(slackCopyDelay(null, now), null);
+});

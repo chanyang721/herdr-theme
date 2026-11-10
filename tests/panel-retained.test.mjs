@@ -326,6 +326,8 @@ test('one meta line carries both tools: Slack unread on its part, Linear unread 
     assert.equal(r.objects.filter(o=>o.dirty).length,before+1,'only that card');
     r.flush();
     assert(texts().includes('미확인 2')&&texts().includes('1'));
+    counts.delay=76;counts.delayAt='2026-11-07T01:16:11Z';r.controller.alertsChanged();r.flush();
+    assert(texts().includes('사본 지연'),'a stopped Slack copy is shown');
     r.controller.alertsChanged();assert.equal(card.dirty,false,'unchanged counts: no redraw');
   }finally{r.controller.dispose();}
 });

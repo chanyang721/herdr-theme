@@ -78,3 +78,12 @@ export function alertedIssues(items, space, query = '', limit = ALERTED_ISSUES) 
     .map(([key, title]) => { const alerts = issueAlerts(items, space, key); return {key, title, at: alerts.lines[0]?.at || '', alerts}; })
     .sort((a, b) => b.at.localeCompare(a.at)).slice(0, limit);
 }
+
+// The Slack copy (the MCP mirror the collector reads) has stopped when its newest message is older
+// than the collector's limit (6 h): the chip says so instead of a quiet 0.
+export function slackCopyDelay(health, now = Date.now()) {
+  const at = Date.parse(health?.mirror_latest_at ?? ''), limit = Number(health?.mirror_stale_hours) || 6;
+  if (!Number.isFinite(at)) return null;
+  const hours = (now - at) / 3_600_000;
+  return hours > limit ? {hours: Math.floor(hours), at: health.mirror_latest_at} : null;
+}

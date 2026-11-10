@@ -222,7 +222,9 @@ export function cardView(view,card,state,color,computerNames,t,motion,rowEntitie
     .when(slackShown,e=>e.child(image('mods/sixfold-desk/icons/slack.svg').size(11).flex_none()))
     .child(text(space.slack?.channel||'',space.slack?t.muted:t.dim,9).flex_1())
     .when(slackUnread>0,e=>e.child(text(String(slackUnread),t.accent_foreground||t.background,9).px(4).rounded(3).bg(t.accent).font_bold().flex_none()))
-    .when(Boolean(alerts?.hasSlack),e=>e.cursor_pointer().tooltip(`Slack 알림${slackUnread?` 미확인 ${slackUnread}건`:''}`));
+    // The Slack copy has stopped: say so rather than show a quiet 0.
+    .when(Boolean(alerts?.delay),e=>e.child(text('사본 지연',t.blocked||t.muted,9).flex_none().id(`panel-slack-delay-${space.id}`)))
+    .when(Boolean(alerts?.hasSlack),e=>e.cursor_pointer().tooltip(`Slack 알림${slackUnread?` 미확인 ${slackUnread}건`:''}${alerts?.delay?`\nSlack 사본이 ${alerts.delay}시간째 멈춤 (마지막 메시지 ${alerts.delayAt}) · 새 멘션이 늦게 보일 수 있음`:''}`));
   if(panelMetaHeight(space))box.child(h_flex().h(PANEL_GEOMETRY.meta).flex_none().px(7).gap(5).items_center()
     .child(alerts?.hasSlack&&view.slackAlerts?view.slackAlerts(space,slack,t):slack)
     .child(space.work&&view.issuePopover?view.issuePopover(space,tool,t):tool));
