@@ -37,7 +37,10 @@ export function requestId(now = Date.now(), random = Math.random) {
 
 // One request = one Linear write, run by the local collector only because a person pressed it.
 export function buildRequest(action, item, extra = {}, {now = new Date(), id = requestId(now.getTime())} = {}) {
-  const base = {v: 1, id, action, requested_at: now.toISOString()};
+  // Who asked: a pressed button (default), an opened row ('opened') or '모두 읽음' ('all'); the collector
+  // retries a failed automatic read mark, a failed press is shown to the person instead.
+  const origin = ['opened', 'all'].includes(extra.origin) ? {origin: extra.origin} : {};
+  const base = {v: 1, id, action, requested_at: now.toISOString(), ...(action === 'mark_read' || action === 'mark_seen' ? origin : {})};
   if (action === 'mark_read') return {...base, notification: item.id, read: true};
   if (action === 'mark_seen') {
     if (!item?.local || !/^comment:[0-9a-f-]{36}$/.test(item.id || '')) throw new Error('이 컴퓨터에서 확인할 수 있는 댓글이 아닙니다');
@@ -57,3 +60,8 @@ export function buildRequest(action, item, extra = {}, {now = new Date(), id = r
   throw new Error('지원하지 않는 작업');
 }
 export const resultLabel = result => !result ? '처리 대기 중…' : result.ok ? '반영했습니다' : `실패: ${result.error || '이유 미확인'}`;
+
+// '모두 읽음' in the window: the unread alerts shown, at most READ_ALL (the collector runs 5 a tick).
+export const READ_ALL = 20;
+export const readAllTargets = (items, space, writes = []) => visibleItems(items, {space, unreadOnly: true})
+  .filter(i => i.local || (writes ?? []).includes('mark_read')).slice(0, READ_ALL);

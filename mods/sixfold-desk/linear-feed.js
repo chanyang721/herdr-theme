@@ -4,6 +4,7 @@ import { readJsonSnapshot, subscribeJsonFile, subscribeFileChanges } from './pan
 import { addArrival, hasArrivalHost } from './arrival-store.js';
 import { arrivalTarget, ARRIVAL } from './arrival-model.js';
 import { placeItems } from './alert-model.js';
+import { withLocalReads, onReadConfirmed } from './linear-reads.js';
 
 // Linear inbox feed for the sidebar: data/sixfold/linear-alerts.json and
 // linear-live-health.json, written by a machine-local collector. Kept apart from
@@ -56,12 +57,16 @@ async function announce(events, allowed = () => true) {
 }
 
 export function publishLinear(feed, health, names = []) {
-  const items = placeItems(feed.items ?? [], names);
+  onReadConfirmed(() => publishLinear(feed, health, names));   // a confirmed read is shown before the next collection
+  const items = withLocalReads(placeItems(feed.items ?? [], names));
   setShared('sixfold.linearItems', items);
   setShared('sixfold.linearSpaces', names.length ? [...new Set(items.map(i => i.workspace).filter(Boolean))] : feed.spaces ?? []);
   setShared('sixfold.linearStatuses', feed.statuses ?? {});
   setShared('sixfold.linearHealth', health ?? {});
+  // Writes the collector accepts on this computer (an opened row marks read only when mark_read is on).
+  setShared('sixfold.linearWrites', Array.isArray(feed.writes) ? feed.writes : []);
 }
+
 
 // A new alert becomes an arrival: a popup that folds into its space card (Share
 // when no space matches). A sidebar that draws arrivals marks itself as host;

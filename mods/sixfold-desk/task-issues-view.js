@@ -33,32 +33,55 @@ export function issuePopover(model,t){
       .cursor_pointer().tooltip('닫기').on_click(change(model.onOpen,false)).child('✕')));
   if(model.search)body.child(model.search);
   // Issues with new alerts, the same in every tab (even when a tab's list lacks the issue).
-  const alerted=model.alerted||[];
+  // Opening a row (or [읽음]) confirms it in Linear; a pending mark is drawn dimmed until the
+  // collector reports back, a failure comes back unread with one error line.
+  const alerted=model.alerted||[],pending=model.readPending||new Set(),done=model.doneKeys||new Set();
   if(alerted.length){
+    const readButton=(key,label,tip,action,enabled=true)=>div().id(key).h(20).px(7).flex_none().rounded(10).border(1)
+      .border_color(enabled?t.accent:t.border).text_size(9).font_bold().text_color(enabled?t.accent:t.dim).flex().items_center()
+      .when(enabled,e=>e.cursor_pointer().hover(s=>s.bg(t.hover||t.selected)).tooltip(tip).on_click(action)).child(label);
+    const unread=alerted.reduce((sum,entry)=>sum+entry.alerts.unread,0);
+    const waiting=alerted.every(entry=>entry.alerts.lines.every(item=>pending.has(item.id)));
     const group=v_flex().id(`task-issues-alerted-${id}`).gap(4).p(6).rounded(8).bg(t.chrome||t.surface).border(1).border_color(t.border)
       .child(h_flex().gap(6).items_center().px(2)
         .child(text('알림 온 이슈',t.foreground,11).font_bold())
-        .child(text(`미확인 ${alerted.reduce((sum,entry)=>sum+entry.alerts.unread,0)}`,t.accent,10))
-        .child(div().flex_1()).child(text('읽음은 Linear 기준',t.dim,9)));
+        .child(text(`미확인 ${unread}`,t.accent,10))
+        .child(div().flex_1())
+        .child(model.onReadAll&&model.readable
+          ?readButton(`task-issues-read-all-${id}`,waiting?'처리 중':'모두 읽음','이 묶음의 알림을 Linear에서도 읽음으로 표시',change(model.onReadAll),!waiting)
+          :text('읽음은 Linear 기준',t.dim,9)));
     for(const entry of alerted){
       const newest=entry.alerts.lines[0]||{};
-      const line=(item,i)=>h_flex().id(`task-issues-alerted-line-${id}-${entry.key}-${i}`).gap(6).px(6).py(2).rounded(5).items_center()
-        .when(Boolean(item.url&&model.onLink),e=>e.cursor_pointer().tooltip('누르면 이 댓글을 Linear에서 엽니다').hover(s=>s.bg(t.hover||t.selected))
-          .on_click(change(model.onLink,item.url)))
-        .child(text(item.text,t.muted,11).flex_1().tooltip(item.text))
-        .when(i>0,e=>e.child(text(clock(item.at),t.dim,9).flex_none()));
+      const issueAlerts=()=>model.issueTargets?.(entry.key)||entry.alerts.lines;
+      const line=(item,i)=>{
+        const busy=pending.has(item.id);
+        // A comment from a linked issue has no Linear notification: [확인] keeps it on this computer only.
+        const canRead=Boolean(model.onRead)&&(item.local||model.readable);
+        return h_flex().id(`task-issues-alerted-line-${id}-${entry.key}-${i}`).gap(6).px(6).py(2).rounded(5).items_center()
+          .opacity(busy?0.45:1)
+          .when(Boolean(item.url&&model.onLink)&&!busy,e=>e.cursor_pointer().tooltip('누르면 이 댓글을 Linear에서 열고 읽음으로 표시합니다').hover(s=>s.bg(t.hover||t.selected))
+            .on_click((_event,cx)=>{cx.stop_propagation();model.onLink(item.url,cx,[item]);}))
+          .child(text(item.text,t.muted,11).flex_1().tooltip(item.text))
+          .child(text(clock(item.at),t.dim,9).flex_none())
+          .when(canRead,e=>e.child(readButton(`task-issues-read-${id}-${entry.key}-${i}`,busy?'처리 중':item.local?'확인':'읽음',
+            item.local?'이 컴퓨터에서만 확인 표시 · Linear에는 쓰지 않음':'Linear에서 이 알림을 읽음으로 표시',change(model.onRead,[item]),!busy)));
+      };
       const target=entry.alerts.lines.find(item=>item.url)?.url||'';
       group.child(v_flex().id(`task-issues-alerted-${id}-${entry.key}`).gap(1).p(4).rounded(6).bg(t.selected)
         .child(h_flex().id(`task-issues-alerted-head-${id}-${entry.key}`).gap(6).items_center().px(2)
-          .when(Boolean(target&&model.onLink),e=>e.cursor_pointer().tooltip('누르면 이 이슈(최근 댓글)를 Linear에서 엽니다').on_click(change(model.onLink,target)))
+          .when(Boolean(target&&model.onLink),e=>e.cursor_pointer().tooltip('누르면 이 이슈(최근 댓글)를 Linear에서 열고 이 이슈의 알림을 읽음으로 표시합니다')
+            .on_click((_event,cx)=>{cx.stop_propagation();model.onLink(target,cx,issueAlerts());}))
           .child(div().px(5).rounded(3).flex_none().text_size(9).font_bold().bg(t.accent).text_color(t.accent_foreground||t.background).child(newest.category||'알림'))
           .child(text(entry.key,t.muted,10).flex_none().font_bold())
           .child(text(entry.title,t.foreground,12).flex_1().tooltip(entry.title))
-          .when(entry.alerts.unread>1,e=>e.child(text(`${entry.alerts.unread}건`,t.accent,9).flex_none()))
-          .child(text(clock(newest.at),t.dim,9).flex_none()))
+          // Its work finished (the sidebar shows the issue done): marked, not read in Linear unless set.
+          .when(done.has(entry.key),e=>e.child(div().id(`task-issues-alerted-done-${id}-${entry.key}`).px(5).rounded(7).flex_none().border(1)
+            .border_color(t.border).text_size(9).text_color(t.muted).tooltip('이 이슈의 작업이 끝났습니다 · 알림은 Linear 기준으로 남아 있습니다').child('처리됨')))
+          .when(entry.alerts.unread>1,e=>e.child(text(`${entry.alerts.unread}건`,t.accent,9).flex_none())))
         .children(entry.alerts.lines.map(line))
         .when(entry.alerts.more>0,e=>e.child(text(`외 ${entry.alerts.more}건`,t.dim,10).px(8))));
     }
+    if(model.readError)group.child(text(model.readError,t.blocked,10).px(4));
     body.child(group);
   }
   body.child(h_flex().gap(4).pb(8).border_b(1).border_color(t.border)

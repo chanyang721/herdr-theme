@@ -57,8 +57,29 @@ export function issueAlerts(items, space, key, limit = ISSUE_ALERT_LINES) {
   return {unread: unread.length, more: Math.max(0, unread.length - limit), lines: unread.slice(0, limit).map(i => ({
     id: i.id, category: linearCategory(i), at: i.changed_at || i.at || '',
     text: String(i.subtitle || i.comments?.[0]?.body || changeLines(i)[0] || i.title || '').split('\n')[0].slice(0, 200),
-    url: typeof i.url === 'string' && LINEAR_URL.test(i.url) ? i.url : ''}))};
+    url: typeof i.url === 'string' && LINEAR_URL.test(i.url) ? i.url : '', local: Boolean(i.local)}))};
 }
+
+// Opening an alert row (or '모두 읽음') confirms it: a Linear notification is marked read in Linear
+// through the collector's guarded write; a comment read from a linked issue (no Linear notification)
+// is marked on this computer only. One request per alert; the collector checks the id against its feed.
+const NOTIFICATION = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+const COMMENT = /^comment:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+export const READ_LIMIT = 20;   // read requests one press may leave; the collector runs 5 a tick
+const requestStamp = (now, random) => `${now.toString(36)}-${random().toString(36).slice(2, 10).padEnd(8, '0')}`;
+export function readRequest(alert, origin, writes = [], {now = new Date(), random = Math.random} = {}) {
+  if (!alert || alert.read || !['opened', 'all'].includes(origin)) return null;
+  const base = {v: 1, id: requestStamp(now.getTime(), random), requested_at: now.toISOString(), origin};
+  if (alert.local) return COMMENT.test(alert.id || '') ? {...base, action: 'mark_seen', item: alert.id} : null;
+  if (!NOTIFICATION.test(alert.id || '') || !(writes ?? []).includes('mark_read')) return null;
+  return {...base, action: 'mark_read', notification: alert.id, read: true};
+}
+// The unread alerts an opened issue row confirms: every unread alert of that issue in the space.
+export const issueReadTargets = (items, space, key) => !key ? [] : linearScoped(items, space)
+  .filter(i => !i.read && String(i.issue || '').toUpperCase() === String(key).toUpperCase()).slice(0, READ_LIMIT);
+// '모두 읽음' in the issue search: the unread alerts of the issues the shared group shows.
+export const groupReadTargets = (items, space, query = '') => alertedIssues(items, space, query)
+  .flatMap(entry => issueReadTargets(items, space, entry.key)).slice(0, READ_LIMIT);
 // Changes only when an issue's unread alerts change: part of the card key.
 export const issueAlertSignature = (items, space) => linearScoped(items, space).filter(i => !i.read && i.issue)
   .map(i => JSON.stringify([i.issue, i.id, i.subtitle || '', i.changed_at || i.at || '', i.changes || [], i.comments?.[0]?.body || '', i.url || '', i.issue_title || '', i.title || ''])).sort().join(',');

@@ -1,7 +1,7 @@
 import { View, div, image } from 'gpui-kit';
 import { h_flex, v_flex, InputState, Input } from 'gpui-base';
 import { theme, props, appHome, readTextFile, writeTextFile, openOverlay, closeOverlay, exec, spaces } from 'herdr';
-import { categoryLabel, linearLink, visibleItems, spacesOf, issueLine, buildRequest, resultLabel, changeLines, placeItems } from './model.js';
+import { categoryLabel, linearLink, visibleItems, spacesOf, issueLine, buildRequest, resultLabel, changeLines, placeItems, readAllTargets } from './model.js';
 
 // Linear inbox. Reads data/sixfold/linear-alerts.json (written by a local collector).
 // Writes never happen here: a pressed button leaves one request file that the
@@ -39,6 +39,11 @@ export default class LinearInbox extends View {
             this.writes = Array.isArray(feed.writes) ? feed.writes : [];
             this.health = JSON.parse(health || '{}');
             previous = snapshot; changed = true;
+          }
+          // A read mark Linear accepted is shown read now, before the collector's next list.
+          for (const [key, result] of this.results) {
+            if (key.startsWith('read:') && result?.ok === true && result.unread === undefined)
+              { this.items = this.items.map(i => i.id === key.slice(5) && !i.read ? {...i, read: true} : i); }
           }
           if (changed) cx.notify();
         } catch { /* Keep the last valid snapshot through collector writes. */ }
@@ -85,6 +90,10 @@ export default class LinearInbox extends View {
         .children(spaces.map(space => button(`sf-linear-space-${space}`, `${space} · ${visibleItems(this.items, {space, unreadOnly: true}).length}`,
           this.space === space, (_e, cx) => { this.space = space; cx.notify(); })))
         .child(div().flex_1())
+        .when(readAllTargets(this.items, this.space, this.writes).some(i => !this.pending.has(`read:${i.id}`)), e => e.child(button('sf-linear-read-all', '모두 읽음', false, (_e, cx) => {
+          for (const item of readAllTargets(this.items, this.space, this.writes))
+            if (!this.pending.has(`read:${item.id}`)) this.send(`read:${item.id}`, item.local ? 'mark_seen' : 'mark_read', item, {origin: 'all'}, cx);
+        })))
         .child(button('sf-linear-unread', this.unreadOnly ? '미확인만' : '읽은 알림 포함', this.unreadOnly, (_e, cx) => { this.unreadOnly = !this.unreadOnly; cx.notify(); })))
       .when(Boolean(this.error), e => e.child(div().text_size(12).text_color(t.blocked).child(this.error)))
       .child(v_flex().id('sf-linear-scroll').flex_1().min_h(0).overflow_y_scroll().gap(12)
@@ -92,7 +101,7 @@ export default class LinearInbox extends View {
         .children(shown.map(item => {
           const open = this.expanded.has(item.id), states = this.statuses[item.team] ?? [];
           const stateKey = `state:${item.id}`, commentKey = `comment:${item.id}`, readKey = `read:${item.id}`;
-          return v_flex().id(`sf-linear-item-${item.id}`).p(14).gap(8).rounded(7).bg(t.surface).border(1).border_color(item.read ? t.border : t.accent)
+          return v_flex().id(`sf-linear-item-${item.id}`).opacity(this.pending.has(readKey) ? 0.5 : 1).p(14).gap(8).rounded(7).bg(t.surface).border(1).border_color(item.read ? t.border : t.accent)
             .child(h_flex().gap(8).items_center()
               .child(div().px(8).py(3).rounded(4).bg(item.read ? t.chrome : t.selected).text_color(item.read ? t.muted : t.accent).text_size(12).font_bold()
                 .child(item.read ? `✓ ${categoryLabel(item)}` : `● ${categoryLabel(item)}`))
@@ -130,7 +139,12 @@ export default class LinearInbox extends View {
             .when(Boolean(feedback(stateKey)), e => e.child(div().text_size(12).text_color(t.muted).child(`상태 변경: ${feedback(stateKey)}`)))
             .when(Boolean(feedback(readKey)), e => e.child(div().text_size(12).text_color(t.muted).child(`읽음 처리: ${feedback(readKey)}`)))
             .child(h_flex().gap(7)
-              .when(linearLink(item.url), e => e.child(button(`sf-linear-open-${item.id}`, '원문 열기', false, (_e, cx) => cx.spawn(async () => { await exec('open', [item.url]); }))))
+              // Opening the original confirms it: read in Linear (a linked-issue comment on this computer only).
+              .when(linearLink(item.url), e => e.child(button(`sf-linear-open-${item.id}`, '원문 열기', false, (_e, cx) => {
+                cx.spawn(async () => { await exec('open', [item.url]); });
+                if (!item.read && !this.pending.has(readKey) && (item.local || this.writes.includes('mark_read')))
+                  this.send(readKey, item.local ? 'mark_seen' : 'mark_read', item, {origin: 'opened'}, cx);
+              })))
               .child(button(`sf-linear-expand-${item.id}`, open ? '접기' : '댓글·답글', open, (_e, cx) => { open ? this.expanded.delete(item.id) : this.expanded.add(item.id); cx.notify(); }))
               .when(Boolean(item.issue) && this.writes.includes('set_state'), e => e.child(button(`sf-linear-states-${item.id}`, '상태 변경', this.stateOpen === item.id, (_e, cx) => { this.stateOpen = this.stateOpen === item.id ? null : item.id; this.confirm = null; cx.notify(); })))
               .when(!item.local && !item.read && !this.pending.has(readKey) && this.writes.includes('mark_read'), e => e.child(button(`sf-linear-read-${item.id}`, '읽음 처리', true, (_e, cx) => this.send(readKey, 'mark_read', item, {}, cx))))

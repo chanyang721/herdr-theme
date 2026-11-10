@@ -1,7 +1,8 @@
 import {View,div,svg} from 'gpui-kit';
 import {h_flex,v_flex,InputState,Input} from 'gpui-base';
 import {theme,spaces,shared,setShared,settings,window,exec} from 'herdr';
-import {issueAlerts,issueAlertSignature,alertedIssues} from './alert-model.js';
+import {issueAlerts,issueAlertSignature,alertedIssues,issueReadTargets,groupReadTargets} from './alert-model.js';
+import {requestReads,checkReads,readPendingIds,lastReadError,READ_POLL_MS} from './linear-reads.js';
 import {projectPanelFeed,panelEventStates,panelSpaces,panelSpacePartners,PANEL_TIMING,PANEL_LEGS,panelLeg,agentReason} from './panel-model.js';
 import {panelLayout,cardView,agentRow,panelFlowLayer,panelCounts,PANEL_GEOMETRY,toolIcon,panelReasonWake,agentRowHeight,panelMetaHeight,rowArrival} from './panel-view.js';
 import {groupColors,paletteMode} from './collab-flow.js';
@@ -132,7 +133,22 @@ export function createRetainedPanel(cx,{macTitlebar=false,onClassic=null,onDispo
   c.alertMarks=new Map();
   c.alertMark=space=>{
     const state=c.issueStates.get(space.id);
-    return JSON.stringify([c.cardAlerts?.(space)||null,state?.open?issueAlertSignature(shared('sixfold.linearItems')??[],space.name):'',shared('sixfold.alertPopover')?.space===space.name?shared('sixfold.alertPopover'):null]);
+    return JSON.stringify([c.cardAlerts?.(space)||null,state?.open?issueAlertSignature(shared('sixfold.linearItems')??[],space.name):'',shared('sixfold.alertPopover')?.space===space.name?shared('sixfold.alertPopover'):null,
+      state?.open?[[...readPendingIds()].sort().join(','),lastReadError()]:null]);
+  };
+  // Read marks: one request per alert (the collector runs it once through its guard). While any is
+  // pending, its result is read every READ_POLL_MS; the timer stops when none is left (at most 3 min).
+  c.readTimer=null;
+  c.pollReads=()=>{
+    if(c.disposed||c.readTimer||!readPendingIds().size)return;
+    c.readTimer=c.cx.timer.after(READ_POLL_MS,()=>{c.readTimer=null;if(c.disposed)return;
+      c.cx.spawn(async()=>{try{await checkReads();}catch{}c.alertsChanged();c.pollReads();});});
+  };
+  c.markRead=(alerts,origin,space)=>{
+    c.cx.spawn(async()=>{
+      try{await requestReads(alerts,origin,shared('sixfold.linearWrites')??[]);}catch{}
+      c.alertsChanged();c.notify(c.cards.get(space.id));c.pollReads();
+    });
   };
   // A card not drawn yet has no mark and is skipped: its first render reads the current alerts.
   c.alertsChanged=()=>{
@@ -182,8 +198,15 @@ export function createRetainedPanel(cx,{macTitlebar=false,onClassic=null,onDispo
       search:state?.input?Input.new(state.input).w_full().h(30):null,
       alertsFor:state?.open?key=>issueAlerts(shared('sixfold.linearItems')??[],space.name,key):null,
       alerted:state?.open?alertedIssues(shared('sixfold.linearItems')??[],space.name,state.query):[],
-      // Opens the comment itself (#comment-…); reading it marks nothing in Linear.
-      onLink:(url,context)=>{if(/^https:\/\/linear\.app\//.test(url))(context||cx).spawn(async()=>{await exec('open',[url]);});},
+      // Opens the comment itself (#comment-…) and confirms what was opened: the Linear notification is
+      // marked read in Linear (a comment read from a linked issue only on this computer).
+      onLink:(url,context,alerts)=>{if(/^https:\/\/linear\.app\//.test(url)){(context||cx).spawn(async()=>{await exec('open',[url]);});if(alerts?.length)c.markRead(alerts,'opened',space);}},
+      issueTargets:state?.open?key=>issueReadTargets(shared('sixfold.linearItems')??[],space.name,key):null,
+      onRead:alerts=>c.markRead(alerts,'opened',space),
+      onReadAll:()=>c.markRead(groupReadTargets(shared('sixfold.linearItems')??[],space.name,state?.query||''),'all',space),
+      readPending:state?.open?readPendingIds():new Set(),readError:state?.open?lastReadError():'',
+      readable:(shared('sixfold.linearWrites')??[]).includes('mark_read'),
+      doneKeys:new Set((space.issues||[]).filter(issue=>issue.state==='done').map(issue=>issue.key)),
       onOpen:(open)=>{
         let current=c.issueStates.get(space.id);
         if(!current){
@@ -324,7 +347,7 @@ export function createRetainedPanel(cx,{macTitlebar=false,onClassic=null,onDispo
   };
   c.setEnabled=enabled=>{if(c.enabled!==enabled){c.enabled=enabled;c.preferences();}};
   c.dispose=()=>{
-    if(c.disposed)return;c.disposed=true;
+    if(c.disposed)return;c.disposed=true;c.readTimer?.cancel?.();c.readTimer=null;
     try{c.wake?.cancel();}catch{/* The old source generation may already be released. */}
     try{c.life?.cancel();}catch{}
     for(const entity of [...c.rows.values(),...c.cards.values(),c.computers,c.summary,c.flows,c.list,c.entity])try{entity?.release();}catch{}
