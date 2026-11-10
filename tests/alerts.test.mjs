@@ -179,7 +179,7 @@ test('with a sidebar drawing arrivals a new mention folds into its space card in
     files.set('slack-mentions.json',JSON.stringify({items:[{id:'history',project:'Alpha'},{id:'m1',project:'Alpha',text:'hello',author:'Kim'}]}));
     h.publish('slack-mentions.json');await h.flush();
     assert.equal(h.opens.length,0,'no window, no focus change');
-    assert.deepEqual(arrived.map(a=>[a.key,a.id,a.source,a.space,a.title]),[['mention:m1','m1','slack','Share','hello']]);
+    assert.deepEqual(arrived.map(a=>[a.key,a.id,a.source,a.space,a.line]),[['mention:m1','m1','slack','Share','Kim: hello']]);
     host.value=false;
     files.set('slack-mentions.json',JSON.stringify({items:[{id:'history'},{id:'m1'},{id:'m2',project:'Alpha'}]}));
     h.publish('slack-mentions.json');await h.flush();

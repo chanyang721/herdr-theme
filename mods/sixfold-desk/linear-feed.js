@@ -20,7 +20,9 @@ const LEDGER_LIMIT = 500;   // ids of notifications already announced; bounded
 export function linearPopupEvents(items) {
   return (items ?? []).filter(item => typeof item?.id === 'string' && item.id)
     .map(item => ({key: `linear:${item.id}`, id: item.id, popup: !item.read && POPUP.has(item.category), workspace: item.workspace ?? '',
-      title: item.issue_title || item.title || '', issue: item.issue || '', category: item.category || ''}));
+      title: item.issue_title || item.title || '', issue: item.issue || '', category: item.category || '',
+      // What changed, in one line: Linear's own subtitle ("Kim commented: …") or the comment read for it.
+      line: String(item.subtitle || item.comments?.[0]?.body || '').split('\n')[0].slice(0, 200), url: item.url || ''}));
 }
 
 async function ledgerSnapshot(path) {
@@ -70,7 +72,7 @@ export function announceLinear(events) {
   const names = (spaces() ?? []).map(s => s.name);
   for (const event of events) {
     addArrival({key: event.key, id: event.id, source: 'linear', space: arrivalTarget(event.workspace, names),
-      title: event.title, issue: event.issue, category: event.category});
+      title: event.title, issue: event.issue, category: event.category, line: event.line, url: event.url});
   }
 }
 

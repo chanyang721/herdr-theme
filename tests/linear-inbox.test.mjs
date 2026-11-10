@@ -110,12 +110,17 @@ test('new Linear alerts become arrivals into their space (Share otherwise); no s
     assert.equal(opens.length, 1);                       // read or reminder only: nothing
     // A sidebar host: each new alert arrives into its space, an unknown space into Share. Comments count.
     store.setArrivalHost(() => true);
-    feed([{id: 'a', read: false, category: 'commentsAndReplies', workspace: 'Alpha', issue: 'ABC-1', issue_title: 'T'},
+    feed([{id: 'a', read: false, category: 'commentsAndReplies', workspace: 'Alpha', issue: 'ABC-1', issue_title: 'T',
+           subtitle: 'Kim commented: looks good\nsecond line', url: 'https://linear.app/demo/issue/ABC-1/t#comment-0a1b2c3d'},
           {id: 'b', read: false, category: 'assignments', workspace: 'Nowhere'}, {id: 'old', read: false, category: 'assignments'}]);
     await flush();
     assert.equal(opens.length, 1);
     const landed = store.arrivals().filter(a => a.key === 'linear:a' || a.key === 'linear:b').map(a => [a.key, a.id, a.space, a.source, a.issue]);
     assert.deepEqual(landed, [['linear:b', 'b', 'Share', 'linear', ''], ['linear:a', 'a', 'Alpha', 'linear', 'ABC-1']]);   // newest lands last
+    // The popup says what changed in one line (who, what) and keeps the comment link.
+    const a = store.arrivals().find(x => x.key === 'linear:a');
+    assert.equal(a.line, 'Kim commented: looks good');
+    assert.equal(a.url, 'https://linear.app/demo/issue/ABC-1/t#comment-0a1b2c3d');
     // An alert of a space not on screen belongs to Share everywhere: badge, popover and inbox agree with its arrival.
     assert.equal(shared['sixfold.linearItems'].find(i => i.id === 'b').workspace, 'Share');
     assert.equal(shared['sixfold.linearItems'].find(i => i.id === 'b').workspace_raw, 'Nowhere');
@@ -190,3 +195,4 @@ test('of many new alerts the newest few arrive; unknown spaces are placed in Sha
     assert.deepEqual(placeItems([{id: 1, workspace: 'Gone'}], []).map(i => i.workspace), ['Gone']);   // no space list: unchanged
   }
 });
+

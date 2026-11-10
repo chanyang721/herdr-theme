@@ -13,7 +13,7 @@ function popupEvents(mentions, read) {
   const events = [];
   for (const item of mentions ?? []) {
     if (typeof item?.id === 'string' && item.id) {
-      events.push({key: `mention:${item.id}`, id: item.id, popup: read[item.id] !== item.id, project: item.project ?? '', title: item.text || item.title || '', author: item.author || ''});
+      events.push({key: `mention:${item.id}`, id: item.id, popup: read[item.id] !== item.id, project: item.project ?? '', title: item.title || '', line: String(item.text || '').split('\n')[0].slice(0,200), author: item.author || '', url: item.link || ''});
     }
   }
   return events;
@@ -52,7 +52,7 @@ function announceSlack(events){
   if(!hasArrivalHost())return openOverlay({mod:'sixfold-slack-inbox',kind:'window',key:'slack-mentions',keep:true,width:1040,height:800,props:{window:true,review:Boolean(events[0].review)}});
   const names=(spaces()??[]).map(s=>s.name);
   // Mentions are newest first: the newest few, oldest of them first so the newest lands last.
-  for(const event of events.slice(0,ARRIVAL.visible).reverse())addArrival({key:event.key,id:event.id,source:'slack',space:arrivalTarget(event.project,names),title:event.title,issue:event.author});
+  for(const event of events.slice(0,ARRIVAL.visible).reverse())addArrival({key:event.key,id:event.id,source:'slack',space:arrivalTarget(event.project,names),title:event.title,line:event.author?`${event.author}: ${event.line}`:event.line,url:event.url});
 }
 
 // Tracked Slack, GitHub and pane requests, ordered by the watcher: needs-you first.
