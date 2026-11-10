@@ -118,7 +118,8 @@ test('tool issue groups use the same priority order and keep unassigned agents l
   const item = normalize({ spaces: [space('one', {
     work: { tool: 'jira', key: 'OPS', open: 5 },
     issues: states.map((state, index) => ({ key: `OPS-${index}`, title: state, state, at: NOW + index })),
-    agents: [...states.map((state, index) => agent(`agent-${index}`, { issue: `OPS-${index}` })), agent('unassigned', { issue: 'gone' })],
+    // Folded issues hold only idle agents; a live task never folds away (see below).
+    agents: [...states.map((state, index) => agent(`agent-${index}`, { issue: `OPS-${index}`, status: index < 2 ? 'idle' : 'working' })), agent('unassigned', { issue: 'gone' })],
   })] }).spaces[0];
   const result = agentGroups(item);
   assert.equal(result.grouped, true);
@@ -128,6 +129,24 @@ test('tool issue groups use the same priority order and keep unassigned agents l
   assert.deepEqual(expanded.groups.map(group=>group.issue?.state??null),['blocked','working','review','waiting','done',null]);
   assert.equal(expanded.issuesExpanded,true);assert.equal(expanded.groupsHidden,0);
   assert.deepEqual(result.groups.at(-1).agents.map(a => a.id), ['unassigned']);
+});
+
+test('an issue with a working or blocked agent stays visible past the issue fold', () => {
+  const states = ['done', 'waiting', 'review', 'working', 'blocked', 'done'];
+  const build = statuses => normalize({ spaces: [space('one', {
+    work: { tool: 'jira', key: 'OPS', open: 6 },
+    issues: states.map((state, index) => ({ key: `OPS-${index}`, title: state, state, at: NOW + index })),
+    agents: statuses.map((status, index) => agent(`agent-${index}`, { issue: `OPS-${index}`, status })),
+  })] }).spaces[0];
+  const quiet = agentGroups(build(['idle', 'idle', 'idle', 'idle', 'idle', 'idle']));
+  assert.equal(quiet.groups.length, 3);assert.equal(quiet.groupsHidden, 3);
+  for (const status of ['working', 'blocked']) {
+    const live = agentGroups(build(['idle', 'idle', 'idle', 'idle', 'idle', status]));
+    assert(live.groups.some(group => group.issue?.key === 'OPS-5'), `a ${status} agent keeps its issue out of the fold`);
+    assert(live.agents.some(a => a.id === 'agent-5'));assert.equal(live.groupsHidden, 2);
+  }
+  const idle = agentGroups(build(['idle', 'idle', 'idle', 'idle', 'idle', 'done']));
+  assert(!idle.groups.some(group => group.issue?.key === 'OPS-5'), 'a finished agent still folds');
 });
 
 test('root agent rows are never truncated inside an issue', () => {

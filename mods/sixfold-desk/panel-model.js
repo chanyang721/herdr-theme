@@ -298,7 +298,10 @@ export function agentGroups(space, { includeClosedIds = new Set(), expandedIssue
   }));
   if (!space?.work) return { grouped: false, groups: [], groupsHidden: 0, issueHidden: 0, issuesExpanded: false, groupsExpandable: false, ...treeAgents(agents, expandedParents) };
   const groupsExpandable = issues.length > 4, issuesExpanded = groupsExpandable && expandedIssueSpaces.has(space.id);
-  const visibleIssues = groupsExpandable && !issuesExpanded ? issues.slice(0, 3) : issues;
+  // A live task must not disappear behind the generic issue fold.
+  const activeIssues = new Set(agents.filter(agent => ['working','blocked'].includes(agent.status)).map(agent => agent.issue));
+  const visibleIssues = groupsExpandable && !issuesExpanded
+    ? issues.filter((issue,index) => index < 3 || activeIssues.has(issue.key)) : issues;
   const groups = visibleIssues.map(issue => ({ issue, ...treeAgents(agents.filter(agent => agent.issue === issue.key), expandedParents) }));
   const unassigned = agents.filter(agent => !assigned.has(agent.issue));
   if (unassigned.length) groups.push({ issue: null, ...treeAgents(unassigned, expandedParents) });
