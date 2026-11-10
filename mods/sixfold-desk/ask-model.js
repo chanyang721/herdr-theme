@@ -131,7 +131,9 @@ function digest(value) {
 export function askSummary(cards) {
   const panes = {};
   for (const group of groupAsks(cards)) panes[group.terminal ?? ''] = {n: group.cards.length, kind: group.cards[0].kind};
-  const live = (cards ?? []).map(card => `${card.id}:${card.revision}`).join('|');
+  // The owning terminal is part of the version: a card moved to another pane
+  // must leave the old pane's popup.
+  const live = (cards ?? []).map(card => JSON.stringify([card.id, card.revision, card.terminal ?? null])).join('|');
   return {v: live ? digest(live) : '', panes};
 }
 export function summaryFor(summary, terminal) {

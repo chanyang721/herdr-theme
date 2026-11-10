@@ -330,3 +330,15 @@ test('popup and pre-send checks use the same typed reader as the sidebar (no 1 M
   click(p.render(), 'sf-ask-big-action-0', p.cx); await p.cx.settle();
   assert.ok(f.calls.some(c => c[0] === 'exec'), 'the send went through');
 });
+
+test('a card moved to another pane leaves the old popup and cannot be sent from it', async () => {
+  const f = host([card('a1', 'pane-a')]), mod = await load(f.h), p = await popup(f, mod, 'pane-a');
+  const moved = [card('a1', 'pane-b')];
+  assert.notEqual(askSummary(moved).v, askSummary([card('a1', 'pane-a')]).v, 'ownership is part of the version');
+  f.files.set('/demo/data/sixfold/cards.json', JSON.stringify({schema: 1, cards: moved}));
+  click(p.render(), 'sf-ask-a1-action-0', p.cx); await p.cx.settle();
+  assert.equal(f.calls.filter(c => c[0] === 'write' || c[0] === 'exec').length, 0, 'never sent from the old pane');
+  f.store.set(SUMMARY_KEY, askSummary(moved)); p.render(); await p.cx.settle();
+  assert.deepEqual(p.view.asks, []);
+  const b = await popup(f, mod, 'pane-b'); assert.equal(b.view.asks[0].id, 'a1');
+});

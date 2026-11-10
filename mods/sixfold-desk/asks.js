@@ -93,7 +93,8 @@ export function sendAction(view, card, action, cx) {
       // The bridge validates the revision too; this only avoids sending an
       // answer to a card that is already gone or was revised on disk.
       const live = parseAsks(valueOf(await snapshot('cards')));
-      if (!live?.cards.some(item => item.id === card.id && item.revision === card.revision)) throw new ActionError('stale');
+      if (!live?.cards.some(item => item.id === card.id && item.revision === card.revision
+        && (item.terminal ?? null) === (card.terminal ?? null))) throw new ActionError('stale');
       const id = `${Date.now().toString(36)}-${(++sequence).toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
       let request;
       try { request = actionRequest(card, action, view.askChoices[card.id], id, new Date().toISOString()); } catch { throw new ActionError('incomplete'); }
