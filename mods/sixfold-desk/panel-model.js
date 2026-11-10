@@ -230,10 +230,11 @@ export function panelSpacePartners(feed, spaceID) {
 }
 export function agentState(agent) {
   if (agent.closing?.blocked_reason || agent.status === 'blocked' || agent.report_missing === true || agent.error) return 'blocked';
-  // 완료 = the harness will clean the pane up: the feed's status 'done'. A finished task whose pane
-  // the harness still keeps (stage 5 with a pane, `nav`) is not completed yet; its stage and
-  // keep_reason say why. A record row without a pane is completed by its stage.
-  if (agent.status === 'done' || (agent.stage === 5 && !agent.nav)) return 'done';
+  // 완료 = the feed's status 'done' alone. The harness sends it for a record row without a pane
+  // whose task finished (stage 5) and for a pane its close scan will clean up. A finished task
+  // whose pane is still kept arrives idle or working; its stage and keep_reason say why. `nav` is
+  // not a pane test: a live pane whose session is not confirmed has nav null (review 2026-11-10).
+  if (agent.status === 'done') return 'done';
   if (agent.stage === 3) return 'review';
   if (agent.stage === 4) return 'waiting';
   return agent.status === 'working' ? 'working' : 'waiting';
@@ -442,7 +443,7 @@ export function panelEventStates(feed, now, { previous = null, motion = true } =
   const incoming = feed?.events ?? [];
   const seen = new Set(previous?.seen ?? incoming.map(event => event.id));
   const pending = new Map(previous?.pending ?? []);
-  const agentStages=new Map(),stageNames=['대기','배분 중','작업 중','검수 중','수락 대기','완료'];
+  const agentStages=new Map(),stageNames=['대기','배분 중','작업 중','검수 중','수락 대기','수락됨'];  // 완료 is the cleanup target only (agentState)
   let stageRevision=previous?.stageRevision||0;
   for(const agent of (feed?.spaces||[]).flatMap(space=>space.agents)){
     const signature=JSON.stringify([agent.stage,agent.closing?.step||0]);agentStages.set(agent.id,signature);

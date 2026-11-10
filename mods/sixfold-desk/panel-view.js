@@ -113,7 +113,7 @@ function stageBar(agent,tag,color,t,motion,width){
   const blocked=agent.status==='blocked'||Boolean(closing?.blocked_reason);
   const tone=closing?(t.ansi6||t.accent):color;
   const active=closing?closing.step-1:Math.max(-1,Math.min(4,agent.stage-1));
-  const tip=closing?closing.blocked_reason||CLOSE[active]:agent.stage===5?'완료':STAGES[active]||'대기·계획';
+  const tip=closing?closing.blocked_reason||CLOSE[active]:agent.stage===5?(agent.status==='done'?'완료':'수락됨·정리 전'):STAGES[active]||'대기·계획';
   const slot=h_flex().w(width<300?64:120).h(18).flex_none().gap(2).items_center().justify_end().tooltip(tag?.label||tip);
   if(tag)return slot.child(text(tag.label,blocked?t.blocked:tone,9).flex_1());
   // Mockup ㉑: a blocked task paints only the stage it is stuck on; finished stages keep their colour.

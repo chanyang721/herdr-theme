@@ -561,7 +561,8 @@ test('parent trees stay inside issue buckets and fold after the last visible des
 test('completed children leave both expanded rows and collapsed branch counts',()=>{
   const initial=space('one',{agents:[agent('root'),...Array.from({length:6},(_,i)=>agent(`child${i}`,{parent_id:'root'}))]});
   assert.equal(agentGroups(initial).folds[0].hidden,3);
-  const next={...initial,agents:initial.agents.map(row=>row.id==='child0'?{...row,status:'done'}:row.id==='child1'?{...row,stage:5}:row)};
+  const next={...initial,agents:initial.agents.map(row=>row.id==='child0'?{...row,status:'done'}:row.id==='child1'?{...row,stage:5,status:'done'}:row)};
+  // A finished child arrives as status done (feed: a record row, or a pane the close scan will clean up).
   const collapsed=agentGroups(next),expanded=agentGroups(next,{expandedParents:new Set(['root'])});
   assert.equal(collapsed.rowMeta.get('root').childCount,4);assert.equal(collapsed.hidden,1);assert.equal(collapsed.folds.length,1);
   assert.deepEqual(expanded.agents.map(row=>row.id),['root','child2','child3','child4','child5']);
@@ -600,7 +601,11 @@ test('완료 is the harness cleanup target: a finished task whose pane is still 
   const target=agent('target',{status:'done',stage:5,state:'cleanup_wait',nav:nav('p3'),
     cleanup:{idle_since:'2026-11-10T00:00:00Z',limit_s:1800,due_at:'2026-11-10T00:30:00Z'}});
   assert.equal(agentState(target),'done','the cleanup target is 완료');
-  assert.equal(agentState(agent('record',{status:'idle',stage:5,nav:null})),'done','a record row without a pane is completed by its stage');
+  assert.equal(agentState(agent('record',{status:'done',stage:5,nav:null})),'done','the feed sends a finished record row without a pane as done');
+  // A live pane whose session is not confirmed has no nav; it is still a kept pane, not a record row.
+  const unconfirmed=agent('unconfirmed',{parent_id:'root',status:'idle',stage:5,state:'unseen_result',nav:null,cleanup:null});
+  assert.notEqual(agentState(unconfirmed),'done');
+  assert(agentGroups(space('nav-less',{agents:[agent('root'),unconfirmed]})).agents.some(row=>row.id==='unconfirmed'));
 });
 
 test('issue and parent expansion recompute only the owning space with stable feed references',()=>{
