@@ -110,7 +110,7 @@ export function watchLinear(view, cx) {
         if (!allowed()) return;
         previous = signature;   // after the ledger write, so a failed write is retried
         announceLinear(events);
-        if (events.length) cx.notify();   // the sidebar draws the new arrivals
+        if (events.length) { cx.notify(); view.panelRetained?.alertsChanged?.(); }   // arrivals drawn; chips count them once landed
       } catch { /* A partial collector write keeps the last valid list; retried on the next change. */ }
       finally { loading = false; if (dirty) schedule(); }
     });
