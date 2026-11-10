@@ -20,6 +20,8 @@ const ROW_BLINK_MS=Math.round(PANEL_TIMING.pingMs/2);
 export const LINK_PULSE=5;
 export const PANEL_GEOMETRY=Object.freeze({header:34,meta:20,issue:18,row:ROW,reason:REASON,child:20,border:1,bottom:4,gap:4,padding:7,rightGutter:RIGHT,popoverGap:10});
 // Compact rows keep reasons in the tooltip; geometry and rendered height agree.
+// The Slack / work-tool line is drawn, and takes height, only when one is connected.
+export const panelMetaHeight=space=>space.slack||space.work?PANEL_GEOMETRY.meta:0;
 export const agentRowHeight=(agent,child=false)=>child?PANEL_GEOMETRY.child:ROW;
 // Wake time for the earliest countdown text change among the feed's rows.
 export function panelReasonWake(feed,now){
@@ -65,7 +67,7 @@ export function panelLayout(feed, eventState, nativeSpaces=[],groupMap=null) {
   y+=28;
   for(const space of panelSpaces(feed,nativeSpaces)){
     const groups=groupMap?.get(space.id)||agentGroups(space,{includeClosedIds:new Set(eventState.tags.keys())});
-    const metaHeight=space.slack||space.work?PANEL_GEOMETRY.meta:0;
+    const metaHeight=panelMetaHeight(space);
     const card={space,groups,top:y,rows:[],height:PANEL_GEOMETRY.header+metaHeight+2};
     anchors.set(space.id,{y:y+PANEL_GEOMETRY.border+PANEL_GEOMETRY.header/2,kind:'space',space:space.id,computer:space.computer});
     let row=y+PANEL_GEOMETRY.border+PANEL_GEOMETRY.header+metaHeight;
@@ -209,7 +211,7 @@ export function cardView(view,card,state,color,computerNames,t,motion,rowEntitie
     .when(Boolean(space.work),e=>e.child(toolIcon(space.work.tool,t)))
     .child(text(space.work?`${space.work.key} · 이슈 ${space.work.open}`:'',space.work?t.muted:t.dim,9))
     .when(Boolean(space.work),e=>e.cursor_pointer().tooltip('이번 주 · 마일스톤 · 전체 이슈'));
-  if(space.slack||space.work)box.child(h_flex().h(PANEL_GEOMETRY.meta).flex_none().px(7).gap(5).items_center()
+  if(panelMetaHeight(space))box.child(h_flex().h(PANEL_GEOMETRY.meta).flex_none().px(7).gap(5).items_center()
     .when(Boolean(space.slack),e=>e.child(image('mods/sixfold-desk/icons/slack.svg').size(11).flex_none()))
     .child(text(space.slack?.channel||'',space.slack?t.muted:t.dim,9).flex_1())
     .child(space.work&&view.issuePopover?view.issuePopover(space,tool,t):tool));

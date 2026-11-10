@@ -2,7 +2,7 @@ import {View,div,svg} from 'gpui-kit';
 import {h_flex,v_flex,InputState,Input} from 'gpui-base';
 import {theme,spaces,shared,setShared,settings,window} from 'herdr';
 import {projectPanelFeed,panelEventStates,panelSpaces,panelSpacePartners,PANEL_TIMING,PANEL_LEGS,panelLeg,agentReason} from './panel-model.js';
-import {panelLayout,cardView,agentRow,panelFlowLayer,panelCounts,PANEL_GEOMETRY,toolIcon,panelReasonWake,agentRowHeight} from './panel-view.js';
+import {panelLayout,cardView,agentRow,panelFlowLayer,panelCounts,PANEL_GEOMETRY,toolIcon,panelReasonWake,agentRowHeight,panelMetaHeight} from './panel-view.js';
 import {groupColors,paletteMode} from './collab-flow.js';
 import {issuePopover} from './task-issues-view.js';
 import {issueScopeData,issueCacheLabel} from './task-issue-state.js';
@@ -220,7 +220,8 @@ export function createRetainedPanel(cx,{macTitlebar=false,onClassic=null,onDispo
     }
     const topology=c.feed.spaces.map(space=>{
       const group=c.projection.groups.get(space.id);
-      return [space.id,group.grouped,group.grouped?group.groups.map(g=>[g.issue?.key,g.agents.map(a=>a.id),g.folds]):[group.agents.map(a=>a.id),group.folds],group.issueHidden,group.issuesExpanded];
+      // The meta line comes and goes with Slack / work-tool links and moves every row below it.
+      return [space.id,panelMetaHeight(space),group.grouped,group.grouped?group.groups.map(g=>[g.issue?.key,g.agents.map(a=>a.id),g.folds]):[group.agents.map(a=>a.id),group.folds],group.issueHidden,group.issuesExpanded];
     });
     // Row height depends on the parent relation (child rows are 20px) and on a
     // reason line, so both belong to the layout key even when order is unchanged.

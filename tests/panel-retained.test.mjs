@@ -286,3 +286,20 @@ test('a root row with a reason that gains a parent in place re-lays its height a
     assert.equal(card().height,find().y+20-card().top+5);
   }finally{r.controller.dispose();}
 });
+
+test('adding or removing a Slack / work-tool link re-lays the card, since the meta line comes and goes',async()=>{
+  for(const initial of [false,true]){
+    const r=await runtime(false);
+    try{
+      const raw=makePanelFixture({slack:initial}),id=raw.spaces[0].agents[0].id;
+      r.controller.apply(cleanPanelFeed(raw),'ready');r.flush();
+      const key=r.controller.layoutKey,before=r.controller.layout.anchors.get(id).y,height=r.controller.layout.cards[0].height;
+      raw.spaces[0].slack=initial?null:{channel:'new-channel'};
+      r.controller.apply(cleanPanelFeed(raw),'ready');r.flush();
+      const shift=initial?-20:20;
+      assert.notEqual(r.controller.layoutKey,key);
+      assert.equal(r.controller.layout.anchors.get(id).y,before+shift,'row anchor follows the meta line');
+      assert.equal(r.controller.layout.cards[0].height,height+shift,'card height follows the meta line');
+    }finally{r.controller.dispose();}
+  }
+});
