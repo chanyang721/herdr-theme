@@ -61,7 +61,7 @@ export function issueAlerts(items, space, key, limit = ISSUE_ALERT_LINES) {
 }
 // Changes only when an issue's unread alerts change: part of the card key.
 export const issueAlertSignature = (items, space) => linearScoped(items, space).filter(i => !i.read && i.issue)
-  .map(i => JSON.stringify([i.issue, i.id, i.subtitle || '', i.changed_at || i.at || '', i.changes || [], i.comments?.[0]?.body || ''])).sort().join(',');
+  .map(i => JSON.stringify([i.issue, i.id, i.subtitle || '', i.changed_at || i.at || '', i.changes || [], i.comments?.[0]?.body || '', i.url || '', i.issue_title || ''])).sort().join(',');
 
 // The issues of a space with unread Linear alerts, for the shared "알림 온 이슈"
 // group of the issue search: every tab shows the same group, whether or not the

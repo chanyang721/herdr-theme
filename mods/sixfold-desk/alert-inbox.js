@@ -35,8 +35,7 @@ export function workspaceAlertsRow(space,t,{motion=true}={}) {
   const scope={project:space.name,motion};
   const row=h_flex().id(`sf-channel-alerts-${space.id}`).h(26).w_full().px(10).gap(6).items_center().cursor_pointer()
     .child(alertBadge(`space-${space.id}`,t,{...scope,popover:true}))
-    .child(linearBadge(`space-${space.id}`,t,{...scope,popover:true}))
-    .child(div().text_size(10).text_color(t.muted).child('알림'));
+    .child(linearBadge(`space-${space.id}`,t,{...scope,popover:true}));   // same chips as the merged meta line, no separate label
   // Presses stop here so the card underneath is not selected or dragged.
   const stop=(_e,cx)=>cx.stop_propagation();
   return div().id(`sf-channel-alerts-wrap-${space.id}`).h(26).flex_none().on_mouse_down('left',stop).on_mouse_up('left',stop)
