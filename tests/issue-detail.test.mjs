@@ -74,8 +74,10 @@ test('milestones: every one in Linear order with its own counts; computed ones m
   const untitled={...PROJECT,issues:PROJECT.issues.map(({title,...rest})=>rest)};
   assert.equal(milestoneList(untitled,{all:[{key:'DEMO-1',title:'From the list'}]})[0].items[0].title,'From the list','compact rows take the list title');
   assert.deepEqual(list.map(m=>m.id),['m2','m1','m3']);                       // Linear's order, not sorted
-  assert.deepEqual(list.map(m=>[m.issues,m.progress,m.status,m.counted]),[[5,40,'started',false],[2,100,'done',false],[1,null,'planned',true]]);
+  assert.deepEqual(list.map(m=>[m.issues,m.progress,m.status,m.counted]),[[5,40,'started',false],[2,100,'done',false],[null,null,'planned',true]]);
   assert.equal(list[0].unread,1);assert.deepEqual(list[0].items.map(i=>i.key),['DEMO-1','DEMO-2']);
+  const unknown=milestoneList({...PROJECT,milestones:[{id:'m2',name:'Two',issues:null,progress:null,done:50,status:'started',counted:true}]},null);
+  assert.deepEqual([unknown[0].issues,unknown[0].progress,unknown[0].status],[null,null,'started'],'an unknown Linear count stays unknown, never the partial row count');
   // No project read yet: the catalog's milestones, counts computed from its rows.
   const catalog={milestones:[{id:'x',name:'X',due:'2026-11-30',progress:3}],milestone:[{key:'K-1',milestone_id:'x'}],all:[{key:'K-1',milestone_id:'x'},{key:'K-2',milestone_id:'x'}]};
   const fallback=milestoneList(null,catalog);
@@ -172,4 +174,23 @@ test('read requests only when missing or old; force at most every 30 s; answered
   await cache.ensure('project','Alpha',{now,...io});assert.equal(written.at(-1)[1].space,'Alpha');
   assert.equal(cache.projectSlug('PeaceMinusOne'),'peaceminusone-31397865','same name as the collector writes');
   assert.notEqual(cache.projectSlug('가나'),cache.projectSlug('다라'),'names differing outside ASCII never share a file');
+  // The same table as the collector's test (space_slug): one '-' per code point, ASCII-only lowering.
+  for(const [name,slug] of [['가나','---a2ecb730'],['Team 🚀 X','team---x-ed51bf5b'],['İx','-x-c8fa95b3'],['\ud800a','-a-54bad7b1']])
+    assert.equal(cache.projectSlug(name),slug,name);
+});
+
+test('a late answer still lands after the 읽는 중 spinner has ended',async()=>{
+  const files=new Map();
+  const stub={appHome:()=>'/home',readTextFile:async path=>{if(!files.has(path))throw new Error('missing');return files.get(path);},writeTextFile:async()=>{}};
+  const cache=await cacheModule(stub);
+  const now=Date.parse('2026-11-10T08:00:00Z'),io={read:stub.readTextFile,write:stub.writeTextFile,home:'/home'};
+  await cache.ensure('project','Alpha',{now,...io});
+  await cache.checkCaches({...io,now:now+9*60*1000});
+  assert(!cache.waiting('project','Alpha',now+9*60*1000),'the spinner ends');assert(cache.anyWaiting(now+9*60*1000),'the cache is still checked');
+  // Queued 3 min + a 7 min read: the answer comes at 10 min.
+  files.set(`/home/data/sixfold/linear-cache/project-${cache.projectSlug('Alpha')}.json`,JSON.stringify({schema:1,space:'Alpha',at:new Date(now+10*60*1000).toISOString(),state:'ok',milestones:[]}));
+  assert.equal(await cache.checkCaches({...io,now:now+10*60*1000+1000}),true);
+  assert.equal(cache.cached('project','Alpha').space,'Alpha');assert(!cache.anyWaiting(now+10*60*1000+1000),'answered: checking stops');
+  await cache.ensure('project','Beta',{now,...io});
+  await cache.checkCaches({...io,now:now+19*60*1000});assert(!cache.anyWaiting(now+19*60*1000),'no answer at all: checking stops by itself');
 });
