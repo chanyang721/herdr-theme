@@ -60,7 +60,9 @@ export function prepareDocs(group){
     seen.add(file.path);
     const name=String(file.name||base(file.path)).normalize('NFC');
     const label=folderLabel(file);
+    // The whole path too (slashes unified), so 'sub/guide', a parent folder the label leaves out or a pasted path match.
     items.push({key:file.path,path:file.path,name,nameF:fold(name),folder:file.folder||dir(file.path),folderLabel:label,folderF:fold(label),
+      pathF:fold(file.path).replace(/\\/g,'/'),
       kind:docKind(file.path),archived:docArchived(file),mtime:Number.isFinite(file.mtime)?file.mtime:0});
   }
   prepared.set(group,items);
@@ -91,13 +93,21 @@ export function scoreToken(token,text){
   return Math.max(1,score-Math.max(0,span-token.length*3)*0.3-Math.min(first,40)*0.2);
 }
 export const queryTokens=query=>fold(query).split(/\s+/).filter(Boolean);
-// Every word must hit the name or the folder; the name counts double.
+// A word in the full path counts only as a contiguous piece: scattered letters across a long
+// path would match almost anything.
+export function scorePath(token,path){
+  const at=path.indexOf(token.replace(/\\/g,'/'));
+  if(at<0)return 0;
+  const end=at+token.length;
+  return 60+token.length*4+(at===0||BOUNDARY.test(path[at-1])?15:0)+(end===path.length||BOUNDARY.test(path[end])?10:0);
+}
+// Every word must hit the name, the folder label or the full path; the name counts double.
 export function scoreDoc(tokens,item){
   let total=0;
   for(const token of tokens){
-    const name=scoreToken(token,item.nameF),folder=scoreToken(token,item.folderF);
-    if(!name&&!folder)return 0;
-    total+=Math.max(name*2,folder);
+    const name=scoreToken(token,item.nameF),folder=scoreToken(token,item.folderF),path=scorePath(token,item.pathF||'');
+    if(!name&&!folder&&!path)return 0;
+    total+=Math.max(name*2,folder,path);
   }
   return total;
 }
