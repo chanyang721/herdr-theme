@@ -76,8 +76,10 @@ test('native computer navigator, task rows, documents, badges and local question
   assert(flatten(remoteTree).some(node=>node.nodes.includes(c.bodyFor(native[1]))));
   c.resize(224,cx);
   const agent=c.feed.spaces[0].agents[0],row=entities.find(entity=>entity.view.id===agent.id);
-  assert(ids(row.view.render()).includes(`panel-stacked-${agent.id}`),'narrow native cards put the stage below the one-line title');
+  // Compact rows (ROW 24): even a narrow card keeps the stage inline on the one line.
+  assert(!ids(row.view.render()).includes(`panel-stacked-${agent.id}`),'narrow native cards keep the stage inline');
+  assert(ids(row.view.render()).some(id=>id.startsWith(`panel-stage-${agent.id}-`))||!agent.stage,'the stage is still drawn');
   c.resize(280,cx);
-  assert(!ids(row.view.render()).includes(`panel-stacked-${agent.id}`),'wide cards restore the inline stage');
+  assert(!ids(row.view.render()).includes(`panel-stacked-${agent.id}`),'wide cards keep the inline stage');
   c.dispose();delete globalThis.__sidebarCoexist;
 });

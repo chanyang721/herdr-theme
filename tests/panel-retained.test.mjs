@@ -257,7 +257,10 @@ test('a cleanup countdown wakes only at its minute boundary and re-renders just 
     r.controller.apply(cleanPanelFeed(raw),'ready');r.flush();
     const id=raw.spaces[0].agents[0].id,entity=r.controller.rows.get(id);
     const reason=()=>{const walk=n=>[n,...n.nodes.filter(x=>x&&typeof x==='object').flatMap(walk)];
-      return walk(entity.tree).find(n=>n.calls.some(c=>c[0]==='id'&&c[1]===`panel-reason-${id}`)).nodes.join('');};
+      // Compact rows (ROW 24) keep the reason in the row tooltip, not a second line.
+      const row=walk(entity.tree).find(n=>n.calls.some(c=>c[0]==='id'&&c[1]===`panel-agent-${id}`));
+      assert(!walk(entity.tree).some(n=>n.calls.some(c=>c[0]==='id'&&c[1]===`panel-reason-${id}`)),'no reason line');
+      return row.calls.find(c=>c[0]==='tooltip')[1].split('\n').find(line=>line.startsWith('정리 대기'));};
     assert.equal(reason(),'정리 대기 · 30분 쉬면 닫힘 (남은 2분)');assert.equal(r.controller.wakeAt,now+30000);
     const renders={...r.controller.stats.renders};now+=30000;r.controller.wake.fn();r.flush();
     assert.equal(reason(),'정리 대기 · 30분 쉬면 닫힘 (남은 1분)');
@@ -268,13 +271,13 @@ test('a cleanup countdown wakes only at its minute boundary and re-renders just 
   }finally{r?.controller.dispose();Date.now=original;}
 });
 
-test('a root reason row that gains a parent in place re-lays its height and route anchor',async()=>{
+test('a root row with a reason that gains a parent in place re-lays its height and route anchor',async()=>{
   const r=await runtime(),raw=makePanelFixture({now:Date.now()});
   try{
     const [,parent,row]=raw.spaces[0].agents;row.keep_reason='검수 대기';
     r.controller.apply(cleanPanelFeed(raw),'ready');r.flush();
     const card=()=>r.controller.layout.cards[0],find=()=>card().rows.find(item=>item.agent?.id===row.id);
-    assert.equal(find().height,42);
+    assert.equal(find().height,24,'compact: a reason never adds a second line');
     // Same order and no fold: only the parent relation changes.
     row.parent_id=parent.id;
     r.controller.apply(cleanPanelFeed(raw),'ready');r.flush();

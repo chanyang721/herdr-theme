@@ -71,7 +71,7 @@ test('all 24 fixture combinations pass the actual view builder, with one-line ro
     for(const space of model.spaces){
       assert(byId(tree,`panel-space-${space.id}`));
       for(const agent of space.agents){
-        const row=byId(tree,`panel-agent-${agent.id}`);assert(row);assert.equal(call(row,'h')[1],28);
+        const row=byId(tree,`panel-agent-${agent.id}`);assert(row);assert.equal(call(row,'h')[1],24,'compact one-line row');
         assert(words(row).includes(agent.title));
       }
     }
@@ -110,8 +110,8 @@ test('card row geometry includes borders, issue headings and the hidden-row rema
   r.renderPanelTracking(view,t,r.cx);const layout=r.panelLayout(view.panelState.feed,view.panelEvents);
   for(const card of layout.cards){
     for(const row of card.rows.filter(row=>row.kind==='agent')){
-      assert.equal(layout.anchors.get(row.agent.id).y,row.y+14);
-      assert(row.y>=card.top+r.PANEL_GEOMETRY.border+r.PANEL_GEOMETRY.header+r.PANEL_GEOMETRY.meta);assert(row.y+28<card.top+card.height);
+      assert.equal(layout.anchors.get(row.agent.id).y,row.y+r.PANEL_GEOMETRY.row/2);
+      assert(row.y>=card.top+r.PANEL_GEOMETRY.border+r.PANEL_GEOMETRY.header+r.PANEL_GEOMETRY.meta);assert(row.y+r.PANEL_GEOMETRY.row<card.top+card.height);
     }
   }
 });
@@ -188,7 +188,7 @@ test('header metrics share the exact memory endpoint and reserve nonoverlapping 
   assert.equal(call(partner,'h')[1],18);assert.equal(call(partner,'rounded')[1],9);
   assert(call(partner,'border'));assert(call(partner,'bg'));
   const metrics=r.panelHeaderMetrics(space,224);
-  assert.equal(metrics.header,34);assert.equal(metrics.meta,26);assert.equal(metrics.issue,18);
+  assert.equal(metrics.header,34);assert.equal(metrics.meta,20);assert.equal(metrics.issue,18);
   assert.equal(metrics.memoryWidth,32);
   assert.equal(metrics.memoryAnchorX,-(metrics.padding+metrics.border+metrics.countWidth+metrics.gap+metrics.memoryWidth/2));
   const layout=r.panelLayout(view.panelState.feed,view.panelEvents);
@@ -457,15 +457,19 @@ const stateRow=async(fields,{motion=false,now=Date.parse('2026-11-09T05:00:00Z')
  const state={packets:[],connections:[],spawning:new Set(),active:[]};
  return {r,view,space,agent,row:r.agentRow(view,agent,space,tag,state,t.accent,t,motion)};
 };
-const reasonOf=(row,agent)=>words(byId(row,`panel-reason-${agent.id}`)||{nodes:[]}).join('');
+// Compact rows (ROW 24): the reason lives in the row tooltip, never as a second line.
+const reasonOf=(row,agent)=>{
+ assert.equal(byId(row,`panel-reason-${agent.id}`),undefined,'no reason line');
+ return (call(row,'tooltip')?.[1]||'').split('\n').filter(line=>line!==agent.title&&line!==agent.tooltip_addr).find(line=>line.includes(' · '))||'';
+};
 
-test('a seven-state row draws the packaged glyph and its reason with the live countdown',async()=>{
+test('a seven-state row draws the packaged glyph and keeps its live countdown reason in the tooltip',async()=>{
  const cleanup={idle_since:'2026-11-09T04:42:00Z',limit_s:1800,due_at:'2026-11-09T05:12:00Z'};
  const {agent,row}=await stateRow({status:'idle',state:'cleanup_wait',cleanup},{motion:true});
  const glyph=all(byId(row,`panel-status-${agent.id}`)).find(n=>n.kind==='image');
  assert.equal(glyph.value,'mods/sixfold-desk/icons/status/cleanup_wait-12-dark.webp');
  assert.equal(reasonOf(row,agent),'정리 대기 · 30분 쉬면 닫힘 (남은 12분)');
- assert.equal(call(row,'h')[1],28+14);
+ assert.equal(call(row,'h')[1],24,'a reason never grows a compact row');
  assert(call(row,'tooltip')[1].includes('남은 12분'));
 });
 
@@ -491,21 +495,21 @@ test('an event tag freezes the glyph, and an expired timer says the next cleanup
 test('a feed without state keeps the four-status mark, one-line height and no reason line',async()=>{
  const {agent,row}=await stateRow({status:'working'});
  assert(words(byId(row,`panel-status-${agent.id}`)).includes('●'));assert(!all(row).some(n=>n.kind==='image'));
- assert.equal(byId(row,`panel-reason-${agent.id}`),undefined);assert.equal(call(row,'h')[1],28);
+ assert.equal(byId(row,`panel-reason-${agent.id}`),undefined);assert.equal(call(row,'h')[1],24);
  const unknown=await stateRow({status:'working',state:'paused',cleanup:{idle_since:'x',limit_s:-1,due_at:'y'}});
  assert(words(byId(unknown.row,`panel-status-${unknown.agent.id}`)).includes('●'));assert.equal(byId(unknown.row,`panel-reason-${unknown.agent.id}`),undefined);
  const kept=await stateRow({status:'working',keep_reason:'하위 작업 2개 있어 유지'});
  assert.equal(reasonOf(kept.row,kept.agent),'작업 중 · 하위 작업 2개 있어 유지','a keep reason without state uses the four-status label');
 });
 
-test('two-line rows grow the card while routes stay on the title line, and the countdown wakes once a minute',async()=>{
+test('a reason never grows the compact card, routes stay centred on the row, and the countdown wakes once a minute',async()=>{
  const now=Date.now(),r=await renderer(false),raw=makePanelFixture();
  Object.assign(raw.spaces[0].agents[0],{status:'idle',state:'cleanup_wait',cleanup:{idle_since:new Date(now-60000).toISOString(),limit_s:1800,due_at:new Date(now+90500).toISOString()}});
  const view=viewFor(raw),plain=viewFor(makePanelFixture());
  const layout=r.panelLayout(view.panelState.feed,{tags:new Map()}),before=r.panelLayout(plain.panelState.feed,{tags:new Map()});
  const id=view.panelState.feed.spaces[0].agents[0].id,row=layout.cards[0].rows.find(item=>item.agent?.id===id);
- assert.equal(layout.cards[0].height,before.cards[0].height+14);
- assert.equal(layout.anchors.get(id).y,row.y+14);
+ assert.equal(layout.cards[0].height,before.cards[0].height);
+ assert.equal(layout.anchors.get(id).y,row.y+r.PANEL_GEOMETRY.row/2);
  r.renderPanelTracking(view,t,r.cx);
  const wake=r.timers.at(-1).ms;assert(wake>25000&&wake<=30600,`wakes at the next minute boundary, got ${wake}`);
 });

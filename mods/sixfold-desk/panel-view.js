@@ -13,14 +13,14 @@ const STATUS_LABEL={working:'작업 중',idle:'쉬는 중',blocked:'막힘',done
 const STAGES=['배분','작업','검수','수락 대기'];
 const CLOSE=['보고 작성','경험·결정 저장','기억함 제안','닫힘'];
 const ISSUE={blocked:'막힘',working:'진행 중',review:'검수',waiting:'대기',done:'완료'};
-const RIGHT=PANEL_FLOW.gutter, ROW=28, REASON=14;
+const RIGHT=PANEL_FLOW.gutter, ROW=24, REASON=0;
 // Two blinks of the arrival row highlight fit in the ping phase.
 const ROW_BLINK_MS=Math.round(PANEL_TIMING.pingMs/2);
 // A flow pulse on a 1px pipe: as wide as the line, this long (px).
 export const LINK_PULSE=5;
-export const PANEL_GEOMETRY=Object.freeze({header:34,meta:26,issue:18,row:ROW,reason:REASON,child:20,border:1,bottom:4,gap:4,padding:7,rightGutter:RIGHT,popoverGap:10});
-// A root row with a producer reason gets one fixed extra line (mockup 26).
-export const agentRowHeight=(agent,child=false)=>child?PANEL_GEOMETRY.child:ROW+(agentHasReason(agent)?REASON:0);
+export const PANEL_GEOMETRY=Object.freeze({header:34,meta:20,issue:18,row:ROW,reason:REASON,child:20,border:1,bottom:4,gap:4,padding:7,rightGutter:RIGHT,popoverGap:10});
+// Compact rows keep reasons in the tooltip; geometry and rendered height agree.
+export const agentRowHeight=(agent,child=false)=>child?PANEL_GEOMETRY.child:ROW;
 // Wake time for the earliest countdown text change among the feed's rows.
 export function panelReasonWake(feed,now){
   let at=null;
@@ -65,9 +65,10 @@ export function panelLayout(feed, eventState, nativeSpaces=[],groupMap=null) {
   y+=28;
   for(const space of panelSpaces(feed,nativeSpaces)){
     const groups=groupMap?.get(space.id)||agentGroups(space,{includeClosedIds:new Set(eventState.tags.keys())});
-    const card={space,groups,top:y,rows:[],height:PANEL_GEOMETRY.header+PANEL_GEOMETRY.meta+2};
+    const metaHeight=space.slack||space.work?PANEL_GEOMETRY.meta:0;
+    const card={space,groups,top:y,rows:[],height:PANEL_GEOMETRY.header+metaHeight+2};
     anchors.set(space.id,{y:y+PANEL_GEOMETRY.border+PANEL_GEOMETRY.header/2,kind:'space',space:space.id,computer:space.computer});
-    let row=y+PANEL_GEOMETRY.border+PANEL_GEOMETRY.header+PANEL_GEOMETRY.meta;
+    let row=y+PANEL_GEOMETRY.border+PANEL_GEOMETRY.header+metaHeight;
     const groupRows=groups.grouped?groups.groups:[{issue:null,agents:groups.agents,folds:groups.folds}];
     for(const group of groupRows){
       if(groups.grouped){card.rows.push({kind:'issue',group,y:row});row+=PANEL_GEOMETRY.issue;}
@@ -137,11 +138,11 @@ export function agentRow(view,agent,space,tag,state,color,t,motion){
   const born=state.spawning.has(agent.id);
   const birthAge=state.active?.find(event=>(event.kind==='spawn'||event.allocation?.kind==='new')&&event.to===agent.id)?.elapsed||0;
   const ghost=born&&motion&&birthAge<PANEL_TIMING.packetMs;
-  const stacked=view.embedded&&(view.panelWidth||224)<260&&!child;
+  const stacked=false;
   const line=h_flex().id(`panel-agent-content-${agent.id}`).w_full().min_w(0).gap(5).items_center().opacity(ghost?0:1)
     .when(born&&motion,e=>e.transition('opacity',{duration:180,easing:'ease-out'}));
   const dimmed=rowState?rowState==='closed':status==='done';
-  const row=h_flex().id(`panel-agent-${agent.id}`).relative().h(child?PANEL_GEOMETRY.child:ROW+(reasonLine?REASON:0)).flex_none().pl(child?30+(depth-1)*16:7).pr(7).gap(5).items_center().rounded(3)
+  const row=h_flex().id(`panel-agent-${agent.id}`).relative().h(child?PANEL_GEOMETRY.child:ROW).flex_none().pl(child?30+(depth-1)*16:7).pr(7).gap(5).items_center().rounded(3)
     .opacity(dimmed||agent.report_missing?0.52:1)
     .when(born,e=>e.border(1).border_dashed().border_color(color))
     .tooltip([agent.title,agent.tooltip_addr,agent.closing?.blocked_reason,reasonLine,detail.tooltip].filter(Boolean).join('\n'))
@@ -166,13 +167,7 @@ export function agentRow(view,agent,space,tag,state,color,t,motion){
     .text_color(detail.statusColor|| (status==='blocked'?t.blocked:status==='working'?color:t.dim))
     .tooltip(remembered?`${remembered.state==='pending'?'기억 저장 대기':remembered.state==='saved'?'기억함에 저장됨':'기억 제안'}${remembered.proposals?` ${remembered.proposals}`:''}`:status)
     .child(detail.statusMark||(remembered?(remembered.state==='pending'?'◌':'◈'):MARK[status])||'?'));
-  const reason=reasonLine?div().id(`panel-reason-${agent.id}`).h(REASON).flex_none().pl(18).min_w(0).truncate().text_size(10).text_color(t.muted)
-    .tooltip(reasonLine).accessibility_label(reasonLine).child(reasonLine):null;
-  if(stacked)row.child(v_flex().id(`panel-stacked-${agent.id}`).w_full().min_w(0).child(line)
-    .when(Boolean(showStage),e=>e.child(stageBar(agent,tag,color,t,motion,224).h(tag?10:7).ml(18).w(52).justify_start().opacity(ghost?0:1)))
-    .when(Boolean(reason),e=>e.child(reason)));
-  else if(reason)row.child(v_flex().id(`panel-lines-${agent.id}`).w_full().min_w(0).child(line.h(ROW-2)).child(reason));
-  else row.child(line);
+  row.child(line);
   // The arrival ("done") highlight, made to be seen (2026-11-10): an overlay, so
   // the row never shifts, with a 2px border in the foreground (>=8:1 on every
   // sixfold surface), a tint of the event colour and two short blinks within
@@ -212,11 +207,11 @@ export function cardView(view,card,state,color,computerNames,t,motion,rowEntitie
     .when(count>0,e=>e.child(text(`◌ ${count}`,t.muted,compact?8:10).w(countWidth).flex_none())));
   const tool=h_flex().gap(5).items_center().min_w(0)
     .when(Boolean(space.work),e=>e.child(toolIcon(space.work.tool,t)))
-    .child(text(space.work?`${space.work.key} · 이슈 ${space.work.open}`:'업무 도구 연결 없음',space.work?t.muted:t.dim,9))
+    .child(text(space.work?`${space.work.key} · 이슈 ${space.work.open}`:'',space.work?t.muted:t.dim,9))
     .when(Boolean(space.work),e=>e.cursor_pointer().tooltip('이번 주 · 마일스톤 · 전체 이슈'));
-  box.child(h_flex().h(PANEL_GEOMETRY.meta).flex_none().px(7).gap(5).items_center()
+  if(space.slack||space.work)box.child(h_flex().h(PANEL_GEOMETRY.meta).flex_none().px(7).gap(5).items_center()
     .when(Boolean(space.slack),e=>e.child(image('mods/sixfold-desk/icons/slack.svg').size(11).flex_none()))
-    .child(text(space.slack?.channel||'Slack 연결 없음',space.slack?t.muted:t.dim,9).flex_1())
+    .child(text(space.slack?.channel||'',space.slack?t.muted:t.dim,9).flex_1())
     .child(space.work&&view.issuePopover?view.issuePopover(space,tool,t):tool));
   for(const row of card.rows){
     if(row.kind==='issue')box.child(h_flex().h(PANEL_GEOMETRY.issue).flex_none().px(7).gap(4).items_center().bg(t.surface).opacity(row.group.issue?.state==='done'?0.5:1)
