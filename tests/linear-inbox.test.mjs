@@ -428,3 +428,25 @@ test('an alert whose space is not known yet stays 미분류 in both mods (not Sh
     assert.deepEqual(placeItems(items, ['Alpha', 'Share']).map(i => i.workspace), ['미분류', 'Share', 'Alpha']);
   assert.equal(desk.linearUnread([{id: 'u', workspace: '미분류', read: false}], 'Share'), 0);
 });
+
+test('a local space-issue comment (issueComment) is badged 댓글 in both mods', async () => {
+  const desk = await import('../mods/sixfold-desk/alert-model.js');
+  const inbox = await import('../mods/sixfold-linear-inbox/model.js');
+  const item = {type: 'issueComment', category: 'commentsAndReplies', subtitle: 'Kim commented: hi', local: true};
+  assert.equal(desk.alertKind(item).label, '댓글');
+  assert.equal(inbox.categoryLabel(item), '댓글');
+});
+
+test('a read mark with no answer in 5 minutes goes back to unread with a line saying so', async () => {
+  const {linearReadsUrl} = await import('./linear-reads-url.mjs');
+  globalThis.__linearReads = {appHome: () => '/home', readTextFile: async () => null, writeTextFile: async () => {}};
+  const reads = await import(await linearReadsUrl() + '#timeout');
+  const now = new Date('2026-11-10T07:00:00Z');
+  const a = {id: '33333333-3333-4333-8333-333333333333', read: false};
+  assert.equal(await reads.requestReads([a], 'opened', ['mark_read'], {now, write: async () => {}, folder: '/f'}), 1);
+  await reads.checkReads({read: async () => null, now: now.getTime() + 4 * 60_000});
+  assert.equal(reads.readState(a.id), 'pending');                     // still waiting at 4 minutes
+  await reads.checkReads({read: async () => null, now: now.getTime() + 5 * 60_000 + 1});
+  assert.equal(reads.readState(a.id), '');
+  assert.match(reads.lastReadError(now.getTime() + 5 * 60_000 + 2), /응답이 없어 되돌렸습니다/);
+});
