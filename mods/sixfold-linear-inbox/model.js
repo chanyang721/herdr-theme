@@ -10,7 +10,7 @@ export const ALERT_KINDS = Object.freeze({
   due: '마감', mention: '멘션', review: '확인 요청', reaction: '반응', other: '알림'});
 const TYPE_KIND = {
   issueCreated: 'new', issueNewIssue: 'new', triageResponsibilityIssueAddedToTriage: 'review',
-  issueNewComment: 'comment', issueCommentReply: 'reply', issueThreadReply: 'reply',
+  issueNewComment: 'comment', issueComment: 'comment', issueCommentReply: 'reply', issueThreadReply: 'reply',   // issueComment: a space issue's comment read here (local)
   issueAssignedToYou: 'assign', issueUnassignedFromYou: 'assign',
   issueStatusChanged: 'status', issueStatusChangedAll: 'status', issueBlocking: 'status', issueUnblocked: 'status',
   issuePriorityUrgent: 'status', issueTitleChanged: 'status',
