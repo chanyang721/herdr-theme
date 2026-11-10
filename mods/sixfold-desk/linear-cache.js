@@ -5,10 +5,14 @@ import { appHome, readTextFile, writeTextFile } from 'herdr';
 // drops a request file; the local collector's read-only runner answers into linear-cache/. Nothing
 // here calls Linear, and every map below is bounded.
 export const ISSUE_FRESH_MS = 5 * 60 * 1000, PROJECT_FRESH_MS = 10 * 60 * 1000;
-const ASKED_MS = 60 * 1000, WAIT_MS = 4 * 60 * 1000, KEEP = {issue: 30, project: 10};
+// WAIT_MS outlasts the collector's longest read (a project, 420 s) so a slow answer is still taken in.
+const ASKED_MS = 60 * 1000, WAIT_MS = 8 * 60 * 1000, KEEP = {issue: 30, project: 10};
 export const CACHE_POLL_MS = 1500;
 const ISSUE_KEY = /^[A-Z][A-Z0-9]{0,9}-\d{1,7}$/;
-export const projectSlug = space => String(space || '').toLowerCase().replace(/[^a-z0-9]/g, '-');
+// File name of a space's cache: readable ASCII plus a hash of the whole name, so names that differ only
+// outside ASCII (가나 / 다라) never share a file. Same function in the collector (space_slug).
+const fnv = text => { let h = 0x811c9dc5; for (const byte of new TextEncoder().encode(text)) { h ^= byte; h = Math.imul(h, 0x01000193) >>> 0; } return h.toString(16).padStart(8, '0'); };
+export const projectSlug = space => `${String(space || '').toLowerCase().replace(/[^a-z0-9]/g, '-')}-${fnv(String(space || ''))}`;
 const fileName = (kind, target) => kind === 'issue' ? `issue-${target}.json` : `project-${projectSlug(target)}.json`;
 const entries = {issue: new Map(), project: new Map()};   // target -> {value, at(read time), asked, waiting}
 let changedHook = null;
@@ -57,7 +61,8 @@ async function load(kind, target, {read = readTextFile, home = appHome()} = {}) 
   if (!text) return false;
   let value = null;
   try { value = JSON.parse(text); } catch { return false; }
-  if (value?.schema !== 1) return false;
+  // Only the cache of this very target (never another space's or issue's file).
+  if (value?.schema !== 1 || (kind === 'issue' ? value.key !== target : value.space !== target)) return false;
   const item = entry(kind, target), before = item.value?.at;
   item.value = value;
   if (value.at !== before && Date.parse(value.at) >= item.waiting - 1000) item.waiting = 0;   // answered

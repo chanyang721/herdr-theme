@@ -68,7 +68,7 @@ export function issuePopover(model,t){
     const busy=busyKeys.has(issue.key),status=model.statusOf?.(issue.key)||null,hover=model.hoverKey===issue.key;
     const included=scope!=='week'&&(issue.week||issue.pinned);
     // Left dot and right label: Linear's real status (상태 미확인 until read); Herdr's own state only as a fallback colour.
-    const tone=status?statusTone(status,t):issue.state==='blocked'?t.blocked:issue.state==='working'?t.ansi4||t.accent:t.dim;
+    const tone=statusTone(status,t);
     // The right button acts on this computer's space list: [이번 주에] adds an issue, [빼기] takes back an added one.
     // An issue of Linear's own week list has no button (it is in by Linear, not by this computer).
     const label=busy?'요청 중':issue.pinned&&!issue.week?'빼기':!issue.week?'이번 주에':'';
@@ -88,7 +88,7 @@ export function issuePopover(model,t){
         .tooltip(`새 알림 ${alerts.unread}건`).child(`새 ${alerts.unread}`)))
       .child(text(issue.title,t.foreground,12).flex_1().tooltip(issue.title))
       .when(scope!=='week'&&issue.week,row=>row.child(text('이번 주',t.ansi4||t.accent,9).px(5).rounded(7).border(1).border_color((t.ansi4||t.accent).slice(0,7)+'55')))
-      .child(status||!model.statusOf?statusChip(status,t,`task-issue-status-${id}-${issue.key}`):text(states[issue.state]||states.waiting,tone,9).flex_none())
+      .child(statusChip(status,t,`task-issue-status-${id}-${issue.key}`))
       // Shown only under the mouse (or while its request runs).
       .when((hover||busy)&&Boolean(label),row=>row.child(div().id(`task-issues-pull-${id}-${issue.key}`).h(24).px(9).flex_none().rounded(12).border(1)
         .border_color(issue.pinned?(t.ansi6||t.accent).slice(0,7)+'55':t.border)
