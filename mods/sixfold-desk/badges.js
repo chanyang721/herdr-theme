@@ -80,6 +80,6 @@ export function workspaceBadges(view,s,t){
       .when(Boolean(b.open||b.command),e=>e.cursor_pointer()
         .on_mouse_down('left',(_e,cx)=>cx.stop_propagation()).on_mouse_up('left',(_e,cx)=>cx.stop_propagation())
         .on_click((_e,cx)=>{cx.stop_propagation();activate(b);}))
-      .child(b.text);
+      .child(b.id==='harness-memory' && /^!\s*\d+$/.test(b.text) ? b.text.replace(/^!\s*/, '확인 ') : b.text);
   }));
 }
