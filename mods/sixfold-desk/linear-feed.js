@@ -105,6 +105,7 @@ export function watchLinear(view, cx) {
         const names = (spaces() ?? []).map(s => s.name);
         publishLinear(feed, health, names);
         cx.notify();
+        view.panelRetained?.alertsChanged?.();   // an open issue search shows its issues' new alerts
         const events = await announce(linearPopupEvents(placeItems(feed.items ?? [], names)), allowed);
         if (!allowed()) return;
         previous = signature;   // after the ledger write, so a failed write is retried

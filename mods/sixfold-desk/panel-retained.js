@@ -1,6 +1,7 @@
 import {View,div,svg} from 'gpui-kit';
 import {h_flex,v_flex,InputState,Input} from 'gpui-base';
-import {theme,spaces,shared,setShared,settings,window} from 'herdr';
+import {theme,spaces,shared,setShared,settings,window,exec} from 'herdr';
+import {issueAlerts,issueAlertSignature} from './alert-model.js';
 import {projectPanelFeed,panelEventStates,panelSpaces,panelSpacePartners,PANEL_TIMING,PANEL_LEGS,panelLeg,agentReason} from './panel-model.js';
 import {panelLayout,cardView,agentRow,panelFlowLayer,panelCounts,PANEL_GEOMETRY,toolIcon,panelReasonWake,agentRowHeight,panelMetaHeight,rowArrival} from './panel-view.js';
 import {groupColors,paletteMode} from './collab-flow.js';
@@ -123,6 +124,14 @@ export function createRetainedPanel(cx,{macTitlebar=false,onClassic=null,onDispo
   c.entity=make(PanelRoot);c.computers=make(PanelComputers);c.summary=make(PanelSummary);c.flows=make(PanelFlows);c.list=make(PanelList);
   c.notify=entity=>{if(entity&&!c.disposed){c.stats.notifications++;c.cx.notify(entity);}};
   c.taskFor=space=>nativeTaskSpace(c.feed,space);
+  // New Linear alerts redraw only the card whose issue search is open, and only when its issues' alerts changed.
+  c.alertsChanged=()=>{
+    for(const [id,state] of c.issueStates){
+      if(!state.open)continue;
+      const space=c.spaceMap.get(id),mark=space?issueAlertSignature(shared('sixfold.linearItems')??[],space.name):'';
+      if(mark!==state.alertMark){state.alertMark=mark;c.notify(c.cards.get(id));}
+    }
+  };
   c.bodyFor=space=>c.cards.get(c.taskFor(space)?.id)||null;
   c.hostFlows=(entries,computerAnchors,gutter=null)=>panelFlowLayer(c.feed,hostedTaskLayout(c.layout,entries,computerAnchors),c.events,c.color,theme(),c.motion,c.panelWidth,gutter);
   c.toggleIssues=id=>{c.expandedIssueSpaces.has(id)?c.expandedIssueSpaces.delete(id):c.expandedIssueSpaces.add(id);c.apply(c.input);};
@@ -159,6 +168,9 @@ export function createRetainedPanel(cx,{macTitlebar=false,onClassic=null,onDispo
       onExternal:space.work?.url?context=>context?.open_url?.(space.work.url):null,
       canImport:Boolean(onIssueRequest&&space.issue_catalog?.import_request),busyKeys:new Set(state?.pending.keys()||[]),error:state?.error,
       search:state?.input?Input.new(state.input).w_full().h(30):null,
+      alertsFor:state?.open?key=>issueAlerts(shared('sixfold.linearItems')??[],space.name,key):null,
+      // Opens the comment itself (#comment-…); reading it marks nothing in Linear.
+      onLink:(url,context)=>{if(/^https:\/\/linear\.app\//.test(url))(context||cx).spawn(async()=>{await exec('open',[url]);});},
       onOpen:(open)=>{
         let current=c.issueStates.get(space.id);
         if(!current){

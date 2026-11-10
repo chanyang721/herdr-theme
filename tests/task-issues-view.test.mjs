@@ -76,3 +76,19 @@ test('open and dismiss state is reported through the native popover callback',as
   assert.deepEqual(changes,[[false,cx],[true,cx],[false,cx]]);
   assert.equal(byId(tree,'query'),search);
 });
+
+test('an issue with new alerts keeps its place, shows a count and the newest lines; a line opens its comment',async()=>{
+  const {issuePopover}=await renderer(),opened=[],cx={stop_propagation(){}};
+  const link='https://linear.app/demo/issue/DEMO-2/x#comment-0a1b2c3d';
+  const alerts={'DEMO-2':{unread:3,more:1,lines:[{id:'n2',category:'댓글',text:'Kim replied: second',at:'2026-11-10T04:45:00Z',url:link},{id:'n1',category:'댓글',text:'Kim commented: first',at:'2026-11-10T04:24:00Z',url:''}]}};
+  const tree=issuePopover(model({alertsFor:key=>alerts[key]||null,onLink:(url,context)=>{assert.equal(context,cx);opened.push(url);}}),theme);
+  const list=byId(tree,'task-issues-list-demo');
+  assert.deepEqual(list.nodes.map(node=>call(node,'id')[1]),['task-issue-demo-DEMO-1','task-issue-wrap-demo-DEMO-2','task-issue-demo-DEMO-3']);   // order unchanged
+  assert.deepEqual(words(byId(tree,'task-issue-alerts-demo-DEMO-2')),['새 3']);
+  assert(!byId(tree,'task-issue-alerts-demo-DEMO-1'));
+  const text=words(byId(tree,'task-issue-wrap-demo-DEMO-2'));
+  assert(text.includes('Kim replied: second')&&text.includes('Kim commented: first')&&text.includes('외 1건'));
+  click(byId(tree,'task-issue-alert-demo-DEMO-2-0'),cx);
+  assert.deepEqual(opened,[link]);
+  assert(!call(byId(tree,'task-issue-alert-demo-DEMO-2-1'),'on_click'));   // no trusted link: not a button
+});

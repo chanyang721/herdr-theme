@@ -8,6 +8,7 @@ export const ISSUE_SCOPES=Object.freeze([
 ]);
 const states={blocked:'막힘',working:'진행 중',review:'검수',waiting:'대기',done:'완료'};
 const text=(value,color,size=11)=>div().min_w(0).truncate().text_size(size).text_color(color).child(value);
+const clock=at=>{const d=new Date(at);if(Number.isNaN(d.getTime()))return '';const p=n=>String(n).padStart(2,'0');return `${d.getMonth()+1}/${d.getDate()} ${p(d.getHours())}:${p(d.getMinutes())}`;};
 
 // The caller supplies normalized display data, owns local UI state, and posts
 // explicit row actions through its local request boundary.
@@ -46,11 +47,17 @@ export function issuePopover(model,t){
     const tone=issue.state==='blocked'?t.blocked:issue.state==='working'?t.ansi4||t.accent:issue.state==='review'?t.accent:t.dim;
     const label=busy?'요청 중':issue.week?'이번 주':issue.pinned?'가져옴 ✓':'가져오기';
     const enabled=model.canImport===true&&!busy&&!issue.week;
-    return h_flex().id(`task-issue-${id}-${issue.key}`).h(34).px(8).gap(8).items_center().rounded(6)
-      .opacity(issue.state==='done'?0.5:1)
+    // New alerts of this issue (comments, assignment, state): a count beside the key and,
+    // under the row, the newest lines in the alert popover's form. Order is unchanged.
+    const alerts=model.alertsFor?.(issue.key)||null;
+    const row=h_flex().id(`task-issue-${id}-${issue.key}`).h(34).px(8).gap(8).items_center().rounded(6)
+      .opacity(issue.state==='done'&&!alerts?0.5:1)
       .when(included,row=>row.bg((t.ansi6||t.accent).slice(0,7)+'0F'))
       .child(div().size(8).flex_none().rounded(4).bg(tone))
       .child(text(issue.key,t.muted,10).w(58).flex_none().font_bold().tooltip(issue.key))
+      .when(Boolean(alerts),row=>row.child(div().id(`task-issue-alerts-${id}-${issue.key}`).h(16).px(5).flex_none().rounded(8)
+        .bg(t.accent).text_color(t.accent_foreground||t.background).text_size(9).font_bold().flex().items_center()
+        .tooltip(`새 알림 ${alerts.unread}건`).child(`새 ${alerts.unread}`)))
       .child(text(issue.title,t.foreground,12).flex_1().tooltip(issue.title))
       .when(issue.week,row=>row.child(text('이번 주',t.ansi4||t.accent,9).px(5).rounded(7).border(1).border_color((t.ansi4||t.accent).slice(0,7)+'55')))
       .child(text(states[issue.state]||states.waiting,tone,9).flex_none())
@@ -59,6 +66,17 @@ export function issuePopover(model,t){
         .text_color(issue.pinned?t.ansi6||t.accent:t.muted).text_size(10).font_bold()
         .when(enabled,button=>button.cursor_pointer().on_click(change(model.onPull,issue.key,!issue.pinned)))
         .when(issue.week,button=>button.opacity(0.55)).child(label));
+    if(!alerts)return row;
+    const line=(entry,i)=>v_flex().id(`task-issue-alert-${id}-${issue.key}-${i}`).ml(24).mr(8).px(8).py(4).gap(1).rounded(6).bg(t.selected)
+      .when(Boolean(entry.url&&model.onLink),e=>e.cursor_pointer().tooltip('누르면 이 댓글을 Linear에서 엽니다').hover(s=>s.bg(t.hover||t.selected))
+        .on_click(change(model.onLink,entry.url)))
+      .child(h_flex().gap(6).items_center()
+        .child(div().px(5).rounded(3).flex_none().text_size(9).font_bold().bg(t.accent).text_color(t.accent_foreground||t.background).child(entry.category))
+        .child(text(entry.text,t.foreground,11).flex_1().tooltip(entry.text))
+        .child(text(clock(entry.at),t.dim,9).flex_none()));
+    return v_flex().id(`task-issue-wrap-${id}-${issue.key}`).gap(2).child(row)
+      .children(alerts.lines.map(line))
+      .when(alerts.more>0,e=>e.child(text(`외 ${alerts.more}건`,t.dim,10).ml(32)));
   };
   if(scope==='milestone'){
     for(const group of groups){

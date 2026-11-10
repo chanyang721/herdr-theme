@@ -43,3 +43,22 @@ export function popoverOpen(state, space, source, boot, now = Date.now()) {
 export function popoverRows(items, limit = 5, isUnread = i => !i.read) {
   return [...(items ?? [])].sort((a, b) => (isUnread(b) - isUnread(a)) || String(b.at ?? '').localeCompare(String(a.at ?? ''))).slice(0, limit);
 }
+
+// Unread Linear alerts of one issue for its row in the issue search: how many,
+// the newest `limit` as one line each ("Kim commented: …" + time + comment
+// link), and how many more. Same items and read state as the alert popover.
+export const ISSUE_ALERT_LINES = 2;
+const LINEAR_URL = /^https:\/\/linear\.app\/[A-Za-z0-9_-]+\/(issue|project)\//;
+export function issueAlerts(items, space, key, limit = ISSUE_ALERT_LINES) {
+  if (!key) return null;
+  const unread = linearScoped(items, space).filter(i => !i.read && String(i.issue || '').toUpperCase() === String(key).toUpperCase())
+    .sort((a, b) => String(b.changed_at || b.at || '').localeCompare(String(a.changed_at || a.at || '')));
+  if (!unread.length) return null;
+  return {unread: unread.length, more: Math.max(0, unread.length - limit), lines: unread.slice(0, limit).map(i => ({
+    id: i.id, category: linearCategory(i), at: i.changed_at || i.at || '',
+    text: String(i.subtitle || i.comments?.[0]?.body || changeLines(i)[0] || i.title || '').split('\n')[0].slice(0, 200),
+    url: typeof i.url === 'string' && LINEAR_URL.test(i.url) ? i.url : ''}))};
+}
+// Changes only when an issue's unread alerts change: part of the card key.
+export const issueAlertSignature = (items, space) => linearScoped(items, space).filter(i => !i.read && i.issue)
+  .map(i => `${i.issue}:${i.id}`).sort().join(',');

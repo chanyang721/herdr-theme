@@ -196,3 +196,24 @@ test('of many new alerts the newest few arrive; unknown spaces are placed in Sha
   }
 });
 
+
+test('an issue row in the issue search shows its unread alerts: count, newest two lines with time and comment link, and "외 n건"', async () => {
+  const {issueAlerts, issueAlertSignature} = await import('../mods/sixfold-desk/alert-model.js');
+  const link = 'https://linear.app/demo/issue/ABC-7/x#comment-4e5f6a7b';
+  const items = [
+    {id: 'n1', workspace: 'Alpha', issue: 'ABC-7', read: false, category: 'commentsAndReplies', at: '2026-11-10T04:24:00Z', subtitle: 'Kim commented: first\nmore'},
+    {id: 'n2', workspace: 'Alpha', issue: 'ABC-7', read: false, category: 'commentsAndReplies', at: '2026-11-10T04:45:00Z', subtitle: 'Kim replied: second', url: link},
+    {id: 'n3', workspace: 'Alpha', issue: 'ABC-7', read: false, category: 'issueStatusChanged', at: '2026-11-10T03:00:00Z', changes: [{field: 'status', label: '상태', before: 'Todo', after: 'Done'}]},
+    {id: 'n4', workspace: 'Alpha', issue: 'ABC-7', read: true, category: 'commentsAndReplies', at: '2026-11-10T05:00:00Z', subtitle: 'read one'},
+    {id: 'n5', workspace: 'Beta', issue: 'ABC-7', read: false, category: 'comments', at: '2026-11-10T06:00:00Z', subtitle: 'other space'},
+    {id: 'n6', workspace: 'Alpha', issue: 'ABC-8', read: false, category: 'assignments', at: '2026-11-10T06:00:00Z', url: 'https://evil.example/x'}];
+  const row = issueAlerts(items, 'Alpha', 'abc-7');
+  assert.equal(row.unread, 3);
+  assert.equal(row.more, 1);
+  assert.deepEqual(row.lines.map(l => [l.id, l.category, l.text, l.url]),
+    [['n2', '댓글', 'Kim replied: second', link], ['n1', '댓글', 'Kim commented: first', '']]);
+  assert.equal(issueAlerts(items, 'Alpha', 'ABC-8').lines[0].url, '');     // only linear.app links open
+  assert.equal(issueAlerts(items, 'Alpha', 'ABC-9'), null);                  // no alert: the row is unchanged
+  assert.notEqual(issueAlertSignature(items, 'Alpha'), issueAlertSignature(items.slice(1), 'Alpha'));
+  assert.equal(issueAlertSignature(items, 'Alpha'), issueAlertSignature([...items].reverse(), 'Alpha'));
+});
