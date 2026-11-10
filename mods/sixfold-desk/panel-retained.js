@@ -1,6 +1,6 @@
 import {View,div,svg} from 'gpui-kit';
 import {h_flex,v_flex,InputState,Input} from 'gpui-base';
-import {theme,spaces,shared,setShared,settings,window,exec} from 'herdr';
+import {theme,spaces,shared,setShared,settings,window,exec,appHome,readTextFile,writeTextFile} from 'herdr';
 import {issueAlerts,issueAlertSignature,alertedIssues,issueReadTargets,groupReadTargets} from './alert-model.js';
 import {requestReads,checkReads,readPendingIds,lastReadError,READ_POLL_MS} from './linear-reads.js';
 import {projectPanelFeed,panelEventStates,panelSpaces,panelSpacePartners,PANEL_TIMING,PANEL_LEGS,panelLeg,agentReason} from './panel-model.js';
@@ -8,6 +8,8 @@ import {panelLayout,cardView,agentRow,panelFlowLayer,panelCounts,PANEL_GEOMETRY,
 import {groupColors,paletteMode} from './collab-flow.js';
 import {issuePopover,alertedGroup} from './task-issues-view.js';
 import {issueScopeData,issueCacheLabel} from './task-issue-state.js';
+import {ensure,cached,waiting,checkCaches,anyWaiting,CACHE_POLL_MS} from './linear-cache.js';
+import {statusIndex,teamStatuses,statusFilters,filterRows,foldedCount,milestoneList,detailData} from './issue-model.js';
 import {nativeTaskSpace,hostedTaskLayout,panelWidthClass} from './panel-host.js';
 
 // Each retained entity receives only a local controller key. Display data stays
@@ -144,6 +146,95 @@ export function createRetainedPanel(cx,{macTitlebar=false,onClassic=null,onDispo
     c.readTimer=c.cx.timer.after(READ_POLL_MS,()=>{c.readTimer=null;if(c.disposed)return;
       c.cx.spawn(async()=>{try{await checkReads();}catch{}c.alertsChanged();c.pollReads();});});
   };
+  // Linear details read only on demand (the collector's read-only runner answers into linear-cache/):
+  // the space's milestones, issues and statuses when its issue search opens, an issue when its
+  // detail opens. While anything is read, or a pressed write runs, its file is checked.
+  c.cacheTimer=null;c.statusMemo=new Map();
+  c.askLinear=(kind,target,force=false)=>{if(typeof c.cx.spawn!=='function')return;c.cx.spawn(async()=>{try{await ensure(kind,target,{force});}catch{}c.pollCaches();c.repaintIssues();});};
+  c.repaintIssues=()=>{for(const [id,state] of c.issueStates)if(state.open)c.notify(c.cards.get(id));};
+  c.pollCaches=()=>{
+    const writing=[...c.issueStates.values()].some(state=>state.write&&!state.write.done);
+    if(c.disposed||c.cacheTimer||(!anyWaiting()&&!writing))return;
+    c.cacheTimer=c.cx.timer.after(CACHE_POLL_MS,()=>{c.cacheTimer=null;if(c.disposed)return;
+      c.cx.spawn(async()=>{
+        try{await checkCaches();}catch{}
+        for(const [id,state] of c.issueStates)if(state.write&&!state.write.done)await c.checkWrite(id,state);
+        c.repaintIssues();c.pollCaches();});});
+  };
+  // A pressed write from the detail ([상태 변경] or [댓글]): one request file, run once by the collector's guard.
+  c.writeIssue=(space,state,action,fields)=>{
+    if(!state.detail||state.write&&!state.write.done)return;
+    const now=new Date(),id=`${now.getTime().toString(36)}-${Math.random().toString(36).slice(2,10).padEnd(8,'0')}`;
+    const request={v:1,id,action,requested_at:now.toISOString(),issue:state.detail,...fields};
+    state.write={id,action,key:state.detail,at:now.getTime(),done:false};state.writeNote='처리 중…';
+    c.cx.spawn(async()=>{
+      try{await writeTextFile(`${appHome()}/data/sixfold/linear-actions/${id}.json`,JSON.stringify(request),null);}
+      catch(error){state.write.done=true;state.writeNote=`실패: 요청을 남기지 못했습니다`;}
+      c.notify(c.cards.get(space.id));c.pollCaches();
+    });
+  };
+  c.checkWrite=async(id,state)=>{
+    const w=state.write;
+    const text=await readTextFile(`${appHome()}/data/sixfold/linear-actions/results/${w.id}.json`).catch(()=>null);
+    if(!text){if(Date.now()-w.at>5*60*1000){w.done=true;state.writeNote='실패: 응답이 없습니다. Linear에서 확인해 주세요';}return;}
+    let result=null;try{result=JSON.parse(text);}catch{return;}
+    w.done=true;
+    state.writeNote=result?.ok?(w.action==='comment'?'댓글을 남겼습니다':'상태를 바꿨습니다'):`실패: ${String(result?.error||'이유 미확인').slice(0,120)}`;
+    if(result?.ok){
+      if(w.action==='comment')state.commentInput?.set_value?.('');
+      state.menu=null;
+      const space=c.spaceMap.get(id);
+      c.askLinear('issue',w.key,true);if(space&&w.action==='set_state')c.askLinear('project',space.name,true);
+    }
+  };
+  c.issueExtra=(space,state,data)=>{
+    const items=shared('sixfold.linearItems')??[];
+    const project=cached('project',space.name);
+    let memo=c.statusMemo.get(space.id);
+    if(!memo||memo.project!==project){memo={project,index:statusIndex(project)};c.statusMemo.set(space.id,memo);}
+    for(const id of c.statusMemo.keys())if(!c.spaceMap.has(id))c.statusMemo.delete(id);
+    const statusOf=project?key=>memo.index.get(key)||null:null;
+    const rows=data.rows||[];
+    const lookup=statusOf||(()=>null);
+    const unreadKeys=new Set(items.filter(i=>!i.read&&i.workspace===space.name&&i.issue).map(i=>i.issue));
+    const milestones=milestoneList(project,space.issue_catalog,unreadKeys);
+    const writes=shared('sixfold.linearWrites')??[];
+    const onDetail=key=>{
+      state.detail=key||null;state.menu=null;state.writeNote='';state.hoverKey=null;
+      if(key)c.askLinear('issue',key);
+      c.notify(c.cards.get(space.id));
+    };
+    let detail=null;
+    if(state.detail){
+      const key=state.detail;
+      const row=['week','milestone','all'].flatMap(scope=>space.issue_catalog?.[scope]||[]).find(issue=>issue.key===key)||(project?.issues||[]).find(issue=>issue.key===key)||null;
+      detail=detailData(key,{issueCache:cached('issue',key),row,status:lookup(key),agents:space.agents||[],alerts:issueAlerts(items,space.name,key,6)?.lines||[]});
+    }
+    return {
+      statusOf,hoverKey:state.hoverKey||null,
+      onHover:(key,own)=>{if(key?state.hoverKey!==key:state.hoverKey===own){state.hoverKey=key;c.notify(c.cards.get(space.id));}},
+      filters:statusOf?statusFilters(rows,lookup):[],filter:state.filter||'전체',
+      shownRows:statusOf?filterRows(rows,lookup,state.filter||'전체',state.showFolded===true):rows,
+      foldedCount:statusOf&&(state.filter||'전체')==='전체'?foldedCount(rows,lookup):0,showFolded:state.showFolded===true,
+      onFilter:name=>{state.filter=name;c.notify(c.cards.get(space.id));},
+      onShowFolded:value=>{state.showFolded=value;c.notify(c.cards.get(space.id));},
+      milestones,milestonesCounted:milestones.some(m=>m.counted&&m.progress!==null),expanded:state.expanded||(state.expanded=new Set()),
+      projectWaiting:waiting('project',space.name),
+      onMilestone:id=>{const set=state.expanded||(state.expanded=new Set());set.has(id)?set.delete(id):set.add(id);if(set.size>20)set.delete(set.values().next().value);c.notify(c.cards.get(space.id));},
+      onDetail,detail,detailWaiting:detail?waiting('issue',detail.key):false,
+      writes,menu:state.menu||null,writeNote:state.writeNote||'',
+      statuses:detail?teamStatuses(project,detail.team):[],
+      onMenu:menu=>{state.menu=menu;if(menu==='comment'&&!state.commentInput)state.commentInput=InputState.new({placeholder:'Linear에 남길 댓글'});c.notify(c.cards.get(space.id));},
+      commentBox:state.menu==='comment'&&state.commentInput?Input.new(state.commentInput).flex_1().h(30):null,
+      onSetState:name=>{if(writes.includes('set_state'))c.writeIssue(space,state,'set_state',{state:name});},
+      onComment:()=>{
+        const body=String(state.commentInput?.value?.()||'');
+        if(!writes.includes('comment'))return;
+        if(!body.trim()||body.length>4000){state.writeNote='실패: 댓글 내용을 입력하세요 (4000자 이하)';c.notify(c.cards.get(space.id));return;}
+        c.writeIssue(space,state,'comment',{body});
+      },
+    };
+  };
   // Any issue search open: a new alert then only counts on its chip (no peek over it).
   c.anyIssuesOpen=()=>[...c.issueStates.values()].some(state=>state.open);
   // A peek: the top of a space's issue search ('알림 온 이슈') opened by new alerts, drawn by the
@@ -216,7 +307,8 @@ export function createRetainedPanel(cx,{macTitlebar=false,onClassic=null,onDispo
       data=state.data;
     }
     const cache=state?.open?issueCacheLabel(space,state.scope):null;
-    return issuePopover({id:space.id,trigger,open:state?.open===true,scope:state?.scope||'week',...data,
+    const extra=state?.open?c.issueExtra(space,state,data):{};
+    return issuePopover({...extra,id:space.id,trigger,open:state?.open===true,scope:state?.scope||'week',...data,
       leadingGap:PANEL_GEOMETRY.rightGutter+PANEL_GEOMETRY.padding+PANEL_GEOMETRY.border+PANEL_GEOMETRY.popoverGap,
       projectLabel:space.name,toolLabel:space.work?.tool==='jira'?'Jira':space.work?.tool==='linear'?'Linear':space.work?.tool||'업무 도구',
       icon:state?.open?toolIcon(space.work?.tool,t).size(24):null,
@@ -244,7 +336,10 @@ export function createRetainedPanel(cx,{macTitlebar=false,onClassic=null,onDispo
           input.on('change',()=>{current.query=input.value();c.notify(c.cards.get(space.id));});
         }
         if(open)for(const [id,other] of c.issueStates)if(id!==space.id&&other.open){other.open=false;c.notify(c.cards.get(id));}
-        current.open=open;c.notify(c.cards.get(space.id));
+        current.open=open;
+        if(!open){current.detail=null;current.menu=null;current.hoverKey=null;}
+        else c.askLinear('project',space.name);
+        c.notify(c.cards.get(space.id));
       }),
       onScope:scope=>{if(state&&state.scope!==scope){state.scope=scope;c.notify(c.cards.get(space.id));}},
       onPull:(key,desired)=>{
@@ -375,7 +470,7 @@ export function createRetainedPanel(cx,{macTitlebar=false,onClassic=null,onDispo
   };
   c.setEnabled=enabled=>{if(c.enabled!==enabled){c.enabled=enabled;c.preferences();}};
   c.dispose=()=>{
-    if(c.disposed)return;c.disposed=true;c.readTimer?.cancel?.();c.readTimer=null;
+    if(c.disposed)return;c.disposed=true;c.readTimer?.cancel?.();c.readTimer=null;c.cacheTimer?.cancel?.();c.cacheTimer=null;c.statusMemo?.clear();
     try{c.wake?.cancel();}catch{/* The old source generation may already be released. */}
     try{c.life?.cancel();}catch{}
     for(const entity of [...c.rows.values(),...c.cards.values(),c.computers,c.summary,c.flows,c.list,c.entity])try{entity?.release();}catch{}

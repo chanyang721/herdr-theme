@@ -1,6 +1,8 @@
 import {div,svg} from 'gpui-kit';
 import {h_flex,v_flex,Popover} from 'gpui-base';
 import {kindTone} from './alert-model.js';
+import {issueDetail,milestoneRows,statusChip} from './issue-detail-view.js';
+import {statusTone,statusLook} from './issue-model.js';
 
 export const ISSUE_SCOPES=Object.freeze([
   {id:'week',label:'이번 주'},
@@ -34,6 +36,11 @@ export function issuePopover(model,t){
       .child(text(model.updatedLabel||model.toolLabel||'연결 없음',t.dim,10)))
     .child(div().id(`task-issues-close-${id}`).size(28).rounded(6).text_size(14).text_color(t.muted)
       .cursor_pointer().tooltip('닫기').on_click(change(model.onOpen,false)).child('✕')));
+  // An issue's detail replaces the alerts, tabs and list (← 목록 goes back).
+  if(model.detail){
+    body.child(issueDetail(model,t));
+    return popover.content(body);
+  }
   if(model.search)body.child(model.search);
   const group=alertedGroup(model,t);
   if(group)body.child(group);
@@ -46,16 +53,33 @@ export function issuePopover(model,t){
         .child(text(item.label,scope===item.id?t.foreground:t.muted,12))
         .child(text(Number.isInteger(count)?String(count):'—',t.dim,10));
     })));
+  // Status filter (Linear's real statuses, with counts); done and canceled are folded under 전체.
+  if(scope!=='milestone'&&model.filters?.length>1){
+    body.child(h_flex().id(`task-issues-filters-${id}`).flex_wrap().gap(4)
+      .children(model.filters.map((f,i)=>h_flex().id(`task-issues-filter-${id}-${i}`).h(22).px(8).gap(4).rounded(11).items_center().cursor_pointer()
+        .border(1).border_color((model.filter||'전체')===f.name?t.accent:t.border)
+        .bg((model.filter||'전체')===f.name?t.selected:t.popover||t.surface)
+        .on_click(change(model.onFilter,f.name))
+        .when(Boolean(f.status),chip=>chip.child(text(statusLook(f.status).icon,statusTone(f.status,t),10)))
+        .child(text(f.name,t.foreground,10)).child(text(String(f.count),t.dim,9)))));
+  }
   const list=v_flex().id(`task-issues-list-${id}`).min_h(42).max_h(560).overflow_y_scroll().gap(2);
   const issueRow=issue=>{
-    const included=issue.week||issue.pinned,busy=busyKeys.has(issue.key);
-    const tone=issue.state==='blocked'?t.blocked:issue.state==='working'?t.ansi4||t.accent:issue.state==='review'?t.accent:t.dim;
-    const label=busy?'요청 중':issue.week?'이번 주':issue.pinned?'가져옴 ✓':'가져오기';
-    const enabled=model.canImport===true&&!busy&&!issue.week;
+    const busy=busyKeys.has(issue.key),status=model.statusOf?.(issue.key)||null,hover=model.hoverKey===issue.key;
+    const included=scope!=='week'&&(issue.week||issue.pinned);
+    // Left dot and right label: Linear's real status (상태 미확인 until read); Herdr's own state only as a fallback colour.
+    const tone=status?statusTone(status,t):issue.state==='blocked'?t.blocked:issue.state==='working'?t.ansi4||t.accent:t.dim;
+    // The right button acts on this computer's space list: [이번 주에] adds an issue, [빼기] takes back an added one.
+    // An issue of Linear's own week list has no button (it is in by Linear, not by this computer).
+    const label=busy?'요청 중':issue.pinned&&!issue.week?'빼기':!issue.week?'이번 주에':'';
+    const enabled=model.canImport===true&&!busy&&Boolean(label);
     // An issue with new alerts gets a small count here; what changed is in the shared group above the tabs.
     const alerts=model.alertsFor?.(issue.key)||null;
     const row=h_flex().id(`task-issue-${id}-${issue.key}`).h(34).px(8).gap(8).items_center().rounded(6)
       .opacity(issue.state==='done'&&!alerts?0.5:1)
+      .when(Boolean(model.onDetail),row=>row.cursor_pointer().on_click(change(model.onDetail,issue.key)))
+      .when(Boolean(model.onHover),row=>row.on_hover((hovered,cx)=>model.onHover(hovered?issue.key:null,issue.key,cx)))
+      .when(hover,row=>row.bg(t.selected))
       .when(included,row=>row.bg((t.ansi6||t.accent).slice(0,7)+'0F'))
       .child(div().size(8).flex_none().rounded(4).bg(tone))
       .child(text(issue.key,t.muted,10).w(58).flex_none().font_bold().tooltip(issue.key))
@@ -63,16 +87,18 @@ export function issuePopover(model,t){
         .bg(t.accent).text_color(t.accent_foreground||t.background).text_size(9).font_bold().flex().items_center()
         .tooltip(`새 알림 ${alerts.unread}건`).child(`새 ${alerts.unread}`)))
       .child(text(issue.title,t.foreground,12).flex_1().tooltip(issue.title))
-      .when(issue.week,row=>row.child(text('이번 주',t.ansi4||t.accent,9).px(5).rounded(7).border(1).border_color((t.ansi4||t.accent).slice(0,7)+'55')))
-      .child(text(states[issue.state]||states.waiting,tone,9).flex_none())
-      .child(div().id(`task-issues-pull-${id}-${issue.key}`).h(24).px(9).rounded(12).border(1)
+      .when(scope!=='week'&&issue.week,row=>row.child(text('이번 주',t.ansi4||t.accent,9).px(5).rounded(7).border(1).border_color((t.ansi4||t.accent).slice(0,7)+'55')))
+      .child(status||!model.statusOf?statusChip(status,t,`task-issue-status-${id}-${issue.key}`):text(states[issue.state]||states.waiting,tone,9).flex_none())
+      // Shown only under the mouse (or while its request runs).
+      .when((hover||busy)&&Boolean(label),row=>row.child(div().id(`task-issues-pull-${id}-${issue.key}`).h(24).px(9).flex_none().rounded(12).border(1)
         .border_color(issue.pinned?(t.ansi6||t.accent).slice(0,7)+'55':t.border)
         .text_color(issue.pinned?t.ansi6||t.accent:t.muted).text_size(10).font_bold()
         .when(enabled,button=>button.cursor_pointer().on_click(change(model.onPull,issue.key,!issue.pinned)))
-        .when(issue.week,button=>button.opacity(0.55)).child(label));
+        .child(label)));
     return row;
   };
-  if(scope==='milestone'){
+  if(scope==='milestone'&&model.milestones?.length)list.child(milestoneRows(model,t));
+  else if(scope==='milestone'){
     for(const group of groups){
       list.child(h_flex().id(`task-issues-group-${id}-${group.id}`).pt(10).pb(4).px(8).gap(8).items_center()
         .child(text(group.name,t.foreground,11).font_bold())
@@ -80,8 +106,14 @@ export function issuePopover(model,t){
         .child(text(group.progress||'',t.dim,10)));
       list.children(group.items.map(issueRow));
     }
-  }else list.children(rows.map(issueRow));
-  if(!(scope==='milestone'?groups.some(group=>group.items.length):rows.length)){
+  }else{
+    const shown=model.shownRows||rows;
+    list.children(shown.map(issueRow));
+    if(model.foldedCount>0&&(model.filter||'전체')==='전체')list.child(h_flex().id(`task-issues-folded-${id}`).h(26).px(8).items_center().cursor_pointer()
+      .on_click(change(model.onShowFolded,!model.showFolded))
+      .child(text(model.showFolded?`완료·취소 ${model.foldedCount}건 접기`:`완료·취소 ${model.foldedCount}건 보기`,t.dim,10)));
+  }
+  if(!(scope==='milestone'?(model.milestones?.length||groups.some(group=>group.items.length)):(model.shownRows||rows).length||model.foldedCount)){
     list.child(text(model.loading?'이슈를 불러오는 중':model.emptyLabel||'이 범위에 표시할 이슈가 없습니다',t.dim,11).py(12));
   }
   body.child(list);
