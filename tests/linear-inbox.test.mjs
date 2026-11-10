@@ -22,6 +22,22 @@ test('linear items are scoped to their space and counted unread', () => {
   assert.equal(issueLine(items[0]), 'Todo · 담당 Me · 우선순위 High');
 });
 
+test('changed fields read before → after; the card popover expires and ranks unread first', async () => {
+  const {changeLines: deskLines, popoverOpen, popoverRows, POPOVER_TTL} = await import('../mods/sixfold-desk/alert-model.js');
+  const {changeLines} = await import('../mods/sixfold-linear-inbox/model.js');
+  const item = {changes: [{field: 'status', from: 'Todo', to: 'Done'}, {field: 'assignee', from: '', to: 'Kim'}, {field: 'secret', from: 'a', to: 'b'}]};
+  assert.deepEqual(changeLines(item), ['상태 Todo → Done', '담당 없음 → Kim']);
+  assert.deepEqual(deskLines(item), changeLines(item));   // the two copies stay identical
+  assert.deepEqual(changeLines({}), []);
+  const now = 1_000_000_000;
+  assert.ok(popoverOpen({space: 'Alpha', source: 'linear', at: now}, 'alpha', 'linear', now + 1000));
+  assert.ok(!popoverOpen({space: 'Alpha', source: 'linear', at: now}, 'Alpha', 'slack', now));
+  assert.ok(!popoverOpen({space: 'Alpha', source: 'linear', at: now}, 'Alpha', 'linear', now + POPOVER_TTL));
+  assert.ok(!popoverOpen({}, 'Alpha', 'linear', now));
+  const rows = popoverRows([{id: 1, read: true, at: '3'}, {id: 2, read: false, at: '1'}, {id: 3, read: false, at: '2'}], 2);
+  assert.deepEqual(rows.map(r => r.id), [3, 2]);
+});
+
 test('only linear.app links open', () => {
   assert.ok(linearLink(items[0].url));
   for (const url of ['https://evil.example/issue/x', 'javascript:alert(1)', 'https://linear.app.evil.com/x/issue/y', undefined]) assert.equal(linearLink(url), false);
@@ -57,11 +73,14 @@ test('a new unread Linear assignment opens the Linear window once; history seeds
     },
     setShared: (key, value) => { shared[key] = value; },
     openOverlay: value => opens.push(value),
+    spaces: () => [{id: 's1', name: 'Alpha'}],
     run() {},
   };
   let source = await readFile(new URL('../mods/sixfold-desk/linear-feed.js', import.meta.url), 'utf8');
   source = source.replace(/\r\n/g, '\n')
-    .replace(/^import .* from 'herdr';/m, 'const {appHome, readTextFile, writeTextFile, setShared, openOverlay} = globalThis.__linearRuntime;');
+    .replace(/^import .* from 'herdr';/m, 'const {appHome, readTextFile, writeTextFile, setShared, openOverlay, spaces} = globalThis.__linearRuntime;')
+    .replace(/^import \{ showPopover \} from .*$/m, 'const showPopover = (space, source, o) => globalThis.__linearRuntime.setShared("sixfold.alertPopover", {space, source, ...o});')
+    .replace(/^import \{ projectKey \} from .*$/m, 'const projectKey = n => String(n ?? "").toLowerCase();');
   try {
     const {watchLinear} = await import('data:text/javascript;base64,' + Buffer.from(source).toString('base64') + '#linear');
     watchLinear({}, cx);
@@ -72,13 +91,17 @@ test('a new unread Linear assignment opens the Linear window once; history seeds
     feed([{id: 'old', read: false, category: 'assignments'}, {id: 'seen', read: true, category: 'assignments'}, {id: 'remind', read: false, category: 'reminders'}]);
     refresh(cx); await tasks.at(-1);
     assert.equal(opens.length, 0);                       // read or reminder only: no window
-    feed([{id: 'new', read: false, category: 'mentions'}, {id: 'old', read: false, category: 'assignments'}]);
+    feed([{id: 'new', read: false, category: 'mentions', workspace: 'alpha'}, {id: 'old', read: false, category: 'assignments'}]);
     refresh(cx); await tasks.at(-1);
-    assert.equal(opens.length, 1);
+    assert.equal(opens.length, 0);                       // its space card is on screen: popover beside it
+    assert.deepEqual([shared['sixfold.alertPopover'].space, shared['sixfold.alertPopover'].source], ['Alpha', 'linear']);
+    feed([{id: 'other', read: false, category: 'mentions', workspace: 'Nowhere'}, {id: 'new', read: false, category: 'mentions'}, {id: 'old', read: false, category: 'assignments'}]);
+    refresh(cx); await tasks.at(-1);
+    assert.equal(opens.length, 1);                       // no such card: the Linear window
     assert.equal(opens[0].mod, 'sixfold-linear-inbox');
-    feed([{id: 'new', read: false, category: 'mentions'}, {id: 'old', read: true, category: 'assignments'}]);
+    feed([{id: 'other', read: false, category: 'mentions'}, {id: 'new', read: false, category: 'mentions'}, {id: 'old', read: true, category: 'assignments'}]);
     refresh(cx); await tasks.at(-1);
     assert.equal(opens.length, 1);                       // the same notification never reopens it
-    assert.equal(shared['sixfold.linearItems'].length, 2);
+    assert.equal(shared['sixfold.linearItems'].length, 3);
   } finally { delete globalThis.__linearRuntime; }
 });

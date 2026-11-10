@@ -1,4 +1,6 @@
-import { appHome, readTextFile, writeTextFile, setShared, openOverlay } from 'herdr';
+import { appHome, readTextFile, writeTextFile, setShared, openOverlay, spaces } from 'herdr';
+import { showPopover } from './alert-popover.js';
+import { projectKey } from './alert-model.js';
 
 // Linear inbox feed for the sidebar: data/sixfold/linear-alerts.json and
 // linear-live-health.json, written by a machine-local collector. Kept apart from
@@ -11,7 +13,7 @@ const LEDGER_LIMIT = 500;   // ids of notifications already announced; bounded
 
 export function linearPopupEvents(items) {
   return (items ?? []).filter(item => typeof item?.id === 'string' && item.id)
-    .map(item => ({key: `linear:${item.id}`, popup: !item.read && POPUP.has(item.category)}));
+    .map(item => ({key: `linear:${item.id}`, popup: !item.read && POPUP.has(item.category), workspace: item.workspace ?? ''}));
 }
 
 // First run seeds the existing history silently. Later writes use the previous
@@ -39,6 +41,14 @@ export function publishLinear(feed, health) {
   setShared('sixfold.linearHealth', health ?? {});
 }
 
+// A new alert opens the popover beside its space card; with no such card on
+// screen it falls back to the Linear window.
+export function announceLinear(event) {
+  const space = (spaces() ?? []).find(s => projectKey(s.name) === projectKey(event.workspace));
+  if (space) showPopover(space.name, 'linear', {auto: true});
+  else openLinearWindow();
+}
+
 export function openLinearWindow() {
   openOverlay({mod: 'sixfold-linear-inbox', kind: 'window', key: 'linear-inbox', keep: true, width: 980, height: 760, props: {window: true}});
 }
@@ -60,7 +70,7 @@ export function watchLinear(view, cx) {
         cx.notify();
         const event = await announce(linearPopupEvents(feed.items));
         previous = snapshot;   // after the ledger write, so a failed write is retried
-        if (event) openLinearWindow();
+        if (event) announceLinear(event);
       } catch { /* A partial collector write keeps the last valid list; retried next tick. */ }
       finally { loading = false; }
     });

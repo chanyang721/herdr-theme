@@ -1,7 +1,7 @@
 import { View, div, image } from 'gpui-kit';
 import { h_flex, v_flex, InputState, Input } from 'gpui-base';
 import { theme, props, appHome, readTextFile, writeTextFile, openOverlay, closeOverlay, exec } from 'herdr';
-import { categoryLabel, linearLink, visibleItems, spacesOf, issueLine, buildRequest, resultLabel } from './model.js';
+import { categoryLabel, linearLink, visibleItems, spacesOf, issueLine, buildRequest, resultLabel, changeLines } from './model.js';
 
 // Linear inbox. Reads data/sixfold/linear-alerts.json (written by a local collector).
 // Writes never happen here: a pressed button leaves one request file that the
@@ -103,6 +103,9 @@ export default class LinearInbox extends View {
             .child(div().text_size(16).font_bold().child(item.issue_title || item.title || '제목 없음'))
             .child(div().text_size(12).text_color(t.muted).child(item.subtitle || ''))
             .when(Boolean(issueLine(item)), e => e.child(div().text_size(13).child(issueLine(item))))
+            .when(changeLines(item).length > 0, e => e.child(v_flex().gap(2).px(8).py(6).rounded(5).bg(t.chrome)
+              .child(div().text_size(11).text_color(t.muted).child(`바뀐 내용${item.changed_at ? ` · ${item.changed_at.slice(5, 16).replace('T', ' ')}` : ''}`))
+              .children(changeLines(item).map((change, i) => div().id(`sf-linear-change-${item.id}-${i}`).text_size(13).text_color(t.ansi4 || t.accent).child(change)))))
             .when(open, e => e.child(v_flex().gap(6).pt(6).border_t(1).border_color(t.border)
               .when(!(item.comments ?? []).length, e => e.child(div().text_size(12).text_color(t.muted).child('불러온 최근 댓글이 없습니다.')))
               .children((item.comments ?? []).map((c, i) => v_flex().id(`sf-linear-c-${item.id}-${i}`).gap(2)
