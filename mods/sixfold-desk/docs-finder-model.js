@@ -3,8 +3,8 @@
 // sort is a pure pass over them, so the popover recomputes only when its inputs change.
 
 export const DOC_TABS=Object.freeze([{id:'all',label:'전체'},{id:'opened',label:'최근 연'},{id:'folders',label:'폴더'}]);
-export const DOC_KINDS=Object.freeze([{id:'all',label:'전체'},{id:'md',label:'md'},{id:'html',label:'html'},{id:'pdf',label:'pdf'},{id:'other',label:'기타'}]);
-export const DOC_PERIODS=Object.freeze([{id:'all',label:'전체'},{id:'today',label:'오늘'},{id:'week',label:'7일'},{id:'month',label:'30일'}]);
+export const DOC_KINDS=Object.freeze([{id:'all',label:'모든 종류'},{id:'md',label:'md'},{id:'html',label:'html'},{id:'pdf',label:'pdf'},{id:'other',label:'기타'}]);
+export const DOC_PERIODS=Object.freeze([{id:'all',label:'전 기간'},{id:'today',label:'오늘'},{id:'week',label:'7일'},{id:'month',label:'30일'}]);
 export const DOC_SORTS=Object.freeze([{id:'modified',label:'최근 수정'},{id:'name',label:'이름'},{id:'opened',label:'최근 연'}]);
 export const OPENED_LIMIT=200;
 

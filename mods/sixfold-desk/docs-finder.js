@@ -8,7 +8,7 @@ import {DOC_TABS,DOC_KINDS,DOC_PERIODS,DOC_SORTS,prepareDocs,docsView,docReadabl
 // button on the space header (or the find-docs command). It reads the shared document
 // index (watchDocs) and keeps only its own UI state and the opened-documents record.
 
-const ROW=40,LIST_MAX=400;
+const ROW=46,LIST_MAX=414;
 const windows=()=>(typeof window==='function'&&window()?.platform==='windows')||/^(?:[A-Za-z]:[\\/]|\\\\)/.test(appHome());
 const native=()=>`${appHome()}/scripts/sixfold/herdr-theme${windows()?'.exe':''}`;
 const openedPath=()=>`${appHome()}/data/sixfold/docs-opened.json`;
@@ -167,7 +167,8 @@ export function docsFinder(view,space,trigger,t,options={}){
     body.child(text('이 공간에 설정된 문서 폴더가 없습니다. 문서 탭 규칙(project-docs-pins.json)에 폴더를 더하면 여기에 나옵니다.',t.dim,11).whitespace_normal().py(8));
     return popover.content(body);
   }
-  body.child(Input.new(state.input).w_full().h(30).text_size(12).text_color(t.foreground));
+  body.child(h_flex().h(32).px(8).gap(6).items_center().rounded(7).border(1).border_color(t.accent).bg(t.background||t.surface)
+    .child(Input.new(state.input).flex_1().h_full().text_size(12).text_color(t.foreground)));
   body.child(h_flex().gap(4).pb(6).border_b(1).border_color(t.border)
     .children(DOC_TABS.map(item=>h_flex().id(`sf-docs-tab-${space.id}-${item.id}`).h(28).px(12).gap(4).rounded(6).items_center().cursor_pointer()
       .bg(state.tab===item.id?t.selected:t.popover||t.surface)
@@ -201,7 +202,7 @@ export function docsFinder(view,space,trigger,t,options={}){
       const out=[];
       for(let i=range.start;i<range.end&&i<rows.length;i++){
         const item=rows[i],active=i===state.selected;
-        out.push(v_flex().h(ROW).px(8).py(4).gap(2).rounded(6).justify_center().when(active,el=>el.bg(t.selected))
+        out.push(v_flex().h(ROW).px(8).gap(3).rounded(6).justify_center().when(active,el=>el.bg(t.selected))
           .child(h_flex().gap(6).items_center().min_w(0)
             .child(text(item.kind==='other'?(/\.([A-Za-z0-9]+)$/.exec(item.name)?.[1]||'파일'):item.kind,t.dim,9).flex_none().w(28))
             .child(text(item.name,active?t.foreground:t.muted,12).flex_1()))

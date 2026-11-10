@@ -431,8 +431,8 @@ export default class SixfoldDesk extends View {
           if (a) run('agent.focus', { terminal: a.address });
         } else if (command === 'find-docs') {
           const space=spaces().find(s=>s.active);
-          // Opens that space's document finder (the popover on its header's docs button).
-          if(space)setDocsFinderOpen(this,space,true,cx);
+          // Opens that space's document finder (the popover on its header's docs button); again closes it.
+          if(space)setDocsFinderOpen(this,space,!this.docsFinders?.get(space.id)?.open,cx);
         } else if (command === 'language') {
           setShared('sixfold.language', this.lang() === 'ko' ? 'en' : 'ko');
         } else if (command.startsWith('inbox-')) {
