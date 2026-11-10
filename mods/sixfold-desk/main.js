@@ -21,7 +21,7 @@ import { panePet } from './pets.js';
 import { paneUsage } from './session-usage.js';
 import { paneMeta, paneMetaChip, showPaneIndex, showTitle } from './pane-meta.js';
 import { watchBadges, workspaceBadges } from './badges.js';
-import { watchAsks, askSection, hasAsks } from './asks.js';
+import { watchAsks, askSection, hasAsks, paneAskButton, askPopup } from './asks.js';
 import { askFor } from './ask-model.js';
 import { watchReports, reportsSection } from './session-reports.js';
 import {reconcilePanelFeed,panelSpacePartners} from './panel-model.js';
@@ -567,7 +567,7 @@ export default class SixfoldDesk extends View {
     const index = all.filter(x => x.tab === p.tab).findIndex(x => x.pane === p.pane) + 1;
     const style = paneHeaderStyle(p, t);
     // Agent icon, model, speed, effort and permission of the pane's confirmed session, after the title.
-    const meta = paneMeta(p.terminal, shared), name = title(p);
+    const meta = paneMeta(p.terminal, shared), name = title(p), ask = paneAskButton(p, t, this.lang(), name);
     return div().size_full().bg(style.base).child(h_flex().id(`sixfold-head-${p.pane}`).size_full().items_center().gap(7).px(9)
       .bg(style.background).text_size(11.5)
       .border(1).border_color(style.border)
@@ -580,6 +580,8 @@ export default class SixfoldDesk extends View {
       // Session usage sits in the middle: title and an equal spacer share the room around it.
       .child(paneUsage(p, t, shared))
       .child(div().flex_1().min_w(0))
+      // A waiting question/permission opens here, over its own pane, on click only.
+      .when(Boolean(ask), el => el.child(ask))
       // The cat is the status, so it stands beside the status badge.
       .child(panePet(p,t,shared,style))
       .child(this.badge(p.status, p.status ? w[p.status] : '', t, 11, ['working', 'blocked'].includes(p.status) ? t.foreground : null)));
@@ -589,6 +591,8 @@ export default class SixfoldDesk extends View {
     const t = theme();
     const w = WORDS[this.lang()];
     const role = props()?.role;
+    // One pane's cards in a popup (asks.js). It needs none of the layout work below.
+    if (role === 'ask') return askPopup(this, t, this.lang(), cx);
     if(role==='sidebar'){
       const environment=JSON.stringify([t,shared('sixfold.motion'),window()?.visible??null]);
       if(environment!==this.panelEnvironment){this.panelEnvironment=environment;this.refreshPanelPreferences?.();}
