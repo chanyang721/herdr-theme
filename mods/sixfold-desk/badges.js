@@ -54,6 +54,7 @@ export function watchBadges(view,cx){
     loaded=true;previousHash=hash;previousValue=snapshot.value;
     view.fileBadges=cleanBadges(snapshot.value);
     if(view.sidebarVisible!==false)cx.notify();
+    view.panelRetained?.alertsChanged?.();   // a task card's meta line carries the badges
   });
   const stop=()=>{if(disposed)return;disposed=true;unsubscribe();};
   view.stopBadges=stop;(view.fileSubscriptions??=[]).push(stop);
@@ -68,6 +69,8 @@ function activate(badge){
   }else if(badge.command)run(badge.command.name,badge.command.args);
 }
 
+// The harness memory badge's bare '! N' means items waiting for a check; say so.
+export const badgeLabel=b=>b.id==='harness-memory'&&/^!\s*\d+$/.test(b.text)?b.text.replace(/^!\s*/,'확인 대기 '):b.text;
 export function workspaceBadges(view,s,t){
   const list=badgesFor(badgeKey(s.machine??null,s.id),view.fileBadges,shared(BADGES_KEY));
   if(!list.length)return div();
@@ -80,6 +83,6 @@ export function workspaceBadges(view,s,t){
       .when(Boolean(b.open||b.command),e=>e.cursor_pointer()
         .on_mouse_down('left',(_e,cx)=>cx.stop_propagation()).on_mouse_up('left',(_e,cx)=>cx.stop_propagation())
         .on_click((_e,cx)=>{cx.stop_propagation();activate(b);}))
-      .child(b.id==='harness-memory' && /^!\s*\d+$/.test(b.text) ? b.text.replace(/^!\s*/, '확인 ') : b.text);
+      .child(badgeLabel(b));
   }));
 }

@@ -33,7 +33,8 @@ export function hostedTaskLayout(layout, entries, computerAnchors=[]) {
   for(const entry of entries){
     const card=layout?.cards.find(card=>card.space.id===entry.task?.id);
     if(card){
-      const header=41+(entry.alertHeight||0);
+      // Header 36 + border 1 + the card's 2px gaps; alertHeight adds the badge and alert rows.
+      const header=39+(entry.alertHeight||0);
       const delta=y+header-(card.top+35);
       const next={...card,top:y,rows:card.rows.map(row=>({...row,y:row.y+delta}))};
       cards.push(next);

@@ -32,6 +32,7 @@ import {createRetainedPanel} from './panel-retained.js';
 import {taskComputerAnchors,taskComputerRecord} from './panel-host.js';
 import {subscribeJsonFile,readJsonSnapshot,fileDelivery,FILE_CHANGED_COMMAND} from './panel-io.js';
 import {watchSidebarFiles} from './sidebar-files.js';
+import {orderSpaceCards,spaceBadges,lineBadges,metaBadges} from './sidebar-meta.js';
 import {subscribeLiveEvents} from './live-events.js';
 import {createRetainedCards} from './retained-cards.js';
 import {createHash} from 'crypto';
@@ -146,6 +147,7 @@ export default class SixfoldDesk extends View {
       schedule:fn=>fileReceiver.enqueue(fn),
       // Counts on the meta line only when it carries the alerts; otherwise the alerts row has them (never both).
       cardAlerts:(space,motion)=>alertsOnMetaLine(space,space.name)?cardAlertCounts(space.name,motion):null,slackAlerts:slackAlertsChip,
+      cardBadges:metaBadges(this),
       onIssueRequest:(space,key,desired)=>{
         const serial=globalThis.__sixfoldIssueRequestSerial=(globalThis.__sixfoldIssueRequestSerial||0)+1;
         const id=`request-${Date.now().toString(36)}-${serial.toString(36)}-${Math.random().toString(36).slice(2,14)}`;
@@ -176,6 +178,7 @@ export default class SixfoldDesk extends View {
       this.startLiveMessages?.();
       this.panelRetained?.setEnabled(this.panelTrackingActive);
       this.panelRetained?.preferences();
+      this.panelRetained?.alertsChanged?.();   // shared workspace badges sit on task meta lines
     }));
     this.fileSubscriptions.push(subscribeJsonFile(cx,`${appHome()}/settings.json`,snapshot=>{
       if(snapshot.status==='ready')this.panelRetained?.preferences();
@@ -855,17 +858,18 @@ export default class SixfoldDesk extends View {
     // A workspace's rows are its terminals; a mod pane (document tabs, a usage panel) has no
     // terminal and is not a session, so it gets no row and no count.
     this.classicMembers??=new Map();
-    const groups=workspaceList.map(s=>{
+    const groups=orderSpaceCards(workspaceList.map(s=>{
       const raw=s.tabs.flatMap(tab=>all.filter(p=>p.tab===tab.id&&p.terminal)),key=JSON.stringify(raw);
       let cached=this.classicMembers.get(s.id);
       if(cached?.key!==key){cached={key,members:priority(raw)};this.classicMembers.set(s.id,cached);}
       return {s,members:cached.members};
-    });
+    }),s=>workspacePinned(s,this.workspacePins),s=>taskPanel?.taskFor(s));
     for(const id of this.classicMembers.keys())if(!workspaceIds.has(id))this.classicMembers.delete(id);
-    const extraHeight=s=>{
-      const key=`${s.machine??''}|${String(s.id).split('/').pop()}`;
-      return this.fileBadges?.[key]?.length||shared('sixfold.workspace.badges')?.[key]?.length?20:0;
-    };
+    // A task card's meta line (Slack · Linear) also carries badges with a state; a card without
+    // one keeps them on a badge row. Launcher-only badges ('기억') sit in the header: no row.
+    const metaLine=s=>{const task=taskPanel?.taskFor(s);return Boolean(task&&taskPanel?.bodyFor(s)&&(task.slack||task.work));};
+    const badgeRow=s=>!metaLine(s)&&lineBadges(spaceBadges(this,s));
+    const extraHeight=s=>badgeRow(s)?20:0;
     // A task card with a meta line carries Slack and Linear alerts there; the separate alerts row is for other cards.
     const mergedAlerts=s=>Boolean(taskPanel?.bodyFor(s)&&alertsOnMetaLine(taskPanel.taskFor(s),s.name));
     const alertRowHeight=s=>hasWorkspaceAlerts(s.name)&&!mergedAlerts(s)?26:0;
@@ -881,7 +885,7 @@ export default class SixfoldDesk extends View {
         offset+=(this.boxSizes?.[s.id]?.h||card.height+9+extraHeight(s)+alertRowHeight(s))+12;
         continue;
       }
-      let row=offset+53+extraHeight(s)+alertRowHeight(s);
+      let row=offset+51+extraHeight(s)+alertRowHeight(s);
       for (const p of members) {
         positions[p.terminal]=row;row+=30;
         {
@@ -920,7 +924,7 @@ export default class SixfoldDesk extends View {
       const task=taskPanel?.taskFor(s),taskBody=taskPanel?.bodyFor(s);
       const partner=partnersOf(s),mark=spaceLink(s);
       const badgeKey=`${s.machine??''}|${String(s.id).split('/').pop()}`;
-      const key=JSON.stringify([s,members,task?.id,task?.memory,task?.share,task?.agents.map(agent=>[agent.id,agent.status,agent.closing]),taskPanel?.names&&[...taskPanel.names],taskPanel?.feed?.links,t,w,motion,partner,mark,comets.comets.get(groupKey(partner?.group.name??mark?.lane.link.name)),
+      const key=JSON.stringify([s,members,task?.id,Boolean(taskBody),Boolean(task?.slack||task?.work),task?.memory,task?.share,task?.agents.map(agent=>[agent.id,agent.status,agent.closing]),taskPanel?.names&&[...taskPanel.names],taskPanel?.feed?.links,t,w,motion,partner,mark,comets.comets.get(groupKey(partner?.group.name??mark?.lane.link.name)),
         this.boxSizes?.[s.id],partner?.partners.includes(this.hoverComputer)||false,this.dragSpace,this.overSpace,
         this.workspaceIcons[s.id]||this.workspaceIcons[s.name],workspaceColor(s),workspacePinned(s,this.workspacePins),
         this.fileBadges?.[badgeKey],alertCardSignature(s.name,motion),shared('sixfold.workspace.badges')?.[badgeKey],this.projectDocs?.spaces?.[s.id]||this.projectDocs?.spaces?.[s.name],
@@ -1009,12 +1013,13 @@ export default class SixfoldDesk extends View {
           .text_size(9).text_color(t.ansi6||t.accent).truncate().tooltip(`기억 제안${task.memory.proposals?` ${task.memory.proposals}`:''}`)
           .child(metrics.compact?`◈${task.memory.proposals?` ${task.memory.proposals}`:''}`:`기억 제안${task.memory.proposals?` ${task.memory.proposals}`:''}`)))
         .when(Boolean(metrics?.count),e=>e.child(div().w(metrics.countWidth).flex_none().text_size(10).text_color(t.muted).child(`◌ ${metrics.count}`)))
+        .when(!lineBadges(spaceBadges(this,s)),e=>e.child(workspaceBadges(this,s,t)))
         .when(!metrics,e=>e.child(div().text_size(10).text_color(t.muted).child(String(members.length))))
         .child(docsButton(s)))
       .when(extraHeight(s)>0,e=>e.child(h_flex().id(`sf-space-extras-${s.id}`).h(18).flex_none().px(7).gap(4).items_center().min_w(0)
         .child(workspaceBadges(this,s,t))
       ))
-      .when(!mergedAlerts(s),e=>e.child(workspaceAlertsRow(s,t,{motion})))
+      .when(alertRowHeight(s)>0,e=>e.child(workspaceAlertsRow(s,t,{motion})))
       .children(taskBody?[taskBody]:members.map(p=>{
         const tab=s.tabs.find(tab=>tab.id===p.tab);
         const records=sessionChildren(this.workflowNodes,p.terminal,true);

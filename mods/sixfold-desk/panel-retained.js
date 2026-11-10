@@ -104,7 +104,7 @@ class PanelRoot extends View{
   }
 }
 
-export function createRetainedPanel(cx,{macTitlebar=false,onClassic=null,onDispose=null,onIssueRequest=null,embedded=false,onHostChange=null,schedule=fn=>fn(),cardAlerts=null,slackAlerts=null}={}){
+export function createRetainedPanel(cx,{macTitlebar=false,onClassic=null,onDispose=null,onIssueRequest=null,embedded=false,onHostChange=null,schedule=fn=>fn(),cardAlerts=null,slackAlerts=null,cardBadges=null}={}){
   const prune=()=>{
   for(const previous of [...registry.values()]){
     let retired=previous.protocol!=='2';try{retired||=previous.life?.is_done()===true;}catch{retired=true;}
@@ -133,12 +133,14 @@ export function createRetainedPanel(cx,{macTitlebar=false,onClassic=null,onDispo
   c.taskFor=space=>nativeTaskSpace(c.feed,space);
   // Alert counts on the card's meta line come from the host (Slack and Linear feeds).
   c.cardAlerts=cardAlerts?space=>cardAlerts(space,c.motion):null;c.slackAlerts=slackAlerts;
+  // The host's workspace badges with a state ride on the same line: {key, view(t)} or null.
+  c.cardBadges=cardBadges?space=>space.native?cardBadges(space.native):null:null;
   // New alerts redraw a card only when what it shows changed: its meta-line counts, and the
   // alerted issues of an open issue search. Bounded by the number of cards; no timer.
   c.alertMarks=new Map();
   c.alertMark=space=>{
     const state=c.issueStates.get(space.id);
-    return JSON.stringify([c.cardAlerts?.(space)||null,state?.open?issueAlertSignature(shared('sixfold.linearItems')??[],space.name):'',shared('sixfold.alertPopover')?.space===space.name?shared('sixfold.alertPopover'):null,
+    return JSON.stringify([c.cardAlerts?.(space)||null,c.cardBadges?.(space)?.key||null,state?.open?issueAlertSignature(shared('sixfold.linearItems')??[],space.name):'',shared('sixfold.alertPopover')?.space===space.name?shared('sixfold.alertPopover'):null,
       state?.open?[[...readPendingIds()].sort().join(','),lastReadError()]:null,
       state?.open?[autoSignature(shared('sixfold.linearAuto'),space.name),[...busyKeys()].sort().join(','),[...doneIds()].sort().join(','),autoError()]:null]);
   };

@@ -225,7 +225,9 @@ export function cardView(view,card,state,color,computerNames,t,motion,rowEntitie
     // The Slack copy has stopped: say so rather than show a quiet 0.
     .when(Boolean(alerts?.delay),e=>e.child(text('사본 지연',t.blocked||t.muted,9).flex_none().id(`panel-slack-delay-${space.id}`)))
     .when(Boolean(alerts?.hasSlack),e=>e.cursor_pointer().tooltip(`Slack 알림${slackUnread?` 미확인 ${slackUnread}건`:''}${alerts?.delay?`\nSlack 사본이 ${alerts.delay}시간째 멈춤 (마지막 메시지 ${alerts.delayAt}) · 새 멘션이 늦게 보일 수 있음`:''}`));
+  const badges=view.cardBadges?.(space)||null;
   if(panelMetaHeight(space))box.child(h_flex().h(PANEL_GEOMETRY.meta).flex_none().px(7).gap(5).items_center()
+    .when(Boolean(badges),e=>e.child(badges.view(t)))
     .child(alerts?.hasSlack&&view.slackAlerts?view.slackAlerts(space,slack,t):slack)
     .child(space.work&&view.issuePopover?view.issuePopover(space,tool,t):tool));
   for(const row of card.rows){
