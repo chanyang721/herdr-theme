@@ -1,8 +1,21 @@
 import { div, image } from 'gpui-kit';
 import { h_flex } from 'gpui-base';
 import { shared, openOverlay } from 'herdr';
-import { scopedAlerts, linearUnread } from './alert-model.js';
-import { alertPopover, showPopover } from './alert-popover.js';
+import { scopedAlerts, linearScoped } from './alert-model.js';
+import { alertPopover, showPopover, popoverState } from './alert-popover.js';
+import { arrivals } from './arrival-store.js';
+import { flyingIds } from './arrival-model.js';
+
+// An alert still flying in from its popup is counted once it lands.
+const landedOnly = (items, scope) => { const flying = flyingIds(arrivals(), Date.now(), scope.motion !== false); return flying.size ? items.filter(i => !flying.has(i.id)) : items; };
+const slackUnread = scope => landedOnly(scopedAlerts(shared('sixfold.alertItems') ?? [],{...scope,read:shared('sixfold.alertRead') ?? {},unread:true}),scope).length;
+const linearUnreadNow = scope => landedOnly(linearScoped(shared('sixfold.linearItems') ?? [],scope.project).filter(i=>!i.read),scope).length;
+// What the card's alerts row shows; part of the retained card's signature so the row redraws when it changes.
+export function alertSignature(name, motion = true) {
+  if(!hasWorkspaceAlerts(name))return '';
+  const scope={project:name,motion},open=popoverState();
+  return [hasSlackAlerts(name),hasLinearAlerts(name),slackUnread(scope),linearUnreadNow(scope),open?.space===name?`${open.source}:${open.boot}:${open.at}`:''].join('|');
+}
 
 export function openInbox(scope = {}) {
   return openOverlay({mod:'sixfold-slack-inbox',kind:'dialog',width:760,height:620,props:{...scope,newMessages:true}});
@@ -17,9 +30,9 @@ export const hasLinearAlerts = name => named(shared('sixfold.linearSpaces'),name
 export const hasWorkspaceAlerts = name => hasSlackAlerts(name) || hasLinearAlerts(name);
 // The whole row is the popover trigger, so the surface opens beside the card.
 // A badge press picks which source the popover shows first.
-export function workspaceAlertsRow(space,t) {
+export function workspaceAlertsRow(space,t,{motion=true}={}) {
   if(!hasWorkspaceAlerts(space.name))return div();
-  const scope={project:space.name};
+  const scope={project:space.name,motion};
   const row=h_flex().id(`sf-channel-alerts-${space.id}`).h(26).w_full().px(10).gap(6).items_center().cursor_pointer()
     .child(alertBadge(`space-${space.id}`,t,{...scope,popover:true}))
     .child(linearBadge(`space-${space.id}`,t,{...scope,popover:true}))
@@ -28,7 +41,7 @@ export function workspaceAlertsRow(space,t) {
   const stop=(_e,cx)=>cx.stop_propagation();
   return div().id(`sf-channel-alerts-wrap-${space.id}`).h(26).flex_none().on_mouse_down('left',stop).on_mouse_up('left',stop)
     .child(alertPopover({id:space.id,project:space.name,trigger:row,t,hasSlack:hasSlackAlerts(space.name),hasLinear:hasLinearAlerts(space.name),
-      onAll:source=>source==='linear'?openLinearInbox(scope):openInbox(scope)}));
+      onAll:source=>source==='linear'?openLinearInbox({project:space.name}):openInbox({project:space.name})}));
 }
 // Inside the card row a badge only chooses the popover source; elsewhere it opens the inbox.
 const badgePress=(scope,source,open)=>(_e,cx)=>{
@@ -37,7 +50,7 @@ const badgePress=(scope,source,open)=>(_e,cx)=>{
 };
 export function alertBadge(id,t,scope={}) {
   if(!hasSlackAlerts(scope.project))return div();
-  const unread=scopedAlerts(shared('sixfold.alertItems') ?? [],{...scope,read:shared('sixfold.alertRead') ?? {},unread:true}).length;
+  const unread=slackUnread(scope);
   return div().id(`sf-slack-${id}`).flex_none().px(5).py(2).rounded(4).text_size(10)
     .bg(unread?t.accent:t.surface).text_color(unread?t.accent_foreground:t.muted)
     .tooltip(`팝업에서 미확인 ${unread}건 · Slack 앱 읽음 상태와 별도`)
@@ -48,7 +61,7 @@ export function alertBadge(id,t,scope={}) {
 }
 export function linearBadge(id,t,scope={}) {
   if(!hasLinearAlerts(scope.project))return div();
-  const unread=linearUnread(shared('sixfold.linearItems') ?? [],scope.project);
+  const unread=linearUnreadNow(scope);
   return div().id(`sf-linear-${id}`).flex_none().px(5).py(2).rounded(4).text_size(10)
     .bg(unread?t.accent:t.surface).text_color(unread?t.accent_foreground:t.muted)
     .tooltip(`Linear 미확인 알림 ${unread}건`)

@@ -15,6 +15,7 @@ import { workflowNodes, delegationEvents, workflowStatus, sessionChildren, activ
 import { watchDocs, currentDocs, docsSection, prepareDocsInput } from './docs.js';
 import { watchAlerts, alertSection, visibleAlerts } from './alerts.js';
 import { workspaceAlertsRow, hasWorkspaceAlerts, openInbox } from './alert-inbox.js';
+import { startAlertArrivals, alertArrivalLayer, alertCardSignature } from './alert-arrivals.js';
 import { panePet } from './pets.js';
 import { paneUsage } from './session-usage.js';
 import { paneMeta, paneMetaChip, showPaneIndex, showTitle } from './pane-meta.js';
@@ -147,7 +148,7 @@ export default class SixfoldDesk extends View {
         const id=`request-${Date.now().toString(36)}-${serial.toString(36)}-${Math.random().toString(36).slice(2,14)}`;
         return saveIssueRequest(issueRequest(this.panelFeedPath,space,key,desired,id),writeTextFile);
       },
-      onClassic:()=>{this.panelTrackingActive=false;this.panelRetained?.setEnabled(false);this.syncCardActivity?.();this.startLiveMessages?.();this.refreshLegacy?.(cx);this.refreshAlerts?.(cx);this.refreshAsks?.(cx);},onDispose:()=>{for(const stop of this.fileSubscriptions||[])stop();this.stopAsks?.();this.stopReports?.();this.classicCards?.dispose();}}):null;
+      onClassic:()=>{this.panelTrackingActive=false;this.panelRetained?.setEnabled(false);this.syncCardActivity?.();this.startLiveMessages?.();this.refreshLegacy?.(cx);this.refreshAlerts?.(cx);this.refreshLinear?.(cx);this.refreshAsks?.(cx);},onDispose:()=>{for(const stop of this.fileSubscriptions||[])stop();this.stopAsks?.();this.stopReports?.();this.classicCards?.dispose();}}):null;
     this.fileSubscriptions=[];
     const receiveTaskFeed=createTaskFeedSource(snapshot=>{
       this.panelFeedPath=`${appHome()}/${TASK_FEED_FILE}`;
@@ -181,6 +182,7 @@ export default class SixfoldDesk extends View {
     watchDocs(this,cx);
     this.alerts = [];
     watchAlerts(this, cx);
+    startAlertArrivals(this, cx);   // Linear feed + new alerts folding into their card
     watchBadges(this, cx);
     watchAsks(this, cx);
     watchReports(this, cx);
@@ -395,7 +397,7 @@ export default class SixfoldDesk extends View {
             // suspended, then resume from that watermark in this copy's scope.
             fileReceiver.flush();this.sidebarVisible=true;this.syncCardActivity?.();
             this.panelRetained?.setVisible(true);this.panelRetained?.preferences();
-            this.startLiveMessages?.();this.refreshLegacy?.(cx);this.refreshAlerts?.(cx);this.refreshAsks?.(cx);
+            this.startLiveMessages?.();this.refreshLegacy?.(cx);this.refreshAlerts?.(cx);this.refreshLinear?.(cx);this.refreshAsks?.(cx);
             cx.notify();
           }
           continue;
@@ -444,6 +446,7 @@ export default class SixfoldDesk extends View {
     this.stopLegacyMotion();
     this.stopAsks?.();this.stopReports?.();
     this.classicCards?.dispose();
+    this.stopArrivals?.();
     this.linkFlowTimer?.cancel();this.linkWakeTimer?.cancel();this.cometTimer?.cancel();
     for(const stop of this.fileSubscriptions||[])stop();
     this.fileSubscriptions=[];this.stopLiveMessages?.();this.stopLiveMessages=null;this.panelRetained?.dispose();
@@ -898,7 +901,7 @@ export default class SixfoldDesk extends View {
       const key=JSON.stringify([s,members,task?.id,task?.memory,task?.share,task?.agents.map(agent=>[agent.id,agent.status,agent.closing]),taskPanel?.names&&[...taskPanel.names],taskPanel?.feed?.links,t,w,motion,partner,mark,comets.comets.get(groupKey(partner?.group.name??mark?.lane.link.name)),
         this.boxSizes?.[s.id],partner?.partners.includes(this.hoverComputer)||false,this.dragSpace,this.overSpace,
         this.workspaceIcons[s.id]||this.workspaceIcons[s.name],workspaceColor(s),workspacePinned(s,this.workspacePins),
-        this.fileBadges?.[badgeKey],shared('sixfold.workspace.badges')?.[badgeKey],this.projectDocs?.spaces?.[s.id]||this.projectDocs?.spaces?.[s.name],
+        this.fileBadges?.[badgeKey],alertCardSignature(s.name,motion),shared('sixfold.workspace.badges')?.[badgeKey],this.projectDocs?.spaces?.[s.id]||this.projectDocs?.spaces?.[s.name],
         this.docsSpaces?.has(s.id),this.docsQueries?.[s.id],this.docsLimits?.[s.id],this.docsErrors?.[s.id],this.docsArchive,
         members.map(p=>[unseen(p.terminal),endpoint(p.terminal),routeColor(p.terminal),askFor(this.asks,p.terminal),
           sessionChildren(this.workflowNodes,p.terminal,true),this.expandedAgents.has(p.terminal),list.find(a=>a.address===p.terminal)?.program])]);
@@ -992,7 +995,7 @@ export default class SixfoldDesk extends View {
       .when(extraHeight(s)>0,e=>e.child(h_flex().id(`sf-space-extras-${s.id}`).h(18).flex_none().px(7).gap(4).items_center().min_w(0)
         .child(workspaceBadges(this,s,t))
       ))
-      .child(workspaceAlertsRow(s,t))
+      .child(workspaceAlertsRow(s,t,{motion}))
       .children(taskBody?[taskBody]:members.map(p=>{
         const tab=s.tabs.find(tab=>tab.id===p.tab);
         const records=sessionChildren(this.workflowNodes,p.terminal,true);
@@ -1042,6 +1045,9 @@ export default class SixfoldDesk extends View {
       return {task,alertHeight:extraHeight(s)+(hasWorkspaceAlerts(s.name)?26:0),height:this.boxSizes?.[s.id]?.h||
         (card?card.height+9:(members.length*30+40))+extraHeight(s)+(this.docsHeights?.[s.id]||0)+(hasWorkspaceAlerts(s.name)?26:0)};
     });
+    // New-alert arrivals: a popup on the card's spot, then a pixel block steps into its badge.
+    const arrivalCards=[];{let top=0;groups.forEach(({s},i)=>{arrivalCards.push({s,top,extra:extraHeight(s)});top+=taskEntries[i].height+12;});}
+    const arrivalViews=alertArrivalLayer(this,cx,{cards:arrivalCards,motion,t,right:LINK_MARGIN+4});
     const workspaceTree=v_flex().relative().flex_none().children(spaceRows)
       .when(Boolean(taskPanel?.feed),e=>e.child(taskPanel.hostFlows(taskEntries,
         taskComputerAnchors(taskPanel.feed,activeComputers,this.computerBlockHeight??(activeComputers.length*39+3),this.spaceSectionHeight??31),LINK_MARGIN)))
@@ -1057,7 +1063,8 @@ export default class SixfoldDesk extends View {
         const row = outgoing ? positions[route.source] : positions[route.target];
         return pipeline({id:`${route.id}-hop`,width:8+(route.lane%2)*6,inset:6,from:outgoing?row:0,to:outgoing?0:row,color:workspaceFlowColor(route),phase:route.phase,packets:route.packets,motion,unit:1/(Number(settings()?.zoom)||1)})
           .right(LINK_MARGIN-18-(route.lane%2)*6);
-      }));
+      }))
+      .children(arrivalViews);
     return v_flex().id('sixfold-sidebar').size_full().bg(t.chrome).text_color(t.foreground)
       // Width only matters to the task panel's breakpoints; between them the
       // flex layout resizes the cards without a redraw.

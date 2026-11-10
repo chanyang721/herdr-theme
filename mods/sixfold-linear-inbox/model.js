@@ -1,5 +1,5 @@
 // Pure helpers for the Linear inbox window (tested in tests/linear-inbox.test.mjs).
-const CATEGORY = {assignments:'배정', mentions:'멘션', comments:'댓글', statusChanges:'상태 변경', reminders:'알림', reactions:'반응', subscriptions:'구독', triage:'분류'};
+const CATEGORY = {assignments:'배정', mentions:'멘션', comments:'댓글', commentsAndReplies:'댓글', reviews:'리뷰', documentChanges:'문서', statusChanges:'상태 변경', reminders:'알림', reactions:'반응', subscriptions:'구독', triage:'분류'};
 export const categoryLabel = item => CATEGORY[item?.category] || '알림';
 export const spaceKey = name => String(name ?? '').toLowerCase().replace(/[\s_-]/g, '');
 export const linearLink = url => typeof url === 'string' && /^https:\/\/linear\.app\/[A-Za-z0-9_-]+\/(issue|project)\//.test(url);

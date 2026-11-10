@@ -15,7 +15,7 @@ const CHANGE_LABEL = {issue_title: '제목', status: '상태', assignee: '담당
 export const changeLines = item => (Array.isArray(item?.changes) ? item.changes : [])
   .filter(c => c && CHANGE_LABEL[c.field])
   .map(c => `${CHANGE_LABEL[c.field]} ${c.from || '없음'} → ${c.to || '없음'}`);
-const LINEAR_CATEGORY = {assignments: '배정', mentions: '멘션', comments: '댓글', statusChanges: '상태 변경', reminders: '알림', reactions: '반응', subscriptions: '구독', triage: '분류'};
+const LINEAR_CATEGORY = {assignments: '배정', mentions: '멘션', comments: '댓글', commentsAndReplies: '댓글', reviews: '리뷰', documentChanges: '문서', statusChanges: '상태 변경', reminders: '알림', reactions: '반응', subscriptions: '구독', triage: '분류'};
 export const linearCategory = item => LINEAR_CATEGORY[item?.category] || '알림';
 
 // The space card popover: which card and source is open, set by a badge press

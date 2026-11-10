@@ -5,7 +5,7 @@
 // rendering and the clock. Bounded: at most ARRIVAL.ledger entries are kept.
 import { projectKey } from './alert-model.js';
 
-export const ARRIVAL = Object.freeze({showMs: 4000, flyMs: 640, steps: 6, unit: 2, visible: 3, ledger: 50, keepMs: 60_000});
+export const ARRIVAL = Object.freeze({showMs: 4000, flyMs: 640, steps: 6, unit: 2, blinkMs: 480, visible: 3, ledger: 50, keepMs: 60_000});
 export const FALLBACK_SPACE = 'Share';
 
 // The space an alert belongs to, among the spaces on screen; Share otherwise.
@@ -37,10 +37,27 @@ export function inFlight(list, space, source, now, motion = true) {
     && arrivalPhase(a, now, motion) !== 'landed').length;
 }
 
-// The next moment the sidebar must re-render for a phase change, or null.
+// Which of the ARRIVAL.steps flight points the block is on now (0-based).
+export function flightStep(arrival, now) {
+  const into = now - arrival.at - ARRIVAL.showMs;
+  return Math.max(0, Math.min(ARRIVAL.steps - 1, Math.floor(into / (ARRIVAL.flyMs / ARRIVAL.steps))));
+}
+
+// Landed a moment ago: the card blinks once where it came in.
+export function justLanded(list, now, motion = true) {
+  if (!motion) return [];
+  return (list ?? []).filter(a => { const since = now - a.at - ARRIVAL.showMs - ARRIVAL.flyMs; return since >= 0 && since < ARRIVAL.blinkMs; });
+}
+
+// The next moment the sidebar must re-render (popup ends, each flight step,
+// landing, blink end), or null. Finite: at most steps + 2 per arrival.
 export function nextPhaseAt(list, now, motion = true) {
   if (!motion) return null;
-  const edges = (list ?? []).flatMap(a => [a.at + ARRIVAL.showMs, a.at + ARRIVAL.showMs + ARRIVAL.flyMs]).filter(t => t > now);
+  const step = ARRIVAL.flyMs / ARRIVAL.steps;
+  const edges = (list ?? []).flatMap(a => {
+    const fly = a.at + ARRIVAL.showMs;
+    return [...Array.from({length: ARRIVAL.steps}, (_, k) => fly + k * step), fly + ARRIVAL.flyMs, fly + ARRIVAL.flyMs + ARRIVAL.blinkMs];
+  }).filter(t => t > now);
   return edges.length ? Math.min(...edges) : null;
 }
 
@@ -61,3 +78,9 @@ export function flightPath(from, to, {steps = ARRIVAL.steps, unit = ARRIVAL.unit
 
 // Pressing a popup goes straight to that space's inbox for its source.
 export const arrivalOpen = arrival => ({source: arrival.source === 'linear' ? 'linear' : 'slack', project: arrival.space});
+
+// Ids of the alerts still on their way, so each badge counts exactly the items
+// that have landed (an arrival whose item the badge does not list changes nothing).
+export function flyingIds(list, now, motion = true) {
+  return new Set((list ?? []).filter(a => a.id && arrivalPhase(a, now, motion) !== 'landed').map(a => a.id));
+}

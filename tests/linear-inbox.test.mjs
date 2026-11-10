@@ -60,59 +60,65 @@ test('requests match the collector contract and refuse bad input', () => {
   assert.equal(resultLabel({ok: false, error: 'x'}), '실패: x');
 });
 
-test('new Linear alerts become arrivals into their space (Share otherwise); no sidebar host opens the window; history seeds silently', async () => {
-  const files = new Map([['linear-alerts.json', JSON.stringify({items: [{id: 'old', read: false, category: 'assignments'}], spaces: ['Alpha']})]]);
-  const shared = {}, opens = [], tasks = [];
-  let refresh;
-  const cx = {notify() {}, spawn(fn) { const task = fn(cx); tasks.push(task); return task; }, timer: {every(_ms, fn) { refresh = fn; }}};
+test('new Linear alerts become arrivals into their space (Share otherwise); no sidebar host opens the window; unread ones announce on first run', async () => {
+  const {createHash} = await import('node:crypto');
+  const files = new Map([['linear-alerts.json', JSON.stringify({items: [{id: 'old', read: false, category: 'assignments', workspace: 'Alpha'}, {id: 'past', read: true, category: 'mentions'}], spaces: ['Alpha']})]]);
+  const shared = {}, opens = [], tasks = [], timers = new Set(), callbacks = new Map(), changes = new Set();
+  const cx = {notify() {}, spawn(fn) { const task = fn(cx); tasks.push(task); return task; },
+    timer: {after(ms, callback) { assert.equal(ms, 20); const timer = {callback, cancel() { timers.delete(timer); }}; timers.add(timer); return timer; }, every() { assert.fail('no polling'); }}};
+  const snapshot = path => { const raw = files.get(path.split('/').at(-1)); if (raw === undefined) return {status: 'missing', hash: null};
+    return {status: 'ready', hash: createHash('sha256').update(raw).digest('hex'), value: JSON.parse(raw)}; };
   globalThis.__linearRuntime = {
-    appHome: () => '/test',
-    readTextFile: async path => { const name = path.split('/').at(-1); if (!files.has(name)) throw new Error('missing'); return files.get(name); },
+    appHome: () => '/test', createHash,
+    readJsonSnapshot: async path => snapshot(path),
+    readTextFile: async path => files.get(path.split('/').at(-1)) ?? null,
     writeTextFile: async (path, value, expected) => {
       const name = path.split('/').at(-1);
       if ((files.get(name) ?? null) !== expected) throw new Error('compare-and-swap conflict');
-      files.set(name, value);
+      files.set(name, value); for (const c of changes) c();
     },
+    subscribeJsonFile: (_cx, path, callback) => { callbacks.set(path, callback); return () => callbacks.delete(path); },
+    subscribeFileChanges: (_cx, _path, callback) => { changes.add(callback); return () => changes.delete(callback); },
     setShared: (key, value) => { shared[key] = value; },
     openOverlay: value => opens.push(value),
     spaces: () => [{id: 's1', name: 'Alpha'}, {id: 's0', name: 'Share'}],
-    run() {},
   };
   const storeUrl = new URL('../mods/sixfold-desk/arrival-store.js', import.meta.url).href;
   const modelUrl = new URL('../mods/sixfold-desk/arrival-model.js', import.meta.url).href;
   let source = await readFile(new URL('../mods/sixfold-desk/linear-feed.js', import.meta.url), 'utf8');
-  source = source.replace(/\r\n/g, '\n')
-    .replace(/^import .* from 'herdr';/m, 'const {appHome, readTextFile, writeTextFile, setShared, openOverlay, spaces} = globalThis.__linearRuntime;')
+  source = source.replace(/\r\n/g, '\n').replace(/^import .* from '(herdr|crypto|\.\/panel-io\.js)';\n/gm, '')
     .replace("'./arrival-store.js'", `'${storeUrl}'`).replace("'./arrival-model.js'", `'${modelUrl}'`);
+  source = `const {${Object.keys(globalThis.__linearRuntime).join(',')}} = globalThis.__linearRuntime;\n` + source;
   const store = await import(storeUrl);
+  const flush = async () => { for (let n = 0; n < 20; n++) { const due = [...timers]; timers.clear(); due.forEach(t => t.callback(cx)); await Promise.all(tasks.splice(0)); await Promise.resolve(); if (!timers.size && !tasks.length) return; } assert.fail('did not settle'); };
+  const publish = () => { for (const [path, callback] of callbacks) callback(snapshot(path)); };
+  const feed = items => { files.set('linear-alerts.json', JSON.stringify({items, spaces: ['Alpha']})); publish(); };
   try {
     const {watchLinear} = await import('data:text/javascript;base64,' + Buffer.from(source).toString('base64') + '#linear');
-    watchLinear({}, cx);
-    await tasks.at(-1);
-    assert.equal(opens.length, 0);
+    const view = {}, stop = watchLinear(view, cx);
+    publish(); await flush();
+    // First run, no sidebar host: the still-unread assignment opens the window once; read history stays silent.
+    assert.equal(opens.length, 1);
+    assert.deepEqual(JSON.parse(files.get('linear-popup-events.json')).seen, ['linear:old', 'linear:past']);
     assert.deepEqual(shared['sixfold.linearSpaces'], ['Alpha']);
-    const feed = items => files.set('linear-alerts.json', JSON.stringify({items, spaces: ['Alpha']}));
     feed([{id: 'old', read: false, category: 'assignments'}, {id: 'seen', read: true, category: 'assignments'}, {id: 'remind', read: false, category: 'reminders'}]);
-    refresh(cx); await tasks.at(-1);
-    assert.equal(opens.length, 0);                       // read or reminder only: nothing
-    // No sidebar drew arrivals yet (the installed sidebar has none): the window opens instead.
-    feed([{id: 'new', read: false, category: 'mentions', workspace: 'alpha'}, {id: 'old', read: false, category: 'assignments'}]);
-    refresh(cx); await tasks.at(-1);
+    await flush();
+    assert.equal(opens.length, 1);                       // read or reminder only: nothing
+    // A sidebar host: each new alert arrives into its space, an unknown space into Share. Comments count.
+    store.setArrivalHost(() => true);
+    feed([{id: 'a', read: false, category: 'commentsAndReplies', workspace: 'Alpha', issue: 'ABC-1', issue_title: 'T'},
+          {id: 'b', read: false, category: 'assignments', workspace: 'Nowhere'}, {id: 'old', read: false, category: 'assignments'}]);
+    await flush();
     assert.equal(opens.length, 1);
-    assert.equal(opens[0].mod, 'sixfold-linear-inbox');
-    // A sidebar host: each new alert arrives into its space, an unknown space into Share.
-    store.markArrivalHost();
-    feed([{id: 'a', read: false, category: 'mentions', workspace: 'Alpha', issue: 'ABC-1', issue_title: 'T'},
-          {id: 'b', read: false, category: 'assignments', workspace: 'Nowhere'}, {id: 'new', read: false, category: 'mentions'}, {id: 'old', read: false, category: 'assignments'}]);
-    refresh(cx); await tasks.at(-1);
-    assert.equal(opens.length, 1);
-    const landed = store.arrivals().filter(a => a.key === 'linear:a' || a.key === 'linear:b').map(a => [a.key, a.space, a.source, a.issue]);
-    assert.deepEqual(landed, [['linear:a', 'Alpha', 'linear', 'ABC-1'], ['linear:b', 'Share', 'linear', '']]);
+    const landed = store.arrivals().filter(a => a.key === 'linear:a' || a.key === 'linear:b').map(a => [a.key, a.id, a.space, a.source, a.issue]);
+    assert.deepEqual(landed, [['linear:a', 'a', 'Alpha', 'linear', 'ABC-1'], ['linear:b', 'b', 'Share', 'linear', '']]);
     const count = store.arrivals().length;
-    feed([{id: 'a', read: false, category: 'mentions', workspace: 'Alpha'}, {id: 'b', read: false, category: 'assignments'}, {id: 'new', read: false, category: 'mentions'}, {id: 'old', read: true, category: 'assignments'}]);
-    refresh(cx); await tasks.at(-1);
+    feed([{id: 'a', read: false, category: 'mentions', workspace: 'Alpha'}, {id: 'b', read: false, category: 'assignments'}, {id: 'old', read: true, category: 'assignments'}]);
+    await flush();
     assert.equal(store.arrivals().length, count);        // the same notification never arrives twice
-    assert.equal(shared['sixfold.linearItems'].length, 4);
+    assert.equal(shared['sixfold.linearItems'].length, 3);
+    stop(); assert.equal(callbacks.size, 0); assert.equal(changes.size, 0);   // stops with the view: nothing piles up
+    store.setArrivalHost(null);
   } finally { delete globalThis.__linearRuntime; }
 });
 
@@ -144,4 +150,24 @@ test('an arrival shows, flies in integer steps and lands; motion off only counts
   assert.equal(arrivalTarget('ALPHA', ['Alpha', 'Share']), 'Alpha');
   assert.equal(arrivalTarget('x', []), 'Share');
   assert.deepEqual(arrivalOpen({source: 'linear', space: 'Alpha'}), {source: 'linear', project: 'Alpha'});
+});
+
+test('a flight wakes the sidebar only at its finite step edges, then blinks once; badges count landed items only', async () => {
+  const {ARRIVAL, pushArrival, nextPhaseAt, flightStep, justLanded, flyingIds} = await import('../mods/sixfold-desk/arrival-model.js');
+  const t0 = 5_000_000, list = pushArrival([], {key: 'linear:x', id: 'x', source: 'linear', space: 'Alpha'}, t0);
+  const fly = t0 + ARRIVAL.showMs, step = ARRIVAL.flyMs / ARRIVAL.steps;
+  const edges = [];
+  for (let now = t0, next; (next = nextPhaseAt(list, now)) !== null; now = next) edges.push(next - t0);
+  assert.equal(edges.length, ARRIVAL.steps + 2);                       // finite: each step, landing, blink end
+  assert.equal(edges.at(-1), ARRIVAL.showMs + ARRIVAL.flyMs + ARRIVAL.blinkMs);
+  assert.equal(flightStep(list[0], fly), 0);
+  assert.equal(flightStep(list[0], fly + step * 2 + 1), 2);
+  assert.equal(flightStep(list[0], fly + ARRIVAL.flyMs * 3), ARRIVAL.steps - 1);
+  assert.equal(justLanded(list, fly + ARRIVAL.flyMs - 1).length, 0);
+  assert.equal(justLanded(list, fly + ARRIVAL.flyMs + 1).length, 1);
+  assert.equal(justLanded(list, fly + ARRIVAL.flyMs + ARRIVAL.blinkMs).length, 0);
+  assert.equal(justLanded(list, fly + ARRIVAL.flyMs + 1, false).length, 0);
+  assert.deepEqual([...flyingIds(list, t0 + 1)], ['x']);                // not in the badge yet
+  assert.equal(flyingIds(list, fly + ARRIVAL.flyMs).size, 0);           // landed: counted
+  assert.equal(flyingIds(list, t0 + 1, false).size, 0);                 // motion off: counted at once
 });
