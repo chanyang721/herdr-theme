@@ -334,3 +334,33 @@ test('one meta line carries both tools: Slack unread on its part, Linear unread 
     r.controller.alertsChanged();assert.equal(card.dirty,false,'unchanged counts: no redraw');
   }finally{r.controller.dispose();}
 });
+
+test('a peek is the alerted-issues top of a space issue search with the new alerts lit; its title opens the search; an open search makes alerts quiet',async()=>{
+  const r=await runtime();
+  try{
+    const raw=makePanelFixture({slack:true,tool:'linear'});
+    r.controller.apply(cleanPanelFeed(raw),'ready');r.flush();
+    const space=r.controller.feed.spaces[0],t=r.native.theme();
+    const N='11111111-1111-4111-8111-111111111111';
+    r.store.set('sixfold.linearItems',[{id:N,issue:'DEMO-7',issue_title:'Peeked issue',workspace:space.name,read:false,category:'commentsAndReplies',
+      subtitle:'Kim commented: look',at:'2026-11-10T06:44:37Z',url:'https://linear.app/demo/issue/DEMO-7/x#comment-c0ffee01'}]);
+    r.store.set('sixfold.linearWrites',['mark_read']);
+    const walk=n=>[n,...(n.nodes||[]).filter(x=>x&&typeof x==='object').flatMap(walk)];
+    const byId=(tree,id)=>walk(tree).find(n=>n.calls?.some(c=>c[0]==='id'&&c[1]===id));
+    const texts=tree=>walk(tree).flatMap(n=>(n.nodes||[]).filter(x=>typeof x==='string'));
+    const peek=r.controller.peekIssues(space.name,[N],t);
+    assert(texts(peek).includes(`${space.name} · 이슈 검색`)&&texts(peek).includes('Kim commented: look')&&texts(peek).includes('읽음'));
+    const line=byId(peek,`task-issues-alerted-line-peek-${space.id}-DEMO-7-0`);
+    assert(line.calls.some(c=>c[0]==='border_color'&&c[1]===t.accent),'the new alert is lit');
+    assert.equal(r.controller.peekIssues('No such space',[N],t),null);
+    r.store.set('sixfold.linearItems',[]);assert.equal(r.controller.peekIssues(space.name,[N],t),null,'nothing unread: no peek');
+    // The search has not been drawn with an opener yet: render it once, then the peek title opens it.
+    r.controller.issuePopover(space,element(),t);
+    assert.equal(r.controller.anyIssuesOpen(),false);
+    r.store.set('sixfold.linearItems',[{id:N,issue:'DEMO-7',workspace:space.name,read:false,category:'mentions',at:'1',url:''}]);
+    const head=byId(r.controller.peekIssues(space.name,[N],t),`task-issues-peek-head-${space.id}`);
+    head.calls.find(c=>c[0]==='on_click')[1]({},{stop_propagation(){}});
+    assert.equal(r.controller.issueStates.get(space.id).open,true);
+    assert.equal(r.controller.anyIssuesOpen(),true,'an open issue search: new alerts only count on the chip');
+  }finally{r.controller.dispose();}
+});

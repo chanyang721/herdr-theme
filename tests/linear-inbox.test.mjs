@@ -323,3 +323,65 @@ test('inbox window: opening the original and 모두 읽음 carry their origin; o
   assert.deepEqual(readAllTargets(list, 'Alpha', []).map(i => i.id), ['c']);
   assert.ok(READ_ALL >= 5);
 });
+
+test('a peek opens its space popover for 8 s, joins quick arrivals, queues other spaces, holds while hovered, then folds in', async () => {
+  const {ARRIVAL, arrivalPhase, pushArrival, activePeek, foldingPeeks, visibleArrivals, holdPeek, settleQueue, nextPhaseAt, justLanded, inFlight} =
+    await import('../mods/sixfold-desk/arrival-model.js');
+  const t0 = 1_000_000;
+  const a = (key, space, source = 'linear', extra = {}) => ({key, id: key, space, source, peek: true, ...extra});
+  let list = pushArrival([], a('l1', 'Alpha'), t0);
+  assert.equal(activePeek(list, t0).space, 'Alpha');
+  assert.deepEqual(visibleArrivals(list, t0), []);                                   // no small popup for a peek
+  assert.equal(arrivalPhase(list[0], t0 + ARRIVAL.peekMs - 1), 'show');               // 8 s open
+  // A second alert for Alpha 3 s later joins it: one popover, both fold from the later start.
+  list = pushArrival(list, a('l2', 'Alpha'), t0 + 3000);
+  assert.deepEqual(activePeek(list, t0 + 3000).arrivals.map(x => x.id), ['l1', 'l2']);
+  assert.equal(arrivalPhase(list[0], t0 + 3000 + ARRIVAL.peekMs - 1), 'show');
+  // Beta waits its turn; its chip does not count it yet.
+  list = pushArrival(list, a('b1', 'Beta', 'slack'), t0 + 4000);
+  assert.equal(arrivalPhase(list[2], t0 + 4000), 'queued');
+  assert.equal(activePeek(list, t0 + 4000).space, 'Alpha');
+  assert.equal(inFlight(list, 'Beta', 'slack', t0 + 4000), 1);
+  const alphaEnd = t0 + 3000 + ARRIVAL.peekMs;
+  assert.deepEqual(foldingPeeks(list, alphaEnd).map(x => x.id), ['l1', 'l2']);       // Alpha folds into its chip
+  assert.equal(activePeek(list, alphaEnd).space, 'Beta');                             // then Beta's turn
+  assert.ok(nextPhaseAt(list, t0 + 4000) <= alphaEnd);
+  // Hovering Beta holds it open past 8 s; leaving restarts its time.
+  list = holdPeek(list, 'Beta', 'slack', true, alphaEnd + 1000);
+  assert.equal(activePeek(list, alphaEnd + 1000 + 3 * ARRIVAL.peekMs).space, 'Beta');
+  list = pushArrival(list, a('c1', 'Gamma'), alphaEnd + 2000);                       // queued behind a held peek
+  assert.equal(arrivalPhase(list.at(-1), alphaEnd + 60_000 - 1), 'queued');
+  const leave = alphaEnd + 20_000;
+  list = holdPeek(list, 'Beta', 'slack', false, leave);
+  assert.equal(arrivalPhase(list.find(x => x.id === 'b1'), leave + ARRIVAL.peekMs - 1), 'show');
+  assert.equal(list.find(x => x.id === 'c1').at, leave + ARRIVAL.peekMs);            // Gamma right after Beta
+  assert.equal(holdPeek(list, 'Nope', 'linear', true, leave), list);                  // nothing to hold: unchanged
+  // A hold that never ends lets go after holdMs, and the queue behind it starts again.
+  let stuck = holdPeek(pushArrival([], a('d1', 'Delta'), t0), 'Delta', 'linear', true, t0 + 10);
+  stuck = pushArrival(stuck, a('e1', 'Eps'), t0 + 20);
+  assert.equal(arrivalPhase(stuck[1], t0 + 30), 'queued');
+  assert.equal(nextPhaseAt(stuck, t0 + 30), t0 + 10 + ARRIVAL.holdMs);
+  const after = t0 + 10 + ARRIVAL.holdMs;
+  stuck = settleQueue(stuck, after);
+  assert.equal(activePeek(stuck, after).space, 'Eps');
+  // Quiet (another popover open): no popup, the chip counts it at once.
+  const quiet = pushArrival([], {key: 'q', id: 'q', space: 'Alpha', source: 'linear', quiet: true}, t0);
+  assert.equal(arrivalPhase(quiet[0], t0), 'landed');
+  assert.deepEqual([visibleArrivals(quiet, t0), justLanded(quiet, t0), activePeek(quiet, t0), nextPhaseAt(quiet, t0)], [[], [], null, null]);
+  assert.equal(activePeek(list, t0, false), null);                                     // motion off: no peek
+});
+
+test('the store asks the host how a new arrival shows, and a failing check falls back to the small popup', async () => {
+  const store = await import(`../mods/sixfold-desk/arrival-store.js?peek=${Date.now()}`);
+  const seen = [];
+  store.setPeekCheck((space, source) => { seen.push([space, source]); return space === 'Alpha' ? 'peek' : space === 'Beta' ? 'quiet' : ''; });
+  store.addArrival({key: 'k1', id: '1', space: 'Alpha', source: 'linear'}, 5000);
+  store.addArrival({key: 'k2', id: '2', space: 'Beta', source: 'slack'}, 5000);
+  store.setPeekCheck(() => { throw new Error('boom'); });
+  store.addArrival({key: 'k3', id: '3', space: 'Gamma', source: 'linear'}, 5000);
+  assert.deepEqual(store.arrivals(5000).map(a => [a.key, a.peek, a.quiet]), [['k1', true, false], ['k2', false, true], ['k3', false, false]]);
+  assert.deepEqual(seen, [['Alpha', 'linear'], ['Beta', 'slack']]);
+  assert.equal(store.holdArrivals('Alpha', 'linear', true, 5100), true);
+  assert.equal(store.holdArrivals('Zed', 'linear', true, 5100), false);
+  store.setPeekCheck(null);
+});
