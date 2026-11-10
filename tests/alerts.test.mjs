@@ -5,7 +5,7 @@ import {createHash} from 'node:crypto';
 
 const nativeParse=JSON.parse;
 const changeServices=new WeakMap();let watcherId=0;
-async function alertHarness(files,{lineEnding='\n',opens=[],home='/test'}={}){
+async function alertHarness(files,{lineEnding='\n',opens=[],home='/test',arrived=[],host={value:false}}={}){
   const tasks=[],timers=new Set(),callbacks=new Map(),shared=new Map(),writes=[];
   let notifications=0,typedHook=null;
   const service=changeServices.get(files)??new Set();changeServices.set(files,service);
@@ -14,6 +14,7 @@ async function alertHarness(files,{lineEnding='\n',opens=[],home='/test'}={}){
   const snapshot=path=>{const raw=files.get(path.split('/').at(-1));if(raw===undefined)return {status:'missing',hash:null};const hash=createHash('sha256').update(raw).digest('hex');try{return {status:'ready',hash,value:nativeParse(raw)};}catch{return {status:'invalid',hash};}};
   const change=changed=>{for(const listener of service)if(listener.path===changed)listener.callback([changed]);};
   const runtime={appHome:()=>home,createHash,setShared:(key,value)=>shared.set(key,value),openOverlay:value=>opens.push(value),
+    spaces:()=>[],addArrival:value=>arrived.push(value),hasArrivalHost:()=>host.value,arrivalTarget:(name,names)=>names.includes(name)?name:'Share',ARRIVAL:{visible:3},
     subscribeJsonFile:(_cx,name,callback)=>{callbacks.set(name,callback);return()=>callbacks.delete(name);},
     subscribeFileChanges:(_cx,name,callback)=>{const listener={path:name,callback};service.add(listener);return()=>service.delete(listener);},
     readJsonSnapshot:async name=>{const value=snapshot(name);typedHook?.(name,value);return value;},
@@ -28,7 +29,7 @@ async function alertHarness(files,{lineEnding='\n',opens=[],home='/test'}={}){
   delete globalThis[key];const view={alerts:[]},stop=module.watchAlerts(view,cx);
   const flush=async()=>{for(let count=0;count<30;count++){const pending=[...timers];timers.clear();for(const timer of pending)timer.callback(cx);await Promise.all(tasks.splice(0));await Promise.resolve();if(!timers.size&&!tasks.length)return;}assert.fail('Alert batching did not settle');};
   const publish=(name=null)=>{for(const [file,callback] of callbacks)if(name===null||file===path(name))callback(snapshot(file));};
-  return {view,cx,opens,writes,shared,stop,flush,publish,path,change,dismiss:module.testDismiss,setTypedHook:hook=>{typedHook=hook;},notifications:()=>notifications,refresh:async()=>{publish();await flush();}};
+  return {view,cx,opens,arrived,host,writes,shared,stop,flush,publish,path,change,dismiss:module.testDismiss,setTypedHook:hook=>{typedHook=hook;},notifications:()=>notifications,refresh:async()=>{publish();await flush();}};
 }
 
 test('initial snapshot barrier seeds existing mentions silently and changed callbacks never parse files on UI',async()=>{
@@ -168,3 +169,21 @@ test(`an empty first run seeds the ledger before later new source arrives (${lin
   }finally{watcher.stop();}
 });
 }
+
+test('with a sidebar drawing arrivals a new mention folds into its space card instead of opening the window',async()=>{
+  const files=new Map([['slack-mentions.json','{"items":[{"id":"history","project":"Alpha"}]}']]);
+  const host={value:true},arrived=[];
+  const h=await alertHarness(files,{host,arrived});
+  try{
+    h.publish();await h.flush();assert.equal(arrived.length,0,'history stays silent');
+    files.set('slack-mentions.json',JSON.stringify({items:[{id:'history',project:'Alpha'},{id:'m1',project:'Alpha',text:'hello',author:'Kim'}]}));
+    h.publish('slack-mentions.json');await h.flush();
+    assert.equal(h.opens.length,0,'no window, no focus change');
+    assert.deepEqual(arrived.map(a=>[a.key,a.id,a.source,a.space,a.title]),[['mention:m1','m1','slack','Share','hello']]);
+    host.value=false;
+    files.set('slack-mentions.json',JSON.stringify({items:[{id:'history'},{id:'m1'},{id:'m2',project:'Alpha'}]}));
+    h.publish('slack-mentions.json');await h.flush();
+    assert.equal(h.opens.length,1,'no sidebar host: the Slack window opens as before');
+    assert.equal(arrived.length,1);
+  }finally{h.stop();}
+});

@@ -35,7 +35,9 @@ async function fixture({home=`/panel-io-${serial}/app`,nativeJson=true}={}){
     globalThis[key]=runtime;
     let body=(await readFile(new URL(`../mods/sixfold-desk/${name}.js`,import.meta.url),'utf8')).replace(/^import .* from 'gpui-kit';\r?\n/m,'').replace(/^import .* from 'gpui-base';\r?\n/m,'')
       .replace(/import \{([^}]+)\} from 'herdr';/,`const {$1}=globalThis[${JSON.stringify(key)}];`)
-      .replace("'./panel-io.js'",JSON.stringify(ioUrl)).replace("'./ask-model.js'",JSON.stringify(new URL('../mods/sixfold-desk/ask-model.js',import.meta.url).href));
+      .replace("'./panel-io.js'",JSON.stringify(ioUrl)).replace("'./ask-model.js'",JSON.stringify(new URL('../mods/sixfold-desk/ask-model.js',import.meta.url).href))
+      .replace("'./arrival-store.js'",JSON.stringify(new URL('../mods/sixfold-desk/arrival-store.js',import.meta.url).href))
+      .replace("'./arrival-model.js'",JSON.stringify(new URL('../mods/sixfold-desk/arrival-model.js',import.meta.url).href));
     try{return await import('data:text/javascript;base64,'+Buffer.from(body).toString('base64'));}finally{delete globalThis[key];}
   };
   const wakeOnly=async()=>{await tick();for(const {cx,immediate} of contexts)for(const {task,callback} of immediate.splice(0))if(!task.cancelled)callback(cx);await tick();};

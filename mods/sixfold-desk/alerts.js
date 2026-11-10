@@ -1,8 +1,10 @@
 import { div } from 'gpui-kit';
 import { h_flex, v_flex } from 'gpui-base';
-import { run, readTextFile, writeTextFile, appHome, setShared, openOverlay } from 'herdr';
+import { run, readTextFile, writeTextFile, appHome, setShared, openOverlay, spaces } from 'herdr';
 import {createHash} from 'crypto';
 import {readJsonSnapshot,subscribeJsonFile,subscribeFileChanges} from './panel-io.js';
+import {addArrival,hasArrivalHost} from './arrival-store.js';
+import {arrivalTarget,ARRIVAL} from './arrival-model.js';
 
 const SHOWN = new Set(['needs-you']);  // Only what a person must decide; the rest stays in the project.
 const MARKS = { 'needs-you': '!', info: '✓', processing: '●' };
@@ -11,7 +13,7 @@ function popupEvents(mentions, read) {
   const events = [];
   for (const item of mentions ?? []) {
     if (typeof item?.id === 'string' && item.id) {
-      events.push({key: `mention:${item.id}`, popup: read[item.id] !== item.id});
+      events.push({key: `mention:${item.id}`, id: item.id, popup: read[item.id] !== item.id, project: item.project ?? '', title: item.text || item.title || '', author: item.author || ''});
     }
   }
   return events;
@@ -33,14 +35,23 @@ async function notifyNewPopupEvents(events,allowed=()=>true) {
   }
   const seen = new Set(ledger.seen);
   const fresh = events.filter(event => !seen.has(event.key));
-  if (!fresh.length && !firstRun) return null;
+  if (!fresh.length && !firstRun) return [];
 
   // Seed existing history silently on first run. Later writes use the exact
   // previous contents as a compare-and-swap guard across multiple views.
   const next = {schema: 1, seen: [...ledger.seen, ...fresh.map(event => event.key)]};
   if(!allowed())throw new Error('View no longer displays alerts');
   await writeTextFile(path, JSON.stringify(next), text);
-  return firstRun ? null : fresh.find(event => event.popup) ?? null;
+  return firstRun ? [] : fresh.filter(event => event.popup);
+}
+
+// A new mention arrives into its space card when a sidebar draws arrivals;
+// otherwise the Slack window opens as before, so it is never dropped.
+function announceSlack(events){
+  if(!events.length)return;
+  if(!hasArrivalHost())return openOverlay({mod:'sixfold-slack-inbox',kind:'window',key:'slack-mentions',keep:true,width:1040,height:800,props:{window:true,review:Boolean(events[0].review)}});
+  const names=(spaces()??[]).map(s=>s.name);
+  for(const event of events.slice(-ARRIVAL.visible))addArrival({key:event.key,id:event.id,source:'slack',space:arrivalTarget(event.project,names),title:event.title,issue:event.author});
 }
 
 // Tracked Slack, GitHub and pane requests, ordered by the watcher: needs-you first.
@@ -74,11 +85,11 @@ export function watchAlerts(view, cx) {
         const items = feed.items ?? [];
         const tagged=mentions.items ?? [];
         const states=workflows.jobs ?? {};
-        const event=await notifyNewPopupEvents(popupEvents(tagged,read),allowed);
+        const events=await notifyNewPopupEvents(popupEvents(tagged,read),allowed);
         if(!allowed())return;
         setShared('sixfold.slackHealth',health);
         setShared('sixfold.slackWorkflows',states);
-        if(event)openOverlay({mod:'sixfold-slack-inbox',kind:'window',key:'slack-mentions',keep:true,width:1040,height:800,props:{window:true,review:Boolean(event.review)}});
+        announceSlack(events);
         setShared('sixfold.alertItems',items);
         setShared('sixfold.alertRead',read);
         setShared('sixfold.alertProjects',feed.projects ?? []);
