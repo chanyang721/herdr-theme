@@ -174,7 +174,9 @@ function loadPopup(view, cx) {
           .map(path => readTextFile(path).catch(() => undefined)));
         if (bridgeText === undefined || cardsText === undefined) { view.askLoadFailed = true; continue; }
         const bridge = bridgeFrom(bridgeText), parsed = bridge ? parseAsks(cardsText) : null;
-        if (bridge && cardsText !== null && parsed === null) { view.askLoadFailed = true; continue; } // keep the last valid display
+        // Only a missing bridge file hides cards. Unreadable or half-written
+        // bridge or cards bytes are a failed read: keep the last valid display.
+        if ((bridgeText !== null && bridge === null) || (bridge && cardsText !== null && parsed === null)) { view.askLoadFailed = true; continue; }
         const next = bridge ? cardsFor(parsed?.cards, terminal) : [];
         const result = reconcile(view.asks, next, view.askChoices, view.askSent);
         // Sticky until the person chooses again: a later re-read must not hide it.

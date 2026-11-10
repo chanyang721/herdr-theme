@@ -287,3 +287,21 @@ test('a failed re-read while cards are shown says so, offers a retry, and recove
   tree = p.render();
   assert.equal(p.view.asks[0].revision, 'r2'); assert.doesNotMatch(text(tree), /최신 내용을 읽지 못했습니다/);
 });
+
+test('a half-written bridge file is a failed read, not a missing bridge: cards stay and a retry recovers', async () => {
+  const f = host([card('a1', 'pane-a')]), mod = await load(f.h), p = await popup(f, mod, 'pane-a');
+  for (const broken of ['{', JSON.stringify({python: 'python3'})]) {
+    f.files.set('/demo/data/sixfold/bridge.json', broken);
+    f.files.set('/demo/data/sixfold/cards.json', JSON.stringify({schema: 1, cards: [{...card('a1', 'pane-a'), revision: 'r2'}]}));
+    f.store.set(SUMMARY_KEY, {v: `broken-${broken.length}`, panes: {}});
+    p.render(); await p.cx.settle();
+    const tree = p.render();
+    assert.equal(p.view.asks.length, 1); assert.equal(p.view.askExpired, 0, 'not reported as expired');
+    assert.match(text(tree), /최신 내용을 읽지 못했습니다/); assert.ok(find(tree, 'sf-ask-reload'));
+  }
+  f.files.set('/demo/data/sixfold/bridge.json', JSON.stringify(bridge));
+  click(p.render(), 'sf-ask-reload', p.cx); await p.cx.settle();
+  assert.equal(p.view.asks[0].revision, 'r2'); assert.equal(p.view.askLoadFailed, false);
+  f.files.delete('/demo/data/sixfold/bridge.json'); p.view.refreshAsks(p.cx); await p.cx.settle();
+  assert.deepEqual(p.view.asks, [], 'a really missing bridge still hides the cards');
+});
