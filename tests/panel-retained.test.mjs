@@ -41,6 +41,10 @@ async function runtime(motion=false,options={}){
   source=source.replace("'./linear-reads.js'",JSON.stringify(await linearReadsUrl()));
   source=source.replace("'./issue-model.js'",JSON.stringify(new URL('../mods/sixfold-desk/issue-model.js',import.meta.url).href));
   source=source.replace("'./linear-cache.js'",JSON.stringify(await localModule('linear-cache')));
+  const autoModel=new URL('../mods/sixfold-desk/linear-auto-model.js',import.meta.url).href;
+  const autoModule=async name=>`data:text/javascript;base64,${Buffer.from(transform(await readFile(new URL(`../mods/sixfold-desk/${name}.js`,import.meta.url),'utf8')).replace("'./linear-auto-model.js'",JSON.stringify(autoModel))).toString('base64')}#${loads++}`;
+  source=source.replace("'./linear-auto-model.js'",JSON.stringify(autoModel)).replace("'./linear-auto.js'",JSON.stringify(await autoModule('linear-auto')))
+    .replace("'./linear-auto-view.js'",JSON.stringify(await autoModule('linear-auto-view')));
   source=source.replace("'./task-issues-view.js'",JSON.stringify(issuesUrl)).replace("'./task-issue-state.js'",JSON.stringify(new URL('../mods/sixfold-desk/task-issue-state.js',import.meta.url).href));
   const mod=await import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}#${loads++}`);
   const controller=mod.createRetainedPanel(cx,options);
@@ -93,6 +97,31 @@ test('child and issue folds change only the affected retained card and flow geom
   assert.equal(r.controller.stats.renders['list:all'],before['list:all']);
   assert.equal(r.controller.rowMeta.get(space.agents[1].id).parent,parent.id);
   r.controller.dispose();
+});
+
+test('an open issue search shows the space auto work (반영 대기) above its alerts; a closed one builds none',async()=>{
+  const r=await runtime(false);
+  const raw=makePanelFixture({tool:'linear'}),space=raw.spaces[0];
+  const feed=cleanPanelFeed(raw);r.controller.apply(feed,'ready');r.flush();
+  const t=r.native.theme(),card=r.controller.spaceMap.get(space.id);
+  r.store.set('sixfold.linearWrites',['comment','set_state']);
+  r.store.set('sixfold.linearAuto',{v:1,switch:{enabled:true,mode:'live',spaces:{[card.name]:true}},entries:[
+    {id:'a1b2c3d4-0000-4000-8000-000000000001',issue:'DEMO-1',title:'Demo issue',workspace:card.name,at:'2026-11-10T07:30:00Z',state:'proposed',
+     proposal:{comment:'Herdr 자동 작업으로 처리했습니다.\n\n**한 일**\n연결했다.',state:'In Review',checks:['없음']}},
+    {id:'ffffffff-0000-4000-8000-000000000002',issue:'DEMO-2',title:'Other space',workspace:'Elsewhere',at:'2026-11-10T07:30:00Z',state:'proposed',proposal:{comment:'x',checks:[]}}]});
+  const walk=node=>[node,...(node.nodes||[]).filter(value=>typeof value==='object').flatMap(walk)];
+  const ids=node=>walk(node).flatMap(n=>(n.calls||[]).filter(c=>c[0]==='id').map(c=>c[1]));
+  let popup=r.controller.issuePopover(card,element(),t);
+  assert(!ids(popup).includes(`task-issues-auto-${space.id}`),'closed: nothing built');
+  popup.calls.find(call=>call[0]==='on_open_change')[1](true);r.flush();
+  popup=r.controller.issuePopover(card,element(),t);
+  const body=popup.calls.find(call=>call[0]==='content')[1],all=ids(body);
+  assert(all.includes(`task-issues-auto-${space.id}`));
+  assert(all.includes(`task-issues-auto-comment-${space.id}-a1b2c3d4`)&&all.includes(`task-issues-auto-state-${space.id}-a1b2c3d4`));
+  assert(!all.includes(`task-issues-auto-comment-${space.id}-ffffffff`),'another space is not shown here');
+  const mark=r.controller.alertMark(card);
+  r.store.set('sixfold.linearAuto',{...r.store.get('sixfold.linearAuto'),entries:[{...r.store.get('sixfold.linearAuto').entries[0],state:'applied'}]});
+  assert.notEqual(r.controller.alertMark(card),mark,'a ledger change redraws the open card');
 });
 
 test('native issue popover opens with retained input; completion returns via owning scheduler',async()=>{
