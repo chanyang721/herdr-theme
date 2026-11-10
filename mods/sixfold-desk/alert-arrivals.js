@@ -1,7 +1,7 @@
 import { div } from 'gpui-kit';
 import { Popup } from 'gpui-base';
-import { settings } from 'herdr';
-import { popoverState, slackPeek } from './alert-popover.js';
+import { settings, appHome, readTextFile, writeTextFile } from 'herdr';
+import { alertPopoverOpen, slackPeek } from './alert-popover.js';
 import { hasWorkspaceAlerts, hasSlackAlerts, openInbox, openLinearInbox, alertSignature } from './alert-inbox.js';
 import { watchLinear } from './linear-feed.js';
 import { arrivals, setArrivalHost, clearArrivalHost, setPeekCheck, holdArrivals } from './arrival-store.js';
@@ -19,12 +19,32 @@ export function startAlertArrivals(view, cx) {
   setArrivalHost(host);
   // A new alert opens its space's popover (a peek) only on a merged card that is on screen, with
   // motion on, and while no issue search or alert popover is open; then the chip only counts it.
-  const check = (space, source) => {
-    if (!host() || view.arrivalMotion === false) return '';
+  const decide = (space, source) => {
+    if (!host()) return ['', 'no sidebar'];
+    if (view.arrivalMotion === false) return ['', 'motion off'];
     const card = view.arrivalMerged?.get(projectKey(space));
-    if (!card) return '';
-    if (view.panelRetained?.anyIssuesOpen?.() || popoverState()?.space) return 'quiet';
-    return source === 'linear' && !card.linear ? '' : 'peek';
+    if (!card) return ['', 'card not merged or not on screen'];
+    if (view.panelRetained?.anyIssuesOpen?.()) return ['quiet', 'an issue search is open'];
+    if (alertPopoverOpen()) return ['quiet', 'an alert popover is open'];
+    return source === 'linear' && !card.linear ? ['', 'no Linear chip'] : ['peek', ''];
+  };
+  // The last few decisions, kept in a small local file so "why did it not open" can be answered.
+  let last = undefined;
+  const note = entry => {
+    const path = `${appHome()}/data/sixfold/arrival-peek-log.json`;
+    cx.spawn(async () => {
+      try {
+        if (last === undefined) last = await readTextFile(path).catch(() => null);
+        const list = (() => { try { return JSON.parse(last || '[]'); } catch { return []; } })();
+        const next = JSON.stringify([...(Array.isArray(list) ? list : []), entry].slice(-20));
+        await writeTextFile(path, next, last); last = next;
+      } catch { last = undefined; }
+    });
+  };
+  const check = (space, source) => {
+    const [mode, why] = decide(space, source);
+    note({at: new Date().toISOString(), space, source, mode: mode || 'popup', why});
+    return mode;
   };
   setPeekCheck(check);
   const stop = () => { clearArrivalHost(host); setPeekCheck(null); view.arrivalWake?.cancel?.(); view.arrivalWake = null; stopLinear(); };

@@ -20,10 +20,12 @@ export function arrivalLayer({list, now, motion, anchors, t, u = 1, onOpen, peek
   // A peek: the space's own popover beside its card (drawn by the host, which takes no focus),
   // then its alerts fold into the chip from the card's edge like any arrival.
   const current = activePeek(list, now, motion);
-  if (current && peek) {
+  let unseen = [];
+  if (current) {
     const anchor = anchors(current.space, current.source);
-    const surface = anchor ? peek({...current, anchor}) : null;
+    const surface = anchor && peek ? peek({...current, anchor}) : null;
     if (surface) layer.push(surface);
+    else unseen = current.arrivals;   // no surface to open: the small popup instead, never silent
   }
   for (const a of foldingPeeks(list, now, motion)) {
     const anchor = anchors(a.space, a.source);
@@ -37,7 +39,7 @@ export function arrivalLayer({list, now, motion, anchors, t, u = 1, onOpen, peek
     layer.push(pixelLanding(`sf-arrival-land-${a.key}`, to.x, to.y, false, tone, u));
   }
   const stack = new Map();
-  for (const a of visibleArrivals(list, now, motion)) {
+  for (const a of [...visibleArrivals(list, now, motion), ...unseen].slice(-ARRIVAL.visible)) {
     const anchor = anchors(a.space, a.source);
     const key = projectKey(a.space), index = stack.get(key) ?? 0;
     stack.set(key, index + 1);

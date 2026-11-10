@@ -15,6 +15,12 @@ export function showPopover(space, source, {auto = false} = {}) {
   setShared(STATE, {space, source, auto, boot: BOOT, at: Date.now()});
 }
 export const hidePopover = () => setShared(STATE, {});
+// A card's alert popover is open now: this run's own state, not expired (a value left from
+// an earlier run or an hour ago does not count).
+export const alertPopoverOpen = (now = Date.now()) => {
+  const state = popoverState();
+  return Boolean(state?.space) && ['slack', 'linear'].some(source => popoverOpen(state, state.space, source, BOOT, now));
+};
 
 const short = at => {
   const d = new Date(at);
