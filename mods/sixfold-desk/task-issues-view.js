@@ -122,7 +122,7 @@ export function issuePopover(model,t){
     .child(text(model.scopeNote||'이번 주와 직접 가져온 이슈가 공간에 표시됩니다',t.dim,10).flex_1());
   if(model.onExternal)footer.child(text(`${model.toolLabel||'도구'}에서 열기 ↗`,t.accent,10).font_bold()
     .cursor_pointer().on_click(change(model.onExternal)));
-  else footer.child(text('도구 링크 없음',t.dim,10).tooltip('연결 도구의 URL이 제공되지 않았습니다'));
+  // No project link given for this space: nothing to open, so nothing is shown (an issue still opens from its detail).
   return popover.content(body.child(footer));
 }
 
