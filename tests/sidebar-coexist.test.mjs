@@ -9,6 +9,7 @@ const element=()=>{
     if(key==='then')return undefined;if(key in target)return target[key];
     if(key==='child')return value=>{if(value!=null)data.nodes.push(value);return proxy;};
     if(key==='children')return values=>{data.nodes.push(...values.filter(Boolean));return proxy;};
+    if(key==='trigger')return value=>{if(value!=null)data.nodes.push(value);return proxy;};
     if(key==='when')return (condition,fn)=>{if(condition)fn(proxy);return proxy;};
     return (...args)=>{data.calls.push([key,...args]);return proxy;};
   }});return proxy;
@@ -53,7 +54,7 @@ test('native computer navigator, task rows, documents, badges and local question
   const ids=tree=>flatten(tree).flatMap(node=>node.calls.filter(call=>call[0]==='id').map(call=>call[1]));
   const localTree=desk.render(cx),localIds=ids(localTree);
   assert(localIds.includes('sf-computer-local'));assert(localIds.includes('sf-computer-remote:worker'));
-  assert(localIds.includes('sf-docs-toggle-sp-local'));assert(!localIds.includes('sf-docs-toggle-worker/sp-remote'));
+  assert(localIds.includes('sf-docs-open-sp-local'));assert(!localIds.includes('sf-docs-open-worker/sp-remote'));assert(!localIds.some(id=>String(id).startsWith('sf-docs-toggle-')),'the inline ▸ document list is gone');
   assert(localIds.includes('sf-badge-sp-local-memo'));assert(localIds.includes('sf-settings'));assert(localIds.includes('sf-new-space'));
   assert(localIds.includes('sf-space-extras-sp-local'),'workspace badges have their own row instead of taking the title width');
   assert(localIds.includes('sf-asks'));assert(localIds.includes('sf-ask-demo-question-action-0'));
@@ -72,7 +73,7 @@ test('native computer navigator, task rows, documents, badges and local question
   assert(c.stats.updates>updates);
   desk.computerFollow={follow:false};store.set('sixfold.computing.selected','remote:worker');
   const remoteTree=desk.render(cx),remoteIds=ids(remoteTree);
-  assert(remoteIds.includes('sf-docs-toggle-worker/sp-remote'));assert(!remoteIds.includes('sf-docs-toggle-sp-local'));
+  assert(remoteIds.includes('sf-docs-open-worker/sp-remote'));assert(!remoteIds.includes('sf-docs-open-sp-local'));
   assert(flatten(remoteTree).some(node=>node.nodes.includes(c.bodyFor(native[1]))));
   c.resize(224,cx);
   const agent=c.feed.spaces[0].agents[0],row=entities.find(entity=>entity.view.id===agent.id);

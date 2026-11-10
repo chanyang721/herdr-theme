@@ -52,7 +52,7 @@ test('computer selection scopes workspaces and agents and restores each selectio
     .replace(/import \{ h_flex, v_flex \} from 'gpui-base';/,'const {h_flex,v_flex}=globalThis.__computersRuntime;')
     .replace(/import \* as herdrNative from 'herdr';/,'const herdrNative=globalThis.__computersRuntime;')
     .replace(/import \{([^}]+)\} from 'herdr';/,'const {$1}=globalThis.__computersRuntime;')
-    .replace(/import \{[^}]*\} from '.\/docs.js';/,'const currentDocs=()=>null;const docsSection=()=>null;const prepareDocsInput=()=>{};')
+    .replace(/import \{[^}]*\} from '.\/docs-finder.js';/,"const docsFinder=(_view,_space,trigger)=>trigger,docsFinderSignature=()=>null,setDocsFinderOpen=()=>{},docsGroup=()=>null;").replace(/import \{[^}]*\} from '.\/docs.js';/,'const currentDocs=()=>null;const docsSection=()=>null;const prepareDocsInput=()=>{};')
     .replace(/import \{ watchAlerts, alertSection, visibleAlerts \} from '.\/alerts.js';/,'const visibleAlerts=()=>[];')
     .replace(/import .* from '.\/alert-inbox.js';/,'const workspaceAlertsRow=()=>null, hasWorkspaceAlerts=()=>false;').replace(/import .* from '.\/alert-arrivals.js';/,"const startAlertArrivals=()=>()=>{},alertArrivalLayer=()=>[],alertCardSignature=()=>'';")
     .replace(/import \{ panePet \} from '.\/pets.js';/,'const panePet=()=>null;')

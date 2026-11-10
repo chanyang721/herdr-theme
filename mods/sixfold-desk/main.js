@@ -12,7 +12,8 @@ import { machineCounts, projectGroups, liveLinks, linkPalette, projectName, trac
 import { groupColors, groupKey, paletteMode, breathPeriod, lastGroupSend, cometPlan } from './collab-flow.js';
 import { breathingBorder, borderComet } from './collab-flow-view.js';
 import { workflowNodes, delegationEvents, workflowStatus, sessionChildren, activeWorkflow } from './workflow.js';
-import { watchDocs, currentDocs, docsSection, prepareDocsInput } from './docs.js';
+import { watchDocs, currentDocs } from './docs.js';
+import { docsFinder, docsFinderSignature, setDocsFinderOpen, docsGroup } from './docs-finder.js';
 import { watchAlerts, alertSection, visibleAlerts } from './alerts.js';
 import { workspaceAlertsRow, hasWorkspaceAlerts, openInbox, cardAlertCounts, slackAlertsChip, alertsOnMetaLine } from './alert-inbox.js';
 import { startAlertArrivals, alertArrivalLayer, alertCardSignature } from './alert-arrivals.js';
@@ -180,7 +181,6 @@ export default class SixfoldDesk extends View {
       if(snapshot.status==='ready')this.panelRetained?.preferences();
     }));
     this.projectDocs=null;
-    this.docsSpaces=new Set();this.docsHeights={};
     watchDocs(this,cx);
     this.alerts = [];
     watchAlerts(this, cx);
@@ -431,7 +431,8 @@ export default class SixfoldDesk extends View {
           if (a) run('agent.focus', { terminal: a.address });
         } else if (command === 'find-docs') {
           const space=spaces().find(s=>s.active);
-          if(space){prepareDocsInput(this,space);this.docsSpaces.add(space.id);cx.notify();cx.timer.after(30,()=>this.docsInputs?.[space.id]?.focus());}
+          // Opens that space's document finder (the popover on its header's docs button).
+          if(space)setDocsFinderOpen(this,space,true,cx);
         } else if (command === 'language') {
           setShared('sixfold.language', this.lang() === 'ko' ? 'en' : 'ko');
         } else if (command.startsWith('inbox-')) {
@@ -873,7 +874,7 @@ export default class SixfoldDesk extends View {
           const row=card.rows.find(row=>row.kind==='agent'&&row.agent.id===agent?.id);
           if(row)positions[p.terminal]=offset+row.y-card.top+6+extraHeight(s)+alertRowHeight(s)+row.height/2;
         }
-        offset+=(this.boxSizes?.[s.id]?.h||card.height+9+extraHeight(s)+(this.docsHeights?.[s.id]||0)+alertRowHeight(s))+12;
+        offset+=(this.boxSizes?.[s.id]?.h||card.height+9+extraHeight(s)+alertRowHeight(s))+12;
         continue;
       }
       let row=offset+53+extraHeight(s)+alertRowHeight(s);
@@ -885,7 +886,7 @@ export default class SixfoldDesk extends View {
           }
         }
       }
-      offset=row-3+(this.docsHeights?.[s.id]||0);
+      offset=row-3;
     }
     const workspaceColor = s => { const saved=shared('space.colors')?.[s.id]; if(saved)return saved.startsWith('#')?saved:(t[saved]||t.accent); const local=workspaceLocal(s,this.site)?.color; return workspaceIdentity(s,this.site)==='hub' ? t.accent : local ? (local.startsWith('#')?local:(t[local]||t.accent))
       : [t.accent,t.ansi5,t.ansi6,t.ansi3,t.ansi2,t.ansi4][[...s.id].reduce((hash,c)=>(hash*31+c.charCodeAt(0))>>>0,0)%6]; };
@@ -898,6 +899,18 @@ export default class SixfoldDesk extends View {
           ? svg(icon.path).size(14).text_color(workspaceColor(s)) : image(icon.path).w(14).h(14));
       return box.bg(workspaceColor(s)).child(svg(`mods/sixfold-desk/icons/ws-${workspaceIdentity(s,this.site)||'workspace'}.svg`).size(12).flex_none().text_color(t.background));
     };
+    // The header's docs button: the space's document finder (search, sort, filters) in a popover.
+    const docsButton=s=>{
+      const count=docsGroup(this,s)?.files?.length;
+      const trigger=h_flex().id(`sf-docs-open-${s.id}`).h(18).flex_none().px(3).gap(2).items_center().rounded(4).cursor_pointer()
+        .text_color(t.dim).hover(e=>e.bg(t.hover).text_color(t.foreground))
+        .tooltip(`문서 찾기${Number.isInteger(count)?` · ${count}건`:''}`)
+        .child(svg('mods/sixfold-desk/icons/doc.svg').size(12).flex_none())
+        .when(Number.isInteger(count)&&count>0,e=>e.child(div().text_size(9).font_normal().child(String(count))));
+      // The header's own press starts a drag; a press on the button belongs to the finder.
+      return div().flex_none().on_mouse_down('left',(_e,cx)=>cx.stop_propagation()).on_mouse_up('left',(_e,cx)=>cx.stop_propagation())
+        .child(docsFinder(this,s,trigger,t,{leadingGap:LINK_MARGIN+14,notify:cx=>this.invalidateSidebar?this.invalidateSidebar():cx?.notify?.()}));
+    };
     this.classicCards?.begin();
     const spaceRows=groups.map(({s,members})=>{
       const task=taskPanel?.taskFor(s),taskBody=taskPanel?.bodyFor(s);
@@ -907,7 +920,7 @@ export default class SixfoldDesk extends View {
         this.boxSizes?.[s.id],partner?.partners.includes(this.hoverComputer)||false,this.dragSpace,this.overSpace,
         this.workspaceIcons[s.id]||this.workspaceIcons[s.name],workspaceColor(s),workspacePinned(s,this.workspacePins),
         this.fileBadges?.[badgeKey],alertCardSignature(s.name,motion),shared('sixfold.workspace.badges')?.[badgeKey],this.projectDocs?.spaces?.[s.id]||this.projectDocs?.spaces?.[s.name],
-        this.docsSpaces?.has(s.id),this.docsQueries?.[s.id],this.docsLimits?.[s.id],this.docsErrors?.[s.id],this.docsArchive,
+        docsFinderSignature(this,s.id),
         members.map(p=>[unseen(p.terminal),endpoint(p.terminal),routeColor(p.terminal),askFor(this.asks,p.terminal),
           sessionChildren(this.workflowNodes,p.terminal,true),this.expandedAgents.has(p.terminal),list.find(a=>a.address===p.terminal)?.program])]);
       const build=()=>{ const mark=spaceLink(s);
@@ -980,10 +993,6 @@ export default class SixfoldDesk extends View {
           this.dragSpace=s.id;this.overSpace=s.id;
           this.invalidateSidebar?this.invalidateSidebar():cx.notify();
         })
-        .child(div().id(`sf-docs-toggle-${s.id}`).text_size(11).text_color(t.accent).tooltip('프로젝트 문서 펼치기')
-          .on_mouse_down('left',(_e,cx)=>cx.stop_propagation()).on_mouse_up('left',(_e,cx)=>cx.stop_propagation())
-          .on_click((_e,cx)=>{cx.stop_propagation();prepareDocsInput(this,s);this.docsSpaces??=new Set();this.docsSpaces.has(s.id)?this.docsSpaces.delete(s.id):this.docsSpaces.add(s.id);this.invalidateSidebar?this.invalidateSidebar():cx.notify();})
-          .child(this.docsSpaces?.has(s.id)?'▾':'▸'))
         .child(workspaceMark(s))
         .when(workspacePinned(s,this.workspacePins),e=>e.child(div().id(`sf-pinned-${s.id}`).w(14).flex_none()
           .tooltip(this.lang()==='ko'?'고정 워크스페이스 · workspace-pins.local.json':'Pinned workspace · workspace-pins.local.json')
@@ -996,7 +1005,8 @@ export default class SixfoldDesk extends View {
           .text_size(9).text_color(t.ansi6||t.accent).truncate().tooltip(`기억 제안${task.memory.proposals?` ${task.memory.proposals}`:''}`)
           .child(metrics.compact?`◈${task.memory.proposals?` ${task.memory.proposals}`:''}`:`기억 제안${task.memory.proposals?` ${task.memory.proposals}`:''}`)))
         .when(Boolean(metrics?.count),e=>e.child(div().w(metrics.countWidth).flex_none().text_size(10).text_color(t.muted).child(`◌ ${metrics.count}`)))
-        .when(!metrics,e=>e.child(div().text_size(10).text_color(t.muted).child(String(members.length)))))
+        .when(!metrics,e=>e.child(div().text_size(10).text_color(t.muted).child(String(members.length))))
+        .child(docsButton(s)))
       .when(extraHeight(s)>0,e=>e.child(h_flex().id(`sf-space-extras-${s.id}`).h(18).flex_none().px(7).gap(4).items_center().min_w(0)
         .child(workspaceBadges(this,s,t))
       ))
@@ -1037,9 +1047,7 @@ export default class SixfoldDesk extends View {
               .child(div().truncate().text_size(9).text_color(t.dim).child(`${s.name} / ${title(p)} · ${node.label||''}`)))
             .child(div().text_size(9).text_color(t.dim).child(workflowStatus(node,this.lang()))))));
 
-      })).child(div().id(`sf-docs-height-${s.id}`).min_w(0)
-        .on_size_change((size,cx)=>{const height=size.height/(settings().zoom||1);this.docsHeights??={};if(Math.abs((this.docsHeights[s.id]||0)-height)>1){this.docsHeights[s.id]=height;this.invalidateSidebar?this.invalidateSidebar():cx.notify();}})
-        .child(docsSection(this,t,s))).when(Boolean(outline),e=>e.child(outline))
+      })).when(Boolean(outline),e=>e.child(outline))
       // ⑩ While worked on together now (and motion is on), a flow runs around the border.
       .when(Boolean(flowView),e=>e.child(flowView)).when(Boolean(markView),e=>e.child(markView));};
       return this.classicCards?this.classicCards.card(s.id,key,build):build();
@@ -1048,7 +1056,7 @@ export default class SixfoldDesk extends View {
     const taskEntries=groups.map(({s,members})=>{
       const task=taskPanel?.taskFor(s),card=taskPanel?.layout?.cards.find(card=>card.space.id===task?.id);
       return {task,alertHeight:extraHeight(s)+alertRowHeight(s),height:this.boxSizes?.[s.id]?.h||
-        (card?card.height+9:(members.length*30+40))+extraHeight(s)+(this.docsHeights?.[s.id]||0)+alertRowHeight(s)};
+        (card?card.height+9:(members.length*30+40))+extraHeight(s)+alertRowHeight(s)};
     });
     // New-alert arrivals: a popup on the card's spot, then a pixel block steps into its badge.
     const arrivalCards=[];{let top=0;groups.forEach(({s},i)=>{arrivalCards.push({s,top,extra:extraHeight(s),merged:mergedAlerts(s),width:this.boxSizes?.[s.id]?.w||0});top+=taskEntries[i].height+12;});}
