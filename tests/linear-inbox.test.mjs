@@ -419,3 +419,12 @@ test('alert kinds at a glance: type -> badge (unknown types keep their name); th
   const lines = issueAlerts([{id: N, issue: 'ABC-1', workspace: 'A', read: false, type: 'issueAssignedToYou', subtitle: 'Assigned by Kim', at: '1'}], 'A', 'ABC-1').lines;
   assert.deepEqual([lines[0].kind, lines[0].category, lines[0].text], ['assign', '배정', 'Kim 님이 배정']);
 });
+
+test('an alert whose space is not known yet stays 미분류 in both mods (not Share, not on a card)', async () => {
+  const desk = await import('../mods/sixfold-desk/alert-model.js');
+  const inbox = await import('../mods/sixfold-linear-inbox/model.js');
+  const items = [{id: 'u', workspace: '미분류'}, {id: 'x', workspace: 'Gone'}, {id: 'a', workspace: 'alpha'}];
+  for (const placeItems of [desk.placeItems, inbox.placeItems])
+    assert.deepEqual(placeItems(items, ['Alpha', 'Share']).map(i => i.workspace), ['미분류', 'Share', 'Alpha']);
+  assert.equal(desk.linearUnread([{id: 'u', workspace: '미분류', read: false}], 'Share'), 0);
+});
