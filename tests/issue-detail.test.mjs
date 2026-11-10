@@ -172,7 +172,7 @@ test('read requests only when missing or old; force at most every 30 s; answered
   for(let i=0;i<40;i++)await cache.ensure('issue',`DEMO-${100+i}`,{now:now+i,...io});
   assert.equal(cache.cached('issue','DEMO-100'),null);
   await cache.ensure('project','Alpha',{now,...io});assert.equal(written.at(-1)[1].space,'Alpha');
-  assert.equal(cache.projectSlug('PeaceMinusOne'),'peaceminusone-31397865','same name as the collector writes');
+  assert.equal(cache.projectSlug('DemoSpace'),'demospace-09472490','same name as the collector writes');
   assert.notEqual(cache.projectSlug('가나'),cache.projectSlug('다라'),'names differing outside ASCII never share a file');
   // The same table as the collector's test (space_slug): one '-' per code point, ASCII-only lowering.
   for(const [name,slug] of [['가나','---a2ecb730'],['Team 🚀 X','team---x-ed51bf5b'],['İx','-x-c8fa95b3'],['\ud800a','-a-54bad7b1']])
