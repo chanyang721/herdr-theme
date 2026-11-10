@@ -34,7 +34,7 @@ test('workspace badges: a generic, validated slot keyed by computer and space',a
  assert.deepEqual(m.renderedLabels,allowedLabels,'the public slot renders exactly the supplied general labels');
  m.renderedLabels.length=0;
  m.workspaceBadges({fileBadges:m.cleanBadges({'|sp1':[{id:'harness-memory',text:'! 3',tone:'dim'},{id:'other',text:'! 2',tone:'blocked'}]})},{id:'sp1',machine:null},{done:'green',working:'blue',dim:'gray',background:'black',blocked:'red'});
- assert.deepEqual(m.renderedLabels,['확인 3','! 2'],'the memory badge says what to do; other badges keep their text');
+ assert.deepEqual(m.renderedLabels,['확인 대기 3','! 2'],'the memory badge says what to do; other badges keep their text');
 });
 
 test('badge typed subscriptions notify once per changed hash, retain partial writes and stop with their view',async()=>{

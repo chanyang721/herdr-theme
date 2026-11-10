@@ -31,7 +31,7 @@ test('hosted routes use selected native order and measured document/card heights
   const host=hostedTaskLayout(layout,[{task:a,height:200,alertHeight:26},{task:null,height:90},{task:b,height:110}]);
   assert.deepEqual(host.cards.map(card=>card.space.id),['a','b']);
   assert.equal(host.anchors.has('remote'),false);
-  assert.equal(host.anchors.get('a-row').y,107);
+  assert.equal(host.anchors.get('a-row').y,105);   // no empty alert child: header 36 + border 1 + two 2px gaps
   assert.equal(host.anchors.get('b').y,332);
   assert.equal(host.height,436);
 });
