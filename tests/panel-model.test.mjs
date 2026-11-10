@@ -585,6 +585,24 @@ test('completion filtering preserves independent roots, blocked work and active 
   assert.equal(agentGroups(closed).agents.length,0,'an already hidden parent does not resurrect its completed child as a root');
 });
 
+test('완료 is the harness cleanup target: a finished task whose pane is still kept stays visible and not done',()=>{
+  // The feed (harness panel_feed.settled_status) sends status 'done' for a pane row only when the
+  // close scan left it nothing but idle time; a raw turn end is idle+unseen_result.
+  const nav=pane=>({pane_id:pane,machine:null});
+  for(const status of ['idle','working']){
+    const parent=agent('parent',{status:'idle',stage:5,state:'unseen_result',keep_reason:'경험 저장 전이라 유지',nav:nav('p1')});
+    const child=agent('child',{parent_id:'parent',status,stage:5,state:status==='idle'?'unseen_result':'working',cleanup:null,
+      keep_reason:'하위 작업 있어 유지',nav:nav('p2')});
+    assert.notEqual(agentState(child),'done',status);
+    assert.notEqual(agentState(parent),'done');
+    assert(agentGroups(space('kept',{agents:[parent,child]})).agents.some(row=>row.id==='child'),status);
+  }
+  const target=agent('target',{status:'done',stage:5,state:'cleanup_wait',nav:nav('p3'),
+    cleanup:{idle_since:'2026-11-10T00:00:00Z',limit_s:1800,due_at:'2026-11-10T00:30:00Z'}});
+  assert.equal(agentState(target),'done','the cleanup target is 완료');
+  assert.equal(agentState(agent('record',{status:'idle',stage:5,nav:null})),'done','a record row without a pane is completed by its stage');
+});
+
 test('issue and parent expansion recompute only the owning space with stable feed references',()=>{
   const raw=makePanelLoadFixture({now:NOW}),target=raw.spaces[0];
   target.work={tool:'linear',key:'DEMO'};target.issues=Array.from({length:5},(_,i)=>({key:`DEMO-${i}`,state:'working'}));

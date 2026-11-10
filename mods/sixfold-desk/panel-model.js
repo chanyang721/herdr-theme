@@ -230,7 +230,10 @@ export function panelSpacePartners(feed, spaceID) {
 }
 export function agentState(agent) {
   if (agent.closing?.blocked_reason || agent.status === 'blocked' || agent.report_missing === true || agent.error) return 'blocked';
-  if (agent.status === 'done' || agent.stage === 5) return 'done';
+  // 완료 = the harness will clean the pane up: the feed's status 'done'. A finished task whose pane
+  // the harness still keeps (stage 5 with a pane, `nav`) is not completed yet; its stage and
+  // keep_reason say why. A record row without a pane is completed by its stage.
+  if (agent.status === 'done' || (agent.stage === 5 && !agent.nav)) return 'done';
   if (agent.stage === 3) return 'review';
   if (agent.stage === 4) return 'waiting';
   return agent.status === 'working' ? 'working' : 'waiting';
