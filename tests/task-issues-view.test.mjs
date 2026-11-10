@@ -92,3 +92,14 @@ test('an issue with new alerts keeps its place, shows a count and the newest lin
   assert.deepEqual(opened,[link]);
   assert(!call(byId(tree,'task-issue-alert-demo-DEMO-2-1'),'on_click'));   // no trusted link: not a button
 });
+
+test('alerted issues the cached list does not have yet show apart above the list, with their alert lines and no import button',async()=>{
+  const {issuePopover}=await renderer();
+  const alerts={'DEMO-9':{unread:1,more:0,lines:[{id:'n9',category:'댓글',text:'Kim commented: new issue',at:'2026-11-10T04:24:00Z',url:''}]}};
+  const tree=issuePopover(model({scope:'all',canImport:true,onPull:()=>assert.fail('no import'),alertsFor:key=>alerts[key]||null,
+    unlisted:[{key:'DEMO-9',title:'Made after the list',state:'waiting',unlisted:true}]}),theme);
+  const ids=byId(tree,'task-issues-list-demo').nodes.map(node=>call(node,'id')[1]);
+  assert.deepEqual(ids,['task-issues-unlisted-demo','task-issue-wrap-demo-DEMO-9','task-issues-unlisted-end-demo','task-issue-demo-DEMO-1','task-issue-demo-DEMO-2','task-issue-demo-DEMO-3']);
+  assert(words(tree).includes('목록 밖')&&words(tree).includes('Kim commented: new issue'));
+  assert(!call(byId(tree,'task-issues-pull-demo-DEMO-9'),'on_click'));
+});

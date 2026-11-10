@@ -62,3 +62,20 @@ export function issueAlerts(items, space, key, limit = ISSUE_ALERT_LINES) {
 // Changes only when an issue's unread alerts change: part of the card key.
 export const issueAlertSignature = (items, space) => linearScoped(items, space).filter(i => !i.read && i.issue)
   .map(i => `${i.issue}:${i.id}`).sort().join(',');
+
+// Issues with unread alerts that the cached issue list does not have yet (made
+// after the catalog was read): shown apart, above the list, so they are not lost
+// and the list's own order stays. Newest first, bounded.
+export function unlistedAlertIssues(items, space, listed, query = '', limit = 5) {
+  const known = new Set([...(listed ?? [])].map(key => String(key).toUpperCase()));
+  const needle = String(query ?? '').normalize('NFC').trim().toLocaleLowerCase();
+  const seen = new Map();
+  for (const item of linearScoped(items, space)) {
+    const key = String(item.issue || '').toUpperCase();
+    if (!key || item.read || known.has(key)) continue;
+    const at = String(item.changed_at || item.at || '');
+    if (!seen.has(key) || at > seen.get(key).at) seen.set(key, {key, title: item.issue_title || item.title || '', state: 'waiting', unlisted: true, at});
+  }
+  return [...seen.values()].filter(row => !needle || `${row.key} ${row.title}`.normalize('NFC').toLocaleLowerCase().includes(needle))
+    .sort((a, b) => b.at.localeCompare(a.at)).slice(0, limit);
+}

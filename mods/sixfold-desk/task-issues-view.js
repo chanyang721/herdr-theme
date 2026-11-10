@@ -45,8 +45,8 @@ export function issuePopover(model,t){
   const issueRow=issue=>{
     const included=issue.week||issue.pinned,busy=busyKeys.has(issue.key);
     const tone=issue.state==='blocked'?t.blocked:issue.state==='working'?t.ansi4||t.accent:issue.state==='review'?t.accent:t.dim;
-    const label=busy?'요청 중':issue.week?'이번 주':issue.pinned?'가져옴 ✓':'가져오기';
-    const enabled=model.canImport===true&&!busy&&!issue.week;
+    const label=issue.unlisted?'목록 밖':busy?'요청 중':issue.week?'이번 주':issue.pinned?'가져옴 ✓':'가져오기';
+    const enabled=model.canImport===true&&!busy&&!issue.week&&!issue.unlisted;
     // New alerts of this issue (comments, assignment, state): a count beside the key and,
     // under the row, the newest lines in the alert popover's form. Order is unchanged.
     const alerts=model.alertsFor?.(issue.key)||null;
@@ -86,8 +86,17 @@ export function issuePopover(model,t){
         .child(text(group.progress||'',t.dim,10)));
       list.children(group.items.map(issueRow));
     }
-  }else list.children(rows.map(issueRow));
-  if(!(scope==='milestone'?groups.some(group=>group.items.length):rows.length)){
+  }else{
+    // Alerted issues the cached list does not have yet, apart and above, so the list keeps its order.
+    const unlisted=model.unlisted||[];
+    if(unlisted.length)list.child(h_flex().id(`task-issues-unlisted-${id}`).pt(6).pb(4).px(8).gap(8).items_center()
+      .child(text('목록 갱신 전 새 알림',t.foreground,11).font_bold()).child(div().flex_1())
+      .child(text('저장된 이슈 목록에 아직 없는 이슈',t.dim,10)));
+    list.children(unlisted.map(issueRow));
+    if(unlisted.length&&rows.length)list.child(div().id(`task-issues-unlisted-end-${id}`).h(1).my(4).bg(t.border));
+    list.children(rows.map(issueRow));
+  }
+  if(!(scope==='milestone'?groups.some(group=>group.items.length):rows.length||(model.unlisted||[]).length)){
     list.child(text(model.loading?'이슈를 불러오는 중':model.emptyLabel||'이 범위에 표시할 이슈가 없습니다',t.dim,11).py(12));
   }
   body.child(list);
