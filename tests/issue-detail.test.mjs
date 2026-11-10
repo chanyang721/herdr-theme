@@ -102,6 +102,9 @@ test('rows show the real status (상태 미확인 when unread), the filter chips
     onFilter:name=>picked.push(name),onDetail:key=>details.push(key)},theme);
   assert(words(tree).includes('In Progress'));assert(words(tree).includes(UNKNOWN_STATUS));
   assert(!words(tree).includes('진행 중'),'Herdr’s own three states are not shown once Linear statuses are known');
+  // No project read at all (or an issue it does not list): 상태 미확인, never Herdr's own state as if it were Linear's.
+  const none=issuePopover({id:'d',open:true,trigger:element(),scope:'all',rows},theme);
+  assert.equal(words(none).filter(w=>w===UNKNOWN_STATUS).length,2);assert(!words(none).includes('진행 중'));
   click(byId(tree,'task-issues-filter-d-1'));assert.deepEqual(picked,['In Progress']);
   click(byId(tree,'task-issue-d-DEMO-1'));assert.deepEqual(details,['DEMO-1']);
   const folded=issuePopover({id:'d',open:true,trigger:element(),scope:'all',rows,statusOf:()=>null,foldedCount:3,showFolded:false,onShowFolded(){}},theme);
@@ -152,6 +155,10 @@ test('read requests only when missing or old; force at most every 30 s; answered
   assert.deepEqual({kind:written[0][1].kind,key:written[0][1].key},{kind:'issue',key:'DEMO-1'});
   await cache.ensure('issue','DEMO-1',{now:now+1000,...io});assert.equal(written.length,1,'asked a moment ago');
   assert(cache.waiting('issue','DEMO-1',now+1000));
+  assert(cache.waiting('issue','DEMO-1',now+7*60*1000),'still waiting past the collector’s 420 s project read');
+  // A file holding another target's cache is never taken in.
+  files.set('/home/data/sixfold/linear-cache/issue-DEMO-1.json',JSON.stringify({schema:1,key:'DEMO-2',at:new Date(now+4000).toISOString(),state:'ok',issue:{key:'DEMO-2'}}));
+  assert.equal(await cache.checkCaches({read:stub.readTextFile,home:'/home',now:now+4500}),false);assert.equal(cache.cached('issue','DEMO-1'),null);
   files.set('/home/data/sixfold/linear-cache/issue-DEMO-1.json',JSON.stringify({schema:1,key:'DEMO-1',at:new Date(now+5000).toISOString(),state:'ok',issue:{key:'DEMO-1'}}));
   assert.equal(await cache.checkCaches({read:stub.readTextFile,home:'/home',now:now+6000}),true);
   assert(!cache.waiting('issue','DEMO-1',now+6000));assert.equal(cache.cached('issue','DEMO-1').issue.key,'DEMO-1');
@@ -163,5 +170,6 @@ test('read requests only when missing or old; force at most every 30 s; answered
   for(let i=0;i<40;i++)await cache.ensure('issue',`DEMO-${100+i}`,{now:now+i,...io});
   assert.equal(cache.cached('issue','DEMO-100'),null);
   await cache.ensure('project','Alpha',{now,...io});assert.equal(written.at(-1)[1].space,'Alpha');
-  assert.equal(cache.projectSlug('Peace Minus/One'),'peace-minus-one');
+  assert.equal(cache.projectSlug('PeaceMinusOne'),'peaceminusone-31397865','same name as the collector writes');
+  assert.notEqual(cache.projectSlug('가나'),cache.projectSlug('다라'),'names differing outside ASCII never share a file');
 });
