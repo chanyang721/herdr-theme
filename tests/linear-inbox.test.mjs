@@ -232,3 +232,13 @@ test('the alerted-issues group: one entry per issue with unread alerts, newest f
   assert.deepEqual(alertedIssues(items, 'Alpha', 'new').map(r => r.key), ['ABC-7']);
   assert.deepEqual(alertedIssues(items, 'Alpha', 'zzz'), []);
 });
+
+test('the issue-search alert signature changes when an alert of the same id changes what it shows', async () => {
+  const {issueAlertSignature} = await import('../mods/sixfold-desk/alert-model.js');
+  const base = {id: 'n1', workspace: 'Alpha', issue: 'ABC-7', read: false, at: '2026-11-10T04:24:00Z', subtitle: 'Kim commented: a'};
+  const sig = issueAlertSignature([base], 'Alpha');
+  assert.notEqual(issueAlertSignature([{...base, subtitle: 'Kim commented: b'}], 'Alpha'), sig);
+  assert.notEqual(issueAlertSignature([{...base, at: '2026-11-10T04:30:00Z'}], 'Alpha'), sig);
+  assert.notEqual(issueAlertSignature([{...base, changes: [{field: 'status', before: 'a', after: 'b'}]}], 'Alpha'), sig);
+  assert.equal(issueAlertSignature([{...base}], 'Alpha'), sig);
+});
