@@ -60,7 +60,7 @@ test('requests match the collector contract and refuse bad input', () => {
   assert.equal(resultLabel({ok: false, error: 'x'}), '실패: x');
 });
 
-test('a new unread Linear assignment opens the Linear window once; history seeds silently', async () => {
+test('new Linear alerts become arrivals into their space (Share otherwise); no sidebar host opens the window; history seeds silently', async () => {
   const files = new Map([['linear-alerts.json', JSON.stringify({items: [{id: 'old', read: false, category: 'assignments'}], spaces: ['Alpha']})]]);
   const shared = {}, opens = [], tasks = [];
   let refresh;
@@ -75,15 +75,16 @@ test('a new unread Linear assignment opens the Linear window once; history seeds
     },
     setShared: (key, value) => { shared[key] = value; },
     openOverlay: value => opens.push(value),
-    spaces: () => [{id: 's1', name: 'Alpha'}, {id: 's2', name: 'Bare'}],
-    hosts: new Set(['Alpha']),   // only Alpha's card draws a popover host
+    spaces: () => [{id: 's1', name: 'Alpha'}, {id: 's0', name: 'Share'}],
     run() {},
   };
+  const storeUrl = new URL('../mods/sixfold-desk/arrival-store.js', import.meta.url).href;
+  const modelUrl = new URL('../mods/sixfold-desk/arrival-model.js', import.meta.url).href;
   let source = await readFile(new URL('../mods/sixfold-desk/linear-feed.js', import.meta.url), 'utf8');
   source = source.replace(/\r\n/g, '\n')
     .replace(/^import .* from 'herdr';/m, 'const {appHome, readTextFile, writeTextFile, setShared, openOverlay, spaces} = globalThis.__linearRuntime;')
-    .replace(/^import \{ showPopover, hasHost \} from .*$/m, 'const showPopover = (space, source, o) => globalThis.__linearRuntime.setShared("sixfold.alertPopover", {space, source, ...o}); const hasHost = s => globalThis.__linearRuntime.hosts.has(s);')
-    .replace(/^import \{ projectKey \} from .*$/m, 'const projectKey = n => String(n ?? "").toLowerCase();');
+    .replace("'./arrival-store.js'", `'${storeUrl}'`).replace("'./arrival-model.js'", `'${modelUrl}'`);
+  const store = await import(storeUrl);
   try {
     const {watchLinear} = await import('data:text/javascript;base64,' + Buffer.from(source).toString('base64') + '#linear');
     watchLinear({}, cx);
@@ -93,21 +94,54 @@ test('a new unread Linear assignment opens the Linear window once; history seeds
     const feed = items => files.set('linear-alerts.json', JSON.stringify({items, spaces: ['Alpha']}));
     feed([{id: 'old', read: false, category: 'assignments'}, {id: 'seen', read: true, category: 'assignments'}, {id: 'remind', read: false, category: 'reminders'}]);
     refresh(cx); await tasks.at(-1);
-    assert.equal(opens.length, 0);                       // read or reminder only: no window
+    assert.equal(opens.length, 0);                       // read or reminder only: nothing
+    // No sidebar drew arrivals yet (the installed sidebar has none): the window opens instead.
     feed([{id: 'new', read: false, category: 'mentions', workspace: 'alpha'}, {id: 'old', read: false, category: 'assignments'}]);
     refresh(cx); await tasks.at(-1);
-    assert.equal(opens.length, 0);                       // its space card is on screen: popover beside it
-    assert.deepEqual([shared['sixfold.alertPopover'].space, shared['sixfold.alertPopover'].source], ['Alpha', 'linear']);
-    feed([{id: 'other', read: false, category: 'mentions', workspace: 'Nowhere'}, {id: 'new', read: false, category: 'mentions'}, {id: 'old', read: false, category: 'assignments'}]);
-    refresh(cx); await tasks.at(-1);
-    assert.equal(opens.length, 1);                       // no such card: the Linear window
+    assert.equal(opens.length, 1);
     assert.equal(opens[0].mod, 'sixfold-linear-inbox');
-    feed([{id: 'bare', read: false, category: 'mentions', workspace: 'Bare'}, {id: 'other', read: false, category: 'mentions'}, {id: 'new', read: false, category: 'mentions'}, {id: 'old', read: false, category: 'assignments'}]);
+    // A sidebar host: each new alert arrives into its space, an unknown space into Share.
+    store.markArrivalHost();
+    feed([{id: 'a', read: false, category: 'mentions', workspace: 'Alpha', issue: 'ABC-1', issue_title: 'T'},
+          {id: 'b', read: false, category: 'assignments', workspace: 'Nowhere'}, {id: 'new', read: false, category: 'mentions'}, {id: 'old', read: false, category: 'assignments'}]);
     refresh(cx); await tasks.at(-1);
-    assert.equal(opens.length, 2);                       // the space exists but its card has no popover: window
-    feed([{id: 'bare', read: false, category: 'mentions'}, {id: 'other', read: false, category: 'mentions'}, {id: 'new', read: false, category: 'mentions'}, {id: 'old', read: true, category: 'assignments'}]);
+    assert.equal(opens.length, 1);
+    const landed = store.arrivals().filter(a => a.key === 'linear:a' || a.key === 'linear:b').map(a => [a.key, a.space, a.source, a.issue]);
+    assert.deepEqual(landed, [['linear:a', 'Alpha', 'linear', 'ABC-1'], ['linear:b', 'Share', 'linear', '']]);
+    const count = store.arrivals().length;
+    feed([{id: 'a', read: false, category: 'mentions', workspace: 'Alpha'}, {id: 'b', read: false, category: 'assignments'}, {id: 'new', read: false, category: 'mentions'}, {id: 'old', read: true, category: 'assignments'}]);
     refresh(cx); await tasks.at(-1);
-    assert.equal(opens.length, 2);                       // the same notification never reopens it
+    assert.equal(store.arrivals().length, count);        // the same notification never arrives twice
     assert.equal(shared['sixfold.linearItems'].length, 4);
   } finally { delete globalThis.__linearRuntime; }
+});
+
+test('an arrival shows, flies in integer steps and lands; motion off only counts it', async () => {
+  const {ARRIVAL, arrivalPhase, pushArrival, visibleArrivals, inFlight, nextPhaseAt, flightPath, arrivalTarget, arrivalOpen} = await import('../mods/sixfold-desk/arrival-model.js');
+  const t0 = 1_000_000;
+  let list = pushArrival([], {key: 'k1', source: 'slack', space: 'Alpha'}, t0);
+  assert.equal(arrivalPhase(list[0], t0 + 10), 'show');
+  assert.equal(arrivalPhase(list[0], t0 + ARRIVAL.showMs + 1), 'fly');
+  assert.equal(arrivalPhase(list[0], t0 + ARRIVAL.showMs + ARRIVAL.flyMs), 'landed');
+  assert.equal(arrivalPhase(list[0], t0 + 10, false), 'landed');          // motion off: no popup, no move
+  assert.equal(inFlight(list, 'alpha', 'slack', t0 + 10), 1);            // not in the badge until it lands
+  assert.equal(inFlight(list, 'Alpha', 'slack', t0 + 10, false), 0);
+  assert.equal(visibleArrivals(list, t0 + 10, false).length, 0);
+  assert.equal(nextPhaseAt(list, t0 + 10), t0 + ARRIVAL.showMs);
+  assert.equal(nextPhaseAt(list, t0 + 10, false), null);
+  list = pushArrival(list, {key: 'k1', source: 'slack', space: 'Alpha'}, t0 + 5);
+  assert.equal(list.length, 1);                                           // one per key
+  for (let i = 0; i < 80; i++) list = pushArrival(list, {key: `n${i}`, source: 'linear', space: 'Alpha'}, t0 + i);
+  assert.equal(list.length, ARRIVAL.ledger);                              // bounded
+  assert.equal(visibleArrivals(list, t0 + 100).length, ARRIVAL.visible);
+  const late = pushArrival(list, {key: 'late', source: 'linear', space: 'Alpha'}, t0 + 10 * ARRIVAL.keepMs);
+  assert.deepEqual(late.map(a => a.key), ['late']);                       // landed ones age out
+  const path = flightPath({x: 101, y: 403}, {x: 13, y: 57});
+  assert.ok(path.every(p => Number.isInteger(p.x) && Number.isInteger(p.y) && p.x % 2 === 0 && p.y % 2 === 0));
+  assert.deepEqual(path.at(-1), {x: 14, y: 58});                         // ends on the target, snapped
+  assert.ok(path.length <= ARRIVAL.steps && path.length >= 3);
+  assert.equal(arrivalTarget('medi', ['Alpha', 'Share']), 'Share');
+  assert.equal(arrivalTarget('ALPHA', ['Alpha', 'Share']), 'Alpha');
+  assert.equal(arrivalTarget('x', []), 'Share');
+  assert.deepEqual(arrivalOpen({source: 'linear', space: 'Alpha'}), {source: 'linear', project: 'Alpha'});
 });

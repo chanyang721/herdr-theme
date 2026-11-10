@@ -14,11 +14,6 @@ export const popoverState = () => shared(STATE) ?? null;
 export function showPopover(space, source, {auto = false} = {}) {
   setShared(STATE, {space, source, auto, boot: BOOT, at: Date.now()});
 }
-// Cards that drew a popover host recently. A new alert opens the popover only on
-// such a card; otherwise the caller falls back to its window. Bounded by spaces.
-const hosts = new Map();
-export const markHost = space => hosts.set(projectKey(space), Date.now());
-export const hasHost = (space, now = Date.now()) => now - (hosts.get(projectKey(space)) ?? -Infinity) < 10_000;
 export const hidePopover = () => setShared(STATE, {});
 
 const short = at => {
@@ -58,7 +53,6 @@ function linearRows(project, t) {
 
 // `trigger` is the whole alerts row of the card, so the surface opens beside the card.
 export function alertPopover({id, project, trigger, t, hasSlack, hasLinear, onAll}) {
-  markHost(project);
   const state = popoverState();
   const source = popoverOpen(state, project, 'linear', BOOT) ? 'linear' : popoverOpen(state, project, 'slack', BOOT) ? 'slack' : null;
   const fallback = hasLinear && !hasSlack ? 'linear' : 'slack';

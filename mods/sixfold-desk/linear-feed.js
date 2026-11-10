@@ -1,6 +1,6 @@
 import { appHome, readTextFile, writeTextFile, setShared, openOverlay, spaces } from 'herdr';
-import { showPopover, hasHost } from './alert-popover.js';
-import { projectKey } from './alert-model.js';
+import { addArrival, hasArrivalHost } from './arrival-store.js';
+import { arrivalTarget, ARRIVAL } from './arrival-model.js';
 
 // Linear inbox feed for the sidebar: data/sixfold/linear-alerts.json and
 // linear-live-health.json, written by a machine-local collector. Kept apart from
@@ -13,7 +13,8 @@ const LEDGER_LIMIT = 500;   // ids of notifications already announced; bounded
 
 export function linearPopupEvents(items) {
   return (items ?? []).filter(item => typeof item?.id === 'string' && item.id)
-    .map(item => ({key: `linear:${item.id}`, popup: !item.read && POPUP.has(item.category), workspace: item.workspace ?? ''}));
+    .map(item => ({key: `linear:${item.id}`, popup: !item.read && POPUP.has(item.category), workspace: item.workspace ?? '',
+      title: item.issue_title || item.title || '', issue: item.issue || '', category: item.category || ''}));
 }
 
 // First run seeds the existing history silently. Later writes use the previous
@@ -28,10 +29,10 @@ async function announce(events) {
   }
   const seen = new Set(ledger.seen);
   const fresh = events.filter(event => !seen.has(event.key));
-  if (!fresh.length && !firstRun) return null;
+  if (!fresh.length && !firstRun) return [];
   const next = {schema: 1, seen: [...ledger.seen, ...fresh.map(event => event.key)].slice(-LEDGER_LIMIT)};
   await writeTextFile(path, JSON.stringify(next), text);
-  return firstRun ? null : fresh.find(event => event.popup) ?? null;
+  return firstRun ? [] : fresh.filter(event => event.popup).slice(-ARRIVAL.visible);
 }
 
 export function publishLinear(feed, health) {
@@ -41,13 +42,17 @@ export function publishLinear(feed, health) {
   setShared('sixfold.linearHealth', health ?? {});
 }
 
-// A new alert opens the popover beside its space card when that card drew a
-// popover host in the last few seconds; otherwise the Linear window opens, so an
-// alert is never dropped by a sidebar that has no popover.
-export function announceLinear(event) {
-  const space = (spaces() ?? []).find(s => projectKey(s.name) === projectKey(event.workspace));
-  if (space && hasHost(space.name)) showPopover(space.name, 'linear', {auto: true});
-  else openLinearWindow();
+// A new alert becomes an arrival: a popup that folds into its space card (Share
+// when no space matches). A sidebar that draws arrivals marks itself as host;
+// without one the Linear window opens, so an alert is never dropped.
+export function announceLinear(events) {
+  if (!events.length) return;
+  if (!hasArrivalHost()) return openLinearWindow();
+  const names = (spaces() ?? []).map(s => s.name);
+  for (const event of events) {
+    addArrival({key: event.key, source: 'linear', space: arrivalTarget(event.workspace, names),
+      title: event.title, issue: event.issue, category: event.category});
+  }
 }
 
 export function openLinearWindow() {
@@ -69,9 +74,10 @@ export function watchLinear(view, cx) {
         const feed = JSON.parse(text || '{}'), status = JSON.parse(health || '{}');
         publishLinear(feed, status);
         cx.notify();
-        const event = await announce(linearPopupEvents(feed.items));
+        const events = await announce(linearPopupEvents(feed.items));
         previous = snapshot;   // after the ledger write, so a failed write is retried
-        if (event) announceLinear(event);
+        announceLinear(events);
+        if (events.length) cx.notify();   // the sidebar draws the new arrivals
       } catch { /* A partial collector write keeps the last valid list; retried next tick. */ }
       finally { loading = false; }
     });
