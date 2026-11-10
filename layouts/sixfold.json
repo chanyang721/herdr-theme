@@ -55,7 +55,7 @@
           "id": "monitor-strip",
           "type": "row",
           "size": {
-            "px": 30
+            "px": 48
           },
           "background": "chrome",
           "children": [
@@ -83,24 +83,33 @@
               }
             },
             {
-              "id": "mcp-status",
-              "type": "block",
-              "size": {
-                "px": 660
-              },
-              "content": {
-                "mod": "mcp-status"
-              }
-            },
-            {
-              "id": "cli-status",
-              "type": "block",
+              "id": "mcp-cli-stack",
+              "type": "column",
               "size": {
                 "px": 700
               },
-              "content": {
-                "mod": "cli-status"
-              }
+              "children": [
+                {
+                  "id": "mcp-status",
+                  "type": "block",
+                  "size": {
+                    "weight": 1
+                  },
+                  "content": {
+                    "mod": "mcp-status"
+                  }
+                },
+                {
+                  "id": "cli-status",
+                  "type": "block",
+                  "size": {
+                    "weight": 1
+                  },
+                  "content": {
+                    "mod": "cli-status"
+                  }
+                }
+              ]
             },
             {
               "id": "plan-usage",
