@@ -13,7 +13,10 @@ test('missing milestone and cache details are not invented or treated as live se
   const unknown={...space,issue_catalog:{...space.issue_catalog,milestones:[],cache:{state:'stale',at:null,scopes:{all:{state:'missing',at:null},week:{state:'stale',at:'2026-11-02T00:00:00Z'}}}}};
   const group=issueScopeData(unknown,'milestone').groups[0];assert.equal(group.progress,'');assert.equal(group.due,'');assert.equal(group.name,'마일스톤 정보 없음');
   assert.match(issueCacheLabel(unknown,'all').label,/미수집/);assert.match(issueCacheLabel(unknown,'all').emptyLabel,/아직 수집/);
-  assert.match(issueCacheLabel(unknown,'week').label,/이전 수집 결과.*2026-11-02/);
+  const at=new Date('2026-11-02T00:00:00Z'),p=n=>String(n).padStart(2,'0'),hm=`${p(at.getHours())}:${p(at.getMinutes())}`;
+  assert.equal(issueCacheLabel(unknown,'week',new Date(at.getTime()+60000)).label,`Linear · 이전 수집 결과 · ${hm} 갱신`,'local time, not the raw ISO stamp');
+  assert.equal(issueCacheLabel(unknown,'week',new Date(at.getTime()+3*86400000)).label,`Linear · 이전 수집 결과 · ${at.getMonth()+1}/${at.getDate()} ${hm} 갱신`,'another day shows its date');
+  assert(!issueCacheLabel({...unknown,issue_catalog:{...unknown.issue_catalog,cache:{state:'ready',at:'bad'}}},'week').label.includes('bad'),'an unreadable time stays out');
   unknown.issue_catalog.cache.scopes.all={state:'ready',at:'2026-11-07T00:00:00Z'};
   assert(!issueCacheLabel(unknown,'all').label.includes('이전 수집 결과'),'a fresh scope is not made stale by another scope');
 });
