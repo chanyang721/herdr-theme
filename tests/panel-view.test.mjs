@@ -262,7 +262,7 @@ test('a local message rides the same pixel line, block and departure ring as a t
   }
   const {tree}=draw('message','travel',PANEL_LEGS[1]+1),head=byId(tree,'panel-packet-p');
   assert.equal(call(head,'w')[1],3);assert.equal(call(head,'h')[1],3);assert.equal(call(head,'bg')[1],'#79D1DC');assert.equal(head.nodes.length,0);
-  assert.equal(call(head,'left')[1]+1,20,'centred on the inner message lane');
+  assert.equal(call(head,'left')[1]+1,12,'centred on the inner message lane');
   assert.equal(head.calls.find(c=>c[0]==='transition'&&c[1]==='top')[2].duration,PANEL_LEGS[2]-PANEL_LEGS[1]);
   const arrival=byId(draw('message','ping',PANEL_TIMING.packetMs).tree,'panel-receiver-p');
   // A message lands with one small blink in its own colour, never the done mark.
@@ -377,11 +377,11 @@ test('filtered remote messages ride the computer pipe lane and ping at the remot
  const packet={id:'remote-message',from:local.agents[0].id,to:'remote-agent',kind:'message',phase:'travel',elapsed:500};
  const tree=r.panelFlowLayer(feed,layout,{...view.panelEvents,packets:[packet]},()=>t.accent,t,true,224);
  assert(byId(tree,'panel-route-remote-message-pipe'));assert(!byId(tree,'panel-route-remote-remote-message'));
- const head=byId(tree,'panel-packet-remote-message');assert.equal(call(head,'left')[1]+1,40,'the packet runs in the computer pipe lane');
+ const head=byId(tree,'panel-packet-remote-message');assert.equal(call(head,'left')[1]+1,28,'the packet runs in the computer pipe lane');
  assert.equal(call(head,'w')[1],3);assert(byId(tree,'panel-sender-remote-message'));
  const arrival=r.panelFlowLayer(feed,layout,{...view.panelEvents,packets:[{...packet,phase:'ping'}]},()=>t.accent,t,true,224);
  assert.equal(call(byId(arrival,'panel-receiver-remote-message'),'left')[1],-1,'a 3x3 landing blink centred on the remote end');
- const route=byId(tree,'panel-route-remote-message');assert.equal(call(route,'right')[1],8);assert.equal(call(route,'w')[1],64);
+ const route=byId(tree,'panel-route-remote-message');assert.equal(call(route,'right')[1],8);assert.equal(call(route,'w')[1],40);
 });
 
 
@@ -395,7 +395,7 @@ test('a message packet follows the pixel lane down or up with the send direction
  });
  const down=samples(a.id,b.id),up=samples(b.id,a.id);
  for(const points of [down,up]){
-  assert.equal(points[1].x,20);assert.equal(points[2].x,20);assert(points.every(p=>p.x>=0&&p.x<=24&&Number.isInteger(p.x)&&Number.isInteger(p.y)));
+  assert.equal(points[1].x,12);assert.equal(points[2].x,12);assert(points.every(p=>p.x>=0&&p.x<=16&&Number.isInteger(p.x)&&Number.isInteger(p.y)));
   assert.equal(points[0].x,points[3].x);assert.equal(points[0].y,points[1].y);assert.equal(points[2].y,points[3].y);
  }
  assert(down[0].y<down[3].y);assert(up[0].y>up[3].y);

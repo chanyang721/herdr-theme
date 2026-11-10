@@ -81,7 +81,7 @@ function departureGap(event, next, waiting) {
 // Right margin kept beside the computer and workspace lists alike: message curves
 // and computer links draw in it, so both lists end on the same line. It stays the
 // same at every sidebar width and equals the task panel's PANEL_FLOW.gutter.
-const LINK_MARGIN = 72;
+const LINK_MARGIN = 48;
 // Computer rows match the workspace header rows now that they hold one status line.
 const COMPUTER_ROW = 36;
 
@@ -741,7 +741,7 @@ export default class SixfoldDesk extends View {
     const laneOf = (from, to) => lanes.find(lane => !lane.gone && lane.link.machines.includes(from) && lane.link.machines.includes(to));
     // Link lanes sit in a fixed right margin of the computer list (LINK_MARGIN), drawn
     // over it: rows keep their width whether or not a link shows. Offsets are from the right.
-    const laneRight = slot => Math.max(8,LINK_MARGIN-40-slot*8);
+    const laneRight = slot => Math.max(8,LINK_MARGIN-28-slot*4);
     const coveredComputerPair=(a,b)=>{
       const first=taskComputerRecord(taskPanel?.feed,a),second=taskComputerRecord(taskPanel?.feed,b);
       return Boolean(first&&second&&taskPanel.feed.spaces.some(space=>space.share&&
@@ -1036,16 +1036,16 @@ export default class SixfoldDesk extends View {
         taskComputerAnchors(taskPanel.feed,activeComputers,this.computerBlockHeight??(activeComputers.length*39+3),this.spaceSectionHeight??31),LINK_MARGIN)))
       .children(paths.filter(flow => positions[flow.source] !== undefined && positions[flow.target] !== undefined).map(flow => {
         const from=positions[flow.source], to=positions[flow.target];
-        return pipeline({id:flow.id,width:8+(flow.lane%2)*10,inset:14,from,to,color:workspaceFlowColor(flow),phase:flow.phase,packets:flow.packets,motion,unit:1/(Number(settings()?.zoom)||1)})
-          .right(LINK_MARGIN-26-(flow.lane%2)*10);
+        return pipeline({id:flow.id,width:8+(flow.lane%2)*6,inset:6,from,to,color:workspaceFlowColor(flow),phase:flow.phase,packets:flow.packets,motion,unit:1/(Number(settings()?.zoom)||1)})
+          .right(LINK_MARGIN-18-(flow.lane%2)*6);
       }))
       // The far end is on another computer: run the pipe up to the top of this list,
       // just under the computer rows (the far computer's row is marked there).
       .children(remoteRoutes.filter(({route}) => (positions[route.source] === undefined) !== (positions[route.target] === undefined)).map(({route}) => {
         const outgoing = positions[route.source] !== undefined;
         const row = outgoing ? positions[route.source] : positions[route.target];
-        return pipeline({id:`${route.id}-hop`,width:8+(route.lane%2)*10,inset:14,from:outgoing?row:0,to:outgoing?0:row,color:workspaceFlowColor(route),phase:route.phase,packets:route.packets,motion,unit:1/(Number(settings()?.zoom)||1)})
-          .right(LINK_MARGIN-26-(route.lane%2)*10);
+        return pipeline({id:`${route.id}-hop`,width:8+(route.lane%2)*6,inset:6,from:outgoing?row:0,to:outgoing?0:row,color:workspaceFlowColor(route),phase:route.phase,packets:route.packets,motion,unit:1/(Number(settings()?.zoom)||1)})
+          .right(LINK_MARGIN-18-(route.lane%2)*6);
       }));
     return v_flex().id('sixfold-sidebar').size_full().bg(t.chrome).text_color(t.foreground)
       // Width only matters to the task panel's breakpoints; between them the

@@ -1,5 +1,7 @@
 // Join display records only through explicit native navigation identities.
-export const PANEL_FLOW=Object.freeze({gutter:72,right:8,width:64,message:20,messageNext:24,collaboration:30,computer:40,endpoint:0});
+// Lane offsets are from the card edge. Since the pixel-art pipes (1px lines, 3x3
+// blocks, 2026-11-10) the lanes sit 4px apart in a 48px gutter, not 72px.
+export const PANEL_FLOW=Object.freeze({gutter:48,right:8,width:40,message:12,messageNext:16,collaboration:22,computer:28,endpoint:0});
 
 // Only filtered remote endpoints project to their explicitly identified
 // computer. Hidden local rows must not acquire an invented route.
@@ -83,5 +85,5 @@ export function messageFlowGeometry(gutter){
 export function computerFlow(feed,computer,flow=PANEL_FLOW){
  const local=taskComputerRecord(feed,null)?.id||feed.computers[0]?.id;
  const index=Math.max(0,feed.computers.filter(item=>item.id!==local).findIndex(item=>item.id===computer));
- return {...flow,computer:Math.min(flow.width,flow.computer+index*8)};
+ return {...flow,computer:Math.min(flow.width,flow.computer+index*4)};
 }

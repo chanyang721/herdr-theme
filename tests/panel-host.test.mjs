@@ -64,8 +64,8 @@ test('flow lanes stay outside cards in ordered bands; only proven remote endpoin
 test('the fixed gutter contains message curves, collaboration and outer computer lanes',()=>{
  // One gutter for every sidebar width: nothing in it depends on the width.
  const flow=messageFlowGeometry(PANEL_FLOW.gutter);
- assert.equal(PANEL_FLOW.gutter,72);
- assert.equal(flow.collaboration,30);assert.equal(flow.computer,40);
+ assert.equal(PANEL_FLOW.gutter,48);
+ assert.equal(flow.collaboration,22);assert.equal(flow.computer,28);
  assert(flow.messageNext<flow.collaboration);assert(flow.collaboration<flow.computer);
  assert.equal(flow.width+flow.right,PANEL_FLOW.gutter);
 });
@@ -78,5 +78,5 @@ test('the sidebar width only matters at the layout breakpoints',()=>{
 test('each of four remote computers has its own outer lane',async()=>{
  const {computerFlow}=await import('../mods/sixfold-desk/panel-host.js');
  const feed={computers:['local','a','b','c','d'].map(id=>({id})),spaces:[]};
- assert.deepEqual(['a','b','c','d'].map(id=>computerFlow(feed,id).computer),[40,48,56,64]);
+ assert.deepEqual(['a','b','c','d'].map(id=>computerFlow(feed,id).computer),[28,32,36,40]);
 });
