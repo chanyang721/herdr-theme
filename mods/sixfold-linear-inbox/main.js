@@ -8,7 +8,7 @@ import { categoryLabel, linearLink, visibleItems, spacesOf, issueLine, buildRequ
 // collector runs once, and the result comes back under linear-actions/results/.
 export default class LinearInbox extends View {
   init(_props, cx) {
-    this.items = []; this.statuses = {}; this.health = {};
+    this.items = []; this.statuses = {}; this.health = {}; this.writes = [];
     this.space = props()?.project ?? null; this.unreadOnly = true;
     this.expanded = new Set(); this.stateOpen = null; this.confirm = null;
     this.pending = new Map(); this.results = new Map(); this.error = '';
@@ -35,6 +35,8 @@ export default class LinearInbox extends View {
           if (snapshot !== previous) {
             const feed = JSON.parse(text || '{}');
             this.items = feed.items ?? []; this.statuses = feed.statuses ?? {};
+            // Writes the local collector accepts on this computer; others stay hidden.
+            this.writes = Array.isArray(feed.writes) ? feed.writes : [];
             this.health = JSON.parse(health || '{}');
             previous = snapshot; changed = true;
           }
@@ -106,7 +108,7 @@ export default class LinearInbox extends View {
               .children((item.comments ?? []).map((c, i) => v_flex().id(`sf-linear-c-${item.id}-${i}`).gap(2)
                 .child(div().text_size(11).text_color(t.muted).child(`${c.at || ''} · ${c.author || ''}`))
                 .child(div().text_size(13).child(c.body || ''))))
-              .when(Boolean(item.issue), e => e.child(h_flex().gap(7).items_center()
+              .when(Boolean(item.issue) && this.writes.includes('comment'), e => e.child(h_flex().gap(7).items_center()
                 .child(Input.new(this.input(item)).flex_1().h(30).text_size(13).text_color(t.foreground))
                 .child(button(`sf-linear-comment-${item.id}`, this.confirm === commentKey ? '다시 눌러 댓글 보내기' : '댓글 보내기', this.confirm === commentKey, (_e, cx) => {
                   if (this.confirm !== commentKey) { this.confirm = commentKey; cx.notify(); return; }
@@ -127,9 +129,9 @@ export default class LinearInbox extends View {
             .child(h_flex().gap(7)
               .when(linearLink(item.url), e => e.child(button(`sf-linear-open-${item.id}`, '원문 열기', false, (_e, cx) => cx.spawn(async () => { await exec('open', [item.url]); }))))
               .child(button(`sf-linear-expand-${item.id}`, open ? '접기' : '댓글·답글', open, (_e, cx) => { open ? this.expanded.delete(item.id) : this.expanded.add(item.id); cx.notify(); }))
-              .when(Boolean(item.issue), e => e.child(button(`sf-linear-states-${item.id}`, '상태 변경', this.stateOpen === item.id, (_e, cx) => { this.stateOpen = this.stateOpen === item.id ? null : item.id; this.confirm = null; cx.notify(); })))
-              .when(!item.read && !this.pending.has(readKey), e => e.child(button(`sf-linear-read-${item.id}`, '읽음 처리', true, (_e, cx) => this.send(readKey, 'mark_read', item, {}, cx)))));
+              .when(Boolean(item.issue) && this.writes.includes('set_state'), e => e.child(button(`sf-linear-states-${item.id}`, '상태 변경', this.stateOpen === item.id, (_e, cx) => { this.stateOpen = this.stateOpen === item.id ? null : item.id; this.confirm = null; cx.notify(); })))
+              .when(!item.read && !this.pending.has(readKey) && this.writes.includes('mark_read'), e => e.child(button(`sf-linear-read-${item.id}`, '읽음 처리', true, (_e, cx) => this.send(readKey, 'mark_read', item, {}, cx)))));
         })))
-      .child(div().text_size(11).text_color(t.dim).child('상태 변경·댓글·읽음 처리는 버튼을 누를 때만 Linear에 반영됩니다. 결과는 다음 조회 때 목록에 나타납니다.'));
+      .child(div().text_size(11).text_color(t.dim).child('Linear 쓰기는 버튼을 누를 때만, 이 컴퓨터에서 켠 작업만 반영됩니다. 실제 호출을 검증해 결과를 알려 줍니다.'));
   }
 }
