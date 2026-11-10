@@ -4,7 +4,7 @@ import {theme,spaces,shared,setShared,settings,window,exec,appHome,readTextFile,
 import {issueAlerts,issueAlertSignature,alertedIssues,issueReadTargets,groupReadTargets} from './alert-model.js';
 import {requestReads,checkReads,readPendingIds,lastReadError,READ_POLL_MS} from './linear-reads.js';
 import {autoView,autoSignature} from './linear-auto-model.js';
-import {approve,local,busyKeys,autoError,checkApprovals,settleStarts,AUTO_POLL_MS} from './linear-auto.js';
+import {approve,local,busyKeys,doneIds,autoError,checkApprovals,settleLedger,AUTO_POLL_MS} from './linear-auto.js';
 import {autoGroup} from './linear-auto-view.js';
 import {projectPanelFeed,panelEventStates,panelSpaces,panelSpacePartners,PANEL_TIMING,PANEL_LEGS,panelLeg,agentReason} from './panel-model.js';
 import {panelLayout,cardView,agentRow,panelFlowLayer,panelCounts,PANEL_GEOMETRY,toolIcon,panelReasonWake,agentRowHeight,panelMetaHeight,rowArrival} from './panel-view.js';
@@ -140,7 +140,7 @@ export function createRetainedPanel(cx,{macTitlebar=false,onClassic=null,onDispo
     const state=c.issueStates.get(space.id);
     return JSON.stringify([c.cardAlerts?.(space)||null,state?.open?issueAlertSignature(shared('sixfold.linearItems')??[],space.name):'',shared('sixfold.alertPopover')?.space===space.name?shared('sixfold.alertPopover'):null,
       state?.open?[[...readPendingIds()].sort().join(','),lastReadError()]:null,
-      state?.open?[autoSignature(shared('sixfold.linearAuto'),space.name),[...busyKeys()].sort().join(','),autoError()]:null]);
+      state?.open?[autoSignature(shared('sixfold.linearAuto'),space.name),[...busyKeys()].sort().join(','),[...doneIds()].sort().join(','),autoError()]:null]);
   };
   // Read marks: one request per alert (the collector runs it once through its guard). While any is
   // pending, its result is read every READ_POLL_MS; the timer stops when none is left (at most 3 min).
@@ -250,9 +250,9 @@ export function createRetainedPanel(cx,{macTitlebar=false,onClassic=null,onDispo
   c.autoAct=(space,act)=>{c.cx.spawn(async()=>{try{await act();}catch{}c.alertsChanged();c.notify(c.cards.get(space.id));c.pollAuto();});};
   c.autoFor=(space,t)=>{
     const view=autoView(shared('sixfold.linearAuto'),space.name),writes=shared('sixfold.linearWrites')??[];
-    settleStarts(view);
+    settleLedger(view);
     const doc=()=>`${appHome()}/scripts/sixfold/herdr-theme${window?.()?.platform==='windows'?'.exe':''}`;
-    return autoGroup({id:space.id,view,busy:busyKeys(),error:autoError(),
+    return autoGroup({id:space.id,view,busy:busyKeys(),done:doneIds(),error:autoError(),
       onApprove:(r,part)=>c.autoAct(space,()=>approve(r,[part],writes)),
       onApplyAll:r=>c.autoAct(space,()=>approve(r,['comment','state'],writes)),
       // [수정]: the draft opens in the space's 문서 tab; [댓글 올리기] then posts the edited text.

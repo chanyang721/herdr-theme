@@ -34,8 +34,8 @@ export function autoGroup(model,t){
         .tooltip('Linear 알림을 분류해 할 일이면 이 공간에 작업을 보냅니다 · Linear 반영은 아래 버튼을 누를 때만')));
   for(const r of view.pending){
     const p=r.proposal,b=part=>busy.has(`${r.key}:${part}`);
-    const comment=partOpen(r,'comment'),state=partOpen(r,'state');
-    const done=(part,label)=>r.applied?.[part]?.ok?text(`✓ ${label}`,t.muted,9).flex_none():null;
+    const comment=partOpen(r,'comment',model.done),state=partOpen(r,'state',model.done);
+    const done=(part,label)=>!partOpen(r,part,model.done)?text(`✓ ${label}`,t.muted,9).flex_none():null;
     const card=v_flex().id(`task-issues-auto-pending-${id}-${r.key}`).gap(2).p(4).rounded(6).bg(t.selected)
       .child(head(r,'task-issues-auto-pending'))
       .child(text(summary(p.comment)||'(한 일 요약 없음)',t.muted,11).px(2).tooltip(p.comment))
@@ -58,8 +58,9 @@ export function autoGroup(model,t){
   for(const r of view.decide)group.child(v_flex().id(`task-issues-auto-decide-${id}-${r.key}`).gap(1).p(4).rounded(6).bg(t.selected)
     .child(head(r,'task-issues-auto-decide'))
     .child(h_flex().gap(6).px(2).items_center()
-      .child(text(`결정 필요 · ${r.reason}`,t.muted,10).flex_1().tooltip(r.reason))
-      .when(Boolean(model.onStart),e=>e.child(button(`task-issues-auto-start-${id}-${r.key}`,busy.has(`${r.key}:start`)?'처리 중':'작업 시작',
+      .child(text(r.state==='followup'?`전달 필요 · 진행 중 task ${r.hostTask.slice(0,10)}에 이 알림을 넘겨 주세요`:`결정 필요 · ${r.reason}`,t.muted,10)
+        .flex_1().tooltip(r.state==='followup'?`${r.note} · ${r.reason}`:r.reason))
+      .when(Boolean(model.onStart)&&r.state==='decide',e=>e.child(button(`task-issues-auto-start-${id}-${r.key}`,busy.has(`${r.key}:start`)?'처리 중':'작업 시작',
         '이 알림을 할 일로 보고 이 공간에 작업을 보냅니다',change(model.onStart,r),{enabled:!busy.has(`${r.key}:start`)})))));
   for(const r of view.running)group.child(h_flex().id(`task-issues-auto-running-${id}-${r.key}`).gap(6).px(6).py(2).rounded(5).items_center()
     .child(text(r.issue,t.muted,10).flex_none().font_bold())

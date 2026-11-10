@@ -9,11 +9,11 @@
 
 export const AUTO_LIMIT = 8;
 const PENDING = ['proposed'];
-const DECIDE = ['decide'];
+const DECIDE = ['decide', 'followup'];   // followup: an open task of the issue; a person forwards it
 const RUNNING = ['planned', 'queued', 'dispatched', 'working', 'final', 'plan_failed'];
 export const STATE_LABEL = Object.freeze({
   planned: '계획만(dry-run)', queued: '대기열', dispatched: '보냄', working: '작업 중', final: '검수 대기',
-  plan_failed: '계획 실패', proposed: '반영 대기', applied: '반영됨', discarded: '버림', decide: '결정 필요',
+  plan_failed: '계획 실패', proposed: '반영 대기', applied: '반영됨', discarded: '버림', decide: '결정 필요', followup: '전달 필요',
 });
 const REQUEST_ID = /^[A-Za-z0-9_-]{8,64}$/;
 const ISSUE = /^[A-Z][A-Z0-9]{0,9}-\d{1,7}$/;
@@ -30,10 +30,11 @@ function row(entry) {
     id: entry.id, key: alert8(entry.id), issue: String(entry.issue || ''), title: String(entry.title || ''),
     url: String(entry.url || ''), at: entry.at || '', state: entry.state, label: STATE_LABEL[entry.state] || entry.state,
     reason: String(entry.reason || ''), note: String(entry.note || ''), taskId: String(entry.task_id || ''),
+    hostTask: String(entry.host_task || ''),
     proposal: proposal && {
       comment: String(proposal.comment || ''), state: String(proposal.state || ''), from: String(proposal.from_status || ''),
       publish: String(proposal.publish || ''), checks: Array.isArray(proposal.checks) ? proposal.checks.map(String) : [],
-      draft: String(proposal.draft || ''),
+      draft: String(proposal.draft || ''), report: String(proposal.report_id || ''),
     },
     applied: {comment: applied.comment || null, state: applied.state || null},
   };
@@ -55,18 +56,23 @@ export function autoView(ledger, space) {
   };
 }
 
-// A part still needs its button: not applied yet (a failed one can be pressed again).
-export const partOpen = (r, part) => Boolean(r?.proposal) && (part === 'comment' || Boolean(r.proposal.state))
-  && r.applied?.[part]?.ok !== true;
+// One part of one proposal: the same id however often it is pressed (the collector runs it once).
+const proposalKey = r => String(r?.proposal?.report || '').replace(/[^A-Za-z0-9]/g, '').slice(0, 26) || 'v0';
+export const requestId = (r, part) => r?.key && ['comment', 'state'].includes(part)
+  ? `auto-${r.key}-${part === 'comment' ? 'c' : 's'}-${proposalKey(r)}` : null;
+// A part still needs its button: not applied in the ledger nor confirmed here (`done`: request ids
+// that succeeded and the ledger has not caught up). A failed one can be pressed again.
+export const partOpen = (r, part, done = new Set()) => Boolean(r?.proposal) && (part === 'comment' || Boolean(r.proposal.state))
+  && r.applied?.[part]?.ok !== true && !done.has(requestId(r, part));
 
 // The linear-actions request one approval button drops. `body` is the comment as it stands when
 // pressed (the person's edited draft, or the proposal). Null when this computer cannot send it.
-export function approvalRequest(r, part, writes = [], {now = new Date(), body = null, serial = now.getTime().toString(36)} = {}) {
+export function approvalRequest(r, part, writes = [], {now = new Date(), body = null} = {}) {
   if (!r?.proposal || !ISSUE.test(r.issue) || !partOpen(r, part)) return null;
   const action = part === 'comment' ? 'comment' : 'set_state';
   if (!(writes ?? []).includes(action)) return null;
-  const id = `auto-${r.key}-${part === 'comment' ? 'c' : 's'}-${serial}`.slice(0, 64);
-  if (!REQUEST_ID.test(id)) return null;
+  const id = requestId(r, part);
+  if (!id || !REQUEST_ID.test(id)) return null;
   const base = {v: 1, id, action, issue: r.issue, requested_at: now.toISOString(), origin: 'button'};
   if (action === 'set_state') return r.proposal.state ? {...base, state: r.proposal.state} : null;
   const text = String(body ?? r.proposal.comment).trim();
