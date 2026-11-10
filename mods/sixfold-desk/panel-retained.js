@@ -6,7 +6,7 @@ import {requestReads,checkReads,readPendingIds,lastReadError,READ_POLL_MS} from 
 import {projectPanelFeed,panelEventStates,panelSpaces,panelSpacePartners,PANEL_TIMING,PANEL_LEGS,panelLeg,agentReason} from './panel-model.js';
 import {panelLayout,cardView,agentRow,panelFlowLayer,panelCounts,PANEL_GEOMETRY,toolIcon,panelReasonWake,agentRowHeight,panelMetaHeight,rowArrival} from './panel-view.js';
 import {groupColors,paletteMode} from './collab-flow.js';
-import {issuePopover} from './task-issues-view.js';
+import {issuePopover,alertedGroup} from './task-issues-view.js';
 import {issueScopeData,issueCacheLabel} from './task-issue-state.js';
 import {nativeTaskSpace,hostedTaskLayout,panelWidthClass} from './panel-host.js';
 
@@ -144,6 +144,33 @@ export function createRetainedPanel(cx,{macTitlebar=false,onClassic=null,onDispo
     c.readTimer=c.cx.timer.after(READ_POLL_MS,()=>{c.readTimer=null;if(c.disposed)return;
       c.cx.spawn(async()=>{try{await checkReads();}catch{}c.alertsChanged();c.pollReads();});});
   };
+  // Any issue search open: a new alert then only counts on its chip (no peek over it).
+  c.anyIssuesOpen=()=>[...c.issueStates.values()].some(state=>state.open);
+  // A peek: the top of a space's issue search ('알림 온 이슈') opened by new alerts, drawn by the
+  // arrival layer in a Popup, which takes no focus. Pressing its title opens the real search.
+  c.peekIssues=(name,fresh,t)=>{
+    const space=[...c.spaceMap.values()].find(item=>item.name===name);if(!space)return null;
+    const items=shared('sixfold.linearItems')??[];
+    const group=alertedGroup({id:`peek-${space.id}`,alerted:alertedIssues(items,space.name,''),fresh:new Set(fresh),
+      readable:(shared('sixfold.linearWrites')??[]).includes('mark_read'),readPending:readPendingIds(),readError:lastReadError(),
+      doneKeys:new Set((space.issues||[]).filter(issue=>issue.state==='done').map(issue=>issue.key)),
+      issueTargets:key=>issueReadTargets(items,space.name,key),onRead:alerts=>c.markRead(alerts,'opened',space),
+      onReadAll:()=>c.markRead(groupReadTargets(items,space.name,''),'all',space),
+      onLink:(url,context,alerts)=>{if(/^https:\/\/linear\.app\//.test(url)){(context||c.cx).spawn(async()=>{await exec('open',[url]);});if(alerts?.length)c.markRead(alerts,'opened',space);}}},t);
+    if(!group)return null;
+    return v_flex().id(`task-issues-peek-${space.id}`).w(440).gap(8).p(12).rounded(10).border(1).border_color(t.accent)
+      .bg(t.popover||t.surface).text_color(t.foreground)
+      .child(h_flex().id(`task-issues-peek-head-${space.id}`).gap(8).items_center().cursor_pointer().tooltip('누르면 이슈 검색을 엽니다')
+        .on_click((_event,cx)=>{cx.stop_propagation();c.openIssues(space);})
+        .child(toolIcon(space.work?.tool||'linear',t).size(20))
+        .child(div().flex_1().min_w(0).truncate().text_size(13).font_bold().child(`${space.name} · 이슈 검색`))
+        .child(div().px(6).rounded(7).text_size(10).font_bold().bg(t.accent).text_color(t.accent_foreground||t.background).child('새 알림')))
+      .child(group);
+  };
+  // The open/close callback of each card's issue search (kept per space id, pruned with the cards).
+  c.issueOpeners=new Map();
+  c.opener=(id,fn)=>{c.issueOpeners.set(id,fn);return fn;};
+  c.openIssues=space=>{c.issueOpeners.get(space.id)?.(true);};
   c.markRead=(alerts,origin,space)=>{
     c.cx.spawn(async()=>{
       try{await requestReads(alerts,origin,shared('sixfold.linearWrites')??[]);}catch{}
@@ -159,6 +186,7 @@ export function createRetainedPanel(cx,{macTitlebar=false,onClassic=null,onDispo
       if(c.alertMarks.get(id)!==mark){c.alertMarks.set(id,mark);c.notify(c.cards.get(id));}
     }
     for(const id of c.alertMarks.keys())if(!c.spaceMap.has(id))c.alertMarks.delete(id);
+    for(const id of c.issueOpeners.keys())if(!c.spaceMap.has(id))c.issueOpeners.delete(id);
   };
   c.bodyFor=space=>c.cards.get(c.taskFor(space)?.id)||null;
   c.hostFlows=(entries,computerAnchors,gutter=null)=>panelFlowLayer(c.feed,hostedTaskLayout(c.layout,entries,computerAnchors),c.events,c.color,theme(),c.motion,c.panelWidth,gutter);
@@ -207,7 +235,7 @@ export function createRetainedPanel(cx,{macTitlebar=false,onClassic=null,onDispo
       readPending:state?.open?readPendingIds():new Set(),readError:state?.open?lastReadError():'',
       readable:(shared('sixfold.linearWrites')??[]).includes('mark_read'),
       doneKeys:new Set((space.issues||[]).filter(issue=>issue.state==='done').map(issue=>issue.key)),
-      onOpen:(open)=>{
+      onOpen:c.opener(space.id,open=>{
         let current=c.issueStates.get(space.id);
         if(!current){
           const input=InputState.new({placeholder:'이슈 검색'});
@@ -217,7 +245,7 @@ export function createRetainedPanel(cx,{macTitlebar=false,onClassic=null,onDispo
         }
         if(open)for(const [id,other] of c.issueStates)if(id!==space.id&&other.open){other.open=false;c.notify(c.cards.get(id));}
         current.open=open;c.notify(c.cards.get(space.id));
-      },
+      }),
       onScope:scope=>{if(state&&state.scope!==scope){state.scope=scope;c.notify(c.cards.get(space.id));}},
       onPull:(key,desired)=>{
         if(!state||state.pending.has(key)||!onIssueRequest)return;

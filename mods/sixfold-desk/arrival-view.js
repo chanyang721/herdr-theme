@@ -1,7 +1,7 @@
 import { div, image } from 'gpui-kit';
 import { h_flex, v_flex } from 'gpui-base';
 import { PACKET_PIXELS, centred, pixelBlock, pixelLanding } from './pixel.js';
-import { ARRIVAL, arrivalPhase, visibleArrivals, justLanded, flightPath, flightStep } from './arrival-model.js';
+import { ARRIVAL, arrivalPhase, visibleArrivals, justLanded, flightPath, flightStep, activePeek, foldingPeeks } from './arrival-model.js';
 import { projectKey, linearCategory } from './alert-model.js';
 
 // New-alert arrivals drawn over the workspace list (absolutely placed, so the
@@ -14,9 +14,28 @@ export const POPUP = Object.freeze({h: 50, gap: 4});
 
 // `anchors(space)` -> {top, badgeX, badgeY, left, right} in the list's
 // coordinates, or null when that card is not on screen.
-export function arrivalLayer({list, now, motion, anchors, t, u = 1, onOpen}) {
+export function arrivalLayer({list, now, motion, anchors, t, u = 1, onOpen, peek = null}) {
   const layer = [];
   if (!motion) return layer;
+  // A peek: the space's own popover beside its card (drawn by the host, which takes no focus),
+  // then its alerts fold into the chip from the card's edge like any arrival.
+  const current = activePeek(list, now, motion);
+  if (current && peek) {
+    const anchor = anchors(current.space, current.source);
+    const surface = anchor ? peek({...current, anchor}) : null;
+    if (surface) layer.push(surface);
+  }
+  for (const a of foldingPeeks(list, now, motion)) {
+    const anchor = anchors(a.space, a.source);
+    if (!anchor) continue;
+    const tone = a.source === 'linear' ? (t.ansi4 || t.accent) : (t.ansi5 || t.accent);
+    const from = {x: (anchor.edge ?? anchor.badgeX + 24), y: anchor.badgeY}, to = {x: anchor.badgeX, y: anchor.badgeY};
+    const path = flightPath(from, to), side = PACKET_PIXELS * u, offset = centred(PACKET_PIXELS, u);
+    const at = path[Math.min(path.length - 1, flightStep(a, now))], ms = ARRIVAL.flyMs / ARRIVAL.steps;
+    layer.push(pixelBlock(at.x - offset, at.y - offset, side, side, tone, `sf-arrival-block-${a.key}`)
+      .transition('left', {duration: ms, easing: 'linear'}).transition('top', {duration: ms, easing: 'linear'}));
+    layer.push(pixelLanding(`sf-arrival-land-${a.key}`, to.x, to.y, false, tone, u));
+  }
   const stack = new Map();
   for (const a of visibleArrivals(list, now, motion)) {
     const anchor = anchors(a.space, a.source);

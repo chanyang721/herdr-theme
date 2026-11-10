@@ -5,7 +5,19 @@
 // rendering and the clock. Bounded: at most ARRIVAL.ledger entries are kept.
 import { projectKey } from './alert-model.js';
 
-export const ARRIVAL = Object.freeze({showMs: 4000, flyMs: 640, steps: 6, unit: 2, blinkMs: 480, visible: 3, ledger: 50, keepMs: 60_000});
+export const ARRIVAL = Object.freeze({showMs: 4000, flyMs: 640, steps: 6, unit: 2, blinkMs: 480, visible: 3, ledger: 50, keepMs: 60_000,
+  peekMs: 8000, holdMs: 60_000});
+
+// How an arrival is shown, decided when it is added (see arrival-store's peek check):
+// - peek: the space's own popover (issue search for Linear, alert popover for Slack) opens
+//   beside its card without taking focus, for ARRIVAL.peekMs (held while the pointer rests
+//   on it, at most holdMs), then folds into the card's chip. One peek at a time: a peek for
+//   another space waits its turn; more alerts for the open one join it and restart its time.
+// - quiet: something else is open (another popover, typing): no popup, the chip counts it.
+// - otherwise the small popup of a card without merged chips.
+export const showFor = a => a?.peek ? ARRIVAL.peekMs : ARRIVAL.showMs;
+const held = (a, now) => Boolean(a?.held) && now - a.held < ARRIVAL.holdMs;
+const WAITING = Number.MAX_SAFE_INTEGER;   // a peek queued behind one that is held open
 export const FALLBACK_SPACE = 'Share';
 
 // The space an alert belongs to, among the spaces on screen; Share otherwise.
@@ -15,21 +27,85 @@ export function arrivalTarget(workspace, names = [], fallback = FALLBACK_SPACE) 
 }
 
 export function arrivalPhase(arrival, now, motion = true) {
-  if (!motion) return 'landed';
-  const age = now - arrival.at;
-  return age < ARRIVAL.showMs ? 'show' : age < ARRIVAL.showMs + ARRIVAL.flyMs ? 'fly' : 'landed';
+  if (!motion || arrival.quiet) return 'landed';
+  if (held(arrival, now)) return 'show';
+  const age = now - arrival.at, show = showFor(arrival);
+  return age < 0 ? 'queued' : age < show ? 'show' : age < show + ARRIVAL.flyMs ? 'fly' : 'landed';
+}
+const sameCard = (a, b) => projectKey(a.space) === projectKey(b.space) && a.source === b.source;
+// When the peeks other than `group` are done showing (held ones count as not yet).
+function peekEnd(list, now, group = null) {
+  let end = now;
+  for (const a of list) {
+    if (!a.peek || (group && sameCard(a, group))) continue;
+    const phase = arrivalPhase(a, now);
+    if (phase === 'show' || phase === 'queued') end = Math.max(end, held(a, now) ? WAITING : a.at + ARRIVAL.peekMs);
+  }
+  return end;
 }
 
 // Adds one arrival (once per key), drops landed ones past keepMs, keeps the newest `ledger`.
 export function pushArrival(list, arrival, now) {
-  const kept = (list ?? []).filter(a => a.key !== arrival.key && now - a.at < ARRIVAL.showMs + ARRIVAL.flyMs + ARRIVAL.keepMs);
-  return [...kept, {...arrival, at: now}].slice(-ARRIVAL.ledger);
+  const kept = (list ?? []).filter(a => a.key !== arrival.key && (a.at > now || now - a.at < showFor(a) + ARRIVAL.flyMs + ARRIVAL.keepMs));
+  if (!arrival.peek) return [...kept, {...arrival, at: now}].slice(-ARRIVAL.ledger);
+  const open = kept.filter(a => a.peek && sameCard(a, arrival) && ['show', 'queued'].includes(arrivalPhase(a, now)));
+  // Joins its card's open (or queued) peek: they show and fold together, from the later start.
+  const start = open.length ? Math.max(now, ...open.map(a => a.at)) : peekEnd(kept, now);
+  const timed = kept.map(a => open.includes(a) ? {...a, at: start} : a);
+  return [...timed, {...arrival, at: start}].slice(-ARRIVAL.ledger);
+}
+
+// The pointer rests on a peek (hovered) or leaves it. Leaving restarts its peekMs and
+// moves the peeks queued behind it to after it, in their order.
+export function holdPeek(list, space, source, hovered, now) {
+  const card = {space, source};
+  let changed = false;
+  const next = (list ?? []).map(a => {
+    if (!a.peek || !sameCard(a, card) || arrivalPhase(a, now) !== 'show') return a;
+    changed = true;
+    return hovered ? {...a, held: now} : {...a, held: 0, at: now};
+  });
+  if (!changed) return list;
+  // Re-queue the others: one peek after another, each card's alerts together.
+  let end = hovered ? WAITING : now + ARRIVAL.peekMs;
+  const starts = new Map();
+  return next.map(a => {
+    if (!a.peek || sameCard(a, card) || arrivalPhase(a, now) !== 'queued') return a;
+    const id = `${projectKey(a.space)}:${a.source}`;
+    if (!starts.has(id)) { starts.set(id, end); if (end !== WAITING) end += ARRIVAL.peekMs; }
+    return {...a, at: starts.get(id)};
+  });
+}
+
+// Peeks queued behind a hold that ended by itself (holdMs) start again, one card after another.
+export function settleQueue(list, now) {
+  if (!(list ?? []).some(a => a.at === WAITING) || (list ?? []).some(a => a.peek && held(a, now))) return list;
+  let end = peekEnd(list.filter(a => a.at !== WAITING), now);
+  const starts = new Map();
+  return list.map(a => {
+    if (a.at !== WAITING) return a;
+    const id = `${projectKey(a.space)}:${a.source}`;
+    if (!starts.has(id)) { starts.set(id, end); end += ARRIVAL.peekMs; }
+    return {...a, at: starts.get(id)};
+  });
+}
+
+// The peeks to draw now: one card at a time (its alerts together), or null.
+export function activePeek(list, now, motion = true) {
+  if (!motion) return null;
+  const shown = (list ?? []).filter(a => a.peek && arrivalPhase(a, now, motion) === 'show');
+  if (!shown.length) return null;
+  const first = shown[0];
+  return {space: first.space, source: first.source, arrivals: shown.filter(a => sameCard(a, first))};
 }
 
 // Popups on screen now (show or fly), newest last, at most `visible`.
+// Peeks are drawn by activePeek; queued ones are not on screen yet.
 export function visibleArrivals(list, now, motion = true) {
-  return (list ?? []).filter(a => arrivalPhase(a, now, motion) !== 'landed').slice(-ARRIVAL.visible);
+  return (list ?? []).filter(a => !a.peek && ['show', 'fly'].includes(arrivalPhase(a, now, motion))).slice(-ARRIVAL.visible);
 }
+// Peeks folding into their chip now (the block flies from the card's edge).
+export const foldingPeeks = (list, now, motion = true) => (list ?? []).filter(a => a.peek && arrivalPhase(a, now, motion) === 'fly');
 
 // Alerts still on their way to a card are not in its badge yet.
 export function inFlight(list, space, source, now, motion = true) {
@@ -39,14 +115,14 @@ export function inFlight(list, space, source, now, motion = true) {
 
 // Which of the ARRIVAL.steps flight points the block is on now (0-based).
 export function flightStep(arrival, now) {
-  const into = now - arrival.at - ARRIVAL.showMs;
+  const into = now - arrival.at - showFor(arrival);
   return Math.max(0, Math.min(ARRIVAL.steps - 1, Math.floor(into / (ARRIVAL.flyMs / ARRIVAL.steps))));
 }
 
 // Landed a moment ago: the card blinks once where it came in.
 export function justLanded(list, now, motion = true) {
   if (!motion) return [];
-  return (list ?? []).filter(a => { const since = now - a.at - ARRIVAL.showMs - ARRIVAL.flyMs; return since >= 0 && since < ARRIVAL.blinkMs; });
+  return (list ?? []).filter(a => { if (a.quiet || held(a, now)) return false; const since = now - a.at - showFor(a) - ARRIVAL.flyMs; return since >= 0 && since < ARRIVAL.blinkMs; });
 }
 
 // The next moment the sidebar must re-render (popup ends, each flight step,
@@ -55,8 +131,10 @@ export function nextPhaseAt(list, now, motion = true) {
   if (!motion) return null;
   const step = ARRIVAL.flyMs / ARRIVAL.steps;
   const edges = (list ?? []).flatMap(a => {
-    const fly = a.at + ARRIVAL.showMs;
-    return [...Array.from({length: ARRIVAL.steps}, (_, k) => fly + k * step), fly + ARRIVAL.flyMs, fly + ARRIVAL.flyMs + ARRIVAL.blinkMs];
+    if (a.quiet || a.at >= WAITING) return [];
+    if (held(a, now)) return [a.held + ARRIVAL.holdMs];   // a hold that outlives holdMs lets go
+    const fly = a.at + showFor(a);
+    return [a.at, ...Array.from({length: ARRIVAL.steps}, (_, k) => fly + k * step), fly + ARRIVAL.flyMs, fly + ARRIVAL.flyMs + ARRIVAL.blinkMs];
   }).filter(t => t > now);
   return edges.length ? Math.min(...edges) : null;
 }

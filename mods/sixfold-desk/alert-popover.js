@@ -24,12 +24,13 @@ const short = at => {
 };
 const line = (value, color, size = 12) => div().min_w(0).truncate().text_size(size).text_color(color).child(String(value ?? ''));
 
-function slackRows(project, t) {
+function slackRows(project, t, fresh = new Set()) {
   const read = shared('sixfold.alertRead') ?? {};
   const unread = item => read[item.id] !== alertVersion(item);
   const items = scopedAlerts(shared('sixfold.alertItems') ?? [], {project});
   return {unread: items.filter(unread).length, rows: popoverRows(items, 5, unread).map((item, i) =>
     v_flex().id(`sf-alert-pop-slack-${i}`).gap(2).p(8).rounded(6).bg(unread(item) ? t.selected : t.chrome)
+      .when(fresh.has(item.id), e => e.border(1).border_color(t.ansi5 || t.accent))
       .child(h_flex().gap(6).items_center()
         .child(div().size(6).flex_none().rounded(3).bg(unread(item) ? t.accent : t.border))
         .child(line(item.author || 'Slack', t.foreground, 12).font_bold().flex_1())
@@ -89,4 +90,19 @@ export function alertPopover({id, project, trigger, t, hasSlack, hasLinear, onAl
       .child(div().id(`sf-alert-pop-all-${id}`).px(10).py(5).rounded(5).text_size(12).font_semibold()
         .bg(t.surface).text_color(t.accent).hover(s => s.bg(t.hover)).cursor_pointer()
         .on_click((_e, cx) => { cx.stop_propagation(); hidePopover(); onAll(source); cx.notify(); }).child('전체 보기'))));
+}
+
+// A peek: the Slack alerts of a space opened by new alerts beside its card (the arrival layer
+// draws it in a Popup, which takes no focus); the ones just arrived are lit. Read-only.
+export function slackPeek(project, t, fresh = [], onAll = null) {
+  const data = slackRows(project, t, new Set(fresh));
+  if (!data.rows.length) return null;
+  return v_flex().id(`sf-alert-peek-${projectKey(project)}`).w(400).gap(8).p(12).rounded(10).border(1).border_color(t.ansi5 || t.accent)
+    .bg(t.popover || t.surface).text_color(t.foreground)
+    .child(h_flex().id(`sf-alert-peek-head-${projectKey(project)}`).gap(8).items_center()
+      .when(Boolean(onAll), e => e.cursor_pointer().tooltip('누르면 이 공간 Slack 알림을 엽니다').on_click((_e, cx) => { cx.stop_propagation(); onAll(); }))
+      .child(image('mods/sixfold-desk/icons/slack.svg').size(16))
+      .child(line(`${project} · Slack 알림`, t.foreground, 13).font_bold().flex_1())
+      .child(line(data.unread ? `미확인 ${data.unread}` : '0', data.unread ? t.accent : t.dim, 10)))
+    .child(v_flex().gap(4).children(data.rows));
 }
