@@ -91,7 +91,8 @@ export function openLinearWindow() {
 export function watchLinear(view, cx) {
   view.stopLinear?.();
   const base = `${appHome()}/data/sixfold`;
-  const inputs = [['feed', 'linear-alerts.json', () => ({items: []})], ['health', 'linear-live-health.json', () => ({})]];
+  const inputs = [['feed', 'linear-alerts.json', () => ({items: []})], ['health', 'linear-live-health.json', () => ({})],
+                  ['auto', 'linear-auto.json', () => ({entries: []})]];   // Linear auto work: the issue search's '자동 작업'
   const cached = new Map(), subscriptions = [];
   let loading = false, previous, disposed = false, scheduled = null, dirty = false, version = 0;
   const allowed = () => !disposed && view.sidebarVisible !== false;
@@ -112,6 +113,7 @@ export function watchLinear(view, cx) {
         const feed = cached.get('feed').value, health = cached.get('health').value;
         const names = (spaces() ?? []).map(s => s.name);
         publishLinear(feed, health, names);
+        setShared('sixfold.linearAuto', cached.get('auto').value);
         cx.notify();
         view.panelRetained?.alertsChanged?.();   // an open issue search shows its issues' new alerts
         const events = await announce(linearPopupEvents(placeItems(feed.items ?? [], names)), allowed);

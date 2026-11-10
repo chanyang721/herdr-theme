@@ -3,6 +3,9 @@ import {h_flex,v_flex,InputState,Input} from 'gpui-base';
 import {theme,spaces,shared,setShared,settings,window,exec,appHome,readTextFile,writeTextFile} from 'herdr';
 import {issueAlerts,issueAlertSignature,alertedIssues,issueReadTargets,groupReadTargets} from './alert-model.js';
 import {requestReads,checkReads,readPendingIds,lastReadError,READ_POLL_MS} from './linear-reads.js';
+import {autoView,autoSignature} from './linear-auto-model.js';
+import {approve,local,busyKeys,autoError,checkApprovals,settleStarts,AUTO_POLL_MS} from './linear-auto.js';
+import {autoGroup} from './linear-auto-view.js';
 import {projectPanelFeed,panelEventStates,panelSpaces,panelSpacePartners,PANEL_TIMING,PANEL_LEGS,panelLeg,agentReason} from './panel-model.js';
 import {panelLayout,cardView,agentRow,panelFlowLayer,panelCounts,PANEL_GEOMETRY,toolIcon,panelReasonWake,agentRowHeight,panelMetaHeight,rowArrival} from './panel-view.js';
 import {groupColors,paletteMode} from './collab-flow.js';
@@ -136,7 +139,8 @@ export function createRetainedPanel(cx,{macTitlebar=false,onClassic=null,onDispo
   c.alertMark=space=>{
     const state=c.issueStates.get(space.id);
     return JSON.stringify([c.cardAlerts?.(space)||null,state?.open?issueAlertSignature(shared('sixfold.linearItems')??[],space.name):'',shared('sixfold.alertPopover')?.space===space.name?shared('sixfold.alertPopover'):null,
-      state?.open?[[...readPendingIds()].sort().join(','),lastReadError()]:null]);
+      state?.open?[[...readPendingIds()].sort().join(','),lastReadError()]:null,
+      state?.open?[autoSignature(shared('sixfold.linearAuto'),space.name),[...busyKeys()].sort().join(','),autoError()]:null]);
   };
   // Read marks: one request per alert (the collector runs it once through its guard). While any is
   // pending, its result is read every READ_POLL_MS; the timer stops when none is left (at most 3 min).
@@ -235,6 +239,28 @@ export function createRetainedPanel(cx,{macTitlebar=false,onClassic=null,onDispo
       },
     };
   };
+  // Linear auto work ('자동 작업'): a pressed approval drops one request file; while any is busy its
+  // result is read every AUTO_POLL_MS (the ledger itself arrives through watchLinear).
+  c.autoTimer=null;
+  c.pollAuto=()=>{
+    if(c.disposed||c.autoTimer||!busyKeys().size)return;
+    c.autoTimer=c.cx.timer.after(AUTO_POLL_MS,()=>{c.autoTimer=null;if(c.disposed)return;
+      c.cx.spawn(async()=>{try{await checkApprovals();}catch{}c.alertsChanged();c.pollAuto();});});
+  };
+  c.autoAct=(space,act)=>{c.cx.spawn(async()=>{try{await act();}catch{}c.alertsChanged();c.notify(c.cards.get(space.id));c.pollAuto();});};
+  c.autoFor=(space,t)=>{
+    const view=autoView(shared('sixfold.linearAuto'),space.name),writes=shared('sixfold.linearWrites')??[];
+    settleStarts(view);
+    const doc=()=>`${appHome()}/scripts/sixfold/herdr-theme${window?.()?.platform==='windows'?'.exe':''}`;
+    return autoGroup({id:space.id,view,busy:busyKeys(),error:autoError(),
+      onApprove:(r,part)=>c.autoAct(space,()=>approve(r,[part],writes)),
+      onApplyAll:r=>c.autoAct(space,()=>approve(r,['comment','state'],writes)),
+      // [수정]: the draft opens in the space's 문서 tab; [댓글 올리기] then posts the edited text.
+      onEdit:r=>{if(r.proposal?.draft)c.cx.spawn(async()=>{await exec(doc(),['open_doc_tab',r.proposal.draft,'--space',space.id]).catch(()=>{});});},
+      onDiscard:r=>c.autoAct(space,()=>local(r,'discard')),
+      onStart:r=>c.autoAct(space,()=>local(r,'start')),
+      onLink:url=>{if(/^https:\/\/linear\.app\//.test(url))c.cx.spawn(async()=>{await exec('open',[url]);});}},t);
+  };
   // Any issue search open: a new alert then only counts on its chip (no peek over it).
   c.anyIssuesOpen=()=>[...c.issueStates.values()].some(state=>state.open);
   // A peek: the top of a space's issue search ('알림 온 이슈') opened by new alerts, drawn by the
@@ -318,6 +344,7 @@ export function createRetainedPanel(cx,{macTitlebar=false,onClassic=null,onDispo
       search:state?.input?Input.new(state.input).w_full().h(30):null,
       alertsFor:state?.open?key=>issueAlerts(shared('sixfold.linearItems')??[],space.name,key):null,
       alerted:state?.open?alertedIssues(shared('sixfold.linearItems')??[],space.name,state.query):[],
+      auto:state?.open?c.autoFor(space,t):null,
       // Opens the comment itself (#comment-…) and confirms what was opened: the Linear notification is
       // marked read in Linear (a comment read from a linked issue only on this computer).
       onLink:(url,context,alerts)=>{if(/^https:\/\/linear\.app\//.test(url)){(context||cx).spawn(async()=>{await exec('open',[url]);});if(alerts?.length)c.markRead(alerts,'opened',space);}},
@@ -470,7 +497,7 @@ export function createRetainedPanel(cx,{macTitlebar=false,onClassic=null,onDispo
   };
   c.setEnabled=enabled=>{if(c.enabled!==enabled){c.enabled=enabled;c.preferences();}};
   c.dispose=()=>{
-    if(c.disposed)return;c.disposed=true;c.readTimer?.cancel?.();c.readTimer=null;c.cacheTimer?.cancel?.();c.cacheTimer=null;c.statusMemo?.clear();
+    if(c.disposed)return;c.disposed=true;c.readTimer?.cancel?.();c.readTimer=null;c.cacheTimer?.cancel?.();c.cacheTimer=null;c.autoTimer?.cancel?.();c.autoTimer=null;c.statusMemo?.clear();
     try{c.wake?.cancel();}catch{/* The old source generation may already be released. */}
     try{c.life?.cancel();}catch{}
     for(const entity of [...c.rows.values(),...c.cards.values(),c.computers,c.summary,c.flows,c.list,c.entity])try{entity?.release();}catch{}

@@ -42,6 +42,7 @@ export function issuePopover(model,t){
     return popover.content(body);
   }
   if(model.search)body.child(model.search);
+  if(model.auto)body.child(model.auto);   // '자동 작업' (linear-auto-view.js): approvals above the alerts
   const group=alertedGroup(model,t);
   if(group)body.child(group);
   body.child(h_flex().gap(4).pb(8).border_b(1).border_color(t.border)
