@@ -110,15 +110,14 @@ for (const native of [false,true]) test(`background messages refresh through ${n
   log = '{partial';
   await refresh();
   assert.equal(view.messageEvents[0].id,'live','partial writes must preserve the previous badges');
-  // A partial unrelated writer must not stop message ingestion, and a burst
-  // must begin together rather than waiting for the first four to arrive.
+  // A partial unrelated writer must not stop message ingestion. A burst found
+  // by one refresh leaves one send at a time, in the order the sends were made.
   malformedAuxiliary=true;
-  const burst=Array.from({length:12},(_,index)=>({id:`burst-${index}`,source:'source',target:'target',at:Date.now()}));
+  const burst=Array.from({length:12},(_,index)=>({id:`burst-${index}`,source:'source',target:'target',at:Date.now(),seq:index+1}));
   log=JSON.stringify({events:[{id:'live',source:'source',target:'target',at:Date.now()},...burst]});
   await refresh();
-  assert.equal(view.activeFlows.length,13);
-  assert.equal(view.pendingFlows.length,0);
-  assert.equal(new Set(view.activeFlows.map(flow=>flow.id)).size,13);
+  assert.equal(view.activeFlows.length,1,'the burst waits for the next departure slot');
+  assert.deepEqual(view.pendingFlows.map(flow=>flow.id),burst.map(flow=>flow.id),'waiting in send order');
   pinText=JSON.stringify({spaces:[{id:'stable-id',machine:null}]});
   await refresh();
   assert.equal(view.workspacePins.spaces[0].id,'stable-id','config-only edits refresh without a message or focus change');
@@ -142,12 +141,13 @@ for (const native of [false,true]) test(`background messages refresh through ${n
   assert.equal(view.sidebarVisible,false);assert.equal(view.activeFlows.length,0);
   assert(activeTimers.every(timer=>timer.cancelled),'hidden event cancels all pending packet transitions without a render');
   if(native)assert.equal(sampler.cancelled,true,'hidden event cancels the memory sampler');
-  log=JSON.stringify({events:[...burst,{id:'while-hidden',source:'source',target:'target',at:Date.now()}]});
+  const hidden=Array.from({length:5},(_,index)=>({id:`while-hidden-${index}`,source:'source',target:'target',at:Date.now(),seq:13+index}));
+  log=JSON.stringify({events:[...burst,{id:'stale-hidden',source:'source',target:'target',at:Date.now()-120000,seq:12.5},...hidden]});
   if(!native){publishFiles();await settle();}
   assert.equal(view.activeFlows.length,0,'hidden delivery cannot start motion');
   await visibilityEvent(true);
   assert.equal(view.sidebarVisible,true);
-  assert.equal(view.activeFlows.length,0,'showing consumes current messages without a backlog of motion');
+  assert.deepEqual([...view.activeFlows,...view.pendingFlows].map(flow=>flow.id),hidden.slice(-3).map(flow=>flow.id),'showing replays only the latest three hidden sends, in order');
   if(native)assert.equal(timers.filter(item=>item.ms===500&&item.options?.owner===null).at(-1).cancelled,false,'shown event resumes one native sampler');
   view.stopLiveMessages?.();for(const stop of view.fileSubscriptions)stop();assert.equal(subscriptions.size,0);
   delete globalThis.__sixfoldTest;

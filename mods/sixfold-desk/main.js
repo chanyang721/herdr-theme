@@ -63,6 +63,21 @@ const LINK_PULSE = 5;   // the slow "working together" pulse
 const SEND_PULSE = 8;   // one send between computers: longer than the idle pulse
 // Bound the three finite host timers per packet, preserving the installed limit.
 const MAX_ACTIVE_FLOWS = 64;
+// Sends leave one at a time in the order they were made (2026-11-10: a refresh
+// that found several sends started them all at once). The next one waits for the
+// real gap between their timestamps, at least FLOW_GAP_MS and at most
+// FLOW_REAL_GAP_MS. A queue longer than FLOW_CATCH_UP shortens the gap to catch up,
+// and only the newest FLOW_BACKLOG wait; older ones are skipped and counted.
+const FLOW_GAP_MS = 320, FLOW_REAL_GAP_MS = 1200, FLOW_MIN_GAP_MS = 90;
+const FLOW_CATCH_UP = 4, FLOW_BACKLOG = 12, FLOW_TRAVEL_MS = 1600;
+// Sends made while the sidebar was hidden: on return, at most this many, this recent.
+const FLOW_RESUME = 3, FLOW_RESUME_MS = 60000;
+const flowOrder = (a, b) => (Number.isSafeInteger(a.seq) && Number.isSafeInteger(b.seq) && a.seq !== b.seq ? a.seq - b.seq : 0) || (a.at ?? 0) - (b.at ?? 0);
+function departureGap(event, next, waiting) {
+  if (waiting > FLOW_CATCH_UP) return Math.max(FLOW_MIN_GAP_MS, Math.round(FLOW_GAP_MS * FLOW_CATCH_UP / waiting));
+  const real = Number.isFinite(next?.at) && Number.isFinite(event?.at) ? next.at - event.at : 0;
+  return Math.min(FLOW_REAL_GAP_MS, Math.max(FLOW_GAP_MS, real));
+}
 // Right margin kept beside the computer and workspace lists alike: message curves
 // and computer links draw in it, so both lists end on the same line. It stays the
 // same at every sidebar width and equals the task panel's PANEL_FLOW.gutter.
@@ -193,11 +208,16 @@ export default class SixfoldDesk extends View {
           this.workflowNodes = workflowNodes(workflow.nodes,[...addresses]);
           this.workflowEvents = delegationEvents(workflow.events,this.workflowNodes);
           this.workflowNodes.forEach(node=>addresses.add(node.id));
-          const delegations = freshMessages(this.previousDelegations,this.workflowEvents);
+          // After the sidebar was hidden, compare with the watermark it left
+          // and replay only the few most recent sends, in order.
+          const resuming=this.previousEvents===null&&Boolean(this.resumeEvents);
+          const delegations = freshMessages(this.previousDelegations??this.resumeDelegations??null,this.workflowEvents);
+          const sends = freshMessages(this.previousEvents??this.resumeEvents??null, events).filter(event => addresses.has(event.source) && addresses.has(event.target));
           // Active rows already show by default; new events must not open history.
-          this.pendingFlows.push(...delegations);
+          const fresh=[...delegations,...sends];
+          this.pendingFlows.push(...(resuming?fresh.filter(event=>event.at>=Date.now()-FLOW_RESUME_MS).sort(flowOrder).slice(-FLOW_RESUME):fresh));
+          this.resumeEvents=null;this.resumeDelegations=null;
           this.previousDelegations = this.workflowEvents;
-          this.pendingFlows.push(...freshMessages(this.previousEvents, events).filter(event => addresses.has(event.source) && addresses.has(event.target)));
           this.previousEvents = events;
           this.messageEvents = events;
           this.routeScript = config?.command || config?.script;
@@ -356,7 +376,8 @@ export default class SixfoldDesk extends View {
           const visible=window()?.visible!==false;
           if(!visible){
             this.sidebarVisible=false;this.syncCardActivity?.();this.panelRetained?.setVisible(false);
-            this.stopLegacyMotion();this.stopLiveMessages?.();this.stopLiveMessages=null;
+            const resumeEvents=this.previousEvents,resumeDelegations=this.previousDelegations;
+            this.stopLegacyMotion();this.resumeEvents=resumeEvents;this.resumeDelegations=resumeDelegations;this.stopLiveMessages?.();this.stopLiveMessages=null;
             fileReceiver.flush();
           }else{
             // Drain the latest queued data while the retained panel is still
@@ -419,8 +440,8 @@ export default class SixfoldDesk extends View {
 
   stopLegacyMotion(){
     for(const timer of this.flowTimers||[])try{timer.cancel();}catch{}
-    this.flowTimers?.clear();this.activeFlows=[];this.pendingFlows=[];
-    this.previousEvents=null;this.previousDelegations=null;
+    this.flowTimers?.clear();this.activeFlows=[];this.pendingFlows=[];this.departTimer=null;this.skippedFlows=0;
+    this.previousEvents=null;this.previousDelegations=null;this.resumeEvents=null;this.resumeDelegations=null;
     this.linkFlowTimer?.cancel();this.linkFlowTimer=null;
     this.linkWakeTimer?.cancel();this.linkWakeTimer=null;this.linkWakeAt=null;
     this.cometTimer?.cancel();this.cometTimer=null;this.cometWake=null;
@@ -485,33 +506,43 @@ export default class SixfoldDesk extends View {
     this.flowTimers??=new Set();
     const after=(ms,callback)=>{
       let timer;timer=cx.timer.after(ms,cx=>{this.flowTimers.delete(timer);callback(cx);});
-      this.flowTimers.add(timer);
+      this.flowTimers.add(timer);return timer;
     };
-    while (this.pendingFlows.length && this.activeFlows.length < MAX_ACTIVE_FLOWS) {
-      const event = this.pendingFlows.shift();
-      // Freshness was checked on ingestion. A real burst must not expire
-      // merely because earlier packets occupied the four visible lanes.
-      const same=this.activeFlows.filter(flow=>flow.source===event.source&&flow.target===event.target);
-      const occupied = new Set(this.activeFlows.map(flow => flow.lane));
-      const lane = same[0]?.lane ?? [0,1,2,3,4,5].find(value=>!occupied.has(value)) ?? this.activeFlows.length%6;
-      const travelMs=1600+(same.length%6)*180;
-      const flow = { ...event, lane, travelMs, phase: 'start' };
-      this.activeFlows.push(flow);
-      after(60, cx => {
-        flow.phase = 'travel';
-        cx.notify();
-      });
-      after(travelMs+60, cx => {
-        flow.phase = 'arrived';
-        cx.notify();
-      });
-      after(travelMs+2200, cx => {
-        this.activeFlows = this.activeFlows.filter(item => item.id !== flow.id);
-        this.startFlows(cx);
-        cx.notify();
-      });
+    this.pendingFlows.sort(flowOrder);
+    if(this.pendingFlows.length>FLOW_BACKLOG){
+      this.skippedFlows=(this.skippedFlows||0)+this.pendingFlows.length-FLOW_BACKLOG;
+      this.pendingFlows=this.pendingFlows.slice(-FLOW_BACKLOG);
     }
+    // One departure per slot: a single pending timer opens the next slot.
+    if(this.departTimer||!this.pendingFlows.length||this.activeFlows.length>=MAX_ACTIVE_FLOWS)return;
+    const event = this.pendingFlows.shift();
+    const same=this.activeFlows.filter(flow=>flow.source===event.source&&flow.target===event.target);
+    const occupied = new Set(this.activeFlows.map(flow => flow.lane));
+    const lane = same[0]?.lane ?? [0,1,2,3,4,5].find(value=>!occupied.has(value)) ?? this.activeFlows.length%6;
+    const travelMs=FLOW_TRAVEL_MS;
+    const flow = { ...event, lane, travelMs, phase: 'start' };
+    this.activeFlows.push(flow);
+    after(60, cx => {
+      flow.phase = 'travel';
+      cx.notify();
+    });
+    after(travelMs+60, cx => {
+      flow.phase = 'arrived';
+      cx.notify();
+    });
+    after(travelMs+2200, cx => {
+      this.activeFlows = this.activeFlows.filter(item => item.id !== flow.id);
+      if(!this.activeFlows.length&&!this.pendingFlows.length)this.skippedFlows=0;
+      this.startFlows(cx);
+      cx.notify();
+    });
+    this.departTimer=after(departureGap(event,this.pendingFlows[0],this.pendingFlows.length),cx=>{
+      this.departTimer=null;
+      this.startFlows(cx);
+      cx.notify();
+    });
   }
+
 
   paneHeader(all, t, w) {
     const p = all.find(p => p.pane === props()?.pane);
@@ -1005,7 +1036,7 @@ export default class SixfoldDesk extends View {
         taskComputerAnchors(taskPanel.feed,activeComputers,this.computerBlockHeight??(activeComputers.length*39+3),this.spaceSectionHeight??31),LINK_MARGIN)))
       .children(paths.filter(flow => positions[flow.source] !== undefined && positions[flow.target] !== undefined).map(flow => {
         const from=positions[flow.source], to=positions[flow.target];
-        return pipeline({id:flow.id,width:8+(flow.lane%2)*10,inset:14,from,to,color:workspaceFlowColor(flow),phase:flow.phase,packets:flow.packets,motion})
+        return pipeline({id:flow.id,width:8+(flow.lane%2)*10,inset:14,from,to,color:workspaceFlowColor(flow),phase:flow.phase,packets:flow.packets,motion,unit:1/(Number(settings()?.zoom)||1)})
           .right(LINK_MARGIN-26-(flow.lane%2)*10);
       }))
       // The far end is on another computer: run the pipe up to the top of this list,
@@ -1013,7 +1044,7 @@ export default class SixfoldDesk extends View {
       .children(remoteRoutes.filter(({route}) => (positions[route.source] === undefined) !== (positions[route.target] === undefined)).map(({route}) => {
         const outgoing = positions[route.source] !== undefined;
         const row = outgoing ? positions[route.source] : positions[route.target];
-        return pipeline({id:`${route.id}-hop`,width:8+(route.lane%2)*10,inset:14,from:outgoing?row:0,to:outgoing?0:row,color:workspaceFlowColor(route),phase:route.phase,packets:route.packets,motion})
+        return pipeline({id:`${route.id}-hop`,width:8+(route.lane%2)*10,inset:14,from:outgoing?row:0,to:outgoing?0:row,color:workspaceFlowColor(route),phase:route.phase,packets:route.packets,motion,unit:1/(Number(settings()?.zoom)||1)})
           .right(LINK_MARGIN-26-(route.lane%2)*10);
       }));
     return v_flex().id('sixfold-sidebar').size_full().bg(t.chrome).text_color(t.foreground)
@@ -1087,7 +1118,9 @@ export default class SixfoldDesk extends View {
           .when(Boolean(crossMachine(flow,machineOf)),row=>row.child(div().flex_none().px(4).rounded(3).border(1).border_color(palette[flow.lane%palette.length]).text_size(9).text_color(palette[flow.lane%palette.length])
             .child(`⇄ ${this.computerLabel(crossMachine(flow,machineOf).far)}`)))
           .when(flow.count>1,row=>row.child(div().text_color(palette[flow.lane%palette.length]).child(`×${flow.count}`)))))
-        .when(routes.length>2,row=>row.child(div().text_size(9).text_color(t.muted).child(this.lang()==='ko'?`+${routes.length-2}개 경로 전송 중`:`+${routes.length-2} active routes`)))))
+        .when(routes.length>2,row=>row.child(div().text_size(9).text_color(t.muted).child(this.lang()==='ko'?`+${routes.length-2}개 경로 전송 중`:`+${routes.length-2} active routes`)))
+        .when((this.skippedFlows||0)>0,row=>row.child(div().id('sf-transfer-skipped').text_size(9).text_color(t.muted)
+          .child(this.lang()==='ko'?`밀린 전송 ${this.skippedFlows}건은 효과 없이 건너뜀`:`${this.skippedFlows} queued sends skipped`)))))
       .when(this.queuedRoutes.length>0,e=>e.child(h_flex().id('sf-delivery-status').flex_none().px(10).py(6).gap(5).items_center().border_t(1).border_color(t.border)
         .tooltip(this.queuedRoutes.map(item=>`${item.project} · ${item.error || (item.hold?'전달 보류':'수신 pane 대기')}`).join('\n'))
         .child(div().text_size(10).text_color(this.queuedRoutes.some(item=>item.hold||item.error)?t.blocked:t.muted)
