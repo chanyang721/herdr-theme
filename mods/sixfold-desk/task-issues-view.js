@@ -47,8 +47,10 @@ export function issuePopover(model,t){
           .on_click(change(model.onLink,item.url)))
         .child(text(item.text,t.muted,11).flex_1().tooltip(item.text))
         .when(i>0,e=>e.child(text(clock(item.at),t.dim,9).flex_none()));
+      const target=entry.alerts.lines.find(item=>item.url)?.url||'';
       group.child(v_flex().id(`task-issues-alerted-${id}-${entry.key}`).gap(1).p(4).rounded(6).bg(t.selected)
-        .child(h_flex().gap(6).items_center().px(2)
+        .child(h_flex().id(`task-issues-alerted-head-${id}-${entry.key}`).gap(6).items_center().px(2)
+          .when(Boolean(target&&model.onLink),e=>e.cursor_pointer().tooltip('누르면 이 이슈(최근 댓글)를 Linear에서 엽니다').on_click(change(model.onLink,target)))
           .child(div().px(5).rounded(3).flex_none().text_size(9).font_bold().bg(t.accent).text_color(t.accent_foreground||t.background).child(newest.category||'알림'))
           .child(text(entry.key,t.muted,10).flex_none().font_bold())
           .child(text(entry.title,t.foreground,12).flex_1().tooltip(entry.title))

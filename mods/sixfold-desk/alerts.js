@@ -97,6 +97,7 @@ export function watchAlerts(view, cx) {
         view.alerts = legacy.items ?? [];
         previous = signature;
         cx.notify();
+        view.panelRetained?.alertsChanged?.();   // the cards' meta lines show the new counts
       } catch { /* Retry after the next input/ledger change or classic-view activation. */ }
       finally { loading = false;if(dirty)schedule(); }
     });

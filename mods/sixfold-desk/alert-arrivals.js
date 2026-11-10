@@ -29,6 +29,9 @@ export function alertArrivalLayer(view, cx, {cards, motion, t, right}) {
   const anchors = (space, source) => {
     const hit = at.get(projectKey(space));
     if (!hit) return null;
+    // Merged card: Slack lands on the left of the meta line, Linear on its tool chip at the right end.
+    if (hit.merged) return {top: hit.top, left: 11, right, badgeY: hit.top + 38 + hit.extra + 10,
+      badgeX: source === 'linear' && hit.width > 80 ? 11 + hit.width - 40 : 26};
     const alerts = hasWorkspaceAlerts(hit.s.name);
     return {top: hit.top, left: 11, right, badgeY: alerts ? hit.top + 38 + hit.extra + 13 : hit.top + 18,
       badgeX: alerts && source === 'linear' && hasSlackAlerts(hit.s.name) ? 72 : 33};
@@ -39,6 +42,7 @@ export function alertArrivalLayer(view, cx, {cards, motion, t, right}) {
     view.arrivalWakeAt = next;
     view.arrivalWake = cx.timer.after(Math.max(16, next - now), () => {
       view.arrivalWake = null; view.arrivalWakeAt = null;
+      view.panelRetained?.alertsChanged?.();   // a landed alert is counted on the card's meta line
       view.invalidateSidebar ? view.invalidateSidebar() : cx.notify();
     });
   }

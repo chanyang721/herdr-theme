@@ -14,7 +14,7 @@ import { breathingBorder, borderComet } from './collab-flow-view.js';
 import { workflowNodes, delegationEvents, workflowStatus, sessionChildren, activeWorkflow } from './workflow.js';
 import { watchDocs, currentDocs, docsSection, prepareDocsInput } from './docs.js';
 import { watchAlerts, alertSection, visibleAlerts } from './alerts.js';
-import { workspaceAlertsRow, hasWorkspaceAlerts, openInbox } from './alert-inbox.js';
+import { workspaceAlertsRow, hasWorkspaceAlerts, hasLinearAlerts, openInbox, cardAlertCounts, slackAlertsChip } from './alert-inbox.js';
 import { startAlertArrivals, alertArrivalLayer, alertCardSignature } from './alert-arrivals.js';
 import { panePet } from './pets.js';
 import { paneUsage } from './session-usage.js';
@@ -143,6 +143,7 @@ export default class SixfoldDesk extends View {
     this.panelRetained=typeof cx.new==='function'?createRetainedPanel(cx,{macTitlebar:window()?.platform==='macos',embedded:true,
       onHostChange:()=>this.invalidateSidebar(),
       schedule:fn=>fileReceiver.enqueue(fn),
+      cardAlerts:(space,motion)=>cardAlertCounts(space.name,motion),slackAlerts:slackAlertsChip,
       onIssueRequest:(space,key,desired)=>{
         const serial=globalThis.__sixfoldIssueRequestSerial=(globalThis.__sixfoldIssueRequestSerial||0)+1;
         const id=`request-${Date.now().toString(36)}-${serial.toString(36)}-${Math.random().toString(36).slice(2,14)}`;
@@ -859,6 +860,9 @@ export default class SixfoldDesk extends View {
       const key=`${s.machine??''}|${String(s.id).split('/').pop()}`;
       return this.fileBadges?.[key]?.length||shared('sixfold.workspace.badges')?.[key]?.length?20:0;
     };
+    // A task card with a meta line carries Slack and Linear alerts there; the separate alerts row is for other cards.
+    const mergedAlerts=s=>{const task=taskPanel?.taskFor(s);return Boolean(task&&taskPanel?.bodyFor(s)&&(task.slack||task.work)&&(task.work?.tool==='linear'||!hasLinearAlerts(s.name)));};
+    const alertRowHeight=s=>hasWorkspaceAlerts(s.name)&&!mergedAlerts(s)?26:0;
     const positions={};let offset=0;
     for(const {s,members} of groups){
       const task=taskPanel?.taskFor(s),card=taskPanel?.layout?.cards.find(card=>card.space.id===task?.id);
@@ -866,12 +870,12 @@ export default class SixfoldDesk extends View {
         for(const p of members){
           const agent=task.agents.find(agent=>agent.nav?.pane_id===String(p.pane).split('/').pop()&&agent.nav.machine===(s.machine??null));
           const row=card.rows.find(row=>row.kind==='agent'&&row.agent.id===agent?.id);
-          if(row)positions[p.terminal]=offset+row.y-card.top+6+extraHeight(s)+(hasWorkspaceAlerts(s.name)?26:0)+row.height/2;
+          if(row)positions[p.terminal]=offset+row.y-card.top+6+extraHeight(s)+alertRowHeight(s)+row.height/2;
         }
-        offset+=(this.boxSizes?.[s.id]?.h||card.height+9+extraHeight(s)+(this.docsHeights?.[s.id]||0)+(hasWorkspaceAlerts(s.name)?26:0))+12;
+        offset+=(this.boxSizes?.[s.id]?.h||card.height+9+extraHeight(s)+(this.docsHeights?.[s.id]||0)+alertRowHeight(s))+12;
         continue;
       }
-      let row=offset+53+extraHeight(s)+(hasWorkspaceAlerts(s.name)?26:0);
+      let row=offset+53+extraHeight(s)+alertRowHeight(s);
       for (const p of members) {
         positions[p.terminal]=row;row+=30;
         {
@@ -995,7 +999,7 @@ export default class SixfoldDesk extends View {
       .when(extraHeight(s)>0,e=>e.child(h_flex().id(`sf-space-extras-${s.id}`).h(18).flex_none().px(7).gap(4).items_center().min_w(0)
         .child(workspaceBadges(this,s,t))
       ))
-      .child(workspaceAlertsRow(s,t,{motion}))
+      .when(!mergedAlerts(s),e=>e.child(workspaceAlertsRow(s,t,{motion})))
       .children(taskBody?[taskBody]:members.map(p=>{
         const tab=s.tabs.find(tab=>tab.id===p.tab);
         const records=sessionChildren(this.workflowNodes,p.terminal,true);
@@ -1042,11 +1046,11 @@ export default class SixfoldDesk extends View {
     this.classicCards?.end();
     const taskEntries=groups.map(({s,members})=>{
       const task=taskPanel?.taskFor(s),card=taskPanel?.layout?.cards.find(card=>card.space.id===task?.id);
-      return {task,alertHeight:extraHeight(s)+(hasWorkspaceAlerts(s.name)?26:0),height:this.boxSizes?.[s.id]?.h||
-        (card?card.height+9:(members.length*30+40))+extraHeight(s)+(this.docsHeights?.[s.id]||0)+(hasWorkspaceAlerts(s.name)?26:0)};
+      return {task,alertHeight:extraHeight(s)+alertRowHeight(s),height:this.boxSizes?.[s.id]?.h||
+        (card?card.height+9:(members.length*30+40))+extraHeight(s)+(this.docsHeights?.[s.id]||0)+alertRowHeight(s)};
     });
     // New-alert arrivals: a popup on the card's spot, then a pixel block steps into its badge.
-    const arrivalCards=[];{let top=0;groups.forEach(({s},i)=>{arrivalCards.push({s,top,extra:extraHeight(s)});top+=taskEntries[i].height+12;});}
+    const arrivalCards=[];{let top=0;groups.forEach(({s},i)=>{arrivalCards.push({s,top,extra:extraHeight(s),merged:mergedAlerts(s),width:this.boxSizes?.[s.id]?.w||0});top+=taskEntries[i].height+12;});}
     const arrivalViews=alertArrivalLayer(this,cx,{cards:arrivalCards,motion,t,right:LINK_MARGIN+4});
     const workspaceTree=v_flex().relative().flex_none().children(spaceRows)
       .when(Boolean(taskPanel?.feed),e=>e.child(taskPanel.hostFlows(taskEntries,

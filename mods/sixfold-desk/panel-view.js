@@ -208,13 +208,23 @@ export function cardView(view,card,state,color,computerNames,t,motion,rowEntitie
     .when(metrics.hasMemory,e=>e.child(div().id(`panel-memory-${space.id}`).w(memoryWidth).flex_none().px(compact?1:4).h(16).truncate().rounded(3).bg(memory?color:t.selected)
       .text_color(memory?t.background:t.ansi6||t.accent).text_size(compact&&space.memory.proposals>9?8:9).tooltip(`기억 제안${space.memory.proposals?` ${space.memory.proposals}`:''}`).child(compact?`◈${space.memory.proposals?` ${space.memory.proposals}`:''}`:`기억 제안${space.memory.proposals?` ${space.memory.proposals}`:''}`)))
     .when(count>0,e=>e.child(text(`◌ ${count}`,t.muted,compact?8:10).w(countWidth).flex_none())));
-  const tool=h_flex().gap(5).items_center().min_w(0)
+  // One line for both tools: Slack (channel · unread) and the work tool (key · issues · unread).
+  // Linear alerts sit on its chip, which opens the issue search with the alerted issues on top.
+  const alerts=view.cardAlerts?.(space)||null,linearUnread=space.work?.tool==='linear'?alerts?.linear||0:0;
+  const tool=h_flex().id(`panel-tool-${space.id}`).gap(5).items_center().min_w(0).flex_none()
     .when(Boolean(space.work),e=>e.child(toolIcon(space.work.tool,t)))
     .child(text(space.work?`${space.work.key} · 이슈 ${space.work.open}`:'',space.work?t.muted:t.dim,9))
-    .when(Boolean(space.work),e=>e.cursor_pointer().tooltip('이번 주 · 마일스톤 · 전체 이슈'));
-  if(panelMetaHeight(space))box.child(h_flex().h(PANEL_GEOMETRY.meta).flex_none().px(7).gap(5).items_center()
-    .when(Boolean(space.slack),e=>e.child(image('mods/sixfold-desk/icons/slack.svg').size(11).flex_none()))
+    .when(linearUnread>0,e=>e.child(text(`미확인 ${linearUnread}`,t.accent_foreground||t.background,9).px(4).rounded(3).bg(t.accent).font_bold()
+      .id(`panel-tool-unread-${space.id}`)))
+    .when(Boolean(space.work),e=>e.cursor_pointer().tooltip(linearUnread?`새 알림 ${linearUnread}건 · 이번 주 · 마일스톤 · 전체 이슈`:'이번 주 · 마일스톤 · 전체 이슈'));
+  const slackUnread=alerts?.slack||0,slackShown=Boolean(space.slack)||Boolean(alerts?.hasSlack);
+  const slack=h_flex().id(`panel-slack-${space.id}`).gap(5).items_center().min_w(0).flex_1()
+    .when(slackShown,e=>e.child(image('mods/sixfold-desk/icons/slack.svg').size(11).flex_none()))
     .child(text(space.slack?.channel||'',space.slack?t.muted:t.dim,9).flex_1())
+    .when(slackUnread>0,e=>e.child(text(String(slackUnread),t.accent_foreground||t.background,9).px(4).rounded(3).bg(t.accent).font_bold().flex_none()))
+    .when(Boolean(alerts?.hasSlack),e=>e.cursor_pointer().tooltip(`Slack 알림${slackUnread?` 미확인 ${slackUnread}건`:''}`));
+  if(panelMetaHeight(space))box.child(h_flex().h(PANEL_GEOMETRY.meta).flex_none().px(7).gap(5).items_center()
+    .child(alerts?.hasSlack&&view.slackAlerts?view.slackAlerts(space,slack,t):slack)
     .child(space.work&&view.issuePopover?view.issuePopover(space,tool,t):tool));
   for(const row of card.rows){
     if(row.kind==='issue')box.child(h_flex().h(PANEL_GEOMETRY.issue).flex_none().px(7).gap(4).items_center().bg(t.surface).opacity(row.group.issue?.state==='done'?0.5:1)

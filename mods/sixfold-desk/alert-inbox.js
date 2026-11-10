@@ -43,6 +43,18 @@ export function workspaceAlertsRow(space,t,{motion=true}={}) {
     .child(alertPopover({id:space.id,project:space.name,trigger:row,t,hasSlack:hasSlackAlerts(space.name),hasLinear:hasLinearAlerts(space.name),
       onAll:source=>source==='linear'?openLinearInbox({project:space.name}):openInbox({project:space.name})}));
 }
+// A task card shows Slack and Linear on its one meta line: the Slack part opens the
+// Slack alerts, the Linear chip (key · issues · unread) opens the issue search.
+export function cardAlertCounts(name, motion = true) {
+  const scope = {project: name, motion};
+  return {hasSlack: hasSlackAlerts(name), slack: hasSlackAlerts(name) ? slackUnread(scope) : 0, linear: hasLinearAlerts(name) ? linearUnreadNow(scope) : 0};
+}
+export function slackAlertsChip(space, trigger, t) {
+  const stop = (_e, cx) => cx.stop_propagation();
+  return div().id(`sf-slack-chip-wrap-${space.id}`).flex_1().min_w(0).on_mouse_down('left', stop).on_mouse_up('left', stop)
+    .child(alertPopover({id: `meta-${space.id}`, project: space.name, trigger, t, hasSlack: true, hasLinear: false,
+      onAll: () => openInbox({project: space.name})}));
+}
 // Inside the card row a badge only chooses the popover source; elsewhere it opens the inbox.
 const badgePress=(scope,source,open)=>(_e,cx)=>{
   if(scope.popover){showPopover(scope.project,source);return;}

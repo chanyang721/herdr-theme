@@ -97,7 +97,7 @@ class PanelRoot extends View{
   }
 }
 
-export function createRetainedPanel(cx,{macTitlebar=false,onClassic=null,onDispose=null,onIssueRequest=null,embedded=false,onHostChange=null,schedule=fn=>fn()}={}){
+export function createRetainedPanel(cx,{macTitlebar=false,onClassic=null,onDispose=null,onIssueRequest=null,embedded=false,onHostChange=null,schedule=fn=>fn(),cardAlerts=null,slackAlerts=null}={}){
   const prune=()=>{
   for(const previous of [...registry.values()]){
     let retired=previous.protocol!=='2';try{retired||=previous.life?.is_done()===true;}catch{retired=true;}
@@ -124,13 +124,21 @@ export function createRetainedPanel(cx,{macTitlebar=false,onClassic=null,onDispo
   c.entity=make(PanelRoot);c.computers=make(PanelComputers);c.summary=make(PanelSummary);c.flows=make(PanelFlows);c.list=make(PanelList);
   c.notify=entity=>{if(entity&&!c.disposed){c.stats.notifications++;c.cx.notify(entity);}};
   c.taskFor=space=>nativeTaskSpace(c.feed,space);
-  // New Linear alerts redraw only the card whose issue search is open, and only when its issues' alerts changed.
+  // Alert counts on the card's meta line come from the host (Slack and Linear feeds).
+  c.cardAlerts=cardAlerts?space=>cardAlerts(space,c.motion):null;c.slackAlerts=slackAlerts;
+  // New alerts redraw a card only when what it shows changed: its meta-line counts, and the
+  // alerted issues of an open issue search. Bounded by the number of cards; no timer.
+  c.alertMarks=new Map();
   c.alertsChanged=()=>{
-    for(const [id,state] of c.issueStates){
-      if(!state.open)continue;
-      const space=c.spaceMap.get(id),mark=space?issueAlertSignature(shared('sixfold.linearItems')??[],space.name):'';
-      if(mark!==state.alertMark){state.alertMark=mark;c.notify(c.cards.get(id));}
+    if(c.disposed)return;
+    for(const [id,space] of c.spaceMap){
+      const state=c.issueStates.get(id);
+      const mark=JSON.stringify([c.cardAlerts?.(space)||null,state?.open?issueAlertSignature(shared('sixfold.linearItems')??[],space.name):'',shared('sixfold.alertPopover')?.space===space.name?shared('sixfold.alertPopover'):null]);
+      if(c.alertMarks.get(id)===mark)continue;
+      const first=!c.alertMarks.has(id);c.alertMarks.set(id,mark);
+      if(!first||mark!==JSON.stringify([null,'',null]))c.notify(c.cards.get(id));
     }
+    for(const id of c.alertMarks.keys())if(!c.spaceMap.has(id))c.alertMarks.delete(id);
   };
   c.bodyFor=space=>c.cards.get(c.taskFor(space)?.id)||null;
   c.hostFlows=(entries,computerAnchors,gutter=null)=>panelFlowLayer(c.feed,hostedTaskLayout(c.layout,entries,computerAnchors),c.events,c.color,theme(),c.motion,c.panelWidth,gutter);

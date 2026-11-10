@@ -304,3 +304,28 @@ test('adding or removing a Slack / work-tool link re-lays the card, since the me
     }finally{r.controller.dispose();}
   }
 });
+
+test('one meta line carries both tools: Slack unread on its part, Linear unread on the issue chip; a count change redraws only that card',async()=>{
+  const counts={slack:0,linear:0,hasSlack:true},chips=[];
+  const r=await runtime(false,{cardAlerts:()=>({...counts}),slackAlerts:(space,trigger)=>{chips.push(space.id);return trigger;}});
+  try{
+    const raw=makePanelFixture({slack:true,tool:'linear'});
+    r.controller.apply(cleanPanelFeed(raw),'ready');r.flush();
+    const card=r.controller.cards.get(raw.spaces[0].id);
+    // A popover keeps its trigger in a call, not as a child.
+    const walk=n=>[n,...(n.nodes||[]).filter(x=>x&&typeof x==='object').flatMap(walk),...(n.calls||[]).filter(c=>c[0]==='trigger'&&c[1]&&typeof c[1]==='object').flatMap(c=>walk(c[1]))];
+    const texts=()=>walk(card.tree).flatMap(n=>(n.nodes||[]).filter(x=>typeof x==='string'));
+    const byId=id=>walk(card.tree).find(n=>n.calls?.some(c=>c[0]==='id'&&c[1]===id));
+    assert(byId(`panel-tool-${raw.spaces[0].id}`),'issue chip');
+    assert(!byId(`panel-tool-unread-${raw.spaces[0].id}`),'no unread: the chip is key · issues only');
+    assert(chips.includes(raw.spaces[0].id),'the Slack part opens the Slack alerts');
+    r.controller.alertsChanged();r.flush();                    // first look: nothing to show, no redraw needed
+    const before=r.objects.filter(o=>o.dirty).length;
+    counts.linear=2;counts.slack=1;r.controller.alertsChanged();
+    assert.equal(card.dirty,true,'the card redraws for its new counts');
+    assert.equal(r.objects.filter(o=>o.dirty).length,before+1,'only that card');
+    r.flush();
+    assert(texts().includes('미확인 2')&&texts().includes('1'));
+    r.controller.alertsChanged();assert.equal(card.dirty,false,'unchanged counts: no redraw');
+  }finally{r.controller.dispose();}
+});
