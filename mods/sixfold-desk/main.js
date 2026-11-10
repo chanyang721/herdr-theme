@@ -285,8 +285,10 @@ export default class SixfoldDesk extends View {
     let computersBusy=false, computersAt=0;
     cx.timer.every(1000,cx=>{
       if(!this.computers?.tailscale || computersBusy || Date.now()-computersAt<15000)return;
+      const lastComputers=computersAt;
       computersBusy=true;computersAt=Date.now();
-      spawnOrRelease(cx,()=>{computersBusy=false;},async cx=>{
+      // A rejected spawn is not a poll: the next tick may try again.
+      spawnOrRelease(cx,()=>{computersBusy=false;computersAt=lastComputers;},async cx=>{
         try {
           const result=await exec(native(),['collect_computers']);
           if(result.code!==0)throw Error('status unavailable');
@@ -360,10 +362,13 @@ export default class SixfoldDesk extends View {
           await writeTextFile(path,JSON.stringify(state),old);
           const key=JSON.stringify([state.active,state.terminal,state.source]);
           if(key!==voiceKey && !voiceActionBusy){
+            const lastKey=voiceKey;
             voiceKey=key;voiceActionBusy=true;
             // Keep publishing focus while a voice connection starts. The helper
             // rechecks that heartbeat before sending any microphone controls.
-            spawnOrRelease(cx,()=>{voiceActionBusy=false;},async cx=>{
+            // A spawn rejected before the action starts must not consume the focus
+            // change; once the helper has been tried, the key stays consumed.
+            spawnOrRelease(cx,()=>{voiceActionBusy=false;voiceKey=lastKey;},async cx=>{
               try {
                 if (Array.isArray(config.command)) await invokeHelper(config.command,'focus_queue',['--app-focus']);
                 else if(config.command) await exec(config.command,[...(config.args || ['focus_queue']),'--app-focus']);
