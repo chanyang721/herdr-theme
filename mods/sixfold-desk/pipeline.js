@@ -1,5 +1,5 @@
 import { div } from 'gpui-kit';
-import { PACKET_PIXELS, snap, centred, pixelBlock, pixelRoute, pixelArrival } from './pixel.js';
+import { PACKET_PIXELS, snap, centred, pixelBlock, pixelRoute, pixelLanding } from './pixel.js';
 
 // The three legs of one send, as fractions of its travel: out to the lane, down
 // the lane, back in to the receiving row.
@@ -12,19 +12,19 @@ export function pipeLegs(travelMs) {
 // One send between two workspace rows, in the task panel's pixel grammar
 // (2026-11-10): a 1px right-angle pipe with stepped corners out to the lane and
 // a 3x3 block that leaves the sending row, runs down the lane and enters the
-// receiving row; then the arrival mark (pixel.js pixelArrival) lights there.
+// receiving row, where it blinks once in its own colour (pixel.js pixelLanding).
 // The three legs are three nested elements, each with one native transition: the outer one moves out, the
 // middle one moves along after it, the inner one moves back in last. All three
 // targets change at the caller's single `travel` phase change, so the corners
 // need no extra timer and no per-frame JavaScript.
-export function pipeline({id, width, from, to, color, phase, packets, motion, inset=0, unit=1, done=color}) {
+export function pipeline({id, width, from, to, color, phase, packets, motion, inset=0, unit=1}) {
   const u = unit;
   const top = Math.min(from, to);
   const height = Math.abs(to-from);
   const start = snap(from-top, u), end = snap(to-top, u), lane = snap(inset+width, u), x0 = snap(inset, u);
   const history = phase === 'history';
   const side = PACKET_PIXELS*u, offset = centred(PACKET_PIXELS, u), reach = lane - x0;
-  // Only the pipe dims after arrival; the arrival mark keeps full contrast.
+  // Only the pipe dims after arrival; the landing blink keeps full contrast.
   return div().id(`sf-route-${id}`).absolute().top(top).w(inset+width+4).h(height+4)
     .child(pixelRoute(start, end, lane, x0, x0, color, u, `sf-pipe-${id}`)
       .opacity(history ? 0.22 : phase==='arrived' ? 0.5 : 0.95).when(motion,el=>el.transition('opacity',350)))
@@ -38,6 +38,6 @@ export function pipeline({id, width, from, to, color, phase, packets, motion, in
         .transition('top',{duration:legs.down,delay:legs.out,easing:'ease-in-out'}).child(block);
       const out = div().id(`sf-pipeline-out-${packet.id}`).absolute().top(0).left(x0-offset+(moving?reach:0))
         .transition('left',{duration:legs.out,easing:'ease-in'}).child(along);
-      return [out, ...pixelArrival(`sf-pipeline-receiver-${packet.id}`, x0, end, packet.phase==='arrived', done, u)];
+      return [out, pixelLanding(`sf-pipeline-receiver-${packet.id}`, x0, end, packet.phase==='arrived', color, u)];
     })));
 }

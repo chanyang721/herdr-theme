@@ -42,7 +42,19 @@ export function pixelRing(id, x, y, open, color, u = 1, { thickness = 1, delay =
   return ring;
 }
 
-// The arrival ("done") mark, made to be seen (2026-11-10): a 5x5 block lights
+// A message landing (2026-11-10, user: the white square was too much): one
+// small blink in the flow's own colour. The 3x3 block appears on the receiving
+// end, holds a moment and fades once. Keyed like the rings: zero-size until
+// `open`, so it is invisible during the flight. One native transition each.
+export const LANDING = Object.freeze({ hold: 160, fade: 320 });
+export function pixelLanding(id, x, y, open, color, u = 1) {
+  const side = open ? PACKET_PIXELS * u : 0, offset = open ? centred(PACKET_PIXELS, u) : 0;
+  const block = pixelBlock(x - offset, y - offset, side, side, color, id).opacity(open ? 0 : 1);
+  for (const property of ['width', 'height', 'left', 'top']) block.transition(property, { duration: 40, easing: 'linear' });
+  return block.transition('opacity', { duration: LANDING.fade, delay: LANDING.hold, easing: 'ease-out' });
+}
+
+// The arrival ("done") mark of a task event, made to be seen (2026-11-10): a 5x5 block lights
 // on the receiving end, a 2px ring opens and stays lit, and a second ring opens
 // a moment later, so it blinks twice. `color` should contrast with the
 // background (the theme foreground). Every part is one native transition that

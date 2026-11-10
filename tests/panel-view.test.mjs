@@ -241,7 +241,7 @@ test('explicit local collaboration has purple solid bracket, two square ends and
   assert.equal(byId(unrelated,`panel-local-partner-${first.id}`),undefined,'same computer alone never infers collaboration');
 });
 
-test('a local message rides the same pixel line, block and rings as a task event; motion off omits it',async()=>{
+test('a local message rides the same pixel line, block and departure ring as a task event; motion off omits it',async()=>{
   const r=await renderer(true),view=viewFor(makePanelFixture()),feed=view.panelState.feed;
   r.renderPanelTracking(view,t,r.cx);const layout=r.panelLayout(feed,view.panelEvents),[a,b]=feed.spaces[0].agents;
   const draw=(kind,phase,elapsed)=>{r.paths.length=0;
@@ -253,7 +253,7 @@ test('a local message rides the same pixel line, block and rings as a task event
     assert.equal(message.paths,0,'no vector stroke: the line is pixel blocks');assert.equal(task.paths,0);
     const pixels=tree=>all(byId(tree,'panel-route-p')).filter(n=>!call(n,'id')).map(n=>n.calls);
     assert.deepEqual(pixels(message.tree),pixels(task.tree),'the same pixel line');
-    for(const id of ['panel-packet-p','panel-sender-p','panel-receiver-p']){
+    for(const id of ['panel-packet-p','panel-sender-p']){
       const m=byId(message.tree,id),k=byId(task.tree,id);assert(m,id);assert(k,id);
       assert.deepEqual(m.calls,k.calls,`${id} at ${elapsed}ms matches the task-event packet`);
     }
@@ -265,17 +265,24 @@ test('a local message rides the same pixel line, block and rings as a task event
   assert.equal(call(head,'left')[1]+1,20,'centred on the inner message lane');
   assert.equal(head.calls.find(c=>c[0]==='transition'&&c[1]==='top')[2].duration,PANEL_LEGS[2]-PANEL_LEGS[1]);
   const arrival=byId(draw('message','ping',PANEL_TIMING.packetMs).tree,'panel-receiver-p');
-  assert.equal(call(arrival,'w')[1],15);assert.equal(call(arrival,'opacity')[1],0);assert.equal(call(arrival,'border')[1],2,'the done ring is 2px');
+  // A message lands with one small blink in its own colour, never the done mark.
+  assert.equal(call(arrival,'w')[1],3);assert.equal(call(arrival,'bg')[1],'#79D1DC');assert.equal(call(arrival,'border'),undefined);
+  assert.equal(call(arrival,'opacity')[1],0,'it fades once after landing');
   const still=r.panelFlowLayer(feed,layout,{...view.panelEvents,packets:[],connections:[{id:'off',kind:'message',from:a.id,to:b.id}]},()=>t.accent,t,false,224);
   assert(!byId(still,'panel-route-off'));assert.equal(all(still).filter(n=>call(n,'transition')||call(n,'loop')).length,0);
 });
 
-test('the done mark is easy to see: a 2px foreground ring held lit, a second blink, a core block, and only the line fades',async()=>{
+test('a task event done mark is easy to see (2px foreground ring held lit, second blink, core block), a message only blinks small in its colour, and only the line fades',async()=>{
   const r=await renderer(true),view=viewFor(makePanelFixture()),feed=view.panelState.feed;
   r.renderPanelTracking(view,t,r.cx);const layout=r.panelLayout(feed,view.panelEvents),[a,b]=feed.spaces[0].agents;
   const draw=(kind,phase)=>r.panelFlowLayer(feed,layout,{...view.panelEvents,packets:[{id:'d',kind,from:a.id,to:b.id,phase,elapsed:PANEL_TIMING.packetMs}]},()=>t.accent,t,true,224);
   const policy=(node,property)=>node.calls.find(c=>c[0]==='transition'&&c[1]===property)?.[2];
-  for(const kind of ['message','dispatch']){
+  const landing=draw('message','ping'),blink=byId(landing,'panel-receiver-d');
+  assert.equal(call(blink,'w')[1],3);assert.equal(call(blink,'h')[1],3);assert.equal(call(blink,'bg')[1],'#79D1DC','the flow colour, not white');
+  assert(!byId(landing,'panel-receiver-d-again')&&!byId(landing,'panel-receiver-d-core'),'no second ring or core block for a message');
+  assert(!all(landing).some(n=>call(n,'border_color')?.[1]===t.foreground||call(n,'bg')?.[1]===t.foreground),'nothing in the foreground colour');
+  const fadeOut=policy(blink,'opacity');assert(fadeOut.delay+fadeOut.duration<=600,'short');
+  for(const kind of ['dispatch']){
     const ping=draw(kind,'ping');
     const ring=byId(ping,'panel-receiver-d'),again=byId(ping,'panel-receiver-d-again'),core=byId(ping,'panel-receiver-d-core');
     assert(ring&&again&&core,`${kind}: ring, second ring and core`);
@@ -284,6 +291,8 @@ test('the done mark is easy to see: a 2px foreground ring held lit, a second bli
     assert(policy(ring,'opacity').delay>=900,'held lit before it fades');
     assert(policy(again,'width').delay>=250,'the second ring blinks after the first');
     assert(PANEL_TIMING.pingMs+PANEL_TIMING.coolMs>=policy(ring,'opacity').delay+policy(ring,'opacity').duration,'the whole mark fits before the packet is removed');
+    }
+  for(const kind of ['message','dispatch']){
     const fade=draw(kind,'fade');
     assert.equal(call(byId(fade,'panel-route-d'),'opacity'),undefined,'the route itself is not dimmed');
     assert.equal(call(byId(fade,'panel-line-d'),'opacity')[1],0.2,'only the line fades');
@@ -311,6 +320,11 @@ test('a row an event arrives on gets a 2px foreground overlay that blinks twice 
   assert(byId(still,`panel-arrival-${agent.id}`));assert(!call(byId(still,`panel-arrival-${agent.id}`),'loop'),'motion off stays steady');
   const quiet=r.agentRow(view,agent,space,null,{...state,packets:[]},'#79D1DC',t,true);
   assert(!byId(quiet,`panel-arrival-${agent.id}`));
+  for(const motion of [true,false]){
+    const message=r.agentRow(view,agent,space,null,{...state,packets:[{id:'m',kind:'message',to:agent.id,phase:'ping'}],connections:[{id:'m',kind:'message',to:agent.id}]},'#79D1DC',t,motion);
+    assert(!byId(message,`panel-arrival-${agent.id}`),'a message arrival never gets the done highlight');
+    assert.equal(call(message,'border'),undefined);
+  }
 });
 
 test('pixel lines are whole pixels with a stepped corner, and stay whole at any zoom',async()=>{
@@ -366,7 +380,7 @@ test('filtered remote messages ride the computer pipe lane and ping at the remot
  const head=byId(tree,'panel-packet-remote-message');assert.equal(call(head,'left')[1]+1,40,'the packet runs in the computer pipe lane');
  assert.equal(call(head,'w')[1],3);assert(byId(tree,'panel-sender-remote-message'));
  const arrival=r.panelFlowLayer(feed,layout,{...view.panelEvents,packets:[{...packet,phase:'ping'}]},()=>t.accent,t,true,224);
- assert.equal(call(byId(arrival,'panel-receiver-remote-message'),'left')[1],-7);
+ assert.equal(call(byId(arrival,'panel-receiver-remote-message'),'left')[1],-1,'a 3x3 landing blink centred on the remote end');
  const route=byId(tree,'panel-route-remote-message');assert.equal(call(route,'right')[1],8);assert.equal(call(route,'w')[1],64);
 });
 

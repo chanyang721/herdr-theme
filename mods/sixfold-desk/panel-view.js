@@ -5,7 +5,7 @@ import {agentGroups, panelEventStates, panelSpaces, panelSpacePartners, PANEL_TI
 import {SESSION_STATES, sessionStatusGlyph} from './session-status.js';
 import {groupColors, paletteMode} from './collab-flow.js';
 import {rowDetailParts} from './task-row-details.js';
-import {PACKET_PIXELS, pixelUnitFor, snap, centred, pixelBlock, pixelRoute as drawPixelRoute, pixelRing, pixelArrival, ARRIVAL} from './pixel.js';
+import {PACKET_PIXELS, pixelUnitFor, snap, centred, pixelBlock, pixelRoute as drawPixelRoute, pixelRing, pixelArrival, pixelLanding, ARRIVAL} from './pixel.js';
 import {PANEL_FLOW, panelFlowAnchor, panelMessageAnchors, messageFlowGeometry, computerFlow} from './panel-host.js';
 
 const MARK={working:'●',idle:'○',blocked:'!',done:'✓'};
@@ -14,6 +14,8 @@ const STAGES=['배분','작업','검수','수락 대기'];
 const CLOSE=['보고 작성','경험·결정 저장','기억함 제안','닫힘'];
 const ISSUE={blocked:'막힘',working:'진행 중',review:'검수',waiting:'대기',done:'완료'};
 const RIGHT=PANEL_FLOW.gutter, ROW=24, REASON=0;
+// A row gets the done highlight when a task event (never a message) lands on it.
+export const rowArrival=(state,id)=>state.packets.some(event=>event.to===id&&event.phase==='ping'&&event.kind!=='message');
 // Two blinks of the arrival row highlight fit in the ping phase.
 const ROW_BLINK_MS=Math.round(PANEL_TIMING.pingMs/2);
 // A flow pulse on a 1px pipe: as wide as the line, this long (px).
@@ -135,8 +137,7 @@ export function agentRow(view,agent,space,tag,state,color,t,motion){
   const reasonText=child?'':agentReason(agent,view.now??Date.now()).text;
   const stateLabel=rowState?SESSION_STATES[rowState].label:STATUS_LABEL[status]||'';
   const reasonLine=reasonText?(reasonText.startsWith(stateLabel)?reasonText:[stateLabel,reasonText].filter(Boolean).join(' · ')):'';
-  const pulse=state.packets.some(event=>event.to===agent.id&&event.phase==='ping')
-    ||!motion&&state.connections?.some(event=>event.kind==='message'&&event.to===agent.id);
+  const pulse=rowArrival(state,agent.id);
   const born=state.spawning.has(agent.id);
   const birthAge=state.active?.find(event=>(event.kind==='spawn'||event.allocation?.kind==='new')&&event.to===agent.id)?.elapsed||0;
   const ghost=born&&motion&&birthAge<PANEL_TIMING.packetMs;
@@ -294,8 +295,9 @@ export function route(id,a,b,color,{dashed=false,packet=null,motion=false,relati
 // One event packet on its line, shared by messages and task events: a 3x3 pixel
 // block that leaves the source row, runs along the lane and enters the target
 // row, one finite native transition per corner, centred on the 1px line. A
-// square 1px ring opens at departure; the arrival mark lights in `done`, a
-// colour that contrasts with the background. No per-frame JavaScript.
+// square 1px ring opens at departure. A message lands with one small blink in
+// its colour; a task event lights the done mark in `done`, a colour that
+// contrasts with the background. No per-frame JavaScript.
 function packetMarks(base,id,packet,{startX,endX,lane,from,to},color,done=color){
   const u=pixelUnit();[startX,endX,lane,from,to]=[startX,endX,lane,from,to].map(value=>snap(value,u));
   if(['start','travel'].includes(packet.phase)){
@@ -311,7 +313,11 @@ function packetMarks(base,id,packet,{startX,endX,lane,from,to},color,done=color)
       .transition('top',{duration:point.ms,easing:'ease-in-out'}));
   }
   base.child(pixelRing(`panel-sender-${id}`,startX,from,packet.phase!=='start',color,u));
-  base.children(pixelArrival(`panel-receiver-${id}`,endX,to,['ping','fade'].includes(packet.phase),done,u));
+  const landed=['ping','fade'].includes(packet.phase);
+  // A message lands with one small blink in its own colour; only a task event
+  // gets the done mark (2px foreground ring, second blink, core block).
+  if(packet.kind==='message')base.child(pixelLanding(`panel-receiver-${id}`,endX,to,landed,color,u));
+  else base.children(pixelArrival(`panel-receiver-${id}`,endX,to,landed,done,u));
 }
 
 export function panelFlowLayer(feed,layout,state,color,t,motion,width,gutter=null){
