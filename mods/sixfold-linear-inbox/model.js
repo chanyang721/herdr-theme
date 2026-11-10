@@ -33,11 +33,14 @@ export const linearLink = url => typeof url === 'string' && /^https:\/\/linear\.
 
 // Same rule as sixfold-desk/alert-model.js placeItems (mods cannot import each other):
 // an alert whose space is not shown belongs to Share.
+export const UNSORTED = '미분류';
 export function placeItems(items, names, fallback = 'Share') {
   const shown = new Map((names ?? []).map(name => [spaceKey(name), name]));
   if (!shown.size) return items ?? [];
   const home = shown.get(spaceKey(fallback)) ?? fallback;
   return (items ?? []).map(item => {
+    // Not placed yet (its issue is read on the next run): it stays 미분류, never Share.
+    if (item?.workspace === UNSORTED) return item;
     const space = shown.get(spaceKey(item?.workspace)) ?? home;
     return space === item?.workspace ? item : {...item, workspace: space, workspace_raw: item?.workspace ?? ''};
   });

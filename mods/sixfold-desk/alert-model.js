@@ -11,11 +11,14 @@ export const linearUnread = (items, space) => linearScoped(items, space).filter(
 // An alert belongs to a space shown in the sidebar; one whose space is not
 // there (renamed, closed, unmapped) belongs to Share, so its arrival, badge,
 // popover and inbox all agree. With no space list nothing is moved.
+export const UNSORTED = '미분류';
 export function placeItems(items, names, fallback = 'Share') {
   const shown = new Map((names ?? []).map(name => [projectKey(name), name]));
   if (!shown.size) return items ?? [];
   const home = shown.get(projectKey(fallback)) ?? fallback;
   return (items ?? []).map(item => {
+    // Not placed yet (its issue is read on the next run): it stays 미분류, never Share.
+    if (item?.workspace === UNSORTED) return item;
     const space = shown.get(projectKey(item?.workspace)) ?? home;
     return space === item?.workspace ? item : {...item, workspace: space, workspace_raw: item?.workspace ?? ''};
   });
