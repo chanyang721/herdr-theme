@@ -14,7 +14,10 @@ const linearUnreadNow = scope => landedOnly(linearScoped(shared('sixfold.linearI
 export function alertSignature(name, motion = true) {
   if(!hasWorkspaceAlerts(name))return '';
   const scope={project:name,motion},open=popoverState();
-  return [hasSlackAlerts(name),hasLinearAlerts(name),slackUnread(scope),linearUnreadNow(scope),open?.space===name?`${open.source}:${open.boot}:${open.at}`:''].join('|');
+  // The copy-delay mark (hours shown and the copy's last message) redraws the row when it starts, moves or ends.
+  const delay=hasSlackAlerts(name)?slackCopyDelay(shared('sixfold.slackHealth')):null;
+  return [hasSlackAlerts(name),hasLinearAlerts(name),slackUnread(scope),linearUnreadNow(scope),open?.space===name?`${open.source}:${open.boot}:${open.at}`:'',
+    delay?`${delay.hours}:${delay.at}`:''].join('|');
 }
 
 export function openInbox(scope = {}) {
