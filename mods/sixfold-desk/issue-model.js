@@ -71,7 +71,10 @@ export const foldedCount = (rows, statusOf) => rows.filter(row => folded(statusO
 // Issue count and progress are Linear's; computed ones are marked (counted) and shown '계산값'.
 export function milestoneList(project, catalog, unreadKeys = new Set()) {
   const fromLinear = Array.isArray(project?.milestones) && project.milestones.length;
-  const issues = fromLinear ? (project.issues || []) : [...(catalog?.milestone || []), ...(catalog?.all || [])];
+  // Titles come from the sidebar's lists when the project read left them out (compact rows).
+  const titles = new Map([...(catalog?.week || []), ...(catalog?.milestone || []), ...(catalog?.all || [])].filter(i => i?.key).map(i => [i.key, i.title]));
+  const issues = (fromLinear ? (project.issues || []) : [...(catalog?.milestone || []), ...(catalog?.all || [])])
+    .map(issue => issue?.title || !titles.has(issue?.key) ? issue : {...issue, title: titles.get(issue.key)});
   const byMilestone = new Map();
   for (const issue of issues) {
     if (!issue?.milestone_id || !issue.key) continue;

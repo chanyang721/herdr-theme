@@ -71,6 +71,8 @@ test('status filter chips count each status; 전체 folds done and canceled unti
 
 test('milestones: every one in Linear order with its own counts; computed ones marked; unread alerts counted',()=>{
   const list=milestoneList(PROJECT,null,new Set(['DEMO-2']));
+  const untitled={...PROJECT,issues:PROJECT.issues.map(({title,...rest})=>rest)};
+  assert.equal(milestoneList(untitled,{all:[{key:'DEMO-1',title:'From the list'}]})[0].items[0].title,'From the list','compact rows take the list title');
   assert.deepEqual(list.map(m=>m.id),['m2','m1','m3']);                       // Linear's order, not sorted
   assert.deepEqual(list.map(m=>[m.issues,m.progress,m.status,m.counted]),[[5,40,'started',false],[2,100,'done',false],[1,null,'planned',true]]);
   assert.equal(list[0].unread,1);assert.deepEqual(list[0].items.map(i=>i.key),['DEMO-1','DEMO-2']);
