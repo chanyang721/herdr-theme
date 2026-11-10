@@ -80,13 +80,6 @@ export function messageFlowGeometry(gutter){
  return {...PANEL_FLOW,gutter,width,computer:Math.min(PANEL_FLOW.computer,width-5),collaboration:Math.min(PANEL_FLOW.collaboration,width-12)};
 }
 
-// The cubic control width is 12 + 8% of the row distance, capped at32px.
-// Its midpoint is three quarters of that width. A second queued lane remains
-// inside the same 24px message band instead of crossing static links.
-export function messageCurveReach(distance,lane=0){
- return .75*Math.max(8,Math.min(32,12+Math.abs(distance)*.08)-Math.min(1,Math.max(0,lane))*4);
-}
-
 export function computerFlow(feed,computer,flow=PANEL_FLOW){
  const local=taskComputerRecord(feed,null)?.id||feed.computers[0]?.id;
  const index=Math.max(0,feed.computers.filter(item=>item.id!==local).findIndex(item=>item.id===computer));

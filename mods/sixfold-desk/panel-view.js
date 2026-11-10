@@ -1,11 +1,11 @@
 import {div, svg, image, PathBuilder} from 'gpui-kit';
 import {h_flex, v_flex} from 'gpui-base';
 import {spaces, panes, shared, setShared, run, settings} from 'herdr';
-import {agentGroups, panelEventStates, panelSpaces, panelSpacePartners, PANEL_TIMING, MESSAGE_TIMING, MESSAGE_LEGS, PANEL_LEGS, messageLeg, panelLeg, agentRowState, agentHasReason, agentReason} from './panel-model.js';
+import {agentGroups, panelEventStates, panelSpaces, panelSpacePartners, PANEL_TIMING, PANEL_LEGS, agentRowState, agentHasReason, agentReason} from './panel-model.js';
 import {SESSION_STATES, sessionStatusGlyph} from './session-status.js';
 import {groupColors, paletteMode} from './collab-flow.js';
 import {rowDetailParts} from './task-row-details.js';
-import {PANEL_FLOW, panelFlowAnchor, panelMessageAnchors, messageFlowGeometry, messageCurveReach, computerFlow} from './panel-host.js';
+import {PANEL_FLOW, panelFlowAnchor, panelMessageAnchors, messageFlowGeometry, computerFlow} from './panel-host.js';
 
 const MARK={working:'●',idle:'○',blocked:'!',done:'✓'};
 const STATUS_LABEL={working:'작업 중',idle:'쉬는 중',blocked:'막힘',done:'완료'};
@@ -242,56 +242,20 @@ export function route(id,a,b,color,{dashed=false,packet=null,motion=false,relati
   const startX=a.x??(packet?flow.endpoint:0),endX=b.x??(packet?flow.endpoint:0);
   const base=div().id(`panel-route-${id}`).absolute().right(flow.right).top(top).w(flow.width).h(height+3);
   if(packet?.kind==='message'){
+    // A message uses the same grammar as every other event packet (2026-11-10):
+    // the rounded right-angle line, the square packet and tail, the same corner
+    // timing and the same departure and arrival rings. Motion off draws nothing.
     if(!motion)return base;
-    const start=a.y-top,end=b.y-top,sourceX=startX,targetX=endX;
-    const reach=messageCurveReach(height,packet.routeLane);
     if(remote){
-      // A remote send follows the same dashed pipe and computer colour. It
-      // never adds a second solid or curved connection across the other lanes.
+      // A remote send follows its dashed computer pipe and colour, never a
+      // second solid connection across the other lanes.
       base.child(route(`${id}-pipe`,a,b,color,{dashed:true,flow}).right(0).top(0));
     }else{
-      const ease=t=>t<.5?4*t*t*t:1-(-2*t+2)**3/2;
-      const points=Array.from({length:25},(_,i)=>{const t=i/24;return {
-        x:t<=.5?sourceX+(reach-sourceX)*ease(t*2):reach+(targetX-reach)*ease(t*2-1),
-        y:start+(end-start)*ease(t),
-      };});
-      const path=PathBuilder.stroke(1.5).move_to(sourceX,start);
-      for(let i=0;i<points.length-1;i++){
-        const a=points[Math.max(0,i-1)],b=points[i],c=points[i+1],d=points[Math.min(points.length-1,i+2)];
-        path.cubic_bezier_to(c.x,c.y,b.x+(c.x-a.x)/6,b.y+(c.y-a.y)/6,c.x-(d.x-b.x)/6,c.y-(d.y-b.y)/6);
-      }
-      base.child(window.paint_path(path.build(),color+'99').absolute().left(0).top(0).w(flow.width+4).h(height+4));
+      const origin=Math.max(0,-startX,-endX);
+      base.child(window.paint_path(routePath(a.y-top,b.y-top,lane,endX,origin,startX),color).absolute().left(-origin).top(0).w(flow.width+origin).h(height+3));
     }
-    if(['start','travel','ping'].includes(packet.phase)){
-      const initial=packet.phase==='start';let x,y,dx,dy,easing;
-      if(remote){
-        const elapsed=packet.elapsed;
-        const [,out,,back]=MESSAGE_LEGS;
-        [x,y,dx,easing]=initial?[sourceX,start,1,'linear']
-          :elapsed<out?[flow.computer,start,out-MESSAGE_LEGS[0],'ease-in']
-          :elapsed<back?[flow.computer,end,back-out,'linear']
-          :[targetX,end,MESSAGE_TIMING.packetMs-back,'ease-out'];dy=dx;
-      }else{
-        const turn=MESSAGE_LEGS[2],travel=MESSAGE_TIMING.packetMs-MESSAGE_TIMING.startMs;
-        x=initial?sourceX:packet.elapsed>=turn?targetX+.001:reach;y=initial?start:end;
-        dx=initial?1:turn-MESSAGE_LEGS[0];dy=initial?1:travel;easing='ease-in-out';
-      }
-      // Stable native policies across the curve turn avoid reversal jumps.
-      // Two delayed copies form the tail; only finite target changes wake JS.
-      for(const [index,size,tint,opacity,delay] of [[2,2.5,color,.3,80],[1,3.5,color,.75,40],[0,4,'#E9FBFF',1,0]]){
-        const part=div().id(index?`panel-packet-tail-${id}-${index}`:`panel-packet-${id}`).absolute()
-          .left(x-size/2).top(y-size/2).size(size).rounded(size/2).bg(tint).opacity(packet.phase==='ping'?0:opacity);
-        part.transition('left',{duration:dx,delay,easing}).transition('top',{duration:dy,delay,easing})
-          .transition('opacity',{duration:120,easing:'ease-out'});
-        base.child(part);
-      }
-    }
-    const arriving=['ping','fade'].includes(packet.phase),size=arriving?14:0;
-    const ping=div().id(`panel-receiver-${id}`).absolute().left(targetX-size/2).top(end-size/2).w(size).h(size)
-      .border(1).border_color(color).opacity(arriving?0:1);
-    for(const property of ['width','height','left','top','opacity'])ping.transition(property,{duration:420,easing:'ease-out'});
-    base.child(ping);
-    if(packet.phase==='fade')base.opacity(0).transition('opacity',390);
+    packetMarks(base,id,packet,{startX,endX,lane:remote?flow.computer:lane,from:a.y-top,to:b.y-top},color);
+    if(packet.phase==='fade')base.opacity(0.2).transition('opacity',900);
     return base;
   }
   if(dashed){
@@ -311,42 +275,47 @@ export function route(id,a,b,color,{dashed=false,packet=null,motion=false,relati
     const origin=Math.max(0,-startX,-endX);
     const path=routePath(a.y-top,b.y-top,lane,endX,origin,startX);
     base.child(window.paint_path(path,color).absolute().left(-origin).top(0).w(flow.width+origin).h(height+3));
-    if(packet&&motion&&['start','travel'].includes(packet.phase)){
-      const elapsed=packet.elapsed;
-      const [leave,down,enter]=PANEL_LEGS;
-      const point=elapsed<leave?{x:startX,y:a.y-top,ms:1}
-        :elapsed<down?{x:lane,y:a.y-top,ms:down-leave}
-        :elapsed<enter?{x:lane,y:b.y-top,ms:enter-down}
-        :{x:endX,y:b.y-top,ms:PANEL_TIMING.packetMs-enter};
-      // Native delayed copies form a real fading tail, following the same
-      // finite corner targets as the head. No per-frame JavaScript runs.
-      for(const [index,size,opacity,delay] of [[1,6,0.8,40],[2,5,0.6,80],[3,4,0.4,120],[4,3,0.2,160]])
-        base.child(div().id(`panel-packet-tail-${id}-${index}`).absolute().left(point.x-size/2).top(point.y-size/2)
-          .size(size).rounded(1).bg(color).opacity(opacity)
-          .transition('left',{duration:point.ms,delay,easing:'ease-in-out'})
-          .transition('top',{duration:point.ms,delay,easing:'ease-in-out'}));
-      base.child(div().id(`panel-packet-${id}`).absolute().left(point.x-4).top(point.y-4).size(8).rounded(1).bg(color)
-        .child(div().absolute().left(3).top(3).size(2).bg('#FFFFFF'))
-        .transition('left',{duration:point.ms,easing:'ease-in-out'})
-        .transition('top',{duration:point.ms,easing:'ease-in-out'}));
-    }
     if(packet?.phase==='fade')base.opacity(0.2).when(motion,e=>e.transition('opacity',900));
-    if(packet&&motion){
-      // Keep a zero-size receiver keyed throughout travel. At arrival its
-      // native width/height expand while opacity fades from one to zero.
-      const departing=packet.phase!=='start',departureSize=departing?24:0;
-      const departure=div().id(`panel-sender-${id}`).absolute().left(startX-departureSize/2).top(a.y-top-departureSize/2)
-        .w(departureSize).h(departureSize).rounded(1).border(1).border_color(color).opacity(departing?0:1);
-      for(const property of ['width','height','left','top','opacity'])departure.transition(property,{duration:460,easing:'ease-out'});
-      base.child(departure);
-      const arriving=['ping','fade'].includes(packet.phase),size=arriving?24:0;
-      const ring=div().id(`panel-receiver-${id}`).absolute().left(endX-size/2).top(b.y-top-size/2)
-        .w(size).h(size).rounded(1).border(1).border_color(color).opacity(arriving?0:1);
-      for(const property of ['width','height','left','top','opacity'])ring.transition(property,{duration:460,easing:'ease-out'});
-      base.child(ring);
-    }
+    if(packet&&motion)packetMarks(base,id,packet,{startX,endX,lane,from:a.y-top,to:b.y-top},color);
   }
   return base;
+}
+
+// One event packet on its line, shared by messages and task events: it leaves
+// the source row, runs along the lane and enters the target row, one finite
+// native transition per corner, with a square departure and arrival ring.
+function packetMarks(base,id,packet,{startX,endX,lane,from,to},color){
+  if(['start','travel'].includes(packet.phase)){
+    const elapsed=packet.elapsed;
+    const [leave,down,enter]=PANEL_LEGS;
+    const point=elapsed<leave?{x:startX,y:from,ms:1}
+      :elapsed<down?{x:lane,y:from,ms:down-leave}
+      :elapsed<enter?{x:lane,y:to,ms:enter-down}
+      :{x:endX,y:to,ms:PANEL_TIMING.packetMs-enter};
+    // Native delayed copies form a real fading tail, following the same
+    // finite corner targets as the head. No per-frame JavaScript runs.
+    for(const [index,size,opacity,delay] of [[1,6,0.8,40],[2,5,0.6,80],[3,4,0.4,120],[4,3,0.2,160]])
+      base.child(div().id(`panel-packet-tail-${id}-${index}`).absolute().left(point.x-size/2).top(point.y-size/2)
+        .size(size).rounded(1).bg(color).opacity(opacity)
+        .transition('left',{duration:point.ms,delay,easing:'ease-in-out'})
+        .transition('top',{duration:point.ms,delay,easing:'ease-in-out'}));
+    base.child(div().id(`panel-packet-${id}`).absolute().left(point.x-4).top(point.y-4).size(8).rounded(1).bg(color)
+      .child(div().absolute().left(3).top(3).size(2).bg('#FFFFFF'))
+      .transition('left',{duration:point.ms,easing:'ease-in-out'})
+      .transition('top',{duration:point.ms,easing:'ease-in-out'}));
+  }
+  // Keep a zero-size receiver keyed throughout travel. At arrival its
+  // native width/height expand while opacity fades from one to zero.
+  const departing=packet.phase!=='start',departureSize=departing?24:0;
+  const departure=div().id(`panel-sender-${id}`).absolute().left(startX-departureSize/2).top(from-departureSize/2)
+    .w(departureSize).h(departureSize).rounded(1).border(1).border_color(color).opacity(departing?0:1);
+  for(const property of ['width','height','left','top','opacity'])departure.transition(property,{duration:460,easing:'ease-out'});
+  base.child(departure);
+  const arriving=['ping','fade'].includes(packet.phase),size=arriving?24:0;
+  const ring=div().id(`panel-receiver-${id}`).absolute().left(endX-size/2).top(to-size/2)
+    .w(size).h(size).rounded(1).border(1).border_color(color).opacity(arriving?0:1);
+  for(const property of ['width','height','left','top','opacity'])ring.transition(property,{duration:460,easing:'ease-out'});
+  base.child(ring);
 }
 
 export function panelFlowLayer(feed,layout,state,color,t,motion,width,gutter=null){
@@ -419,7 +388,7 @@ export function renderPanelTracking(view,t,cx,{macTitlebar=false}={}){
   const state=panelEventStates(feed,now,{previous:view.panelEvents,motion});view.panelEvents=state;view.now=now;
   let nextAt=state.nextAt;
   const reasonAt=panelReasonWake(feed,now);if(reasonAt!==null&&(nextAt===null||reasonAt<nextAt))nextAt=reasonAt;
-  for(const packet of state.packets)for(const offset of (packet.kind==='message'?MESSAGE_LEGS:PANEL_LEGS.slice(1))){
+  for(const packet of state.packets)for(const offset of PANEL_LEGS.slice(1)){
     const at=packet.at+offset;if(at>now&&(nextAt===null||at<nextAt))nextAt=at;
   }
   if(view.panelWakeAt!==nextAt){

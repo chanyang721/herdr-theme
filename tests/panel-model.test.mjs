@@ -182,7 +182,7 @@ test('initial feed is only a watermark, a newly observed ID plays once', () => {
   const active = advance(historical, initial, 10);
   assert.equal(active.active.length, 1);
   assert.equal(advance(historical, active, 100).pending.length, 1, 'same ID does not start twice');
-  assert.equal(advance(historical, active, 3010).active.length, 0);
+  assert.equal(advance(historical, active, M.packetMs + M.pingMs + M.coolMs + 10).active.length, 0);
 });
 
 test('distribution, review, verdict, acceptance and closing labels occupy the same finite tag slot', () => {
@@ -388,7 +388,7 @@ test('a newly observed old-timestamp event plays once but initial history remain
   const observed = advance(value, boot(normalize({ events: [] })), 0);
   assert.equal(observed.packets[0].phase, 'start');
   assert.equal(observed.packets[0].sourceAt, 0);
-  assert.equal(advance(value, observed, 3000).active.length, 0);
+  assert.equal(advance(value, observed, M.packetMs + M.pingMs + M.coolMs).active.length, 0);
   assert.equal(advance(value, observed, 5000).active.length, 0);
 });
 

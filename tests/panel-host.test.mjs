@@ -75,13 +75,8 @@ test('the sidebar width only matters at the layout breakpoints',()=>{
  assert.deepEqual([224,259,260,299,300,419,420,680].map(panelWidthClass),[0,0,1,1,2,2,3,3]);
 });
 
-test('curve extent stays inside its band and each of four remote computers has its own outer lane',async()=>{
- const {messageCurveReach,computerFlow}=await import('../mods/sixfold-desk/panel-host.js');
- for(const distance of [0,20,100,400,10000]){
-  const reach=messageCurveReach(distance);assert(reach>0&&reach<=24);
-  assert.equal(messageCurveReach(-distance),reach);assert(messageCurveReach(distance,1)<reach);
- }
- assert.equal(messageCurveReach(10000),24);
+test('each of four remote computers has its own outer lane',async()=>{
+ const {computerFlow}=await import('../mods/sixfold-desk/panel-host.js');
  const feed={computers:['local','a','b','c','d'].map(id=>({id})),spaces:[]};
  assert.deepEqual(['a','b','c','d'].map(id=>computerFlow(feed,id).computer),[40,48,56,64]);
 });
