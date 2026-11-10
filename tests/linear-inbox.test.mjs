@@ -218,15 +218,17 @@ test('an issue row in the issue search shows its unread alerts: count, newest tw
   assert.equal(issueAlertSignature(items, 'Alpha'), issueAlertSignature([...items].reverse(), 'Alpha'));
 });
 
-test('unread alerts of issues not in the cached list are found once per issue, newest first, filtered by the search', async () => {
-  const {unlistedAlertIssues} = await import('../mods/sixfold-desk/alert-model.js');
+test('the alerted-issues group: one entry per issue with unread alerts, newest first, filtered by the search', async () => {
+  const {alertedIssues} = await import('../mods/sixfold-desk/alert-model.js');
   const items = [
-    {id: 'a', workspace: 'Alpha', issue: 'ABC-7', issue_title: 'New one', read: false, at: '2026-11-10T04:24:00Z'},
-    {id: 'b', workspace: 'Alpha', issue: 'ABC-7', issue_title: 'New one', read: false, at: '2026-11-10T04:45:00Z'},
-    {id: 'c', workspace: 'Alpha', issue: 'ABC-8', issue_title: 'Other', read: false, at: '2026-11-10T03:00:00Z'},
-    {id: 'd', workspace: 'Alpha', issue: 'ABC-1', read: false, at: '2026-11-10T05:00:00Z'},      // listed
+    {id: 'a', workspace: 'Alpha', issue: 'ABC-7', issue_title: 'New one', read: false, at: '2026-11-10T04:24:00Z', subtitle: 'Kim commented: a'},
+    {id: 'b', workspace: 'Alpha', issue: 'ABC-7', issue_title: 'New one', read: false, at: '2026-11-10T04:45:00Z', subtitle: 'Kim replied: b'},
+    {id: 'c', workspace: 'Alpha', issue: 'ABC-8', issue_title: 'Other', read: false, at: '2026-11-10T05:00:00Z'},
     {id: 'e', workspace: 'Alpha', issue: 'ABC-9', read: true, at: '2026-11-10T05:00:00Z'},       // read
     {id: 'f', workspace: 'Beta', issue: 'ABC-10', read: false, at: '2026-11-10T05:00:00Z'}];     // other space
-  assert.deepEqual(unlistedAlertIssues(items, 'Alpha', ['abc-1']).map(r => [r.key, r.at]), [['ABC-7', '2026-11-10T04:45:00Z'], ['ABC-8', '2026-11-10T03:00:00Z']]);
-  assert.deepEqual(unlistedAlertIssues(items, 'Alpha', ['ABC-1'], 'other').map(r => r.key), ['ABC-8']);
+  const group = alertedIssues(items, 'Alpha');
+  assert.deepEqual(group.map(r => [r.key, r.alerts.unread, r.at]), [['ABC-8', 1, '2026-11-10T05:00:00Z'], ['ABC-7', 2, '2026-11-10T04:45:00Z']]);
+  assert.equal(group[1].alerts.lines[0].text, 'Kim replied: b');
+  assert.deepEqual(alertedIssues(items, 'Alpha', 'new').map(r => r.key), ['ABC-7']);
+  assert.deepEqual(alertedIssues(items, 'Alpha', 'zzz'), []);
 });

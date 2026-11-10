@@ -63,19 +63,18 @@ export function issueAlerts(items, space, key, limit = ISSUE_ALERT_LINES) {
 export const issueAlertSignature = (items, space) => linearScoped(items, space).filter(i => !i.read && i.issue)
   .map(i => `${i.issue}:${i.id}`).sort().join(',');
 
-// Issues with unread alerts that the cached issue list does not have yet (made
-// after the catalog was read): shown apart, above the list, so they are not lost
-// and the list's own order stays. Newest first, bounded.
-export function unlistedAlertIssues(items, space, listed, query = '', limit = 5) {
-  const known = new Set([...(listed ?? [])].map(key => String(key).toUpperCase()));
+// The issues of a space with unread Linear alerts, for the shared "알림 온 이슈"
+// group of the issue search: every tab shows the same group, whether or not the
+// tab's list has the issue. Newest first, filtered by the search, bounded.
+export const ALERTED_ISSUES = 5;
+export function alertedIssues(items, space, query = '', limit = ALERTED_ISSUES) {
   const needle = String(query ?? '').normalize('NFC').trim().toLocaleLowerCase();
-  const seen = new Map();
+  const keys = new Map();
   for (const item of linearScoped(items, space)) {
     const key = String(item.issue || '').toUpperCase();
-    if (!key || item.read || known.has(key)) continue;
-    const at = String(item.changed_at || item.at || '');
-    if (!seen.has(key) || at > seen.get(key).at) seen.set(key, {key, title: item.issue_title || item.title || '', state: 'waiting', unlisted: true, at});
+    if (key && !item.read && !keys.has(key)) keys.set(key, item.issue_title || item.title || '');
   }
-  return [...seen.values()].filter(row => !needle || `${row.key} ${row.title}`.normalize('NFC').toLocaleLowerCase().includes(needle))
+  return [...keys].filter(([key, title]) => !needle || `${key} ${title}`.normalize('NFC').toLocaleLowerCase().includes(needle))
+    .map(([key, title]) => { const alerts = issueAlerts(items, space, key); return {key, title, at: alerts.lines[0]?.at || '', alerts}; })
     .sort((a, b) => b.at.localeCompare(a.at)).slice(0, limit);
 }

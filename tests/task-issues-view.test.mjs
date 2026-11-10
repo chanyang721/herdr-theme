@@ -77,29 +77,29 @@ test('open and dismiss state is reported through the native popover callback',as
   assert.equal(byId(tree,'query'),search);
 });
 
-test('an issue with new alerts keeps its place, shows a count and the newest lines; a line opens its comment',async()=>{
-  const {issuePopover}=await renderer(),opened=[],cx={stop_propagation(){}};
-  const link='https://linear.app/demo/issue/DEMO-2/x#comment-0a1b2c3d';
-  const alerts={'DEMO-2':{unread:3,more:1,lines:[{id:'n2',category:'댓글',text:'Kim replied: second',at:'2026-11-10T04:45:00Z',url:link},{id:'n1',category:'댓글',text:'Kim commented: first',at:'2026-11-10T04:24:00Z',url:''}]}};
-  const tree=issuePopover(model({alertsFor:key=>alerts[key]||null,onLink:(url,context)=>{assert.equal(context,cx);opened.push(url);}}),theme);
-  const list=byId(tree,'task-issues-list-demo');
-  assert.deepEqual(list.nodes.map(node=>call(node,'id')[1]),['task-issue-demo-DEMO-1','task-issue-wrap-demo-DEMO-2','task-issue-demo-DEMO-3']);   // order unchanged
-  assert.deepEqual(words(byId(tree,'task-issue-alerts-demo-DEMO-2')),['새 3']);
-  assert(!byId(tree,'task-issue-alerts-demo-DEMO-1'));
-  const text=words(byId(tree,'task-issue-wrap-demo-DEMO-2'));
-  assert(text.includes('Kim replied: second')&&text.includes('Kim commented: first')&&text.includes('외 1건'));
-  click(byId(tree,'task-issue-alert-demo-DEMO-2-0'),cx);
-  assert.deepEqual(opened,[link]);
-  assert(!call(byId(tree,'task-issue-alert-demo-DEMO-2-1'),'on_click'));   // no trusted link: not a button
-});
-
-test('alerted issues the cached list does not have yet show apart above the list, with their alert lines and no import button',async()=>{
+test('issues with new alerts show in one group above the tabs; a tab row only gets a small count; a line opens its comment',async()=>{
+  const opened=[],cx={stop_propagation(){}};
+  const link='https://linear.app/demo/issue/DEMO-9/x#comment-4e5f6a7b';
+  const counts={'DEMO-2':{unread:1,more:0,lines:[]}};
+  const alerted=[
+    {key:'DEMO-9',title:'Made after the list',at:'2026-11-10T04:45:00Z',alerts:{unread:3,more:1,lines:[
+      {id:'n2',category:'댓글',text:'Kim replied: second',at:'2026-11-10T04:45:00Z',url:link},
+      {id:'n1',category:'댓글',text:'Kim commented: first',at:'2026-11-10T04:24:00Z',url:''}]}},
+    {key:'DEMO-2',title:'Demo issue 2',at:'2026-11-10T03:00:00Z',alerts:{unread:1,more:0,lines:[{id:'n5',category:'배정',text:'Lee assigned you',at:'2026-11-10T03:00:00Z',url:''}]}}];
+  for(const scope of ['week','milestone','all']){
+    const {issuePopover}=await renderer();
+    const tree=issuePopover(model({scope,groups:[{id:'g',name:'G',items:rows}],alerted,alertsFor:key=>counts[key]||null,
+      onLink:(url,context)=>{assert.equal(context,cx);opened.push(url);}}),theme);
+    const body=byId(tree,'task-issues-body-demo'),ids=body.nodes.map(node=>call(node,'id')?.[1]).filter(Boolean);
+    assert(ids.indexOf('task-issues-alerted-demo')>=0&&ids.indexOf('task-issues-alerted-demo')<ids.indexOf('task-issues-list-demo'),scope);   // above the tab list, every tab
+    const group=words(byId(tree,'task-issues-alerted-demo'));
+    for(const word of ['알림 온 이슈','미확인 4','DEMO-9','Made after the list','Kim replied: second','Kim commented: first','외 1건','3건','배정','Lee assigned you'])assert(group.includes(word),`${scope}: ${word}`);
+    assert.deepEqual(words(byId(tree,'task-issue-alerts-demo-DEMO-2')),['새 1']);          // the tab row: a count only
+    assert(!words(byId(tree,'task-issue-demo-DEMO-2')).includes('Lee assigned you'));
+    click(byId(tree,'task-issues-alerted-line-demo-DEMO-9-0'),cx);
+    assert(!call(byId(tree,'task-issues-alerted-line-demo-DEMO-9-1'),'on_click'));     // no trusted link: not a button
+  }
+  assert.deepEqual(opened,[link,link,link]);
   const {issuePopover}=await renderer();
-  const alerts={'DEMO-9':{unread:1,more:0,lines:[{id:'n9',category:'댓글',text:'Kim commented: new issue',at:'2026-11-10T04:24:00Z',url:''}]}};
-  const tree=issuePopover(model({scope:'all',canImport:true,onPull:()=>assert.fail('no import'),alertsFor:key=>alerts[key]||null,
-    unlisted:[{key:'DEMO-9',title:'Made after the list',state:'waiting',unlisted:true}]}),theme);
-  const ids=byId(tree,'task-issues-list-demo').nodes.map(node=>call(node,'id')[1]);
-  assert.deepEqual(ids,['task-issues-unlisted-demo','task-issue-wrap-demo-DEMO-9','task-issues-unlisted-end-demo','task-issue-demo-DEMO-1','task-issue-demo-DEMO-2','task-issue-demo-DEMO-3']);
-  assert(words(tree).includes('목록 밖')&&words(tree).includes('Kim commented: new issue'));
-  assert(!call(byId(tree,'task-issues-pull-demo-DEMO-9'),'on_click'));
+  assert(!byId(issuePopover(model({alerted:[]}),theme),'task-issues-alerted-demo'));   // no unread: no group
 });

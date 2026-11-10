@@ -1,7 +1,7 @@
 import {View,div,svg} from 'gpui-kit';
 import {h_flex,v_flex,InputState,Input} from 'gpui-base';
 import {theme,spaces,shared,setShared,settings,window,exec} from 'herdr';
-import {issueAlerts,issueAlertSignature,unlistedAlertIssues} from './alert-model.js';
+import {issueAlerts,issueAlertSignature,alertedIssues} from './alert-model.js';
 import {projectPanelFeed,panelEventStates,panelSpaces,panelSpacePartners,PANEL_TIMING,PANEL_LEGS,panelLeg,agentReason} from './panel-model.js';
 import {panelLayout,cardView,agentRow,panelFlowLayer,panelCounts,PANEL_GEOMETRY,toolIcon,panelReasonWake,agentRowHeight,panelMetaHeight,rowArrival} from './panel-view.js';
 import {groupColors,paletteMode} from './collab-flow.js';
@@ -169,7 +169,7 @@ export function createRetainedPanel(cx,{macTitlebar=false,onClassic=null,onDispo
       canImport:Boolean(onIssueRequest&&space.issue_catalog?.import_request),busyKeys:new Set(state?.pending.keys()||[]),error:state?.error,
       search:state?.input?Input.new(state.input).w_full().h(30):null,
       alertsFor:state?.open?key=>issueAlerts(shared('sixfold.linearItems')??[],space.name,key):null,
-      unlisted:state?.open&&state.scope!=='milestone'?unlistedAlertIssues(shared('sixfold.linearItems')??[],space.name,(space.issue_catalog?.all||[]).map(issue=>issue.key),state.query):[],
+      alerted:state?.open?alertedIssues(shared('sixfold.linearItems')??[],space.name,state.query):[],
       // Opens the comment itself (#comment-…); reading it marks nothing in Linear.
       onLink:(url,context)=>{if(/^https:\/\/linear\.app\//.test(url))(context||cx).spawn(async()=>{await exec('open',[url]);});},
       onOpen:(open)=>{

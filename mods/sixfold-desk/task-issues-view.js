@@ -32,6 +32,33 @@ export function issuePopover(model,t){
     .child(div().id(`task-issues-close-${id}`).size(28).rounded(6).text_size(14).text_color(t.muted)
       .cursor_pointer().tooltip('닫기').on_click(change(model.onOpen,false)).child('✕')));
   if(model.search)body.child(model.search);
+  // Issues with new alerts, the same in every tab (even when a tab's list lacks the issue).
+  const alerted=model.alerted||[];
+  if(alerted.length){
+    const group=v_flex().id(`task-issues-alerted-${id}`).gap(4).p(6).rounded(8).bg(t.chrome||t.surface).border(1).border_color(t.border)
+      .child(h_flex().gap(6).items_center().px(2)
+        .child(text('알림 온 이슈',t.foreground,11).font_bold())
+        .child(text(`미확인 ${alerted.reduce((sum,entry)=>sum+entry.alerts.unread,0)}`,t.accent,10))
+        .child(div().flex_1()).child(text('읽음은 Linear 기준',t.dim,9)));
+    for(const entry of alerted){
+      const newest=entry.alerts.lines[0]||{};
+      const line=(item,i)=>h_flex().id(`task-issues-alerted-line-${id}-${entry.key}-${i}`).gap(6).px(6).py(2).rounded(5).items_center()
+        .when(Boolean(item.url&&model.onLink),e=>e.cursor_pointer().tooltip('누르면 이 댓글을 Linear에서 엽니다').hover(s=>s.bg(t.hover||t.selected))
+          .on_click(change(model.onLink,item.url)))
+        .child(text(item.text,t.muted,11).flex_1().tooltip(item.text))
+        .when(i>0,e=>e.child(text(clock(item.at),t.dim,9).flex_none()));
+      group.child(v_flex().id(`task-issues-alerted-${id}-${entry.key}`).gap(1).p(4).rounded(6).bg(t.selected)
+        .child(h_flex().gap(6).items_center().px(2)
+          .child(div().px(5).rounded(3).flex_none().text_size(9).font_bold().bg(t.accent).text_color(t.accent_foreground||t.background).child(newest.category||'알림'))
+          .child(text(entry.key,t.muted,10).flex_none().font_bold())
+          .child(text(entry.title,t.foreground,12).flex_1().tooltip(entry.title))
+          .when(entry.alerts.unread>1,e=>e.child(text(`${entry.alerts.unread}건`,t.accent,9).flex_none()))
+          .child(text(clock(newest.at),t.dim,9).flex_none()))
+        .children(entry.alerts.lines.map(line))
+        .when(entry.alerts.more>0,e=>e.child(text(`외 ${entry.alerts.more}건`,t.dim,10).px(8))));
+    }
+    body.child(group);
+  }
   body.child(h_flex().gap(4).pb(8).border_b(1).border_color(t.border)
     .children(ISSUE_SCOPES.map(item=>{
       const count=model.scopeCounts?.[item.id];
@@ -45,10 +72,9 @@ export function issuePopover(model,t){
   const issueRow=issue=>{
     const included=issue.week||issue.pinned,busy=busyKeys.has(issue.key);
     const tone=issue.state==='blocked'?t.blocked:issue.state==='working'?t.ansi4||t.accent:issue.state==='review'?t.accent:t.dim;
-    const label=issue.unlisted?'목록 밖':busy?'요청 중':issue.week?'이번 주':issue.pinned?'가져옴 ✓':'가져오기';
-    const enabled=model.canImport===true&&!busy&&!issue.week&&!issue.unlisted;
-    // New alerts of this issue (comments, assignment, state): a count beside the key and,
-    // under the row, the newest lines in the alert popover's form. Order is unchanged.
+    const label=busy?'요청 중':issue.week?'이번 주':issue.pinned?'가져옴 ✓':'가져오기';
+    const enabled=model.canImport===true&&!busy&&!issue.week;
+    // An issue with new alerts gets a small count here; what changed is in the shared group above the tabs.
     const alerts=model.alertsFor?.(issue.key)||null;
     const row=h_flex().id(`task-issue-${id}-${issue.key}`).h(34).px(8).gap(8).items_center().rounded(6)
       .opacity(issue.state==='done'&&!alerts?0.5:1)
@@ -66,17 +92,7 @@ export function issuePopover(model,t){
         .text_color(issue.pinned?t.ansi6||t.accent:t.muted).text_size(10).font_bold()
         .when(enabled,button=>button.cursor_pointer().on_click(change(model.onPull,issue.key,!issue.pinned)))
         .when(issue.week,button=>button.opacity(0.55)).child(label));
-    if(!alerts)return row;
-    const line=(entry,i)=>v_flex().id(`task-issue-alert-${id}-${issue.key}-${i}`).ml(24).mr(8).px(8).py(4).gap(1).rounded(6).bg(t.selected)
-      .when(Boolean(entry.url&&model.onLink),e=>e.cursor_pointer().tooltip('누르면 이 댓글을 Linear에서 엽니다').hover(s=>s.bg(t.hover||t.selected))
-        .on_click(change(model.onLink,entry.url)))
-      .child(h_flex().gap(6).items_center()
-        .child(div().px(5).rounded(3).flex_none().text_size(9).font_bold().bg(t.accent).text_color(t.accent_foreground||t.background).child(entry.category))
-        .child(text(entry.text,t.foreground,11).flex_1().tooltip(entry.text))
-        .child(text(clock(entry.at),t.dim,9).flex_none()));
-    return v_flex().id(`task-issue-wrap-${id}-${issue.key}`).gap(2).child(row)
-      .children(alerts.lines.map(line))
-      .when(alerts.more>0,e=>e.child(text(`외 ${alerts.more}건`,t.dim,10).ml(32)));
+    return row;
   };
   if(scope==='milestone'){
     for(const group of groups){
@@ -86,17 +102,8 @@ export function issuePopover(model,t){
         .child(text(group.progress||'',t.dim,10)));
       list.children(group.items.map(issueRow));
     }
-  }else{
-    // Alerted issues the cached list does not have yet, apart and above, so the list keeps its order.
-    const unlisted=model.unlisted||[];
-    if(unlisted.length)list.child(h_flex().id(`task-issues-unlisted-${id}`).pt(6).pb(4).px(8).gap(8).items_center()
-      .child(text('목록 갱신 전 새 알림',t.foreground,11).font_bold()).child(div().flex_1())
-      .child(text('저장된 이슈 목록에 아직 없는 이슈',t.dim,10)));
-    list.children(unlisted.map(issueRow));
-    if(unlisted.length&&rows.length)list.child(div().id(`task-issues-unlisted-end-${id}`).h(1).my(4).bg(t.border));
-    list.children(rows.map(issueRow));
-  }
-  if(!(scope==='milestone'?groups.some(group=>group.items.length):rows.length||(model.unlisted||[]).length)){
+  }else list.children(rows.map(issueRow));
+  if(!(scope==='milestone'?groups.some(group=>group.items.length):rows.length)){
     list.child(text(model.loading?'이슈를 불러오는 중':model.emptyLabel||'이 범위에 표시할 이슈가 없습니다',t.dim,11).py(12));
   }
   body.child(list);
