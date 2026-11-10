@@ -55,6 +55,12 @@ const invokeHelper = (configured, command, args=[]) => {
   return exec(program,argv);
 };
 
+// cx.spawn can throw before its callback runs; that callback's finally then never
+// releases the busy flag and every later tick of the job is skipped. Release it here.
+export function spawnOrRelease(cx, release, task) {
+  try { cx.spawn(task); return true; }
+  catch { release(); return false; }
+}
 const marks = { blocked: '!', done: '✓', working: '●', idle: '○' };
 // One slow pass of the dot along a link pipe while computers work together.
 const LINK_FLOW_MS = 4000;
@@ -188,7 +194,7 @@ export default class SixfoldDesk extends View {
     const refresh = cx => {
       if (this.refreshBusy) return;
       this.refreshBusy = true;
-      cx.spawn(async cx => {
+      spawnOrRelease(cx, () => { this.refreshBusy = false; }, async cx => {
         try {
           const file=this.sidebarFiles||{};
           const events=typeof herdrNative.messageEvents==='function'?(this.nativeMessages||[]):file.messages?.events||[];
@@ -280,7 +286,7 @@ export default class SixfoldDesk extends View {
     cx.timer.every(1000,cx=>{
       if(!this.computers?.tailscale || computersBusy || Date.now()-computersAt<15000)return;
       computersBusy=true;computersAt=Date.now();
-      cx.spawn(async cx=>{
+      spawnOrRelease(cx,()=>{computersBusy=false;},async cx=>{
         try {
           const result=await exec(native(),['collect_computers']);
           if(result.code!==0)throw Error('status unavailable');
@@ -299,7 +305,7 @@ export default class SixfoldDesk extends View {
     cx.timer.every(1000,cx=>{
       if(this.sidebarVisible===false||!this.messageEvents?.length||readBusy)return;
       readBusy=true;
-      cx.spawn(async cx=>{
+      spawnOrRelease(cx,()=>{readBusy=false;},async cx=>{
         try{
           const path=`${appHome()}/data/sixfold/messages-read.json`;
           const old=await readTextFile(path).catch(()=>null);
@@ -317,7 +323,7 @@ export default class SixfoldDesk extends View {
     cx.timer.every(2000, cx => {
       if (this.routeBusy || !this.routeScript || !this.queuedRoutes.some(item=>!item.hold)) return;
       this.routeBusy = true;
-      cx.spawn(async cx => {
+      spawnOrRelease(cx, () => { this.routeBusy = false; }, async cx => {
         try { await invokeHelper(this.routeScript,'route',['--drain']); }
         finally { this.routeBusy = false; }
       });
@@ -326,7 +332,7 @@ export default class SixfoldDesk extends View {
     cx.timer.every(2000, cx => {
       if (this.collaborationBusy || !this.collaborationScript) return;
       this.collaborationBusy = true;
-      cx.spawn(async cx => {
+      spawnOrRelease(cx, () => { this.collaborationBusy = false; }, async cx => {
         try { await invokeHelper(this.collaborationScript,'collaborate',['drain']); }
         catch { /* The durable lease prevents blind retry after ambiguous delivery. */ }
         finally { this.collaborationBusy = false; }
@@ -340,7 +346,7 @@ export default class SixfoldDesk extends View {
       if(!config?.script&&!config?.command)return;
       if(voiceBusy)return;
       voiceBusy=true;
-      cx.spawn(async cx=>{
+      spawnOrRelease(cx,()=>{voiceBusy=false;},async cx=>{
         try {
           if(!config?.script && !config?.command)return;
           const f=focused(), facts=terminals(), current=facts.find(x=>x.address===f?.terminal);
@@ -357,7 +363,7 @@ export default class SixfoldDesk extends View {
             voiceKey=key;voiceActionBusy=true;
             // Keep publishing focus while a voice connection starts. The helper
             // rechecks that heartbeat before sending any microphone controls.
-            cx.spawn(async cx=>{
+            spawnOrRelease(cx,()=>{voiceActionBusy=false;},async cx=>{
               try {
                 if (Array.isArray(config.command)) await invokeHelper(config.command,'focus_queue',['--app-focus']);
                 else if(config.command) await exec(config.command,[...(config.args || ['focus_queue']),'--app-focus']);
