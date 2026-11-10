@@ -3,6 +3,7 @@ import { createHash } from 'crypto';
 import { readJsonSnapshot, subscribeJsonFile, subscribeFileChanges } from './panel-io.js';
 import { addArrival, hasArrivalHost } from './arrival-store.js';
 import { arrivalTarget, ARRIVAL } from './arrival-model.js';
+import { placeItems } from './alert-model.js';
 
 // Linear inbox feed for the sidebar: data/sixfold/linear-alerts.json and
 // linear-live-health.json, written by a machine-local collector. Kept apart from
@@ -48,12 +49,14 @@ async function announce(events, allowed = () => true) {
   const next = {schema: 1, seen: [...ledger.seen, ...fresh.map(event => event.key)].slice(-LEDGER_LIMIT)};
   if (!allowed()) throw new Error('View no longer displays alerts');
   await writeTextFile(path, JSON.stringify(next), raw);
-  return fresh.filter(event => event.popup).slice(-ARRIVAL.visible);
+  // The feed is newest first: announce the newest few, oldest of them first so the newest lands last.
+  return fresh.filter(event => event.popup).slice(0, ARRIVAL.visible).reverse();
 }
 
-export function publishLinear(feed, health) {
-  setShared('sixfold.linearItems', feed.items ?? []);
-  setShared('sixfold.linearSpaces', feed.spaces ?? []);
+export function publishLinear(feed, health, names = []) {
+  const items = placeItems(feed.items ?? [], names);
+  setShared('sixfold.linearItems', items);
+  setShared('sixfold.linearSpaces', names.length ? [...new Set(items.map(i => i.workspace).filter(Boolean))] : feed.spaces ?? []);
   setShared('sixfold.linearStatuses', feed.statuses ?? {});
   setShared('sixfold.linearHealth', health ?? {});
 }
@@ -97,9 +100,10 @@ export function watchLinear(view, cx) {
     (context ?? cx).spawn(async cx => {
       try {
         const feed = cached.get('feed').value, health = cached.get('health').value;
-        publishLinear(feed, health);
+        const names = (spaces() ?? []).map(s => s.name);
+        publishLinear(feed, health, names);
         cx.notify();
-        const events = await announce(linearPopupEvents(feed.items), allowed);
+        const events = await announce(linearPopupEvents(placeItems(feed.items ?? [], names)), allowed);
         if (!allowed()) return;
         previous = signature;   // after the ledger write, so a failed write is retried
         announceLinear(events);

@@ -1,7 +1,7 @@
 import { View, div, image } from 'gpui-kit';
 import { h_flex, v_flex, InputState, Input } from 'gpui-base';
-import { theme, props, appHome, readTextFile, writeTextFile, openOverlay, closeOverlay, exec } from 'herdr';
-import { categoryLabel, linearLink, visibleItems, spacesOf, issueLine, buildRequest, resultLabel, changeLines } from './model.js';
+import { theme, props, appHome, readTextFile, writeTextFile, openOverlay, closeOverlay, exec, spaces } from 'herdr';
+import { categoryLabel, linearLink, visibleItems, spacesOf, issueLine, buildRequest, resultLabel, changeLines, placeItems } from './model.js';
 
 // Linear inbox. Reads data/sixfold/linear-alerts.json (written by a local collector).
 // Writes never happen here: a pressed button leaves one request file that the
@@ -34,7 +34,7 @@ export default class LinearInbox extends View {
           const snapshot = text + '\u0000' + health;
           if (snapshot !== previous) {
             const feed = JSON.parse(text || '{}');
-            this.items = feed.items ?? []; this.statuses = feed.statuses ?? {};
+            this.items = placeItems(feed.items ?? [], (spaces() ?? []).map(s => s.name)); this.statuses = feed.statuses ?? {};
             // Writes the local collector accepts on this computer; others stay hidden.
             this.writes = Array.isArray(feed.writes) ? feed.writes : [];
             this.health = JSON.parse(health || '{}');

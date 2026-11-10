@@ -90,7 +90,8 @@ test('new Linear alerts become arrivals into their space (Share otherwise); no s
   const modelUrl = new URL('../mods/sixfold-desk/arrival-model.js', import.meta.url).href;
   let source = await readFile(new URL('../mods/sixfold-desk/linear-feed.js', import.meta.url), 'utf8');
   source = source.replace(/\r\n/g, '\n').replace(/^import .* from '(herdr|crypto|\.\/panel-io\.js)';\n/gm, '')
-    .replace("'./arrival-store.js'", `'${storeUrl}'`).replace("'./arrival-model.js'", `'${modelUrl}'`);
+    .replace("'./arrival-store.js'", `'${storeUrl}'`).replace("'./arrival-model.js'", `'${modelUrl}'`)
+    .replace("'./alert-model.js'", `'${new URL('../mods/sixfold-desk/alert-model.js', import.meta.url).href}'`);
   source = `const {${Object.keys(globalThis.__linearRuntime).join(',')}} = globalThis.__linearRuntime;\n` + source;
   const store = await import(storeUrl);
   const flush = async () => { for (let n = 0; n < 20; n++) { const due = [...timers]; timers.clear(); due.forEach(t => t.callback(cx)); await Promise.all(tasks.splice(0)); await Promise.resolve(); if (!timers.size && !tasks.length) return; } assert.fail('did not settle'); };
@@ -103,7 +104,7 @@ test('new Linear alerts become arrivals into their space (Share otherwise); no s
     // First run, no sidebar host: the still-unread assignment opens the window once; read history stays silent.
     assert.equal(opens.length, 1);
     assert.deepEqual(JSON.parse(files.get('linear-popup-events.json')).seen, ['linear:old', 'linear:past']);
-    assert.deepEqual(shared['sixfold.linearSpaces'], ['Alpha']);
+    assert.deepEqual(shared['sixfold.linearSpaces'].sort(), ['Alpha', 'Share']);   // 'past' has no space: Share
     feed([{id: 'old', read: false, category: 'assignments'}, {id: 'seen', read: true, category: 'assignments'}, {id: 'remind', read: false, category: 'reminders'}]);
     await flush();
     assert.equal(opens.length, 1);                       // read or reminder only: nothing
@@ -114,7 +115,11 @@ test('new Linear alerts become arrivals into their space (Share otherwise); no s
     await flush();
     assert.equal(opens.length, 1);
     const landed = store.arrivals().filter(a => a.key === 'linear:a' || a.key === 'linear:b').map(a => [a.key, a.id, a.space, a.source, a.issue]);
-    assert.deepEqual(landed, [['linear:a', 'a', 'Alpha', 'linear', 'ABC-1'], ['linear:b', 'b', 'Share', 'linear', '']]);
+    assert.deepEqual(landed, [['linear:b', 'b', 'Share', 'linear', ''], ['linear:a', 'a', 'Alpha', 'linear', 'ABC-1']]);   // newest lands last
+    // An alert of a space not on screen belongs to Share everywhere: badge, popover and inbox agree with its arrival.
+    assert.equal(shared['sixfold.linearItems'].find(i => i.id === 'b').workspace, 'Share');
+    assert.equal(shared['sixfold.linearItems'].find(i => i.id === 'b').workspace_raw, 'Nowhere');
+    assert.deepEqual(shared['sixfold.linearSpaces'].sort(), ['Alpha', 'Share']);
     const count = store.arrivals().length;
     feed([{id: 'a', read: false, category: 'mentions', workspace: 'Alpha'}, {id: 'b', read: false, category: 'assignments'}, {id: 'old', read: true, category: 'assignments'}]);
     await flush();
@@ -173,4 +178,15 @@ test('a flight wakes the sidebar only at its finite step edges, then blinks once
   assert.deepEqual([...flyingIds(list, t0 + 1)], ['x']);                // not in the badge yet
   assert.equal(flyingIds(list, fly + ARRIVAL.flyMs).size, 0);           // landed: counted
   assert.equal(flyingIds(list, t0 + 1, false).size, 0);                 // motion off: counted at once
+});
+
+test('of many new alerts the newest few arrive; unknown spaces are placed in Share by both mods', async () => {
+  const desk = await import('../mods/sixfold-desk/alert-model.js');
+  const inbox = await import('../mods/sixfold-linear-inbox/model.js');
+  for (const placeItems of [desk.placeItems, inbox.placeItems]) {
+    const placed = placeItems([{id: 1, workspace: 'alpha'}, {id: 2, workspace: 'Gone'}, {id: 3, workspace: ''}], ['Alpha', 'Share']);
+    assert.deepEqual(placed.map(i => i.workspace), ['Alpha', 'Share', 'Share']);
+    assert.equal(placed[1].workspace_raw, 'Gone');
+    assert.deepEqual(placeItems([{id: 1, workspace: 'Gone'}], []).map(i => i.workspace), ['Gone']);   // no space list: unchanged
+  }
 });

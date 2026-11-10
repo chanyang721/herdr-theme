@@ -4,6 +4,17 @@ export const categoryLabel = item => CATEGORY[item?.category] || '알림';
 export const spaceKey = name => String(name ?? '').toLowerCase().replace(/[\s_-]/g, '');
 export const linearLink = url => typeof url === 'string' && /^https:\/\/linear\.app\/[A-Za-z0-9_-]+\/(issue|project)\//.test(url);
 
+// Same rule as sixfold-desk/alert-model.js placeItems (mods cannot import each other):
+// an alert whose space is not shown belongs to Share.
+export function placeItems(items, names, fallback = 'Share') {
+  const shown = new Map((names ?? []).map(name => [spaceKey(name), name]));
+  if (!shown.size) return items ?? [];
+  const home = shown.get(spaceKey(fallback)) ?? fallback;
+  return (items ?? []).map(item => {
+    const space = shown.get(spaceKey(item?.workspace)) ?? home;
+    return space === item?.workspace ? item : {...item, workspace: space, workspace_raw: item?.workspace ?? ''};
+  });
+}
 export function visibleItems(items, {space = null, unreadOnly = false} = {}) {
   return (items ?? []).filter(i => (!space || spaceKey(i.workspace) === spaceKey(space)) && (!unreadOnly || !i.read));
 }

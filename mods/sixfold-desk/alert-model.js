@@ -8,6 +8,18 @@ export function scopedAlerts(items, {project, read = {}, unread = false} = {}) {
 // Linear inbox items carry the Herdr space they belong to (machine-local mapping).
 export const linearScoped = (items, space) => (items ?? []).filter(i => !space || projectKey(i.workspace) === projectKey(space));
 export const linearUnread = (items, space) => linearScoped(items, space).filter(i => !i.read).length;
+// An alert belongs to a space shown in the sidebar; one whose space is not
+// there (renamed, closed, unmapped) belongs to Share, so its arrival, badge,
+// popover and inbox all agree. With no space list nothing is moved.
+export function placeItems(items, names, fallback = 'Share') {
+  const shown = new Map((names ?? []).map(name => [projectKey(name), name]));
+  if (!shown.size) return items ?? [];
+  const home = shown.get(projectKey(fallback)) ?? fallback;
+  return (items ?? []).map(item => {
+    const space = shown.get(projectKey(item?.workspace)) ?? home;
+    return space === item?.workspace ? item : {...item, workspace: space, workspace_raw: item?.workspace ?? ''};
+  });
+}
 
 // Issue fields the collector compares between runs; shown as "상태 Todo → Done".
 // (The Linear inbox mod keeps the same table: mods cannot import each other.)

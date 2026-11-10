@@ -51,7 +51,8 @@ function announceSlack(events){
   if(!events.length)return;
   if(!hasArrivalHost())return openOverlay({mod:'sixfold-slack-inbox',kind:'window',key:'slack-mentions',keep:true,width:1040,height:800,props:{window:true,review:Boolean(events[0].review)}});
   const names=(spaces()??[]).map(s=>s.name);
-  for(const event of events.slice(-ARRIVAL.visible))addArrival({key:event.key,id:event.id,source:'slack',space:arrivalTarget(event.project,names),title:event.title,issue:event.author});
+  // Mentions are newest first: the newest few, oldest of them first so the newest lands last.
+  for(const event of events.slice(0,ARRIVAL.visible).reverse())addArrival({key:event.key,id:event.id,source:'slack',space:arrivalTarget(event.project,names),title:event.title,issue:event.author});
 }
 
 // Tracked Slack, GitHub and pane requests, ordered by the watcher: needs-you first.
