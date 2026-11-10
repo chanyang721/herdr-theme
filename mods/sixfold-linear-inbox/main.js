@@ -133,7 +133,9 @@ export default class LinearInbox extends View {
               .when(linearLink(item.url), e => e.child(button(`sf-linear-open-${item.id}`, '원문 열기', false, (_e, cx) => cx.spawn(async () => { await exec('open', [item.url]); }))))
               .child(button(`sf-linear-expand-${item.id}`, open ? '접기' : '댓글·답글', open, (_e, cx) => { open ? this.expanded.delete(item.id) : this.expanded.add(item.id); cx.notify(); }))
               .when(Boolean(item.issue) && this.writes.includes('set_state'), e => e.child(button(`sf-linear-states-${item.id}`, '상태 변경', this.stateOpen === item.id, (_e, cx) => { this.stateOpen = this.stateOpen === item.id ? null : item.id; this.confirm = null; cx.notify(); })))
-              .when(!item.read && !this.pending.has(readKey) && this.writes.includes('mark_read'), e => e.child(button(`sf-linear-read-${item.id}`, '읽음 처리', true, (_e, cx) => this.send(readKey, 'mark_read', item, {}, cx)))));
+              .when(!item.local && !item.read && !this.pending.has(readKey) && this.writes.includes('mark_read'), e => e.child(button(`sf-linear-read-${item.id}`, '읽음 처리', true, (_e, cx) => this.send(readKey, 'mark_read', item, {}, cx))))
+              // A comment read from a space's linked issue has no Linear notification: "확인" is kept on this computer only.
+              .when(Boolean(item.local) && !item.read && !this.pending.has(readKey), e => e.child(button(`sf-linear-seen-${item.id}`, '확인', true, (_e, cx) => this.send(readKey, 'mark_seen', item, {}, cx)).tooltip('이 컴퓨터에서만 확인 표시 · Linear에는 쓰지 않음'))));
         })))
       .child(div().text_size(11).text_color(t.dim).child('Linear 쓰기는 버튼을 누를 때만, 이 컴퓨터에서 켠 작업만 반영됩니다. 실제 호출을 검증해 결과를 알려 줍니다.'));
   }

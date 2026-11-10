@@ -28,6 +28,10 @@ export function requestId(now = Date.now(), random = Math.random) {
 export function buildRequest(action, item, extra = {}, {now = new Date(), id = requestId(now.getTime())} = {}) {
   const base = {v: 1, id, action, requested_at: now.toISOString()};
   if (action === 'mark_read') return {...base, notification: item.id, read: true};
+  if (action === 'mark_seen') {
+    if (!item?.local || !/^comment:[0-9a-f-]{36}$/.test(item.id || '')) throw new Error('이 컴퓨터에서 확인할 수 있는 댓글이 아닙니다');
+    return {...base, item: item.id};
+  }
   if (!/^[A-Z][A-Z0-9]{0,9}-\d{1,7}$/.test(item?.issue || '')) throw new Error('이 알림에는 이슈가 없습니다');
   if (action === 'set_state') {
     const state = String(extra.state ?? '');

@@ -55,6 +55,9 @@ test('requests match the collector contract and refuse bad input', () => {
   assert.throws(() => buildRequest('set_state', items[0], {state: 'a\nb'}));
   assert.throws(() => buildRequest('set_state', items[2], {state: 'Done'}));   // no issue
   assert.throws(() => buildRequest('delete', items[0]));
+  const seen = buildRequest('mark_seen', {id: 'comment:aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1', local: true}, {}, {now: new Date(0), id: 'req-1'});
+  assert.deepEqual(seen, {v: 1, id: 'req-1', action: 'mark_seen', requested_at: new Date(0).toISOString(), item: 'comment:aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1'});
+  assert.throws(() => buildRequest('mark_seen', items[0]));          // a Linear notification is read in Linear
   assert.match(requestId(1, () => 0.5), /^[A-Za-z0-9_-]{8,64}$/);
   assert.equal(resultLabel(null), '처리 대기 중…');
   assert.equal(resultLabel({ok: false, error: 'x'}), '실패: x');
