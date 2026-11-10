@@ -1,5 +1,6 @@
 import {div,svg} from 'gpui-kit';
 import {h_flex,v_flex,Popover} from 'gpui-base';
+import {kindTone} from './alert-model.js';
 
 export const ISSUE_SCOPES=Object.freeze([
   {id:'week',label:'이번 주'},
@@ -8,6 +9,8 @@ export const ISSUE_SCOPES=Object.freeze([
 ]);
 const states={blocked:'막힘',working:'진행 중',review:'검수',waiting:'대기',done:'완료'};
 const text=(value,color,size=11)=>div().min_w(0).truncate().text_size(size).text_color(color).child(value);
+const kindBadge=(item,t,id)=>div().id(id).px(5).rounded(3).flex_none().text_size(9).font_bold()
+  .bg(kindTone(item.kind,t)).text_color(t.accent_foreground||t.background).child(item.category||'알림');
 const clock=at=>{const d=new Date(at);if(Number.isNaN(d.getTime()))return '';const p=n=>String(n).padStart(2,'0');return `${d.getMonth()+1}/${d.getDate()} ${p(d.getHours())}:${p(d.getMinutes())}`;};
 
 // The caller supplies normalized display data, owns local UI state, and posts
@@ -127,6 +130,7 @@ export function alertedGroup(model,t){
           .when(fresh.has(item.id),e=>e.bg((t.accent||'#88aaff').slice(0,7)+'33').border(1).border_color(t.accent))
           .when(Boolean(item.url&&model.onLink)&&!busy,e=>e.cursor_pointer().tooltip('누르면 이 댓글을 Linear에서 열고 읽음으로 표시합니다').hover(s=>s.bg(t.hover||t.selected))
             .on_click((_event,cx)=>{cx.stop_propagation();model.onLink(item.url,cx,[item]);}))
+          .child(kindBadge(item,t,`task-issues-alerted-kind-${id}-${entry.key}-${i}`))
           .child(text(item.text,t.muted,11).flex_1().tooltip(item.text))
           .child(text(clock(item.at),t.dim,9).flex_none())
           .when(canRead,e=>e.child(readButton(`task-issues-read-${id}-${entry.key}-${i}`,busy?'처리 중':item.local?'확인':'읽음',
@@ -137,7 +141,7 @@ export function alertedGroup(model,t){
         .child(h_flex().id(`task-issues-alerted-head-${id}-${entry.key}`).gap(6).items_center().px(2)
           .when(Boolean(target&&model.onLink),e=>e.cursor_pointer().tooltip('누르면 이 이슈(최근 댓글)를 Linear에서 열고 이 이슈의 알림을 읽음으로 표시합니다')
             .on_click((_event,cx)=>{cx.stop_propagation();model.onLink(target,cx,issueAlerts());}))
-          .child(div().px(5).rounded(3).flex_none().text_size(9).font_bold().bg(t.accent).text_color(t.accent_foreground||t.background).child(newest.category||'알림'))
+          .child(kindBadge(newest,t,`task-issues-alerted-headkind-${id}-${entry.key}`))
           .child(text(entry.key,t.muted,10).flex_none().font_bold())
           .child(text(entry.title,t.foreground,12).flex_1().tooltip(entry.title))
           // Its work finished (the sidebar shows the issue done): marked, not read in Linear unless set.

@@ -1,7 +1,7 @@
 import { div, image } from 'gpui-kit';
 import { h_flex, v_flex, Popover } from 'gpui-base';
 import { shared, setShared } from 'herdr';
-import { scopedAlerts, alertVersion, linearScoped, changeLines, linearCategory, popoverOpen, popoverRows, projectKey } from './alert-model.js';
+import { scopedAlerts, alertVersion, linearScoped, changeLines, linearCategory, popoverOpen, popoverRows, projectKey, alertKind, alertLine, kindTone } from './alert-model.js';
 
 // A small surface beside a space card: the newest Slack and Linear alerts of that
 // space, opened by its alert badges or by a new alert. The full inboxes stay one
@@ -44,12 +44,12 @@ function linearRows(project, t) {
     v_flex().id(`sf-alert-pop-linear-${i}`).gap(2).p(8).rounded(6).bg(item.read ? t.chrome : t.selected)
       .child(h_flex().gap(6).items_center()
         .child(div().px(5).rounded(3).flex_none().text_size(10).font_bold()
-          .bg(item.read ? t.surface : t.accent).text_color(item.read ? t.muted : t.accent_foreground).child(linearCategory(item)))
+          .bg(item.read ? t.surface : kindTone(alertKind(item).kind, t)).text_color(item.read ? t.muted : t.accent_foreground).child(alertKind(item).label))
         .child(line(item.issue || '', t.muted, 11).flex_none().font_bold())
         .child(line(item.issue_title || item.title || '', t.foreground, 12).flex_1())
         .child(line(short(item.changed_at || item.at), t.dim, 10).flex_none()))
       .children(changeLines(item).map((change, j) => line(change, t.ansi4 || t.accent, 11).id(`sf-alert-pop-change-${i}-${j}`)))
-      .when(!changeLines(item).length && Boolean(item.subtitle), e => e.child(line(item.subtitle, t.muted, 11))))};
+      .when(!changeLines(item).length && Boolean(alertLine(item)), e => e.child(line(alertLine(item), t.muted, 11))))};
 }
 
 // `trigger` is the whole alerts row of the card, so the surface opens beside the card.

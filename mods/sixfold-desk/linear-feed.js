@@ -3,7 +3,7 @@ import { createHash } from 'crypto';
 import { readJsonSnapshot, subscribeJsonFile, subscribeFileChanges } from './panel-io.js';
 import { addArrival, hasArrivalHost } from './arrival-store.js';
 import { arrivalTarget, ARRIVAL } from './arrival-model.js';
-import { placeItems } from './alert-model.js';
+import { placeItems, alertKind, alertLine } from './alert-model.js';
 import { withLocalReads, onReadConfirmed } from './linear-reads.js';
 
 // Linear inbox feed for the sidebar: data/sixfold/linear-alerts.json and
@@ -14,7 +14,10 @@ import { withLocalReads, onReadConfirmed } from './linear-reads.js';
 
 // Notifications that pop up: a person was assigned, named or answered.
 // `commentsAndReplies` is the category Linear reports for issue comments.
-const POPUP = new Set(['assignments', 'mentions', 'comments', 'commentsAndReplies']);
+// Every kind pops up (new issue, comment, reply, assignment, status change, due, mention, review)
+// except reactions and Linear's own system notices.
+const QUIET = new Set(['reactions', 'system']);
+const POPUP = {has: category => !QUIET.has(category)};
 const LEDGER = 'linear-popup-events.json';
 const LEDGER_LIMIT = 500;   // ids of notifications already announced; bounded
 
@@ -23,7 +26,7 @@ export function linearPopupEvents(items) {
     .map(item => ({key: `linear:${item.id}`, id: item.id, popup: !item.read && POPUP.has(item.category), workspace: item.workspace ?? '',
       title: item.issue_title || item.title || '', issue: item.issue || '', category: item.category || '',
       // What changed, in one line: Linear's own subtitle ("Kim commented: …") or the comment read for it.
-      line: String(item.subtitle || item.comments?.[0]?.body || '').split('\n')[0].slice(0, 200), url: item.url || ''}));
+      line: alertLine(item), label: alertKind(item).label, kind: alertKind(item).kind, url: item.url || ''}));
 }
 
 async function ledgerSnapshot(path) {
@@ -77,7 +80,7 @@ export function announceLinear(events) {
   const names = (spaces() ?? []).map(s => s.name);
   for (const event of events) {
     addArrival({key: event.key, id: event.id, source: 'linear', space: arrivalTarget(event.workspace, names),
-      title: event.title, issue: event.issue, category: event.category, line: event.line, url: event.url});
+      title: event.title, issue: event.issue, category: event.category, line: event.line, label: event.label, kind: event.kind, url: event.url});
   }
 }
 

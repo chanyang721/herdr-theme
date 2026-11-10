@@ -1,6 +1,33 @@
 // Pure helpers for the Linear inbox window (tested in tests/linear-inbox.test.mjs).
 const CATEGORY = {assignments:'배정', mentions:'멘션', comments:'댓글', commentsAndReplies:'댓글', reviews:'리뷰', documentChanges:'문서', statusChanges:'상태 변경', reminders:'알림', reactions:'반응', subscriptions:'구독', triage:'분류'};
-export const categoryLabel = item => CATEGORY[item?.category] || '알림';
+export const categoryLabel = item => alertKind(item).label || CATEGORY[item?.category] || '알림';
+
+// What kind of alert, at a glance: Linear's notification type -> badge. The same table is in
+// sixfold-desk/alert-model.js (mods cannot import each other). An unknown type keeps its own
+// name (never hidden); one with no type falls back to its category.
+export const ALERT_KINDS = Object.freeze({
+  new: '신규 이슈', comment: '댓글', reply: '답글', assign: '배정', status: '상태 변경',
+  due: '마감', mention: '멘션', review: '확인 요청', reaction: '반응', other: '알림'});
+const TYPE_KIND = {
+  issueCreated: 'new', issueNewIssue: 'new', triageResponsibilityIssueAddedToTriage: 'review',
+  issueNewComment: 'comment', issueCommentReply: 'reply', issueThreadReply: 'reply',
+  issueAssignedToYou: 'assign', issueUnassignedFromYou: 'assign',
+  issueStatusChanged: 'status', issueStatusChangedAll: 'status', issueBlocking: 'status', issueUnblocked: 'status',
+  issuePriorityUrgent: 'status', issueTitleChanged: 'status',
+  issueDue: 'due', issueDueDateApproaching: 'due', issueReminder: 'due',
+  issueMention: 'mention', issueCommentMention: 'mention', documentMention: 'mention', projectUpdateMentionPrompt: 'mention',
+  issueReviewRequested: 'review', pullRequestReviewRequested: 'review', issueApprovalRequested: 'review', projectUpdatePrompt: 'review',
+  issueCommentReaction: 'reaction', issueEmojiReaction: 'reaction', projectUpdateReaction: 'reaction'};
+const CATEGORY_KIND = {assignments: 'assign', mentions: 'mention', comments: 'comment', commentsAndReplies: 'comment',
+  reviews: 'review', statusChanges: 'status', reminders: 'due', reactions: 'reaction', triage: 'review'};
+export function alertKind(item) {
+  const type = String(item?.type || '');
+  let kind = TYPE_KIND[type] || (/review|approval/i.test(type) ? 'review' : '') || (type ? '' : CATEGORY_KIND[item?.category] || 'other');
+  // A comment that answers another one ("Kim replied: …") is a reply.
+  if (kind === 'comment' && /^\S.{0,60}? replied:/.test(String(item?.subtitle || ''))) kind = 'reply';
+  return kind ? {kind, label: ALERT_KINDS[kind]} : {kind: 'other', label: type};
+}
+
 export const spaceKey = name => String(name ?? '').toLowerCase().replace(/[\s_-]/g, '');
 export const linearLink = url => typeof url === 'string' && /^https:\/\/linear\.app\/[A-Za-z0-9_-]+\/(issue|project)\//.test(url);
 

@@ -54,7 +54,7 @@ export function arrivalLayer({list, now, motion, anchors, t, u = 1, onOpen, peek
       .child(h_flex().gap(5).items_center()
         .child(image(`mods/sixfold-desk/icons/${a.source === 'linear' ? 'linear' : 'slack'}.svg`).size(12).flex_none())
         .child(div().flex_1().min_w(0).truncate().text_size(11).font_bold().text_color(t.foreground)
-          .child(`${a.space} · ${a.source === 'linear' ? `Linear ${linearCategory(a)}` : 'Slack 멘션'}${a.issue ? ` · ${a.issue}` : ''}`)))
+          .child(`${a.space} · ${a.source === 'linear' ? `Linear ${a.label || linearCategory(a)}` : 'Slack 멘션'}${a.issue ? ` · ${a.issue}` : ''}`)))
       .child(div().min_w(0).truncate().text_size(11).text_color(t.muted).child(a.line || a.title || '')));
     if (!anchor) continue;
     // The block waits invisibly on the popup, then steps in; keyed for the whole flight.

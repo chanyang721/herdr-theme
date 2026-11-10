@@ -30,6 +30,50 @@ export const changeLines = item => (Array.isArray(item?.changes) ? item.changes 
 const LINEAR_CATEGORY = {assignments: '배정', mentions: '멘션', comments: '댓글', commentsAndReplies: '댓글', reviews: '리뷰', documentChanges: '문서', statusChanges: '상태 변경', reminders: '알림', reactions: '반응', subscriptions: '구독', triage: '분류'};
 export const linearCategory = item => LINEAR_CATEGORY[item?.category] || '알림';
 
+// What kind of alert, at a glance: Linear's notification type -> badge. The same table is in
+// sixfold-linear-inbox/model.js (mods cannot import each other). An unknown type keeps its own
+// name (never hidden); one with no type falls back to its category.
+export const ALERT_KINDS = Object.freeze({
+  new: '신규 이슈', comment: '댓글', reply: '답글', assign: '배정', status: '상태 변경',
+  due: '마감', mention: '멘션', review: '확인 요청', reaction: '반응', other: '알림'});
+const TYPE_KIND = {
+  issueCreated: 'new', issueNewIssue: 'new', triageResponsibilityIssueAddedToTriage: 'review',
+  issueNewComment: 'comment', issueCommentReply: 'reply', issueThreadReply: 'reply',
+  issueAssignedToYou: 'assign', issueUnassignedFromYou: 'assign',
+  issueStatusChanged: 'status', issueStatusChangedAll: 'status', issueBlocking: 'status', issueUnblocked: 'status',
+  issuePriorityUrgent: 'status', issueTitleChanged: 'status',
+  issueDue: 'due', issueDueDateApproaching: 'due', issueReminder: 'due',
+  issueMention: 'mention', issueCommentMention: 'mention', documentMention: 'mention', projectUpdateMentionPrompt: 'mention',
+  issueReviewRequested: 'review', pullRequestReviewRequested: 'review', issueApprovalRequested: 'review', projectUpdatePrompt: 'review',
+  issueCommentReaction: 'reaction', issueEmojiReaction: 'reaction', projectUpdateReaction: 'reaction'};
+const CATEGORY_KIND = {assignments: 'assign', mentions: 'mention', comments: 'comment', commentsAndReplies: 'comment',
+  reviews: 'review', statusChanges: 'status', reminders: 'due', reactions: 'reaction', triage: 'review'};
+export function alertKind(item) {
+  const type = String(item?.type || '');
+  let kind = TYPE_KIND[type] || (/review|approval/i.test(type) ? 'review' : '') || (type ? '' : CATEGORY_KIND[item?.category] || 'other');
+  // A comment that answers another one ("Kim replied: …") is a reply.
+  if (kind === 'comment' && /^\S.{0,60}? replied:/.test(String(item?.subtitle || ''))) kind = 'reply';
+  return kind ? {kind, label: ALERT_KINDS[kind]} : {kind: 'other', label: type};
+}
+// One color per kind, from the theme's own palette.
+export const kindTone = (kind, t) => ({new: t.ansi2, comment: t.accent, reply: t.ansi6, assign: t.ansi3, status: t.ansi4, due: t.blocked,
+  mention: t.ansi5, review: t.ansi1, reaction: t.dim}[kind] || t.muted) || t.accent;
+// The second line says what changed, by kind: a comment its author and first line; a status
+// change before -> after; a new issue who made it and its project; an assignment who assigned.
+export function alertLine(item) {
+  const first = value => String(value ?? '').split('\n')[0].slice(0, 200);
+  const subtitle = first(item?.subtitle), {kind} = alertKind(item);
+  const status = (Array.isArray(item?.changes) ? item.changes : []).find(c => c?.field === 'status');
+  if (kind === 'status' && status) return `상태 ${status.from || '없음'} → ${status.to || '없음'}`;
+  if (kind === 'assign') { const by = /^Assigned by (.+)$/i.exec(subtitle)?.[1]; if (by) return `${by} 님이 배정`; }
+  if (kind === 'new') return [subtitle.replace(/^Created by /i, '만든 사람 ') || '새 이슈', item?.project].filter(Boolean).join(' · ');
+  if (kind === 'due') {
+    const when = item?.due ? `기한 ${item.due}` : '';
+    return [/overdue/i.test(subtitle) ? '기한 지남' : /soon|approach/i.test(subtitle) ? '기한 임박' : subtitle, when].filter(Boolean).join(' · ');
+  }
+  return subtitle || first(item?.comments?.[0]?.body) || changeLines(item)[0] || first(item?.title);
+}
+
 // The space card popover: which card and source is open, set by a badge press
 // or by a new alert. Shared values persist across app restarts, so a state only
 // counts in the run that wrote it (`boot`) and for POPOVER_TTL.
@@ -55,8 +99,8 @@ export function issueAlerts(items, space, key, limit = ISSUE_ALERT_LINES) {
     .sort((a, b) => String(b.changed_at || b.at || '').localeCompare(String(a.changed_at || a.at || '')));
   if (!unread.length) return null;
   return {unread: unread.length, more: Math.max(0, unread.length - limit), lines: unread.slice(0, limit).map(i => ({
-    id: i.id, category: linearCategory(i), at: i.changed_at || i.at || '',
-    text: String(i.subtitle || i.comments?.[0]?.body || changeLines(i)[0] || i.title || '').split('\n')[0].slice(0, 200),
+    id: i.id, category: alertKind(i).label, kind: alertKind(i).kind, at: i.changed_at || i.at || '',
+    text: alertLine(i),
     url: typeof i.url === 'string' && LINEAR_URL.test(i.url) ? i.url : '', local: Boolean(i.local)}))};
 }
 
