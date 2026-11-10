@@ -5,6 +5,7 @@ import {agentGroups, panelEventStates, panelSpaces, panelSpacePartners, PANEL_TI
 import {SESSION_STATES, sessionStatusGlyph} from './session-status.js';
 import {groupColors, paletteMode} from './collab-flow.js';
 import {rowDetailParts} from './task-row-details.js';
+import {PACKET_PIXELS, pixelUnitFor, snap, centred, pixelBlock, pixelRoute as drawPixelRoute, pixelRing} from './pixel.js';
 import {PANEL_FLOW, panelFlowAnchor, panelMessageAnchors, messageFlowGeometry, computerFlow} from './panel-host.js';
 
 const MARK={working:'●',idle:'○',blocked:'!',done:'✓'};
@@ -235,24 +236,10 @@ function routePath(from,to,lane,endX,origin=0,startX=0){
     .cubic_bezier_to(origin+lane-r,to,origin+lane,to,origin+lane,to)
     .line_to(origin+endX,to).build();
 }
-// Event lines and packets are pixel art (2026-11-10): whole device pixels at any
-// zoom, as win98's unit() does (n pixels = n / zoom layout px), square blocks only,
-// stepped one-pixel corners and no tail, glow or rounding.
-export function pixelUnit(){return 1/(Number(settings()?.zoom)||1);}
-const snap=(value,u)=>Math.round(value/u)*u;
-function pixelBlock(x,y,w,h,color,id=null){return (id?div().id(id):div()).absolute().left(x).top(y).w(w).h(h).bg(color);}
-// A 1px right-angle line whose corners are a two-step pixel staircase.
-export function pixelRoute(from,to,lane,startX,endX,color,u=pixelUnit()){
-  [from,to,lane,startX,endX]=[from,to,lane,startX,endX].map(value=>snap(value,u));
-  const line=div().absolute().left(0).top(0);
-  const across=(x1,x2,y)=>{const left=Math.min(x1,x2),width=Math.abs(x2-x1)+u;line.child(pixelBlock(left,y,width,u,color));};
-  if(Math.abs(to-from)<4*u){across(startX,endX,from);return line;}
-  const sign=to>from?1:-1;
-  across(startX,lane-2*u,from);line.child(pixelBlock(lane-u,from+sign*u,u,u,color));
-  const y1=from+sign*2*u,y2=to-sign*2*u;line.child(pixelBlock(lane,Math.min(y1,y2),u,Math.abs(y2-y1)+u,color));
-  line.child(pixelBlock(lane-u,to-sign*u,u,u,color));across(lane-2*u,endX,to);
-  return line;
-}
+// Event lines and packets are pixel art (pixel.js), in whole device pixels at
+// the current zoom.
+export function pixelUnit(){return pixelUnitFor(settings()?.zoom);}
+export function pixelRoute(from,to,lane,startX,endX,color,u=pixelUnit()){return drawPixelRoute(from,to,lane,startX,endX,color,u);}
 export function route(id,a,b,color,{dashed=false,packet=null,motion=false,relation=false,flow=PANEL_FLOW}={}){
   const remote=a.computer&&b.computer&&a.computer!==b.computer;
   const top=Math.min(a.y,b.y),height=Math.max(2,Math.abs(b.y-a.y));
@@ -304,11 +291,8 @@ export function route(id,a,b,color,{dashed=false,packet=null,motion=false,relati
 // block that leaves the source row, runs along the lane and enters the target
 // row, one finite native transition per corner, centred on the 1px line. A
 // square 1px ring opens at departure and at arrival. No per-frame JavaScript.
-export const PACKET_PIXELS=3, RING_PIXELS=15;
 function packetMarks(base,id,packet,{startX,endX,lane,from,to},color){
   const u=pixelUnit();[startX,endX,lane,from,to]=[startX,endX,lane,from,to].map(value=>snap(value,u));
-  // The line occupies [x, x+u); a centred block or ring starts this far before x.
-  const offset=n=>(n-1)/2*u;
   if(['start','travel'].includes(packet.phase)){
     const elapsed=packet.elapsed;
     const [leave,down,enter]=PANEL_LEGS;
@@ -316,19 +300,13 @@ function packetMarks(base,id,packet,{startX,endX,lane,from,to},color){
       :elapsed<down?{x:lane,y:from,ms:down-leave}
       :elapsed<enter?{x:lane,y:to,ms:enter-down}
       :{x:endX,y:to,ms:PANEL_TIMING.packetMs-enter};
-    base.child(pixelBlock(point.x-offset(PACKET_PIXELS),point.y-offset(PACKET_PIXELS),PACKET_PIXELS*u,PACKET_PIXELS*u,color,`panel-packet-${id}`)
+    const side=PACKET_PIXELS*u,offset=centred(PACKET_PIXELS,u);
+    base.child(pixelBlock(point.x-offset,point.y-offset,side,side,color,`panel-packet-${id}`)
       .transition('left',{duration:point.ms,easing:'ease-in-out'})
       .transition('top',{duration:point.ms,easing:'ease-in-out'}));
   }
-  // Keep zero-size rings keyed throughout travel. They open to RING_PIXELS
-  // while opacity fades from one to zero, natively.
-  for(const [name,x,y,open] of [['sender',startX,from,packet.phase!=='start'],['receiver',endX,to,['ping','fade'].includes(packet.phase)]]){
-    const n=open?RING_PIXELS:1;
-    const ring=div().id(`panel-${name}-${id}`).absolute().left(x-offset(n)).top(y-offset(n)).w(open?n*u:0).h(open?n*u:0)
-      .border(u).border_color(color).opacity(open?0:1);
-    for(const property of ['width','height','left','top','opacity'])ring.transition(property,{duration:460,easing:'ease-out'});
-    base.child(ring);
-  }
+  base.child(pixelRing(`panel-sender-${id}`,startX,from,packet.phase!=='start',color,u));
+  base.child(pixelRing(`panel-receiver-${id}`,endX,to,['ping','fade'].includes(packet.phase),color,u));
 }
 
 export function panelFlowLayer(feed,layout,state,color,t,motion,width,gutter=null){

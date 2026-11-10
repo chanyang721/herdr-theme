@@ -33,6 +33,8 @@ async function renderer(motion=true,{nativeSpaces=[],nativePanes=[]}={}){
   const details=(await readFile(new URL('../mods/sixfold-desk/task-row-details.js',import.meta.url),'utf8'))
     .replace(/import \{([^}]+)\} from 'gpui-kit';/,'const {$1}=globalThis.__panelView;');
   source=source.replace("'./task-row-details.js'",JSON.stringify(`data:text/javascript;base64,${Buffer.from(details).toString('base64')}#${serial}`));
+  const pixel=(await readFile(new URL('../mods/sixfold-desk/pixel.js',import.meta.url),'utf8')).replace(/import \{([^}]+)\} from 'gpui-kit';/,'const {$1}=globalThis.__panelView;');
+  source=source.replace("'./pixel.js'",JSON.stringify(`data:text/javascript;base64,${Buffer.from(pixel).toString('base64')}#${serial}`));
   const status=(await readFile(new URL('../mods/sixfold-desk/session-status.js',import.meta.url),'utf8'))
     .replace(/import \{([^}]+)\} from 'gpui-kit';/,'const {$1}=globalThis.__panelView;')
     .replace("'./collab-flow.js'",JSON.stringify(new URL('../mods/sixfold-desk/collab-flow.js',import.meta.url).href));

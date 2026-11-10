@@ -26,6 +26,7 @@ async function runtime(motion=false,options={}){
   const detailsUrl=await localModule('task-row-details'),issuesUrl=await localModule('task-issues-view');
   let view=transform(await readFile(new URL('../mods/sixfold-desk/panel-view.js',import.meta.url),'utf8'));
   view=view.replace("'./task-row-details.js'",JSON.stringify(detailsUrl));
+  view=view.replace("'./pixel.js'",JSON.stringify(await localModule('pixel')));
   const statusSource=transform(await readFile(new URL('../mods/sixfold-desk/session-status.js',import.meta.url),'utf8'))
     .replace("'./collab-flow.js'",JSON.stringify(new URL('../mods/sixfold-desk/collab-flow.js',import.meta.url).href));
   view=view.replace("'./session-status.js'",JSON.stringify(`data:text/javascript;base64,${Buffer.from(statusSource).toString('base64')}#${loads++}`));
