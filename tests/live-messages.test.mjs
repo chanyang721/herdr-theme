@@ -61,7 +61,7 @@ for (const native of [false,true]) test(`background messages refresh through ${n
   let filesSource=(await readFile(new URL('../mods/sixfold-desk/sidebar-files.js',import.meta.url),'utf8')).replace(/import .* from '.\/panel-io.js';/,'const {subscribeJsonFile}=globalThis.__sixfoldTest;');
   filesSource+=`\n// native=${native}`;
   const filesUrl='data:text/javascript;base64,'+Buffer.from(filesSource).toString('base64');
-  source=source.replace("'./sidebar-files.js'",JSON.stringify(filesUrl)).replace("'./live-events.js'",JSON.stringify(new URL('../mods/sixfold-desk/live-events.js',import.meta.url).href));
+  source=source.replace(/import .* from '.\/mic.js';/,"const watchMic=()=>{},paneMic=()=>null,paneMicChip=()=>null,MIC_KEY='sixfold.voice.mic';").replace("'./sidebar-files.js'",JSON.stringify(filesUrl)).replace("'./live-events.js'",JSON.stringify(new URL('../mods/sixfold-desk/live-events.js',import.meta.url).href));
   source = source.replace(/import \{ View, div, svg, image \} from 'gpui-kit';/, 'class View {}');
   source = source.replace(/import \{ h_flex, v_flex \} from 'gpui-base';/, '');
   source = source.replace(/import \* as herdrNative from 'herdr';/, 'const herdrNative = globalThis.__sixfoldTest;');

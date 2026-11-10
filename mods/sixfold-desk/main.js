@@ -30,6 +30,7 @@ import {createRetainedPanel} from './panel-retained.js';
 import {taskComputerAnchors,taskComputerRecord} from './panel-host.js';
 import {subscribeJsonFile,readJsonSnapshot,fileDelivery,FILE_CHANGED_COMMAND} from './panel-io.js';
 import {watchSidebarFiles} from './sidebar-files.js';
+import {watchMic,paneMic,paneMicChip,MIC_KEY} from './mic.js';
 import {subscribeLiveEvents} from './live-events.js';
 import {createRetainedCards} from './retained-cards.js';
 import {createHash} from 'crypto';
@@ -211,6 +212,8 @@ export default class SixfoldDesk extends View {
     };
     this.refreshLegacy=refresh;
     watchSidebarFiles(this,cx,`${appHome()}/data/sixfold`,refresh,{nativeMessages:typeof herdrNative.messageEvents==='function'});
+    // The voice plugin's per-pane microphone state, shared so every pane header can draw its own badge.
+    watchMic(this,cx,`${appHome()}/data/sixfold`,setShared);
     this.startLiveMessages=()=>{
       if(this.stopLiveMessages||typeof herdrNative.messageEvents!=='function'||!this.sidebarVisible)return;
       this.deliverLiveMessages??=events=>{this.nativeMessages=events;refresh(cx);};
@@ -517,6 +520,8 @@ export default class SixfoldDesk extends View {
     const p = all.find(p => p.pane === props()?.pane);
     if (!p) return div();
     const index = all.filter(x => x.tab === p.tab).findIndex(x => x.pane === p.pane) + 1;
+    // Microphone first, where the eye lands: which pane hears you, and why one does not.
+    const mic = paneMic(p, terminals(), shared(MIC_KEY));
     const style = paneHeaderStyle(p, t);
     // Agent icon, model, speed, effort and permission of the pane's confirmed session, after the title.
     const meta = paneMeta(p.terminal, shared), name = title(p);
@@ -526,6 +531,7 @@ export default class SixfoldDesk extends View {
       .on_size_change((size, cx) => { const width = size.width / (settings().zoom || 1); if (Math.abs((this.headWidth || 0) - width) > 8) { this.headWidth = width; cx.notify(); } })
       .on_click(() => run('pane.focus', { pane: p.pane }))
       .when(showPaneIndex(this.site), el => el.child(div().flex_none().font_bold().text_color(p.focused ? t.accent : t.dim).child(String(index).padStart(2, '0'))))
+      .when(Boolean(mic), el => el.child(paneMicChip(p, t, mic, this.headWidth)))
       .child(h_flex().flex_1().min_w(0).items_center().gap(7)
         .when(showTitle(name, meta), el => el.child(div().min_w(0).truncate().text_color(t.foreground).child(name)))
         .when(Boolean(meta), el => el.child(paneMetaChip(p, t, meta, this.headWidth))))
