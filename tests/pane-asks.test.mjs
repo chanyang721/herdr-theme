@@ -169,16 +169,14 @@ test('sidebar lists one compact row per pane, including unassigned, and opens th
   click(tree, 'sf-ask-group-0', context());
   assert.equal(f.overlays.at(-1).props.terminal, 'pane-a');
   assert.deepEqual(f.focus, []);
-  // Beyond six groups the fold row expands, so a late unassigned card stays reachable.
-  const many = {asks: [...Array.from({length: 8}, (_, i) => card(`c${i}`, `pane-${i}`)), card('late', null)], askErrors: {}};
-  let folded = mod.askSection(many, theme, 'ko', t => t);
-  assert.match(text(folded), /\+3개 페인 더 보기/); assert.equal(find(folded, 'sf-ask-group-8'), null);
-  click(folded, 'sf-ask-more', context());
-  const open = mod.askSection(many, theme, 'ko', t => t);
-  assert.equal(ids(open, 'sf-ask-group-').length, 9); assert.match(text(open), /접기/);
-  click(open, 'sf-ask-group-8', context());
+  // Every group is listed in a bounded, scrolling area: a late unassigned card stays reachable.
+  const many = {asks: [...Array.from({length: 99}, (_, i) => card(`c${i}`, `pane-${i}`)), card('late', null)], askErrors: {}};
+  const list = mod.askSection(many, theme, 'ko', t => t), area = find(list, 'sf-ask-groups');
+  assert.equal(ids(list, 'sf-ask-group-').length, 100);
+  assert.ok(area.calls.includes('max_h') && area.calls.includes('overflow_y_scrollbar'), 'bounded and scrollable');
+  assert.match(text(list), /100개 페인 · 목록을 스크롤해 모두 보기/);
+  click(list, 'sf-ask-group-99', context());
   assert.deepEqual(f.overlays.at(-1).props, {role: 'ask', terminal: null, name: '소속 미확인'});
-  click(open, 'sf-ask-more', context()); assert.equal(ids(mod.askSection(many, theme, 'ko', t => t), 'sf-ask-group-').length, 6);
 });
 
 // ---- popup ----------------------------------------------------------------
@@ -201,7 +199,7 @@ test('popup shows only its pane, pages through several cards, and keeps long opt
   assert.match(text(tree), /2\/3/); assert.match(text(tree), /Two questions/);
   assert.ok(find(tree, 'sf-ask-multi-q0-o1')); assert.ok(text(tree).includes(longLabel), 'full long label is rendered');
   walk(tree, node => { if (node.children.includes(longLabel)) assert.ok(!node.calls.includes('truncate'), 'long option is not truncated'); });
-  assert.ok(find(tree, 'sf-ask-body-multi').calls.includes('overflow_y_scroll'));
+  assert.ok(find(tree, 'sf-ask-body-multi').calls.includes('overflow_y_scrollbar'));
   click(tree, 'sf-ask-next', a.cx); tree = a.render();
   assert.match(text(tree), /line one\nline two/, 'detail keeps its original text');
   assert.equal(find(tree, 'sf-ask-next').click(event, a.cx), undefined); assert.equal(a.view.askPage, 2, 'last page stays');
@@ -273,4 +271,19 @@ test('a missing bridge hides cards in the popup and never runs a command', async
   const mod = await load(f.h), p = await popup(f, mod, 'pane-a');
   assert.deepEqual(p.view.asks, []); assert.match(text(p.render()), /남은 확인 요청이 없습니다/);
   assert.deepEqual(f.calls, []);
+});
+
+test('a failed re-read while cards are shown says so, offers a retry, and recovers the new revision', async () => {
+  const f = host([card('a1', 'pane-a')]), mod = await load(f.h), p = await popup(f, mod, 'pane-a');
+  f.files.set('/demo/data/sixfold/cards.json', JSON.stringify({schema: 1, cards: [{...card('a1', 'pane-a'), revision: 'r2'}]}));
+  f.store.set(SUMMARY_KEY, askSummary([{...card('a1', 'pane-a'), revision: 'r2'}]));
+  f.impl.readTextFile = async () => { throw Error('io'); };
+  p.render(); await p.cx.settle();
+  let tree = p.render();
+  assert.equal(p.view.asks[0].revision, 'r1'); assert.match(text(tree), /최신 내용을 읽지 못했습니다/); assert.ok(find(tree, 'sf-ask-reload'));
+  p.render(); await p.cx.settle(); assert.equal(p.view.askLoading, false, 'no re-read loop on every render');
+  f.impl.readTextFile = async path => f.files.get(path) ?? null;
+  click(tree, 'sf-ask-reload', p.cx); await p.cx.settle();
+  tree = p.render();
+  assert.equal(p.view.asks[0].revision, 'r2'); assert.doesNotMatch(text(tree), /최신 내용을 읽지 못했습니다/);
 });

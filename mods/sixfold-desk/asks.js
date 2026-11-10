@@ -133,17 +133,19 @@ export function paneAskButton(p, t, lang, name) {
 
 // Sidebar: a compact per-pane summary only. Each row opens that pane's popup,
 // so every card stays reachable even when its pane is not on screen.
+const GROUP_ROWS = 6;
 export function askSection(view, t, lang, nameOf) {
   const words = KIND_WORDS[lang] ?? KIND_WORDS.en, more = ASK_WORDS[lang] ?? ASK_WORDS.en;
   const groups = groupAsks(view.asks), total = (view.asks ?? []).length;
   return v_flex().id('sf-asks').flex_none().px(10).py(7).gap(4).bg(t.surface).border_t(1).border_color(t.border)
     .child(h_flex().gap(5).items_center().child(div().flex_1().text_size(10).font_bold().text_color(t.muted).child(words.title))
       .child(div().text_size(10).text_color(t.blocked).child(String(total))))
-    // Folded to six rows; the fold row expands, so no group is ever unreachable.
-    .children((view.askShowAll ? groups : groups.slice(0, 6)).map((group, gi) => {
+    // Every group is listed in a bounded area that scrolls (about six rows
+    // tall), so the sidebar stays small and no group is ever out of reach.
+    .child(v_flex().id('sf-ask-groups').gap(4).max_h(GROUP_ROWS * 30).overflow_y_scrollbar().children(groups.map((group, gi) => {
       const first = group.cards[0], name = group.terminal ? nameOf(group.terminal) : more.unassigned;
       const failed = group.cards.some(card => view.askErrors?.[card.id]);
-      return stop(h_flex().id(`sf-ask-group-${gi}`).gap(5).items_center().px(6).py(3).rounded(4).bg(t.chrome).border(1)
+      return stop(h_flex().id(`sf-ask-group-${gi}`).flex_none().gap(5).items_center().px(6).py(3).rounded(4).bg(t.chrome).border(1)
         .border_color(failed ? t.blocked : t.border).cursor_pointer()
         .tooltip(group.cards.map(card => `${kindLabel(lang, card.kind)} · ${card.title}`).join('\n'))
         .on_click((_e, cx) => { cx.stop_propagation(); openAskPopup(group.terminal, name, group.cards); })
@@ -151,9 +153,8 @@ export function askSection(view, t, lang, nameOf) {
         .child(div().flex_none().max_w(110).truncate().text_size(10).text_color(t.foreground).child(name))
         .child(div().flex_1().min_w(0).truncate().text_size(10).text_color(t.dim).child(first.title))
         .when(group.cards.length > 1, e => e.child(div().flex_none().text_size(10).text_color(t.blocked).child(more.count(group.cards.length)))));
-    })).when(groups.length > 6, e => e.child(stop(div().id('sf-ask-more').px(6).py(2).rounded(4).text_size(10).text_color(t.accent).cursor_pointer()
-      .on_click((_e, cx) => { cx.stop_propagation(); view.askShowAll = !view.askShowAll; cx.notify(); })
-      .child(view.askShowAll ? more.fold : more.more(groups.length - 6)))));
+    })))
+    .when(groups.length > GROUP_ROWS, e => e.child(div().text_size(9).text_color(t.muted).child(more.more(groups.length))));
 }
 
 // The popup copy reads the neutral files itself (no subscription of its own);
@@ -209,7 +210,11 @@ export function askPopup(view, t, lang, cx) {
   const notices = v_flex().gap(3).px(14)
     .when(Boolean(view.askRevised), e => e.child(div().text_size(11).text_color(t.blocked).child(more.revised)))
     .when(view.askExpired > 0, e => e.child(div().text_size(11).text_color(t.muted).child(`${more.expired}: ${view.askExpired}`)))
-    .when(view.askSent.size > 0 && !card, e => e.child(div().text_size(11).text_color(t.done ?? t.accent).child(more.sent)));
+    .when(view.askSent.size > 0 && !card, e => e.child(div().text_size(11).text_color(t.done ?? t.accent).child(more.sent)))
+    // A failed re-read keeps the last cards on screen but says so, with a retry.
+    .when(view.asks !== null && Boolean(view.askLoadFailed), e => e.child(h_flex().gap(8).items_center()
+      .child(div().flex_1().min_w(0).text_size(11).text_color(t.blocked).child(more.refreshFailed))
+      .child(button('sf-ask-reload', more.retry, t.foreground, t, cx => loadPopup(view, cx)))));
   let body;
   if (view.asks === null) body = view.askLoadFailed
     ? h_flex().gap(8).items_center().px(14).py(12).child(div().text_size(12).text_color(t.blocked).child(more.loadFailed))
@@ -219,7 +224,7 @@ export function askPopup(view, t, lang, cx) {
   else {
     const busy = Boolean(view.askBusy[card.id]), selected = view.askChoices[card.id] ?? {}, questions = questionsOf(card), actions = actionsOf(card);
     const error = view.askErrors[card.id];
-    body = v_flex().id(`sf-ask-body-${card.id}`).flex_1().min_h(0).overflow_y_scroll().gap(10).px(14).py(10)
+    body = v_flex().id(`sf-ask-body-${card.id}`).flex_1().min_h(0).overflow_y_scrollbar().gap(10).px(14).py(10)
       .child(div().text_size(14).text_color(t.foreground).font_bold().child(card.title))
       .when(Boolean(detailOf(card)), e => e.child(div().px(10).py(8).rounded(4).bg(t.surface).border(1).border_color(t.border)
         .text_size(12).text_color(t.foreground).child(detailOf(card))))
