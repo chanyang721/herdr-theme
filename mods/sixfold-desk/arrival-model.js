@@ -44,6 +44,34 @@ function peekEnd(list, now, group = null) {
   return end;
 }
 
+const cardId = a => `${projectKey(a.space)}:${a.source}`;
+
+// Queued peeks start one card after another, in their order, never before the card ahead of
+// them is done: a card whose time restarted (more alerts joined it) pushes the ones behind it,
+// so no two cards show at once and each queued card gets its full peekMs.
+function requeue(list, now) {
+  const cards = new Map();
+  for (const a of list) {
+    const phase = a.peek ? arrivalPhase(a, now) : '';
+    if (phase !== 'show' && phase !== 'queued') continue;
+    const card = cards.get(cardId(a)) ?? {at: a.at, queued: true, held: false};
+    card.at = Math.min(card.at, a.at);
+    card.queued &&= phase === 'queued';
+    card.held ||= held(a, now);
+    cards.set(cardId(a), card);
+  }
+  let end = now;
+  const starts = new Map();
+  for (const [id, card] of [...cards].sort((x, y) => x[1].at - y[1].at)) {
+    if (!card.queued) { end = Math.max(end, card.held ? WAITING : card.at + ARRIVAL.peekMs); continue; }
+    const start = end === WAITING ? WAITING : Math.max(card.at, end);
+    starts.set(id, start);
+    end = start === WAITING ? WAITING : start + ARRIVAL.peekMs;
+  }
+  return list.map(a => a.peek && starts.has(cardId(a)) && arrivalPhase(a, now) === 'queued' && a.at !== starts.get(cardId(a))
+    ? {...a, at: starts.get(cardId(a))} : a);
+}
+
 // Adds one arrival (once per key), drops landed ones past keepMs, keeps the newest `ledger`.
 export function pushArrival(list, arrival, now) {
   const kept = (list ?? []).filter(a => a.key !== arrival.key && (a.at > now || now - a.at < showFor(a) + ARRIVAL.flyMs + ARRIVAL.keepMs));
@@ -52,7 +80,7 @@ export function pushArrival(list, arrival, now) {
   // Joins its card's open (or queued) peek: they show and fold together, from the later start.
   const start = open.length ? Math.max(now, ...open.map(a => a.at)) : peekEnd(kept, now);
   const timed = kept.map(a => open.includes(a) ? {...a, at: start} : a);
-  return [...timed, {...arrival, at: start}].slice(-ARRIVAL.ledger);
+  return requeue([...timed, {...arrival, at: start}], now).slice(-ARRIVAL.ledger);
 }
 
 // The pointer rests on a peek (hovered) or leaves it. Leaving restarts its peekMs and
@@ -71,7 +99,7 @@ export function holdPeek(list, space, source, hovered, now) {
   const starts = new Map();
   return next.map(a => {
     if (!a.peek || sameCard(a, card) || arrivalPhase(a, now) !== 'queued') return a;
-    const id = `${projectKey(a.space)}:${a.source}`;
+    const id = cardId(a);
     if (!starts.has(id)) { starts.set(id, end); if (end !== WAITING) end += ARRIVAL.peekMs; }
     return {...a, at: starts.get(id)};
   });
@@ -84,7 +112,7 @@ export function settleQueue(list, now) {
   const starts = new Map();
   return list.map(a => {
     if (a.at !== WAITING) return a;
-    const id = `${projectKey(a.space)}:${a.source}`;
+    const id = cardId(a);
     if (!starts.has(id)) { starts.set(id, end); end += ARRIVAL.peekMs; }
     return {...a, at: starts.get(id)};
   });

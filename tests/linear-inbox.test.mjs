@@ -374,6 +374,36 @@ test('a peek opens its space popover for 8 s, joins quick arrivals, queues other
   assert.equal(activePeek(list, t0, false), null);                                     // motion off: no peek
 });
 
+test('a card that takes more alerts pushes the queued cards behind it: one card at a time, each its full 8 s', async () => {
+  const {ARRIVAL, arrivalPhase, pushArrival, activePeek, holdPeek} = await import('../mods/sixfold-desk/arrival-model.js');
+  const t0 = 2_000_000;
+  const a = (key, space) => ({key, id: key, space, source: 'linear', peek: true});
+  // Alpha at 0 s, Beta queued at 0.1 s, then Alpha takes alerts at 7 s and 14 s (its time restarts each time).
+  let list = pushArrival([], a('a1', 'Alpha'), t0);
+  list = pushArrival(list, a('b1', 'Beta'), t0 + 100);
+  list = pushArrival(list, a('a2', 'Alpha'), t0 + 7000);
+  list = pushArrival(list, a('a3', 'Alpha'), t0 + 14_000);
+  list = pushArrival(list, a('c1', 'Gamma'), t0 + 15_000);
+  const alphaEnd = t0 + 14_000 + ARRIVAL.peekMs;
+  const shownFor = new Map();
+  for (let now = t0; now < alphaEnd + 4 * ARRIVAL.peekMs; now += 100) {
+    const showing = new Set(list.filter(x => x.peek && arrivalPhase(x, now) === 'show').map(x => x.space));
+    assert.ok(showing.size <= 1, `two cards at once at ${now - t0} ms: ${[...showing]}`);
+    const peek = activePeek(list, now);
+    if (peek) shownFor.set(peek.space, (shownFor.get(peek.space) ?? 0) + 100);
+  }
+  assert.equal(list.find(x => x.id === 'b1').at, alphaEnd);                            // Beta right after Alpha
+  assert.equal(list.find(x => x.id === 'c1').at, alphaEnd + ARRIVAL.peekMs);            // Gamma after Beta
+  assert.deepEqual([shownFor.get('Beta'), shownFor.get('Gamma')], [ARRIVAL.peekMs, ARRIVAL.peekMs]);
+  // A queued card's own later alert keeps its place; a hovered card still holds the queue.
+  list = pushArrival(list, a('b2', 'Beta'), t0 + 16_000);
+  assert.deepEqual(list.filter(x => x.space === 'Beta').map(x => x.at), [alphaEnd, alphaEnd]);
+  let held = holdPeek(pushArrival([], a('d1', 'Delta'), t0), 'Delta', 'linear', true, t0 + 10);
+  held = pushArrival(held, a('e1', 'Eps'), t0 + 20);
+  held = pushArrival(held, a('d2', 'Delta'), t0 + 30);
+  assert.equal(arrivalPhase(held.find(x => x.id === 'e1'), t0 + ARRIVAL.holdMs - 1), 'queued');
+});
+
 test('the store asks the host how a new arrival shows, and a failing check falls back to the small popup', async () => {
   const store = await import(`../mods/sixfold-desk/arrival-store.js?peek=${Date.now()}`);
   const seen = [];
