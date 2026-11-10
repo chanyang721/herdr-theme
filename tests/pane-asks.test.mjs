@@ -169,8 +169,16 @@ test('sidebar lists one compact row per pane, including unassigned, and opens th
   click(tree, 'sf-ask-group-0', context());
   assert.equal(f.overlays.at(-1).props.terminal, 'pane-a');
   assert.deepEqual(f.focus, []);
-  const many = {asks: Array.from({length: 9}, (_, i) => card(`c${i}`, `pane-${i}`)), askErrors: {}};
-  assert.match(text(mod.askSection(many, theme, 'ko', t => t)), /\+3개 페인/);
+  // Beyond six groups the fold row expands, so a late unassigned card stays reachable.
+  const many = {asks: [...Array.from({length: 8}, (_, i) => card(`c${i}`, `pane-${i}`)), card('late', null)], askErrors: {}};
+  let folded = mod.askSection(many, theme, 'ko', t => t);
+  assert.match(text(folded), /\+3개 페인 더 보기/); assert.equal(find(folded, 'sf-ask-group-8'), null);
+  click(folded, 'sf-ask-more', context());
+  const open = mod.askSection(many, theme, 'ko', t => t);
+  assert.equal(ids(open, 'sf-ask-group-').length, 9); assert.match(text(open), /접기/);
+  click(open, 'sf-ask-group-8', context());
+  assert.deepEqual(f.overlays.at(-1).props, {role: 'ask', terminal: null, name: '소속 미확인'});
+  click(open, 'sf-ask-more', context()); assert.equal(ids(mod.askSection(many, theme, 'ko', t => t), 'sf-ask-group-').length, 6);
 });
 
 // ---- popup ----------------------------------------------------------------

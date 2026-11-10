@@ -139,7 +139,8 @@ export function askSection(view, t, lang, nameOf) {
   return v_flex().id('sf-asks').flex_none().px(10).py(7).gap(4).bg(t.surface).border_t(1).border_color(t.border)
     .child(h_flex().gap(5).items_center().child(div().flex_1().text_size(10).font_bold().text_color(t.muted).child(words.title))
       .child(div().text_size(10).text_color(t.blocked).child(String(total))))
-    .children(groups.slice(0, 6).map((group, gi) => {
+    // Folded to six rows; the fold row expands, so no group is ever unreachable.
+    .children((view.askShowAll ? groups : groups.slice(0, 6)).map((group, gi) => {
       const first = group.cards[0], name = group.terminal ? nameOf(group.terminal) : more.unassigned;
       const failed = group.cards.some(card => view.askErrors?.[card.id]);
       return stop(h_flex().id(`sf-ask-group-${gi}`).gap(5).items_center().px(6).py(3).rounded(4).bg(t.chrome).border(1)
@@ -150,7 +151,9 @@ export function askSection(view, t, lang, nameOf) {
         .child(div().flex_none().max_w(110).truncate().text_size(10).text_color(t.foreground).child(name))
         .child(div().flex_1().min_w(0).truncate().text_size(10).text_color(t.dim).child(first.title))
         .when(group.cards.length > 1, e => e.child(div().flex_none().text_size(10).text_color(t.blocked).child(more.count(group.cards.length)))));
-    })).when(groups.length > 6, e => e.child(div().text_size(9).text_color(t.muted).child(more.more(groups.length - 6))));
+    })).when(groups.length > 6, e => e.child(stop(div().id('sf-ask-more').px(6).py(2).rounded(4).text_size(10).text_color(t.accent).cursor_pointer()
+      .on_click((_e, cx) => { cx.stop_propagation(); view.askShowAll = !view.askShowAll; cx.notify(); })
+      .child(view.askShowAll ? more.fold : more.more(groups.length - 6)))));
 }
 
 // The popup copy reads the neutral files itself (no subscription of its own);

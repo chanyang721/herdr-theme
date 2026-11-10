@@ -100,12 +100,12 @@ export const ASK_WORDS = {
     none: '이 페인에 남은 확인 요청이 없습니다.', loading: '불러오는 중…', loadFailed: '카드를 읽지 못했습니다.', retry: '다시 읽기', sending: '전송 중…', sent: '응답을 접수했습니다.',
     expired: '처리되었거나 만료된 요청', revised: '요청 내용이 바뀌어 선택을 초기화했습니다.', unassigned: '소속 미확인',
     errors: {failed: '전송 실패 — 다시 시도하세요', changed: '연결 설정이 바뀌었습니다 — 다시 열어 주세요', stale: '요청이 바뀌었거나 만료되었습니다 — 최신 내용을 확인하세요', incomplete: '모든 질문에 답한 뒤 보내세요'},
-    count: n => `${n}건`, more: n => `+${n}개 페인`},
+    count: n => `${n}건`, more: n => `+${n}개 페인 더 보기`, fold: '접기'},
   en: {open: 'Open', close: 'Close', closeHint: 'Closing does not deny or answer. Reopen it from the pane header or the sidebar.',
     none: 'No requests left for this pane.', loading: 'Loading…', loadFailed: 'Could not read the cards.', retry: 'Retry', sending: 'Sending…', sent: 'Response accepted.',
     expired: 'Handled or expired', revised: 'The request changed; choices were reset.', unassigned: 'Unassigned',
     errors: {failed: 'Send failed — try again', changed: 'Connection changed — reopen the card', stale: 'The request changed or expired — check the latest', incomplete: 'Answer every question before sending'},
-    count: n => `${n}`, more: n => `+${n} panes`},
+    count: n => `${n}`, more: n => `+${n} more panes`, fold: 'Show less'},
 };
 export const errorText = (lang, code) => {
   const words = (ASK_WORDS[lang] ?? ASK_WORDS.en).errors;
