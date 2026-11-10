@@ -109,14 +109,17 @@ test('new Linear alerts become arrivals into their space (Share otherwise); no s
     assert.deepEqual(shared['sixfold.linearSpaces'].sort(), ['Alpha', 'Share']);   // 'past' has no space: Share
     feed([{id: 'old', read: false, category: 'assignments'}, {id: 'seen', read: true, category: 'assignments'}, {id: 'remind', read: false, category: 'reminders'}]);
     await flush();
-    assert.equal(opens.length, 1);                       // read or reminder only: nothing
+    assert.equal(opens.length, 2);                       // a due reminder pops up too (every kind but reactions); a read one does not
+    feed([{id: 'old', read: false, category: 'assignments'}, {id: 'remind', read: false, category: 'reminders'}, {id: 'like', read: false, category: 'reactions'}]);
+    await flush();
+    assert.equal(opens.length, 2);                       // a reaction: nothing
     // A sidebar host: each new alert arrives into its space, an unknown space into Share. Comments count.
     store.setArrivalHost(() => true);
     feed([{id: 'a', read: false, category: 'commentsAndReplies', workspace: 'Alpha', issue: 'ABC-1', issue_title: 'T',
            subtitle: 'Kim commented: looks good\nsecond line', url: 'https://linear.app/demo/issue/ABC-1/t#comment-0a1b2c3d'},
           {id: 'b', read: false, category: 'assignments', workspace: 'Nowhere'}, {id: 'old', read: false, category: 'assignments'}]);
     await flush();
-    assert.equal(opens.length, 1);
+    assert.equal(opens.length, 2);                       // with a host: arrivals, no window
     const landed = store.arrivals().filter(a => a.key === 'linear:a' || a.key === 'linear:b').map(a => [a.key, a.id, a.space, a.source, a.issue]);
     assert.deepEqual(landed, [['linear:b', 'b', 'Share', 'linear', ''], ['linear:a', 'a', 'Alpha', 'linear', 'ABC-1']]);   // newest lands last
     // The popup says what changed in one line (who, what) and keeps the comment link.
@@ -213,7 +216,7 @@ test('an issue row in the issue search shows its unread alerts: count, newest tw
   assert.equal(row.unread, 3);
   assert.equal(row.more, 1);
   assert.deepEqual(row.lines.map(l => [l.id, l.category, l.text, l.url]),
-    [['n2', '댓글', 'Kim replied: second', link], ['n1', '댓글', 'Kim commented: first', '']]);
+    [['n2', '답글', 'Kim replied: second', link], ['n1', '댓글', 'Kim commented: first', '']]);   // a reply has its own badge
   assert.equal(issueAlerts(items, 'Alpha', 'ABC-8').lines[0].url, '');     // only linear.app links open
   assert.equal(issueAlerts(items, 'Alpha', 'ABC-9'), null);                  // no alert: the row is unchanged
   assert.notEqual(issueAlertSignature(items, 'Alpha'), issueAlertSignature(items.slice(1), 'Alpha'));
@@ -384,4 +387,35 @@ test('the store asks the host how a new arrival shows, and a failing check falls
   assert.equal(store.holdArrivals('Alpha', 'linear', true, 5100), true);
   assert.equal(store.holdArrivals('Zed', 'linear', true, 5100), false);
   store.setPeekCheck(null);
+});
+
+test('alert kinds at a glance: type -> badge (unknown types keep their name); the second line says what changed', async () => {
+  const {alertKind, alertLine, ALERT_KINDS, issueAlerts, kindTone} = await import('../mods/sixfold-desk/alert-model.js');
+  const inbox = await import('../mods/sixfold-linear-inbox/model.js');
+  const cases = [
+    [{type: 'issueCreated', subtitle: 'Created by Kim', project: 'Demo launch'}, 'new', '신규 이슈', '만든 사람 Kim · Demo launch'],
+    [{type: 'issueNewComment', subtitle: 'Kim commented: first line\nsecond'}, 'comment', '댓글', 'Kim commented: first line'],
+    [{type: 'issueNewComment', subtitle: 'Lee replied: thanks'}, 'reply', '답글', 'Lee replied: thanks'],
+    [{type: 'issueAssignedToYou', subtitle: 'Assigned by Kim'}, 'assign', '배정', 'Kim 님이 배정'],
+    [{type: 'issueStatusChanged', subtitle: 'Kim changed status', changes: [{field: 'status', from: 'Todo', to: 'In Progress'}]}, 'status', '상태 변경', '상태 Todo → In Progress'],
+    [{type: 'issueUnblocked', subtitle: 'Kim marked this issue as no longer blocked by DEMO-1'}, 'status', '상태 변경', 'Kim marked this issue as no longer blocked by DEMO-1'],
+    [{type: 'issueDue', subtitle: 'Overdue', due: '2026-11-07'}, 'due', '마감', '기한 지남 · 기한 2026-11-07'],
+    [{type: 'issueCommentMention', subtitle: 'Kim mentioned you: look'}, 'mention', '멘션', 'Kim mentioned you: look'],
+    [{type: 'pullRequestReviewRequested', subtitle: 'Kim requested your review'}, 'review', '확인 요청', 'Kim requested your review'],
+    [{type: 'someFutureTypeReviewed'}, 'review', '확인 요청', ''],
+    [{type: 'issueCommentReaction', subtitle: 'Kim reacted to comment: ok'}, 'reaction', '반응', 'Kim reacted to comment: ok'],
+    [{type: 'projectMilestoneMoved', subtitle: 'Moved'}, 'other', 'projectMilestoneMoved', 'Moved'],   // unknown: its own name
+    [{category: 'assignments'}, 'assign', '배정', ''],                                                   // no type: by category
+    [{category: 'weird'}, 'other', '알림', ''],
+  ];
+  for (const [item, kind, label, line] of cases) {
+    assert.deepEqual(alertKind(item), {kind, label}, JSON.stringify(item));
+    assert.equal(alertLine(item), line, JSON.stringify(item));
+    assert.equal(inbox.categoryLabel(item), label, 'the inbox window uses the same table');
+  }
+  assert.equal(Object.keys(ALERT_KINDS).length, 10);
+  const t = {ansi1: '#1', ansi2: '#2', ansi3: '#3', ansi4: '#4', ansi5: '#5', ansi6: '#6', accent: '#a', blocked: '#b', dim: '#d', muted: '#m'};
+  assert.equal(new Set(['new', 'comment', 'reply', 'assign', 'status', 'due', 'mention', 'review'].map(k => kindTone(k, t))).size, 8);   // eight kinds, eight colors
+  const lines = issueAlerts([{id: N, issue: 'ABC-1', workspace: 'A', read: false, type: 'issueAssignedToYou', subtitle: 'Assigned by Kim', at: '1'}], 'A', 'ABC-1').lines;
+  assert.deepEqual([lines[0].kind, lines[0].category, lines[0].text], ['assign', '배정', 'Kim 님이 배정']);
 });

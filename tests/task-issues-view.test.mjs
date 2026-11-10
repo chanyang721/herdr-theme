@@ -22,7 +22,8 @@ let serial=0;
 async function renderer(){
   globalThis.__issueView={div:()=>element(),svg:value=>element('svg',value),h_flex:()=>element('row'),v_flex:()=>element('column'),Popover:{new:id=>element('popover',id)}};
   const source=(await readFile(new URL('../mods/sixfold-desk/task-issues-view.js',import.meta.url),'utf8'))
-    .replace(/import \{([^}]+)\} from '(?:gpui-kit|gpui-base)';/g,'const {$1}=globalThis.__issueView;');
+    .replace(/import \{([^}]+)\} from '(?:gpui-kit|gpui-base)';/g,'const {$1}=globalThis.__issueView;')
+    .replace("'./alert-model.js'",JSON.stringify(new URL('../mods/sixfold-desk/alert-model.js',import.meta.url).href));
   return import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}#${serial++}`);
 }
 const model=overrides=>({id:'demo',open:true,trigger:element('icon'),rows,selected:new Set(),scope:'week',...overrides});
@@ -132,4 +133,16 @@ test('[읽음] on each alert line and [모두 읽음] on the group head; opening
   tree=issuePopover(model({...base,readable:false}),theme);
   assert(!byId(tree,'task-issues-read-demo-DEMO-9-0'));assert(byId(tree,'task-issues-read-demo-DEMO-9-1'));
   assert(!byId(tree,'task-issues-read-all-demo'));assert(words(tree).includes('읽음은 Linear 기준'));
+});
+
+test('each alert line carries its own kind badge, colored by kind',async()=>{
+  const {issuePopover}=await renderer();
+  const lines=[{id:'n1',kind:'status',category:'상태 변경',text:'상태 Todo → In Progress',at:'2026-11-10T04:45:00Z',url:''},
+    {id:'n2',kind:'assign',category:'배정',text:'Kim 님이 배정',at:'2026-11-10T04:24:00Z',url:''}];
+  const tree=issuePopover(model({alerted:[{key:'DEMO-9',title:'T',at:lines[0].at,alerts:{unread:2,more:0,lines}}]}),{...theme,ansi3:'#ffd75f',ansi4:'#5fafff'});
+  assert.deepEqual(words(byId(tree,'task-issues-alerted-kind-demo-DEMO-9-0')),['상태 변경']);
+  assert.deepEqual(words(byId(tree,'task-issues-alerted-kind-demo-DEMO-9-1')),['배정']);
+  assert.equal(call(byId(tree,'task-issues-alerted-kind-demo-DEMO-9-0'),'bg')[1],'#5fafff');
+  assert.equal(call(byId(tree,'task-issues-alerted-kind-demo-DEMO-9-1'),'bg')[1],'#ffd75f');
+  assert(words(byId(tree,'task-issues-alerted-demo')).includes('상태 Todo → In Progress'));
 });
