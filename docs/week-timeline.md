@@ -5,13 +5,33 @@ The theme never talks to Linear itself.
 
 | | What | Where |
 |---|---|---|
-| A | This week's (or two weeks') Linear work assigned to me: project › top issue › work item, with day bars | a full-width band under the monitor strip, above the agent panes (`week-timeline` block in `layouts/sixfold.json`) |
+| A | This week's (or two weeks') Linear work assigned to me: project › top issue › work item, with deadline markers | a full-width band under the monitor strip, above the agent panes (`week-timeline` block in `layouts/sixfold.json`) |
 | B | Project timeline: milestones ①… with progress bars and target ◆, my issues under them | a window over the panes, from **프로젝트 전체 타임라인 ↗**; **이번 주로 접기** closes it |
 | C | One issue: 요약 (description, to-do list, related issues, Herdr 작업 연결), 댓글, 알림 | a panel on the right over the panes (dialog, the rest dimmed); ✕, Esc or a click beside it closes it |
 
-The title row (`HERDR THEME / WORKSPACE`) is gone. The MCP and CLI chip rows stay two rows;
-when the window is low (the timeline band gets squeezed under 150 px) they join into one
-row (`mcp-cli` stack → `mcp-cli-line`) and come back above 190 px.
+The title row (`HERDR THEME / WORKSPACE`) and bottom `입력 대상` footer are gone. The footer
+renderer in `sixfold-desk` remains available to other layouts.
+
+A starts as a 28 px summary: project counts, today's deadlines, blocked and in-progress work,
+a small status meter, and the first two issue keys in processing-date order. Click the row to expand; click ▾ to fold it again. The selected project
+filter applies to the summary too. Tree folds do not change its counts. The full-timeline link
+opens B without unfolding A. The fold state is saved in `sixfold.week-timeline.expanded` shared
+state across restarts. `layout.resize` changes the actual block height, so the terminal area
+receives the freed space. Expanded A fits up to five 24 px rows (171 px including its two
+headers and bottom border); overflow has a scrollbar. Text is 12 px, with only parent issue
+titles semibold. There are no duration bars in A: a small ◆ marks the deadline day; a deadline beyond the
+window is text alone at the right (`→ 12/3`), and an earlier-week deadline is red with its date
+at the left. No date means no marker. A missing deadline falls back to the milestone target;
+the tooltip names that source. Parent issue rows keep progress only on the left.
+
+The tree sorts by deadline, else milestone target, with undated work last. On the same day:
+in progress, to do, review, then issue key. Projects and parent groups sort by the earliest
+work inside them, including when folded. The collapsed keys use the same date/state/key
+order across projects. Issue membership, the feed and collector contracts are unchanged.
+`band.js` contains the summary and height presentation helpers.
+
+The MCP and CLI chip rows normally stay two rows. A squeezed expanded band can join them
+into one row (`mcp-cli` stack → `mcp-cli-line`); a collapsed band does not trigger that rule.
 
 ## Files
 
