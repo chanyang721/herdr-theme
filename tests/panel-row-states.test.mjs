@@ -68,6 +68,8 @@ test('the short cleanup label names waiting, saving, closing and closed from the
   assert.equal(label('long'),'정리 대기 2시간');
   assert.equal(label('save'),'보관 중');assert.equal(label('report'),'닫는 중');assert.equal(label('memo'),'닫는 중');
   assert.equal(label('gone'),'닫힘');
-  for(const id of ['stuck','unseen','idle','old'])assert.equal(label(id),null,id);
+  assert.equal(label('unseen'),'정리 대기 12분','an unseen result on a cleanup timer is waiting too');
+  assert.equal(agentCleanupLabel({...rows.find(a=>a.id==='unseen'),cleanup:null},now),null);
+  for(const id of ['stuck','idle','old'])assert.equal(label(id),null,id);
   assert.equal(agentCleanupLabel(null),null);
 });

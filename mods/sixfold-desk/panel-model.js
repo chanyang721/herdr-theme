@@ -288,10 +288,12 @@ const shortLeft = ms => {
 };
 export function agentCleanupLabel(agent, now = Date.now()) {
   const state = agentRowState(agent);
-  if (state === 'cleanup_wait') {
+  // An unseen result with a cleanup timer is closed on time too (the producer's
+  // TIMER_STATES); live closes go straight from it to closed, so it says so.
+  if (state === 'cleanup_wait' || state === 'unseen_result' && agent.cleanup) {
     const due = agent.cleanup?.due_at;
     const left = Number.isFinite(due) ? due - now : 0;
-    return { kind: state, text: left > 0 ? `정리 대기 ${shortLeft(left)}` : '정리 대기' };
+    return { kind: 'cleanup_wait', text: left > 0 ? `정리 대기 ${shortLeft(left)}` : '정리 대기' };
   }
   if (state === 'closing' && agent.closing && !agent.closing.blocked_reason) {
     return { kind: state, text: agent.closing.step === 1 ? '보관 중' : '닫는 중' };

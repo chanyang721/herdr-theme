@@ -86,7 +86,8 @@ the sidebar never decides whether a session is kept or closed.
 
 A row whose `state` is one of the cleanup states also carries a short label in
 its stage slot, so the cleanup progress reads without hovering and the row
-stays one line: `cleanup_wait` → **정리 대기** with the minutes (or hours) left
+stays one line: `cleanup_wait`, and `unseen_result` with a `cleanup` timer,
+→ **정리 대기** with the minutes (or hours) left
 until `due_at` on the sidebar clock, and no time once it has passed; `closing`
 step 1 (close requested, the session is saving its report) → **보관 중**;
 `closing` steps 2 and 3 (report saved, or a memory proposal pending; the pane
