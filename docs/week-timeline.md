@@ -34,18 +34,26 @@ The bridge `command`+`args` is run with:
 - `--if-older 90` every 2 minutes (a sync; the producer decides what to read),
 - `--detail KEY [--force]` when C opens or **다시 읽기** is pressed.
 
-The bridge `apply` command is run with `--key KEY` only when **Linear 에 반영** is pressed.
+The bridge `apply` command is run with `--key KEY --request ID` only when **Linear 에 반영** is pressed.
 C writes `<KEY>.request.json` as `{key, id, changes}`; every reply change carries its own
 idempotency key `rid`. The command must write `<KEY>.apply.json` as
 `{key, request, at, ok, error, applied, kept}`, where `request` is the `id` it answered. C uses a
 result only when `request` matches the request it just wrote, whatever the exit code; otherwise it
 keeps every change pending. Changes in `kept` stay pending, and the request file then holds them.
 **취소** and removing a change rewrite that file (with a new `id`), so they do not come back on
-reopen. The command rewrites the request file only while its `id` is still the one it ran.
+reopen. Every save and every apply takes a new generation in the popup: a save whose file read
+finishes after a newer one began is dropped, and each write lands only on the file it read. The
+command runs only the request named by `--request`; when the file holds another one it sends
+nothing and answers `{request: ID, mismatch: true}`, and C keeps its changes. The command rewrites
+the request file only while its `id` is still the one it ran.
 
-A reply whose call went through is recorded in `<KEY>.sent.json` at once and is never sent again
-for that `rid`; if Linear does not show it on the re-read it stays pending with a note instead of
-being re-sent. Removing it and writing it again makes a new `rid`.
+Each reply's `rid` is reserved in `<KEY>.sent.json` by the write guard, synced to disk (fsync),
+before its call is let through; the guard refuses a `rid` already in that file. So a process that
+dies after the call (non-zero exit, timeout, unreadable reply) still leaves the reservation. On the
+next apply a reserved reply is held for a minute, then looked up on Linear: found means confirmed and
+not sent; not found frees the `rid` for one more send (reserved again). A reply whose run finished
+(`sent`) but which Linear does not show stays pending with a note instead of being re-sent.
+Removing it and writing it again makes a new `rid`.
 
 The reference producer (kept outside this repo, Python) syncs only what changed: one full read
 when it starts and every 2 hours as a safety net (a failed one keeps the last good values and is
