@@ -125,3 +125,30 @@ test('a refused request (another one in the file) keeps the changes', async () =
   assert.deepEqual(v.pending, [{ kind: 'status', to: 'Done' }]);
   assert.match(v.message, /바뀜/);
 });
+
+test('an unsure reply shows 확인 필요 and [다시 확인] runs a look-only check', async () => {
+  const { m, v, cx, drain, files, runs, setApply } = await popup();
+  setApply((files, given) => {
+    const request = JSON.parse(files.get(REQ));
+    files.set(RES, JSON.stringify({ key: KEY, at: 'x', request: request.id, ok: false, unsure: 1, applied: 0, kept: request.changes,
+      error: '확인 필요(댓글 전송 여부 불명) — [다시 확인]을 눌러 주세요', ...(given.includes('--check') ? { check: true } : {}) }));
+    return { code: 0 };
+  });
+  m.stage(v, { kind: 'reply', parent: '', body: '한 번' }, cx);
+  m.applyNow(v, cx); await drain();
+  assert.equal(v.result.unsure, 1);
+  assert.match(v.message, /확인 필요/);
+  assert.equal(v.pending.length, 1);
+  m.applyNow(v, cx, true); await drain();
+  assert.ok(runs.at(-1).includes('--check'));
+  assert.equal(v.result.check, true);
+});
+
+test('reopening after an unsure apply still says 확인 필요', async () => {
+  const { m, v, cx, drain, files } = await popup();
+  files.set(REQ, JSON.stringify({ key: KEY, id: 'req-1', changes: [{ kind: 'reply', parent: '', body: 'x', rid: 'abcdefgh-1' }] }));
+  files.set(RES, JSON.stringify({ key: KEY, at: 'x', request: 'req-1', ok: false, unsure: 1, applied: 0, kept: [], error: '확인 필요(댓글 전송 여부 불명)' }));
+  m.loadCarried(v, cx); await drain();
+  assert.equal(v.result?.unsure, 1);
+  assert.match(v.message, /확인 필요/);
+});

@@ -72,3 +72,9 @@ test('apply result, breadcrumb and relations', () => {
   assert.deepEqual(related(issue).map(r => r.key), ['DEMO-2', 'DEMO-3']);
   assert.equal(relationLabel('blocked_by'), '이 이슈를 막음');
 });
+
+test('the rid mark is not shown in comments', () => {
+  const marked = { ...raw, comments: [{ id: C1, parent: '', author: 'Me', at: '', body: '확인했습니다\n\n`herdr-rid:mwbhmyhx-turqut6w`' }] };
+  assert.equal(parseDetail(JSON.stringify(marked), 'DEMO-1').comments[0].body, '확인했습니다');
+  assert.equal(parseApply('{"key":"DEMO-1","at":"x","request":"r","unsure":2,"check":true}', 'DEMO-1').unsure, 2);
+});
