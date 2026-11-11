@@ -1,0 +1,8 @@
+{
+  "command": "/usr/bin/python3",
+  "args": ["/ABSOLUTE/PATH/week_timeline.py"],
+  "apply": {
+    "command": "/usr/bin/python3",
+    "args": ["/ABSOLUTE/PATH/week_timeline_apply.py"]
+  }
+}
