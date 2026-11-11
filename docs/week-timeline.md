@@ -1,37 +1,40 @@
-# Week timeline (헤더 아래 이번 주 타임라인)
+# Week timeline (헤더 칩과 타임라인 오버레이)
 
 `mods/week-timeline` draws three things from files under `~/.config/herdr-app/data/sixfold/`.
 The theme never talks to Linear itself.
 
 | | What | Where |
 |---|---|---|
-| A | This week's (or two weeks') Linear work assigned to me: project › top issue › work item, with deadline markers | a full-width band under the monitor strip, above the agent panes (`week-timeline` block in `layouts/sixfold.json`) |
+| A | This week's open work count and today's deadline count; click for project › top issue › work item, with deadline markers | one `week-timeline-chip` in the MCP header row; its dialog floats over the panes |
 | B | Project timeline: milestones ①… with progress bars and target ◆, my issues under them | a window over the panes, from **프로젝트 전체 타임라인 ↗**; **이번 주로 접기** closes it |
 | C | One issue: 요약 (description, to-do list, related issues, Herdr 작업 연결), 댓글, 알림 | a panel on the right over the panes (dialog, the rest dimmed); ✕, Esc or a click beside it closes it |
 
 The title row (`HERDR THEME / WORKSPACE`) and bottom `입력 대상` footer are gone. The footer
 renderer in `sixfold-desk` remains available to other layouts.
 
-A starts as a 28 px summary: project counts, today's deadlines, blocked and in-progress work,
-a small status meter, and the first two issue keys in processing-date order. Click the row to expand; click ▾ to fold it again. The selected project
-filter applies to the summary too. Tree folds do not change its counts. The full-timeline link
-opens B without unfolding A. The fold state is saved in `sixfold.week-timeline.expanded` shared
-state across restarts. `layout.resize` changes the actual block height, so the terminal area
-receives the freed space. Expanded A fits up to five 24 px rows (171 px including its two
-headers and bottom border); overflow has a scrollbar. Text is 12 px, with only parent issue
-titles semibold. There are no duration bars in A: a small ◆ marks the deadline day; a deadline beyond the
+A is a 20 px chip in the existing header row: `이번 주 5 · 오늘 1 ●`. It counts open work
+selected by the week model (completed work contributes to parent progress, not the chip count).
+Today's count uses the deadline, else milestone target. The dot is red for overdue work,
+accented for today's work, otherwise muted. A missing feed shows dashes until data loads.
+
+Clicking the chip opens a `dialog` over the panes. It takes no layout space. The transparent
+backdrop, ✕, or native Esc closes it; inside clicks stay inside. Herdr owns dialog focus and
+returns to the original pane on close. The table has project filters, 1/2-week controls,
+issue detail links, and the full project timeline link. The latter closes the week dialog
+before opening B. Only the chip runs the existing producer timer; the open dialog reads
+the same local feed. There is no expansion state, dynamic band height, or chip-row resizing.
+
+The dialog fits the window (65% height, at most 420 px) and scrolls within it. Text is 12 px,
+with only parent issue titles semibold, and rows are 24 px with quiet theme-derived rules.
+There are no duration bars in A: a small ◆ marks the deadline day; a deadline beyond the
 window is text alone at the right (`→ 12/3`), and an earlier-week deadline is red with its date
 at the left. No date means no marker. A missing deadline falls back to the milestone target;
 the tooltip names that source. Parent issue rows keep progress only on the left.
 
 The tree sorts by deadline, else milestone target, with undated work last. On the same day:
 in progress, to do, review, then issue key. Projects and parent groups sort by the earliest
-work inside them, including when folded. The collapsed keys use the same date/state/key
-order across projects. Issue membership, the feed and collector contracts are unchanged.
-`band.js` contains the summary and height presentation helpers.
-
-The MCP and CLI chip rows normally stay two rows. A squeezed expanded band can join them
-into one row (`mcp-cli` stack → `mcp-cli-line`); a collapsed band does not trigger that rule.
+work inside them, including when folded. Issue membership and the feed/collector contracts
+are unchanged. `summary.js` computes chip counts from that same selection.
 
 ## Files
 
