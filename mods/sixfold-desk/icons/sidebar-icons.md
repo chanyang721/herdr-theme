@@ -7,3 +7,5 @@ Device OS selects laptop (macOS), desktop (Windows), tablet (iPadOS), phone (iOS
 Workspace marks: common hub, Voice microphone, Herdr terminal, generic folder; project marks such as flower or house/cross come from `site.local.json` → `workspaces.<name>.icon`. Existing `workspace-icons.json` images take precedence. Saved `space.colors` are reused; other colors retain the deterministic sidebar fallback. Marks are 16px with 12px artwork, device art 14px; connectivity dots remain separate.
 
 Connectivity labels distinguish local Mac, Herdr registered remote layout state, and Tailscale discovery. Tailscale Online is never evidence of SSH connectivity. Missing Online values stay unknown.
+
+`linear.svg` is an original rounded-square-and-check line drawing for the issue-tracker inbox badge, made in this repository (not a vendor logo).

@@ -31,7 +31,7 @@ test('hosted routes use selected native order and measured document/card heights
   const host=hostedTaskLayout(layout,[{task:a,height:200,alertHeight:26},{task:null,height:90},{task:b,height:110}]);
   assert.deepEqual(host.cards.map(card=>card.space.id),['a','b']);
   assert.equal(host.anchors.has('remote'),false);
-  assert.equal(host.anchors.get('a-row').y,107);
+  assert.equal(host.anchors.get('a-row').y,105);   // no empty alert child: header 36 + border 1 + two 2px gaps
   assert.equal(host.anchors.get('b').y,332);
   assert.equal(host.height,436);
 });
@@ -64,8 +64,8 @@ test('flow lanes stay outside cards in ordered bands; only proven remote endpoin
 test('the fixed gutter contains message curves, collaboration and outer computer lanes',()=>{
  // One gutter for every sidebar width: nothing in it depends on the width.
  const flow=messageFlowGeometry(PANEL_FLOW.gutter);
- assert.equal(PANEL_FLOW.gutter,72);
- assert.equal(flow.collaboration,30);assert.equal(flow.computer,40);
+ assert.equal(PANEL_FLOW.gutter,48);
+ assert.equal(flow.collaboration,22);assert.equal(flow.computer,28);
  assert(flow.messageNext<flow.collaboration);assert(flow.collaboration<flow.computer);
  assert.equal(flow.width+flow.right,PANEL_FLOW.gutter);
 });
@@ -75,13 +75,8 @@ test('the sidebar width only matters at the layout breakpoints',()=>{
  assert.deepEqual([224,259,260,299,300,419,420,680].map(panelWidthClass),[0,0,1,1,2,2,3,3]);
 });
 
-test('curve extent stays inside its band and each of four remote computers has its own outer lane',async()=>{
- const {messageCurveReach,computerFlow}=await import('../mods/sixfold-desk/panel-host.js');
- for(const distance of [0,20,100,400,10000]){
-  const reach=messageCurveReach(distance);assert(reach>0&&reach<=24);
-  assert.equal(messageCurveReach(-distance),reach);assert(messageCurveReach(distance,1)<reach);
- }
- assert.equal(messageCurveReach(10000),24);
+test('each of four remote computers has its own outer lane',async()=>{
+ const {computerFlow}=await import('../mods/sixfold-desk/panel-host.js');
  const feed={computers:['local','a','b','c','d'].map(id=>({id})),spaces:[]};
- assert.deepEqual(['a','b','c','d'].map(id=>computerFlow(feed,id).computer),[40,48,56,64]);
+ assert.deepEqual(['a','b','c','d'].map(id=>computerFlow(feed,id).computer),[28,32,36,40]);
 });

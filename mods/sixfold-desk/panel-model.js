@@ -5,15 +5,14 @@ import { projectTaskBranches } from './task-tree.js';
 // 1 = the original timing: a message crossed in 1 s, a task event in 1.6 s.
 export const PACE=1.5;
 const paced=ms=>Math.round(ms*PACE);
-export const MESSAGE_TIMING=Object.freeze({startMs:40,packetMs:40+paced(1000),pingMs:paced(170),coolMs:paced(390)});
-// Finite native targets: departure, remote vertical leg, local curve turn,
-// remote arrival leg. There is no JavaScript animation-frame timer.
-export const MESSAGE_LEGS=Object.freeze([40,40+paced(150),40+paced(500),40+paced(850)]);
-export const messageLeg=elapsed=>MESSAGE_LEGS.filter(at=>elapsed>=at).length;
 export const PANEL_TIMING = Object.freeze({ tagMs: 60+paced(1640), startMs: 40, packetMs: 40+paced(1600), pingMs: paced(460), coolMs: paced(900) });
-// A task-event packet's corners: leave the row, run down the lane, enter the target row.
+// A packet's corners: leave the row, run down the lane, enter the target row.
+// Finite native targets; there is no JavaScript animation-frame timer.
 export const PANEL_LEGS=Object.freeze([40,40+paced(260),40+paced(1360)]);
 export const panelLeg=elapsed=>PANEL_LEGS.filter(at=>elapsed>=at).length;
+// A message moves like every other event packet: same corners, same travel,
+// ping and fade (2026-11-10: a faster, differently shaped send looked foreign).
+export const MESSAGE_TIMING=Object.freeze({startMs:PANEL_TIMING.startMs,packetMs:PANEL_TIMING.packetMs,pingMs:PANEL_TIMING.pingMs,coolMs:PANEL_TIMING.coolMs});
 const MAX = Object.freeze({ computers: 64, spaces: 128, agents: 256, issues: 128, links: 512, events: 256, bytes: 2 * 1024 * 1024 });
 const STATUSES = new Set(['working', 'idle', 'blocked', 'done']);
 const STATES = ['blocked', 'working', 'review', 'waiting', 'done'];
@@ -231,7 +230,11 @@ export function panelSpacePartners(feed, spaceID) {
 }
 export function agentState(agent) {
   if (agent.closing?.blocked_reason || agent.status === 'blocked' || agent.report_missing === true || agent.error) return 'blocked';
-  if (agent.status === 'done' || agent.stage === 5) return 'done';
+  // 완료 = the feed's status 'done' alone. The harness sends it for a record row without a pane
+  // whose task finished (stage 5) and for a pane its close scan will clean up. A finished task
+  // whose pane is still kept arrives idle or working; its stage and keep_reason say why. `nav` is
+  // not a pane test: a live pane whose session is not confirmed has nav null (review 2026-11-10).
+  if (agent.status === 'done') return 'done';
   if (agent.stage === 3) return 'review';
   if (agent.stage === 4) return 'waiting';
   return agent.status === 'working' ? 'working' : 'waiting';
@@ -299,7 +302,10 @@ export function agentGroups(space, { includeClosedIds = new Set(), expandedIssue
   }));
   if (!space?.work) return { grouped: false, groups: [], groupsHidden: 0, issueHidden: 0, issuesExpanded: false, groupsExpandable: false, ...treeAgents(agents, expandedParents) };
   const groupsExpandable = issues.length > 4, issuesExpanded = groupsExpandable && expandedIssueSpaces.has(space.id);
-  const visibleIssues = groupsExpandable && !issuesExpanded ? issues.slice(0, 3) : issues;
+  // A live task must not disappear behind the generic issue fold.
+  const activeIssues = new Set(agents.filter(agent => ['working','blocked'].includes(agent.status)).map(agent => agent.issue));
+  const visibleIssues = groupsExpandable && !issuesExpanded
+    ? issues.filter((issue,index) => index < 3 || activeIssues.has(issue.key)) : issues;
   const groups = visibleIssues.map(issue => ({ issue, ...treeAgents(agents.filter(agent => agent.issue === issue.key), expandedParents) }));
   const unassigned = agents.filter(agent => !assigned.has(agent.issue));
   if (unassigned.length) groups.push({ issue: null, ...treeAgents(unassigned, expandedParents) });
@@ -437,7 +443,7 @@ export function panelEventStates(feed, now, { previous = null, motion = true } =
   const incoming = feed?.events ?? [];
   const seen = new Set(previous?.seen ?? incoming.map(event => event.id));
   const pending = new Map(previous?.pending ?? []);
-  const agentStages=new Map(),stageNames=['대기','배분 중','작업 중','검수 중','수락 대기','완료'];
+  const agentStages=new Map(),stageNames=['대기','배분 중','작업 중','검수 중','수락 대기','수락됨'];  // 완료 is the cleanup target only (agentState)
   let stageRevision=previous?.stageRevision||0;
   for(const agent of (feed?.spaces||[]).flatMap(space=>space.agents)){
     const signature=JSON.stringify([agent.stage,agent.closing?.step||0]);agentStages.set(agent.id,signature);
@@ -461,7 +467,7 @@ export function panelEventStates(feed, now, { previous = null, motion = true } =
     if(!route&&!label)continue;
     let routeAt=now,routeLane=0,drawRoute=Boolean(route);
     if(event.kind==='message'&&route&&animate){
-      const queued=[...pending.values()].filter(item=>item.kind==='message'&&item.drawRoute&&item.routeAt+1600>now);
+      const queued=[...pending.values()].filter(item=>item.kind==='message'&&item.drawRoute&&item.routeAt+MESSAGE_TIMING.packetMs>now);
       if(queued.length>=8)drawRoute=false;
       else {
         const last=queued.at(-1);routeAt=Math.max(now,last?last.routeAt+260:now);

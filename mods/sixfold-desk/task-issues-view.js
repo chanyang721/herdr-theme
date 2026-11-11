@@ -1,5 +1,8 @@
 import {div,svg} from 'gpui-kit';
 import {h_flex,v_flex,Popover} from 'gpui-base';
+import {kindTone} from './alert-model.js';
+import {issueDetail,milestoneRows,statusChip} from './issue-detail-view.js';
+import {statusTone,statusLook} from './issue-model.js';
 
 export const ISSUE_SCOPES=Object.freeze([
   {id:'week',label:'이번 주'},
@@ -8,6 +11,9 @@ export const ISSUE_SCOPES=Object.freeze([
 ]);
 const states={blocked:'막힘',working:'진행 중',review:'검수',waiting:'대기',done:'완료'};
 const text=(value,color,size=11)=>div().min_w(0).truncate().text_size(size).text_color(color).child(value);
+const kindBadge=(item,t,id)=>div().id(id).px(5).rounded(3).flex_none().text_size(9).font_bold()
+  .bg(kindTone(item.kind,t)).text_color(t.accent_foreground||t.background).child(item.category||'알림');
+const clock=at=>{const d=new Date(at);if(Number.isNaN(d.getTime()))return '';const p=n=>String(n).padStart(2,'0');return `${d.getMonth()+1}/${d.getDate()} ${p(d.getHours())}:${p(d.getMinutes())}`;};
 
 // The caller supplies normalized display data, owns local UI state, and posts
 // explicit row actions through its local request boundary.
@@ -30,7 +36,15 @@ export function issuePopover(model,t){
       .child(text(model.updatedLabel||model.toolLabel||'연결 없음',t.dim,10)))
     .child(div().id(`task-issues-close-${id}`).size(28).rounded(6).text_size(14).text_color(t.muted)
       .cursor_pointer().tooltip('닫기').on_click(change(model.onOpen,false)).child('✕')));
+  // An issue's detail replaces the alerts, tabs and list (← 목록 goes back).
+  if(model.detail){
+    body.child(issueDetail(model,t));
+    return popover.content(body);
+  }
   if(model.search)body.child(model.search);
+  if(model.auto)body.child(model.auto);   // '자동 작업' (linear-auto-view.js): approvals above the alerts
+  const group=alertedGroup(model,t);
+  if(group)body.child(group);
   body.child(h_flex().gap(4).pb(8).border_b(1).border_color(t.border)
     .children(ISSUE_SCOPES.map(item=>{
       const count=model.scopeCounts?.[item.id];
@@ -40,27 +54,52 @@ export function issuePopover(model,t){
         .child(text(item.label,scope===item.id?t.foreground:t.muted,12))
         .child(text(Number.isInteger(count)?String(count):'—',t.dim,10));
     })));
+  // Status filter (Linear's real statuses, with counts); done and canceled are folded under 전체.
+  if(scope!=='milestone'&&model.filters?.length>1){
+    body.child(h_flex().id(`task-issues-filters-${id}`).flex_wrap().gap(4)
+      .children(model.filters.map((f,i)=>h_flex().id(`task-issues-filter-${id}-${i}`).h(22).px(8).gap(4).rounded(11).items_center().cursor_pointer()
+        .border(1).border_color((model.filter||'전체')===f.name?t.accent:t.border)
+        .bg((model.filter||'전체')===f.name?t.selected:t.popover||t.surface)
+        .on_click(change(model.onFilter,f.name))
+        .when(Boolean(f.status),chip=>chip.child(text(statusLook(f.status).icon,statusTone(f.status,t),10)))
+        .child(text(f.name,t.foreground,10)).child(text(String(f.count),t.dim,9)))));
+  }
   const list=v_flex().id(`task-issues-list-${id}`).min_h(42).max_h(560).overflow_y_scroll().gap(2);
   const issueRow=issue=>{
-    const included=issue.week||issue.pinned,busy=busyKeys.has(issue.key);
-    const tone=issue.state==='blocked'?t.blocked:issue.state==='working'?t.ansi4||t.accent:issue.state==='review'?t.accent:t.dim;
-    const label=busy?'요청 중':issue.week?'이번 주':issue.pinned?'가져옴 ✓':'가져오기';
-    const enabled=model.canImport===true&&!busy&&!issue.week;
-    return h_flex().id(`task-issue-${id}-${issue.key}`).h(34).px(8).gap(8).items_center().rounded(6)
-      .opacity(issue.state==='done'?0.5:1)
+    const busy=busyKeys.has(issue.key),status=model.statusOf?.(issue.key)||null,hover=model.hoverKey===issue.key;
+    const included=scope!=='week'&&(issue.week||issue.pinned);
+    // Left dot and right label: Linear's real status (상태 미확인 until read); Herdr's own state only as a fallback colour.
+    const tone=statusTone(status,t);
+    // The right button acts on this computer's space list: [이번 주에] adds an issue, [빼기] takes back an added one.
+    // An issue of Linear's own week list has no button (it is in by Linear, not by this computer).
+    const label=busy?'요청 중':issue.pinned&&!issue.week?'빼기':!issue.week?'이번 주에':'';
+    const enabled=model.canImport===true&&!busy&&Boolean(label);
+    // An issue with new alerts gets a small count here; what changed is in the shared group above the tabs.
+    const alerts=model.alertsFor?.(issue.key)||null;
+    const row=h_flex().id(`task-issue-${id}-${issue.key}`).h(34).px(8).gap(8).items_center().rounded(6)
+      .opacity(issue.state==='done'&&!alerts?0.5:1)
+      .when(Boolean(model.onDetail),row=>row.cursor_pointer().on_click(change(model.onDetail,issue.key)))
+      .when(Boolean(model.onHover),row=>row.on_hover((hovered,cx)=>model.onHover(hovered?issue.key:null,issue.key,cx)))
+      .when(hover,row=>row.bg(t.selected))
       .when(included,row=>row.bg((t.ansi6||t.accent).slice(0,7)+'0F'))
       .child(div().size(8).flex_none().rounded(4).bg(tone))
       .child(text(issue.key,t.muted,10).w(58).flex_none().font_bold().tooltip(issue.key))
+      .when(Boolean(alerts),row=>row.child(div().id(`task-issue-alerts-${id}-${issue.key}`).h(16).px(5).flex_none().rounded(8)
+        .bg(t.accent).text_color(t.accent_foreground||t.background).text_size(9).font_bold().flex().items_center()
+        .tooltip(`새 알림 ${alerts.unread}건`).child(`새 ${alerts.unread}`)))
       .child(text(issue.title,t.foreground,12).flex_1().tooltip(issue.title))
-      .when(issue.week,row=>row.child(text('이번 주',t.ansi4||t.accent,9).px(5).rounded(7).border(1).border_color((t.ansi4||t.accent).slice(0,7)+'55')))
-      .child(text(states[issue.state]||states.waiting,tone,9).flex_none())
-      .child(div().id(`task-issues-pull-${id}-${issue.key}`).h(24).px(9).rounded(12).border(1)
+      .when(scope!=='week'&&issue.week,row=>row.child(text('이번 주',t.ansi4||t.accent,9).px(5).rounded(7).border(1).border_color((t.ansi4||t.accent).slice(0,7)+'55')))
+      .child(statusChip(status,t,`task-issue-status-${id}-${issue.key}`))
+      // Shown only under the mouse (or while its request runs).
+      .when((hover||busy)&&Boolean(label),row=>row.child(div().id(`task-issues-pull-${id}-${issue.key}`).h(24).px(9).flex_none().rounded(12).border(1)
         .border_color(issue.pinned?(t.ansi6||t.accent).slice(0,7)+'55':t.border)
         .text_color(issue.pinned?t.ansi6||t.accent:t.muted).text_size(10).font_bold()
         .when(enabled,button=>button.cursor_pointer().on_click(change(model.onPull,issue.key,!issue.pinned)))
-        .when(issue.week,button=>button.opacity(0.55)).child(label));
+        .child(label)));
+    return row;
   };
-  if(scope==='milestone'){
+  if(scope==='milestone'&&model.milestones?.length)list.child(milestoneRows(model,t));
+  else if(scope==='milestone'){
     for(const group of groups){
       list.child(h_flex().id(`task-issues-group-${id}-${group.id}`).pt(10).pb(4).px(8).gap(8).items_center()
         .child(text(group.name,t.foreground,11).font_bold())
@@ -68,8 +107,14 @@ export function issuePopover(model,t){
         .child(text(group.progress||'',t.dim,10)));
       list.children(group.items.map(issueRow));
     }
-  }else list.children(rows.map(issueRow));
-  if(!(scope==='milestone'?groups.some(group=>group.items.length):rows.length)){
+  }else{
+    const shown=model.shownRows||rows;
+    list.children(shown.map(issueRow));
+    if(model.foldedCount>0&&(model.filter||'전체')==='전체')list.child(h_flex().id(`task-issues-folded-${id}`).h(26).px(8).items_center().cursor_pointer()
+      .on_click(change(model.onShowFolded,!model.showFolded))
+      .child(text(model.showFolded?`완료·취소 ${model.foldedCount}건 접기`:`완료·취소 ${model.foldedCount}건 보기`,t.dim,10)));
+  }
+  if(!(scope==='milestone'?(model.milestones?.length||groups.some(group=>group.items.length)):(model.shownRows||rows).length||model.foldedCount)){
     list.child(text(model.loading?'이슈를 불러오는 중':model.emptyLabel||'이 범위에 표시할 이슈가 없습니다',t.dim,11).py(12));
   }
   body.child(list);
@@ -78,6 +123,68 @@ export function issuePopover(model,t){
     .child(text(model.scopeNote||'이번 주와 직접 가져온 이슈가 공간에 표시됩니다',t.dim,10).flex_1());
   if(model.onExternal)footer.child(text(`${model.toolLabel||'도구'}에서 열기 ↗`,t.accent,10).font_bold()
     .cursor_pointer().on_click(change(model.onExternal)));
-  else footer.child(text('도구 링크 없음',t.dim,10).tooltip('연결 도구의 URL이 제공되지 않았습니다'));
+  // No project link given for this space: nothing to open, so nothing is shown (an issue still opens from its detail).
   return popover.content(body.child(footer));
+}
+
+// The shared "알림 온 이슈" group: in the issue search above its tabs, and alone in a peek
+// (the popover a new alert opens beside its card). `model.fresh` lights the alerts just arrived.
+export function alertedGroup(model,t){
+  // Issues with new alerts, the same in every tab (even when a tab's list lacks the issue).
+  // Opening a row (or [읽음]) confirms it in Linear; a pending mark is drawn dimmed until the
+  // collector reports back, a failure comes back unread with one error line.
+  const {id}=model,change=(callback,...args)=>(_event,cx)=>{cx.stop_propagation();callback?.(...args,cx);};
+  const alerted=model.alerted||[],pending=model.readPending||new Set(),done=model.doneKeys||new Set(),fresh=model.fresh||new Set();
+  if(!alerted.length)return null;
+  {
+    const readButton=(key,label,tip,action,enabled=true)=>div().id(key).h(20).px(7).flex_none().rounded(10).border(1)
+      .border_color(enabled?t.accent:t.border).text_size(9).font_bold().text_color(enabled?t.accent:t.dim).flex().items_center()
+      .when(enabled,e=>e.cursor_pointer().hover(s=>s.bg(t.hover||t.selected)).tooltip(tip).on_click(action)).child(label);
+    const unread=alerted.reduce((sum,entry)=>sum+entry.alerts.unread,0);
+    const waiting=alerted.every(entry=>entry.alerts.lines.every(item=>pending.has(item.id)));
+    const group=v_flex().id(`task-issues-alerted-${id}`).gap(4).p(6).rounded(8).bg(t.chrome||t.surface).border(1).border_color(t.border)
+      .child(h_flex().gap(6).items_center().px(2)
+        .child(text('알림 온 이슈',t.foreground,11).font_bold())
+        .child(text(`미확인 ${unread}`,t.accent,10))
+        .child(div().flex_1())
+        .child(model.onReadAll&&model.readable
+          ?readButton(`task-issues-read-all-${id}`,waiting?'처리 중':'모두 읽음','이 묶음의 알림을 Linear에서도 읽음으로 표시',change(model.onReadAll),!waiting)
+          :text('읽음은 Linear 기준',t.dim,9)));
+    for(const entry of alerted){
+      const newest=entry.alerts.lines[0]||{};
+      const issueAlerts=()=>model.issueTargets?.(entry.key)||entry.alerts.lines;
+      const line=(item,i)=>{
+        const busy=pending.has(item.id);
+        // A comment from a linked issue has no Linear notification: [확인] keeps it on this computer only.
+        const canRead=Boolean(model.onRead)&&(item.local||model.readable);
+        // Just arrived (an opened peek): lit until it folds into the chip.
+        return h_flex().id(`task-issues-alerted-line-${id}-${entry.key}-${i}`).gap(6).px(6).py(2).rounded(5).items_center()
+          .opacity(busy?0.45:1)
+          .when(fresh.has(item.id),e=>e.bg((t.accent||'#88aaff').slice(0,7)+'33').border(1).border_color(t.accent))
+          .when(Boolean(item.url&&model.onLink)&&!busy,e=>e.cursor_pointer().tooltip('누르면 이 댓글을 Linear에서 열고 읽음으로 표시합니다').hover(s=>s.bg(t.hover||t.selected))
+            .on_click((_event,cx)=>{cx.stop_propagation();model.onLink(item.url,cx,[item]);}))
+          .child(kindBadge(item,t,`task-issues-alerted-kind-${id}-${entry.key}-${i}`))
+          .child(text(item.text,t.muted,11).flex_1().tooltip(item.text))
+          .child(text(clock(item.at),t.dim,9).flex_none())
+          .when(canRead,e=>e.child(readButton(`task-issues-read-${id}-${entry.key}-${i}`,busy?'처리 중':item.local?'확인':'읽음',
+            item.local?'이 컴퓨터에서만 확인 표시 · Linear에는 쓰지 않음':'Linear에서 이 알림을 읽음으로 표시',change(model.onRead,[item]),!busy)));
+      };
+      const target=entry.alerts.lines.find(item=>item.url)?.url||'';
+      group.child(v_flex().id(`task-issues-alerted-${id}-${entry.key}`).gap(1).p(4).rounded(6).bg(t.selected)
+        .child(h_flex().id(`task-issues-alerted-head-${id}-${entry.key}`).gap(6).items_center().px(2)
+          .when(Boolean(target&&model.onLink),e=>e.cursor_pointer().tooltip('누르면 이 이슈(최근 댓글)를 Linear에서 열고 이 이슈의 알림을 읽음으로 표시합니다')
+            .on_click((_event,cx)=>{cx.stop_propagation();model.onLink(target,cx,issueAlerts());}))
+          .child(kindBadge(newest,t,`task-issues-alerted-headkind-${id}-${entry.key}`))
+          .child(text(entry.key,t.muted,10).flex_none().font_bold())
+          .child(text(entry.title,t.foreground,12).flex_1().tooltip(entry.title))
+          // Its work finished (the sidebar shows the issue done): marked, not read in Linear unless set.
+          .when(done.has(entry.key),e=>e.child(div().id(`task-issues-alerted-done-${id}-${entry.key}`).px(5).rounded(7).flex_none().border(1)
+            .border_color(t.border).text_size(9).text_color(t.muted).tooltip('이 이슈의 작업이 끝났습니다 · 알림은 Linear 기준으로 남아 있습니다').child('처리됨')))
+          .when(entry.alerts.unread>1,e=>e.child(text(`${entry.alerts.unread}건`,t.accent,9).flex_none())))
+        .children(entry.alerts.lines.map(line))
+        .when(entry.alerts.more>0,e=>e.child(text(`외 ${entry.alerts.more}건`,t.dim,10).px(8))));
+    }
+    if(model.readError)group.child(text(model.readError,t.blocked,10).px(4));
+    return group;
+  }
 }

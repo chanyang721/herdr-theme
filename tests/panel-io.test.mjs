@@ -35,7 +35,9 @@ async function fixture({home=`/panel-io-${serial}/app`,nativeJson=true}={}){
     globalThis[key]=runtime;
     let body=(await readFile(new URL(`../mods/sixfold-desk/${name}.js`,import.meta.url),'utf8')).replace(/^import .* from 'gpui-kit';\r?\n/m,'').replace(/^import .* from 'gpui-base';\r?\n/m,'')
       .replace(/import \{([^}]+)\} from 'herdr';/,`const {$1}=globalThis[${JSON.stringify(key)}];`)
-      .replace("'./panel-io.js'",JSON.stringify(ioUrl)).replace("'./ask-model.js'",JSON.stringify(new URL('../mods/sixfold-desk/ask-model.js',import.meta.url).href));
+      .replace("'./panel-io.js'",JSON.stringify(ioUrl)).replace("'./ask-model.js'",JSON.stringify(new URL('../mods/sixfold-desk/ask-model.js',import.meta.url).href))
+      .replace("'./arrival-store.js'",JSON.stringify(new URL('../mods/sixfold-desk/arrival-store.js',import.meta.url).href))
+      .replace("'./arrival-model.js'",JSON.stringify(new URL('../mods/sixfold-desk/arrival-model.js',import.meta.url).href));
     try{return await import('data:text/javascript;base64,'+Buffer.from(body).toString('base64'));}finally{delete globalThis[key];}
   };
   const wakeOnly=async()=>{await tick();for(const {cx,immediate} of contexts)for(const {task,callback} of immediate.splice(0))if(!task.cancelled)callback(cx);await tick();};
@@ -265,4 +267,17 @@ test('hidden subscription churn removes queued dead callbacks without losing a l
   }
   assert.equal(f.commands.length,before+50,'each new subscription lifetime can wake after its predecessor is released');
   receiver.flush();assert.equal(dead.length,0);assert.equal(rows.length,1);peer();
+});
+
+test('a receiver that never gets its command keeps one entry per callback, and the sidebar passes fixed callbacks',async()=>{
+  // A hidden or retired receiver never consumes FILE_CHANGED, so nothing flushes the queue.
+  const f=await fixture(),cx=f.context(),receiver=f.io.fileDelivery(cx),state=globalThis.__sixfoldFileDeliveries.get(cx);
+  const fixed=()=>{};
+  for(let i=0;i<1000;i++)receiver.enqueue(fixed,i);
+  assert.equal(state.queue.length,1);assert.equal(state.queue[0][1],999);
+  for(let i=0;i<10;i++)receiver.enqueue(()=>{},i);
+  assert.equal(state.queue.length,11,'a fresh arrow per call adds an entry each time');
+  receiver.flush();assert.equal(state.queue.length,0);
+  const main=await readFile(new URL('../mods/sixfold-desk/main.js',import.meta.url),'utf8');
+  assert.doesNotMatch(main,/fileReceiver\.enqueue\(\(\)=>/,'main.js must not enqueue a new arrow per call');
 });

@@ -28,13 +28,20 @@ export function issueScopeData(space,scope='week',query=''){
   return {rows,groups,scopeCounts:Object.fromEntries(Object.entries(sources).map(([key,value])=>[key,value.length]))};
 }
 
-export function issueCacheLabel(space,scope='week'){
+// '14:05 갱신' today, '11/9 14:05 갱신' another day (this computer's time zone); unreadable stays out.
+export function updatedAt(at,now=new Date()){
+  const d=new Date(at);if(!at||Number.isNaN(d.getTime()))return '';
+  const p=n=>String(n).padStart(2,'0'),time=`${p(d.getHours())}:${p(d.getMinutes())}`;
+  const today=d.getFullYear()===now.getFullYear()&&d.getMonth()===now.getMonth()&&d.getDate()===now.getDate();
+  return `${today?'':`${d.getMonth()+1}/${d.getDate()} `}${time} 갱신`;
+}
+export function issueCacheLabel(space,scope='week',now=new Date()){
   const tool=space.work?.tool==='linear'?'Linear':space.work?.tool==='jira'?'Jira':'업무 도구';
   const cache=space.issue_catalog?.cache,local=cache?.scopes?.[scope];
   if(!cache)return {label:`${tool} · 로컬 이슈 목록`,emptyLabel:'이 범위에 표시할 이슈가 없습니다'};
   const missing=local?.state==='missing',stale=local?local.state==='stale':cache.state==='stale';
   const state=missing?'미수집':stale?'이전 수집 결과':cache.state==='empty'?'저장된 이슈 없음':'저장된 이슈';
-  const at=local?.at||cache.at;
+  const at=updatedAt(local?.at||cache.at,now);
   return {label:`${tool} · ${state}${at?` · ${at}`:''}`,
     emptyLabel:missing?'이 범위의 이슈를 아직 수집하지 않았습니다':'이 범위에 표시할 이슈가 없습니다'};
 }

@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {makePanelMatrix,makePanelFixture,PANEL_IDS,eventSequence} from './panel-fixtures.mjs';
-import {cleanPanelFeed,MESSAGE_LEGS,MESSAGE_TIMING} from '../mods/sixfold-desk/panel-model.js';
+import {cleanPanelFeed,MESSAGE_TIMING,PANEL_TIMING,PANEL_LEGS} from '../mods/sixfold-desk/panel-model.js';
 
 function node(kind='div',value=null){
   const data={kind,value,nodes:[],calls:[]};let proxy;
@@ -25,7 +25,7 @@ async function renderer(motion=true,{nativeSpaces=[],nativePanes=[]}={}){
   const store=new Map([['sixfold.motion',motion]]),commands=[],paths=[];
   const path=(steps=[])=>new Proxy({},{get:(_target,key)=>key==='build'?()=>steps:(...args)=>{steps.push([key,...args]);return path(steps);}});
   globalThis.__panelView={div:()=>node(),svg:value=>node('svg',value),image:value=>node('image',value),h_flex:()=>node('row'),v_flex:()=>node('column'),
-    PathBuilder:{stroke:()=>path()},spaces:()=>nativeSpaces,panes:()=>nativePanes,settings:()=>({zoom:1}),shared:key=>store.get(key),setShared:(k,v)=>store.set(k,v),run:(...args)=>commands.push(args)};
+    PathBuilder:{stroke:()=>path()},spaces:()=>nativeSpaces,panes:()=>nativePanes,settings:()=>({zoom:globalThis.__panelZoom??1}),shared:key=>store.get(key),setShared:(k,v)=>store.set(k,v),run:(...args)=>commands.push(args)};
   globalThis.window={paint_path:(...args)=>{paths.push(args);return node('path',args[0]);}};
   let source=await readFile(new URL('../mods/sixfold-desk/panel-view.js',import.meta.url),'utf8');
   source=source.replace(/import \{([^}]+)\} from '(?:gpui-kit|gpui-base|herdr)';/g,'const {$1}=globalThis.__panelView;');
@@ -33,6 +33,8 @@ async function renderer(motion=true,{nativeSpaces=[],nativePanes=[]}={}){
   const details=(await readFile(new URL('../mods/sixfold-desk/task-row-details.js',import.meta.url),'utf8'))
     .replace(/import \{([^}]+)\} from 'gpui-kit';/,'const {$1}=globalThis.__panelView;');
   source=source.replace("'./task-row-details.js'",JSON.stringify(`data:text/javascript;base64,${Buffer.from(details).toString('base64')}#${serial}`));
+  const pixel=(await readFile(new URL('../mods/sixfold-desk/pixel.js',import.meta.url),'utf8')).replace(/import \{([^}]+)\} from 'gpui-kit';/,'const {$1}=globalThis.__panelView;');
+  source=source.replace("'./pixel.js'",JSON.stringify(`data:text/javascript;base64,${Buffer.from(pixel).toString('base64')}#${serial}`));
   const status=(await readFile(new URL('../mods/sixfold-desk/session-status.js',import.meta.url),'utf8'))
     .replace(/import \{([^}]+)\} from 'gpui-kit';/,'const {$1}=globalThis.__panelView;')
     .replace("'./collab-flow.js'",JSON.stringify(new URL('../mods/sixfold-desk/collab-flow.js',import.meta.url).href));
@@ -69,7 +71,7 @@ test('all 24 fixture combinations pass the actual view builder, with one-line ro
     for(const space of model.spaces){
       assert(byId(tree,`panel-space-${space.id}`));
       for(const agent of space.agents){
-        const row=byId(tree,`panel-agent-${agent.id}`);assert(row);assert.equal(call(row,'h')[1],28);
+        const row=byId(tree,`panel-agent-${agent.id}`);assert(row);assert.equal(call(row,'h')[1],24,'compact one-line row');
         assert(words(row).includes(agent.title));
       }
     }
@@ -89,7 +91,7 @@ test('message paths have a finite native transition and a stationary task title'
   const titles=view.panelState.feed.spaces.flatMap(s=>s.agents.map(a=>a.title));
   for(const title of titles){assert(words(before).includes(title));assert(words(after).includes(title));}
   const packet=all(after).find(n=>{const id=call(n,'id')?.[1];return id?.startsWith('panel-packet-')&&!id.startsWith('panel-packet-tail-');});
-  assert(packet);assert.equal(call(packet,'size')[1],8);
+  assert(packet);assert.equal(call(packet,'w')[1],3);assert.equal(call(packet,'h')[1],3);
   assert(packet.calls.some(c=>c[0]==='transition'&&c[1]==='top'));
   assert(packet.calls.some(c=>c[0]==='transition'&&c[1]==='left'));
 });
@@ -108,8 +110,8 @@ test('card row geometry includes borders, issue headings and the hidden-row rema
   r.renderPanelTracking(view,t,r.cx);const layout=r.panelLayout(view.panelState.feed,view.panelEvents);
   for(const card of layout.cards){
     for(const row of card.rows.filter(row=>row.kind==='agent')){
-      assert.equal(layout.anchors.get(row.agent.id).y,row.y+14);
-      assert(row.y>=card.top+r.PANEL_GEOMETRY.border+r.PANEL_GEOMETRY.header+r.PANEL_GEOMETRY.meta);assert(row.y+28<card.top+card.height);
+      assert.equal(layout.anchors.get(row.agent.id).y,row.y+r.PANEL_GEOMETRY.row/2);
+      assert(row.y>=card.top+r.PANEL_GEOMETRY.border+r.PANEL_GEOMETRY.header+r.PANEL_GEOMETRY.meta);assert(row.y+r.PANEL_GEOMETRY.row<card.top+card.height);
     }
   }
 });
@@ -186,15 +188,15 @@ test('header metrics share the exact memory endpoint and reserve nonoverlapping 
   assert.equal(call(partner,'h')[1],18);assert.equal(call(partner,'rounded')[1],9);
   assert(call(partner,'border'));assert(call(partner,'bg'));
   const metrics=r.panelHeaderMetrics(space,224);
-  assert.equal(metrics.header,34);assert.equal(metrics.meta,26);assert.equal(metrics.issue,18);
+  assert.equal(metrics.header,34);assert.equal(metrics.meta,20);assert.equal(metrics.issue,18);
   assert.equal(metrics.memoryWidth,32);
   assert.equal(metrics.memoryAnchorX,-(metrics.padding+metrics.border+metrics.countWidth+metrics.gap+metrics.memoryWidth/2));
   const layout=r.panelLayout(view.panelState.feed,view.panelEvents);
   const state={...view.panelEvents,packets:[{id:'memory-ping',from:space.agents[0].id,to:space.id,kind:'memory',phase:'ping'}]};
   const layer=r.panelFlowLayer(view.panelState.feed,layout,state,()=>t.accent,t,true,224);
   const ping=byId(layer,'panel-receiver-memory-ping');assert(ping);
-  assert.equal(call(ping,'left')[1],metrics.memoryAnchorX-12);assert.equal(call(ping,'w')[1],24);
-  assert.equal(call(ping,'h')[1],24);
+  assert.equal(call(ping,'left')[1],metrics.memoryAnchorX-7);assert.equal(call(ping,'w')[1],15);
+  assert.equal(call(ping,'h')[1],15);
 });
 
 test('summary counts exclude cleaned sessions and preserve observed pane status',async()=>{
@@ -239,25 +241,108 @@ test('explicit local collaboration has purple solid bracket, two square ends and
   assert.equal(byId(unrelated,`panel-local-partner-${first.id}`),undefined,'same computer alone never infers collaboration');
 });
 
-test('local message packets are a white head with two teal tail pieces on a curve; motion off omits the curve',async()=>{
+test('a local message rides the same pixel line, block and departure ring as a task event; motion off omits it',async()=>{
   const r=await renderer(true),view=viewFor(makePanelFixture()),feed=view.panelState.feed;
   r.renderPanelTracking(view,t,r.cx);const layout=r.panelLayout(feed,view.panelEvents),[a,b]=feed.spaces[0].agents;
-  const packet={id:'local-message',from:a.id,to:b.id,kind:'message',phase:'travel',elapsed:350};
-  const state={...view.panelEvents,packets:[packet]};
-  const tree=r.panelFlowLayer(feed,layout,state,()=>t.accent,t,true,224),head=byId(tree,'panel-packet-local-message');
-  assert(head);assert.equal(call(head,'bg')[1],'#E9FBFF');assert.equal(call(head,'size')[1],4);
-  assert.equal(head.calls.find(c=>c[0]==='transition'&&c[1]==='top')[2].easing,'ease-in-out');
-  for(const [index,delay,opacity] of [[1,40,0.75],[2,80,0.3]]){
-    const tail=byId(tree,`panel-packet-tail-local-message-${index}`);assert(tail);
-    assert.equal(call(tail,'bg')[1],'#79D1DC');assert.equal(call(tail,'opacity')[1],opacity);
-    assert.equal(tail.calls.find(c=>c[0]==='transition'&&c[1]==='top')[2].delay,delay);
+  const draw=(kind,phase,elapsed)=>{r.paths.length=0;
+    const tree=r.panelFlowLayer(feed,layout,{...view.panelEvents,packets:[{id:'p',kind,from:a.id,to:b.id,phase,elapsed}]},()=>t.accent,t,true,224);
+    return {tree,paths:all(byId(tree,'panel-route-p')).filter(n=>n.kind==='path').length};};
+  for(const elapsed of [0,PANEL_LEGS[0],PANEL_LEGS[1],PANEL_LEGS[2],PANEL_TIMING.packetMs-1]){
+    const phase=elapsed<PANEL_TIMING.startMs?'start':'travel';
+    const message=draw('message',phase,elapsed),task=draw('dispatch',phase,elapsed);
+    assert.equal(message.paths,0,'no vector stroke: the line is pixel blocks');assert.equal(task.paths,0);
+    const pixels=tree=>all(byId(tree,'panel-route-p')).filter(n=>!call(n,'id')).map(n=>n.calls);
+    assert.deepEqual(pixels(message.tree),pixels(task.tree),'the same pixel line');
+    for(const id of ['panel-packet-p','panel-sender-p']){
+      const m=byId(message.tree,id),k=byId(task.tree,id);assert(m,id);assert(k,id);
+      assert.deepEqual(m.calls,k.calls,`${id} at ${elapsed}ms matches the task-event packet`);
+    }
+    assert(!all(message.tree).some(n=>/^panel-packet-tail-/.test(call(n,'id')?.[1]||'')),'no tail');
+    assert(!all(message.tree).some(n=>call(n,'rounded')),'square pixels only');
   }
-  assert(!byId(tree,'panel-packet-tail-local-message-3'));assert(!byId(tree,'panel-sender-local-message'));
-  const arrival=byId(r.panelFlowLayer(feed,layout,{...state,packets:[{...packet,phase:'ping'}]},()=>t.accent,t,true,224),'panel-receiver-local-message');
-  assert.equal(call(arrival,'w')[1],14);assert.equal(call(arrival,'opacity')[1],0);
-  assert(arrival.calls.some(c=>c[0]==='transition'&&c[1]==='width'));
-  const still=r.panelFlowLayer(feed,layout,{...state,packets:[],connections:[packet]},()=>t.accent,t,false,224);
-  assert.equal(all(still).filter(n=>call(n,'transition')||call(n,'loop')).length,0);
+  const {tree}=draw('message','travel',PANEL_LEGS[1]+1),head=byId(tree,'panel-packet-p');
+  assert.equal(call(head,'w')[1],3);assert.equal(call(head,'h')[1],3);assert.equal(call(head,'bg')[1],'#79D1DC');assert.equal(head.nodes.length,0);
+  assert.equal(call(head,'left')[1]+1,12,'centred on the inner message lane');
+  assert.equal(head.calls.find(c=>c[0]==='transition'&&c[1]==='top')[2].duration,PANEL_LEGS[2]-PANEL_LEGS[1]);
+  const arrival=byId(draw('message','ping',PANEL_TIMING.packetMs).tree,'panel-receiver-p');
+  // A message lands with one small blink in its own colour, never the done mark.
+  assert.equal(call(arrival,'w')[1],3);assert.equal(call(arrival,'bg')[1],'#79D1DC');assert.equal(call(arrival,'border'),undefined);
+  assert.equal(call(arrival,'opacity')[1],0,'it fades once after landing');
+  const still=r.panelFlowLayer(feed,layout,{...view.panelEvents,packets:[],connections:[{id:'off',kind:'message',from:a.id,to:b.id}]},()=>t.accent,t,false,224);
+  assert(!byId(still,'panel-route-off'));assert.equal(all(still).filter(n=>call(n,'transition')||call(n,'loop')).length,0);
+});
+
+test('a task event done mark is easy to see (2px foreground ring held lit, second blink, core block), a message only blinks small in its colour, and only the line fades',async()=>{
+  const r=await renderer(true),view=viewFor(makePanelFixture()),feed=view.panelState.feed;
+  r.renderPanelTracking(view,t,r.cx);const layout=r.panelLayout(feed,view.panelEvents),[a,b]=feed.spaces[0].agents;
+  const draw=(kind,phase)=>r.panelFlowLayer(feed,layout,{...view.panelEvents,packets:[{id:'d',kind,from:a.id,to:b.id,phase,elapsed:PANEL_TIMING.packetMs}]},()=>t.accent,t,true,224);
+  const policy=(node,property)=>node.calls.find(c=>c[0]==='transition'&&c[1]===property)?.[2];
+  const landing=draw('message','ping'),blink=byId(landing,'panel-receiver-d');
+  assert.equal(call(blink,'w')[1],3);assert.equal(call(blink,'h')[1],3);assert.equal(call(blink,'bg')[1],'#79D1DC','the flow colour, not white');
+  assert(!byId(landing,'panel-receiver-d-again')&&!byId(landing,'panel-receiver-d-core'),'no second ring or core block for a message');
+  assert(!all(landing).some(n=>call(n,'border_color')?.[1]===t.foreground||call(n,'bg')?.[1]===t.foreground),'nothing in the foreground colour');
+  const fadeOut=policy(blink,'opacity');assert(fadeOut.delay+fadeOut.duration<=600,'short');
+  for(const kind of ['dispatch']){
+    const ping=draw(kind,'ping');
+    const ring=byId(ping,'panel-receiver-d'),again=byId(ping,'panel-receiver-d-again'),core=byId(ping,'panel-receiver-d-core');
+    assert(ring&&again&&core,`${kind}: ring, second ring and core`);
+    for(const node of [ring,again]){assert.equal(call(node,'border')[1],2);assert.equal(call(node,'border_color')[1],t.foreground);assert.equal(call(node,'w')[1],15);}
+    assert.equal(call(core,'bg')[1],t.foreground);assert.equal(call(core,'w')[1],5);
+    assert(policy(ring,'opacity').delay>=900,'held lit before it fades');
+    assert(policy(again,'width').delay>=250,'the second ring blinks after the first');
+    assert(PANEL_TIMING.pingMs+PANEL_TIMING.coolMs>=policy(ring,'opacity').delay+policy(ring,'opacity').duration,'the whole mark fits before the packet is removed');
+    }
+  for(const kind of ['message','dispatch']){
+    const fade=draw(kind,'fade');
+    assert.equal(call(byId(fade,'panel-route-d'),'opacity'),undefined,'the route itself is not dimmed');
+    assert.equal(call(byId(fade,'panel-line-d'),'opacity')[1],0.2,'only the line fades');
+    assert(!all(fade).some(n=>call(n,'rounded')),'square pixels only');
+  }
+  const L=hex=>{const c=[1,3,5].map(i=>parseInt(hex.slice(i,i+2),16)/255).map(x=>x<=0.03928?x/12.92:((x+0.055)/1.055)**2.4);return 0.2126*c[0]+0.7152*c[1]+0.0722*c[2];};
+  const ratio=(x,y)=>{const [hi,lo]=[L(x),L(y)].sort((p,q)=>q-p);return (hi+0.05)/(lo+0.05);};
+  for(const name of ['sixfold-night','sixfold-day']){
+    const theme=JSON.parse(await readFile(new URL(`../themes/${name}.json`,import.meta.url),'utf8'));
+    for(const surface of [theme.background,theme.colors.canvas,theme.colors.chrome,theme.colors.selected])
+      assert(ratio(theme.foreground,surface)>=4.5,`${name}: done mark ${theme.foreground} on ${surface}`);
+  }
+});
+
+test('a row an event arrives on gets a 2px foreground overlay that blinks twice without moving the row',async()=>{
+  const r=await renderer(false),view=viewFor(makePanelFixture()),space=view.panelState.feed.spaces[0],agent=space.agents[0];
+  const state={packets:[{id:'x',kind:'dispatch',to:agent.id,phase:'ping'}],spawning:new Set(),active:[]};
+  const row=r.agentRow(view,agent,space,null,state,'#79D1DC',t,true);
+  const overlay=byId(row,`panel-arrival-${agent.id}`);assert(overlay);
+  assert.equal(call(row,'border'),undefined,'the row border never changes, so nothing shifts');
+  assert.equal(call(overlay,'border')[1],2);assert.equal(call(overlay,'border_color')[1],t.foreground);
+  assert(call(overlay,'absolute'));assert.equal(call(overlay,'bg')[1],'#79D1DC33');
+  const blink=overlay.calls.find(c=>c[0]==='loop');assert.equal(blink?.[1],'opacity');assert(2*blink[2].period<=PANEL_TIMING.pingMs,'two blinks within the ping');
+  const still=r.agentRow(view,agent,space,null,state,'#79D1DC',t,false);
+  assert(byId(still,`panel-arrival-${agent.id}`));assert(!call(byId(still,`panel-arrival-${agent.id}`),'loop'),'motion off stays steady');
+  const quiet=r.agentRow(view,agent,space,null,{...state,packets:[]},'#79D1DC',t,true);
+  assert(!byId(quiet,`panel-arrival-${agent.id}`));
+  for(const motion of [true,false]){
+    const message=r.agentRow(view,agent,space,null,{...state,packets:[{id:'m',kind:'message',to:agent.id,phase:'ping'}],connections:[{id:'m',kind:'message',to:agent.id}]},'#79D1DC',t,motion);
+    assert(!byId(message,`panel-arrival-${agent.id}`),'a message arrival never gets the done highlight');
+    assert.equal(call(message,'border'),undefined);
+  }
+});
+
+test('pixel lines are whole pixels with a stepped corner, and stay whole at any zoom',async()=>{
+  for(const zoom of [1,1.25,2]){
+    const r=await renderer(true);globalThis.__panelZoom=zoom;
+    const u=1/zoom,line=r.pixelRoute(10.4,60.2,20,0,0,'#79D1DC'),blocks=line.nodes.map(n=>Object.fromEntries(['left','top','w','h'].map(k=>[k,call(n,k)[1]])));
+    for(const block of blocks)for(const value of Object.values(block))assert(Math.abs(value/u-Math.round(value/u))<1e-9,`${value} is a whole device pixel at zoom ${zoom}`);
+    assert(blocks.some(b=>b.w===u&&b.h===u),'a one-pixel corner step');
+    assert(blocks.every(b=>b.w===u||b.h===u),'every run is one pixel thick');
+  }
+  delete globalThis.__panelZoom;
+});
+
+test('a message travels as long as a task event, and no leg is a jump',()=>{
+  assert.deepEqual(MESSAGE_TIMING,{startMs:PANEL_TIMING.startMs,packetMs:PANEL_TIMING.packetMs,pingMs:PANEL_TIMING.pingMs,coolMs:PANEL_TIMING.coolMs});
+  assert(MESSAGE_TIMING.packetMs-MESSAGE_TIMING.startMs>=2000,'slow enough to follow');
+  const legs=[...PANEL_LEGS,PANEL_TIMING.packetMs];
+  for(let i=1;i<legs.length;i++)assert(legs[i]-legs[i-1]>=300,`leg ${i} is visible, not a teleport`);
 });
 
 test('task and local collaboration brackets occupy separate lanes when both are present',async()=>{
@@ -292,42 +377,35 @@ test('filtered remote messages ride the computer pipe lane and ping at the remot
  const packet={id:'remote-message',from:local.agents[0].id,to:'remote-agent',kind:'message',phase:'travel',elapsed:500};
  const tree=r.panelFlowLayer(feed,layout,{...view.panelEvents,packets:[packet]},()=>t.accent,t,true,224);
  assert(byId(tree,'panel-route-remote-message-pipe'));assert(!byId(tree,'panel-route-remote-remote-message'));
- const head=byId(tree,'panel-packet-remote-message');assert.equal(call(head,'left')[1]+2,40,'the packet runs in the computer pipe lane');
+ const head=byId(tree,'panel-packet-remote-message');assert.equal(call(head,'left')[1]+1,28,'the packet runs in the computer pipe lane');
+ assert.equal(call(head,'w')[1],3);assert(byId(tree,'panel-sender-remote-message'));
  const arrival=r.panelFlowLayer(feed,layout,{...view.panelEvents,packets:[{...packet,phase:'ping'}]},()=>t.accent,t,true,224);
- assert.equal(call(byId(arrival,'panel-receiver-remote-message'),'left')[1],-7);
- const route=byId(tree,'panel-route-remote-message');assert.equal(call(route,'right')[1],8);assert.equal(call(route,'w')[1],64);
+ assert.equal(call(byId(arrival,'panel-receiver-remote-message'),'left')[1],-1,'a 3x3 landing blink centred on the remote end');
+ const route=byId(tree,'panel-route-remote-message');assert.equal(call(route,'right')[1],8);assert.equal(call(route,'w')[1],40);
 });
 
 
-test('curved packet targets bow outward, stay in the gutter and reverse with send direction',async()=>{
+test('a message packet follows the pixel lane down or up with the send direction',async()=>{
  const r=await renderer(true),view=viewFor(makePanelFixture()),feed=view.panelState.feed;
  r.renderPanelTracking(view,t,r.cx);const layout=r.panelLayout(feed,view.panelEvents),[a,b]=feed.spaces[0].agents;
- const samples=(from,to)=>[0,40,240,440,640,840,1040,1240,1440].map(elapsed=>{
-  const packet={id:'arc',kind:'message',from,to,phase:elapsed?'travel':'start',elapsed};
+ const samples=(from,to)=>[0,PANEL_LEGS[0],PANEL_LEGS[1],PANEL_LEGS[2]].map(elapsed=>{
+  const packet={id:'arc',kind:'message',from,to,phase:elapsed<PANEL_TIMING.startMs?'start':'travel',elapsed};
   const tree=r.panelFlowLayer(feed,layout,{...view.panelEvents,packets:[packet]},()=>t.accent,t,true,224),head=byId(tree,'panel-packet-arc');
-  return {x:call(head,'left')[1]+2,y:call(head,'top')[1]+2};
+  return {x:call(head,'left')[1]+1,y:call(head,'top')[1]+1};
  });
  const down=samples(a.id,b.id),up=samples(b.id,a.id);
- assert(Math.max(...down.map(p=>p.x))>down[0].x+10);assert(down.every(p=>p.x>=0&&p.x<=24.001));
- assert(down[0].y<down.at(-1).y);assert(up[0].y>up.at(-1).y);
- assert(Math.abs(down[0].x-down.at(-1).x)<0.01);assert(Math.abs(up[0].x-up.at(-1).x)<0.01);
+ for(const points of [down,up]){
+  assert.equal(points[1].x,12);assert.equal(points[2].x,12);assert(points.every(p=>p.x>=0&&p.x<=16&&Number.isInteger(p.x)&&Number.isInteger(p.y)));
+  assert.equal(points[0].x,points[3].x);assert.equal(points[0].y,points[1].y);assert.equal(points[2].y,points[3].y);
+ }
+ assert(down[0].y<down[3].y);assert(up[0].y>up[3].y);
 });
 
-
-test('local messages paint a thin curve, bow inside24px and return to the receiver edge',async()=>{
- const r=await renderer(true),view=viewFor(makePanelFixture()),feed=view.panelState.feed;
- r.renderPanelTracking(view,t,r.cx);const layout=r.panelLayout(feed,view.panelEvents),[a,b]=feed.spaces[0].agents;
- const points=[0,MESSAGE_LEGS[0],MESSAGE_LEGS[2],MESSAGE_TIMING.packetMs].map(elapsed=>{
-  const packet={id:'line',kind:'message',from:a.id,to:b.id,phase:elapsed===0?'start':elapsed>=MESSAGE_TIMING.packetMs?'ping':'travel',elapsed};r.paths.length=0;
-  const tree=r.panelFlowLayer(feed,layout,{...view.panelEvents,packets:[packet]},()=>t.accent,t,true,340),head=byId(tree,'panel-packet-line');
-  assert.deepEqual(r.paths.map(args=>args[1]).filter(tint=>tint.startsWith('#79D1DC')),['#79D1DC99'],'one translucent path, no wide glow layers');
-  assert(r.paths[0][0].filter(step=>step[0]==='cubic_bezier_to').length>1,'curve is continuous native cubic segments');
-  return {x:call(head,'left')[1]+2,y:call(head,'top')[1]+2};
- });
- assert(points[1].x>0&&points[1].x<=24);assert(Math.abs(points[2].x)<.01);assert(points[2].y>points[0].y);
- assert(points.every(p=>p.x>=0&&p.x<=24.001));
- const still=r.panelFlowLayer(feed,layout,{...view.panelEvents,packets:[],connections:[{id:'off',kind:'message',from:a.id,to:b.id}]},()=>t.accent,t,false,340);
- assert(!byId(still,'panel-route-off'));assert(!byId(still,'panel-packet-off'));
+test('event pixels keep at least 3:1 contrast on dark and light backgrounds',()=>{
+ const lum=hex=>{const c=[1,3,5].map(i=>parseInt(hex.slice(i,i+2),16)/255).map(v=>v<=.03928?v/12.92:((v+.055)/1.055)**2.4);return .2126*c[0]+.7152*c[1]+.0722*c[2];};
+ const ratio=(a,b)=>{const [x,y]=[lum(a),lum(b)].sort((p,q)=>q-p);return (x+.05)/(y+.05);};
+ for(const [tone,background] of [['#79D1DC',t.background],['#79D1DC',t.chrome],['#006C77','#FFFFFF'],['#006C77','#F3F4F6']])
+  assert(ratio(tone,background)>=3,`${tone} on ${background}: ${ratio(tone,background).toFixed(2)}`);
 });
 
 test('retired collaboration evidence removes the bracket and both partner chips without changing rows',async()=>{
@@ -346,7 +424,7 @@ test('hosted message line uses the external gutter without narrowing the origina
  const state={...view.panelEvents,packets:[{id:'external',kind:'message',from:a.id,to:b.id,phase:'travel',elapsed:500}]};
  const tree=r.panelFlowLayer(feed,layout,state,()=>t.accent,t,true,224,161),head=byId(tree,'panel-packet-external');
  const route=byId(tree,'panel-route-external');assert.equal(call(route,'w')[1],153);
- const x=432-161+call(head,'left')[1]+2;assert(x>=432-161&&x<432,'the packet stays in the gap beside the card, never in the CLI');
+ const x=432-161+call(head,'left')[1]+1;assert(x>=432-161&&x<432,'the packet stays in the gap beside the card, never in the CLI');
 });
 
 test('an explicit remote share connects both computer headers and the shared card as one F topology',async()=>{
@@ -393,15 +471,19 @@ const stateRow=async(fields,{motion=false,now=Date.parse('2026-11-09T05:00:00Z')
  const state={packets:[],connections:[],spawning:new Set(),active:[]};
  return {r,view,space,agent,row:r.agentRow(view,agent,space,tag,state,t.accent,t,motion)};
 };
-const reasonOf=(row,agent)=>words(byId(row,`panel-reason-${agent.id}`)||{nodes:[]}).join('');
+// Compact rows (ROW 24): the reason lives in the row tooltip, never as a second line.
+const reasonOf=(row,agent)=>{
+ assert.equal(byId(row,`panel-reason-${agent.id}`),undefined,'no reason line');
+ return (call(row,'tooltip')?.[1]||'').split('\n').filter(line=>line!==agent.title&&line!==agent.tooltip_addr).find(line=>line.includes(' · '))||'';
+};
 
-test('a seven-state row draws the packaged glyph and its reason with the live countdown',async()=>{
+test('a seven-state row draws the packaged glyph and keeps its live countdown reason in the tooltip',async()=>{
  const cleanup={idle_since:'2026-11-09T04:42:00Z',limit_s:1800,due_at:'2026-11-09T05:12:00Z'};
  const {agent,row}=await stateRow({status:'idle',state:'cleanup_wait',cleanup},{motion:true});
  const glyph=all(byId(row,`panel-status-${agent.id}`)).find(n=>n.kind==='image');
  assert.equal(glyph.value,'mods/sixfold-desk/icons/status/cleanup_wait-12-dark.webp');
  assert.equal(reasonOf(row,agent),'정리 대기 · 30분 쉬면 닫힘 (남은 12분)');
- assert.equal(call(row,'h')[1],28+14);
+ assert.equal(call(row,'h')[1],24,'a reason never grows a compact row');
  assert(call(row,'tooltip')[1].includes('남은 12분'));
 });
 
@@ -427,21 +509,21 @@ test('an event tag freezes the glyph, and an expired timer says the next cleanup
 test('a feed without state keeps the four-status mark, one-line height and no reason line',async()=>{
  const {agent,row}=await stateRow({status:'working'});
  assert(words(byId(row,`panel-status-${agent.id}`)).includes('●'));assert(!all(row).some(n=>n.kind==='image'));
- assert.equal(byId(row,`panel-reason-${agent.id}`),undefined);assert.equal(call(row,'h')[1],28);
+ assert.equal(byId(row,`panel-reason-${agent.id}`),undefined);assert.equal(call(row,'h')[1],24);
  const unknown=await stateRow({status:'working',state:'paused',cleanup:{idle_since:'x',limit_s:-1,due_at:'y'}});
  assert(words(byId(unknown.row,`panel-status-${unknown.agent.id}`)).includes('●'));assert.equal(byId(unknown.row,`panel-reason-${unknown.agent.id}`),undefined);
  const kept=await stateRow({status:'working',keep_reason:'하위 작업 2개 있어 유지'});
  assert.equal(reasonOf(kept.row,kept.agent),'작업 중 · 하위 작업 2개 있어 유지','a keep reason without state uses the four-status label');
 });
 
-test('two-line rows grow the card while routes stay on the title line, and the countdown wakes once a minute',async()=>{
+test('a reason never grows the compact card, routes stay centred on the row, and the countdown wakes once a minute',async()=>{
  const now=Date.now(),r=await renderer(false),raw=makePanelFixture();
  Object.assign(raw.spaces[0].agents[0],{status:'idle',state:'cleanup_wait',cleanup:{idle_since:new Date(now-60000).toISOString(),limit_s:1800,due_at:new Date(now+90500).toISOString()}});
  const view=viewFor(raw),plain=viewFor(makePanelFixture());
  const layout=r.panelLayout(view.panelState.feed,{tags:new Map()}),before=r.panelLayout(plain.panelState.feed,{tags:new Map()});
  const id=view.panelState.feed.spaces[0].agents[0].id,row=layout.cards[0].rows.find(item=>item.agent?.id===id);
- assert.equal(layout.cards[0].height,before.cards[0].height+14);
- assert.equal(layout.anchors.get(id).y,row.y+14);
+ assert.equal(layout.cards[0].height,before.cards[0].height);
+ assert.equal(layout.anchors.get(id).y,row.y+r.PANEL_GEOMETRY.row/2);
  r.renderPanelTracking(view,t,r.cx);
  const wake=r.timers.at(-1).ms;assert(wake>25000&&wake<=30600,`wakes at the next minute boundary, got ${wake}`);
 });

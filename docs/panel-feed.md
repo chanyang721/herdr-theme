@@ -31,16 +31,17 @@ Agent stages 1–4 fill the distribution, work, review and acceptance slots. Sta
 is separate: a pane can still be working after its last task reached stage 5.
 A changed stage or a new
 event replaces that bar with a label for about 2.5 seconds without moving the task
-title. Initial history is not replayed. A local message has a white head, two
-teal tail pieces and a thin right-side curve; it travels for 1.5 seconds and
-finishes with a square arrival ping. All lines occupy the same 72px gutter:
-message curves extend at most 24px beyond the card, stationary purple links
+title. Initial history is not replayed. A message and a task event share one pixel-art
+packet: a 1px right-angle line with stepped one-pixel corners and a 3x3 block
+without tail or glow, on whole device pixels at any zoom. Both travel for 2.4
+seconds and open a square 1px ring at departure and arrival. All lines occupy the same 72px gutter:
+message lanes run 20px and 24px beyond the card, stationary purple links
 use 30px, and remote-computer pipes start at 40px with 8px spacing. Explicit
 row endpoints stay on their rows; space-wide endpoints use their headers.
 Two message lanes stagger bursts, with at most eight scheduled routes. Native
 interpolation uses finite targets rather than a JavaScript frame loop. A remote
 packet follows its computer-coloured dashed pipe, and its receiving row briefly
-shows that computer's name. Motion off omits message curves and packets while
+shows that computer's name. Motion off omits message lines and packets while
 counts and receiving-row information still update. Unknown endpoints are skipped.
 Optional `animate: false` retains supplied labels but suppresses packets and
 connections. Initial history and hidden-window backlogs are never replayed. Dashed routes identify

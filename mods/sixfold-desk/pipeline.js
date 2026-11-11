@@ -1,28 +1,43 @@
-import { div, PathBuilder } from 'gpui-kit';
+import { div } from 'gpui-kit';
+import { PACKET_PIXELS, snap, centred, pixelBlock, pixelRoute, pixelLanding } from './pixel.js';
 
-// A moving clipping window reveals a bright segment of a fixed Bezier curve.
-// Its child moves by the inverse offset, keeping the curve aligned. Both are
-// native transitions: there is no per-frame JavaScript or permanent send loop.
-export function pipeline({id, width, from, to, color, phase, packets, motion, inset=0}) {
+// The three legs of one send, as fractions of its travel: out to the lane, down
+// the lane, back in to the receiving row.
+export const PIPE_LEG_SHARE = Object.freeze([0.16, 0.68, 0.16]);
+export function pipeLegs(travelMs) {
+  const out = Math.round(travelMs * PIPE_LEG_SHARE[0]), back = Math.round(travelMs * PIPE_LEG_SHARE[2]);
+  return { out, down: travelMs - out - back, back };
+}
+
+// One send between two workspace rows, in the task panel's pixel grammar
+// (2026-11-10): a 1px right-angle pipe with stepped corners out to the lane and
+// a 3x3 block that leaves the sending row, runs down the lane and enters the
+// receiving row, where it blinks once in its own colour (pixel.js pixelLanding).
+// The three legs are three nested elements, each with one native transition: the outer one moves out, the
+// middle one moves along after it, the inner one moves back in last. All three
+// targets change at the caller's single `travel` phase change, so the corners
+// need no extra timer and no per-frame JavaScript.
+export function pipeline({id, width, from, to, color, phase, packets, motion, inset=0, unit=1}) {
+  const u = unit;
   const top = Math.min(from, to);
   const height = Math.abs(to-from);
-  const start = from-top, end = to-top;
-  const path = stroke => PathBuilder.stroke(stroke).move_to(inset,start)
-    .cubic_bezier_to(inset,end,inset+width*4/3,start,inset+width*4/3,end).build();
+  const start = snap(from-top, u), end = snap(to-top, u), lane = snap(inset+width, u), x0 = snap(inset, u);
   const history = phase === 'history';
-  const shape = (stroke, tint) => window.paint_path(path(stroke),tint).absolute().left(0).top(0).w(inset+width+4).h(height+4);
+  const side = PACKET_PIXELS*u, offset = centred(PACKET_PIXELS, u), reach = lane - x0;
+  // Only the pipe dims after arrival; the landing blink keeps full contrast.
   return div().id(`sf-route-${id}`).absolute().top(top).w(inset+width+4).h(height+4)
-    .opacity(history ? 0.22 : phase==='arrived' ? 0.5 : 0.95).when(motion,el=>el.transition('opacity',350))
-    .child(shape(1,color))
-    .child(div().absolute().left(inset-3).top(end-3).size(6).rounded(1).bg(color))
-    .when(!history, el=>el.children((packets??[{id,phase}]).map((packet,index)=>{
-      const position=packet.phase==='start'&&motion?start:end;
-      const duration={duration:packet.travelMs??1600,delay:index*120,easing:'ease-in-out'};
-      const band=42+(index%3)*8;
-      return div().id(`sf-pipeline-window-${packet.id}`).absolute().left(-4).top(position-band/2).w(inset+width+12).h(band).overflow_hidden()
-        .when(motion,el=>el.transition('top',duration))
-        .child(div().id(`sf-pipeline-path-${packet.id}`).absolute().left(4).top(band/2-position).w(inset+width+4).h(height+4)
-          .when(motion,el=>el.transition('top',duration))
-          .child(shape(6+index%2,color)));
+    .child(pixelRoute(start, end, lane, x0, x0, color, u, `sf-pipe-${id}`)
+      .opacity(history ? 0.22 : phase==='arrived' ? 0.5 : 0.95).when(motion,el=>el.transition('opacity',350)))
+    .when(!history&&motion, el=>el.children((packets??[{id,phase,travelMs:1600}]).flatMap(packet=>{
+      const moving = packet.phase !== 'start', legs = pipeLegs(packet.travelMs ?? 1600);
+      const block = pixelBlock(moving ? -reach : 0, 0, side, side, color, `sf-pipeline-packet-${packet.id}`)
+        .opacity(packet.phase==='arrived'?0:1)
+        .transition('left',{duration:legs.back,delay:legs.out+legs.down,easing:'ease-out'})
+        .transition('opacity',{duration:120,easing:'ease-out'});
+      const along = div().id(`sf-pipeline-along-${packet.id}`).absolute().left(0).top((moving?end:start)-offset)
+        .transition('top',{duration:legs.down,delay:legs.out,easing:'ease-in-out'}).child(block);
+      const out = div().id(`sf-pipeline-out-${packet.id}`).absolute().top(0).left(x0-offset+(moving?reach:0))
+        .transition('left',{duration:legs.out,easing:'ease-in'}).child(along);
+      return [out, pixelLanding(`sf-pipeline-receiver-${packet.id}`, x0, end, packet.phase==='arrived', color, u)];
     })));
 }

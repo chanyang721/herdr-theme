@@ -12,14 +12,17 @@ import { machineCounts, projectGroups, liveLinks, linkPalette, projectName, trac
 import { groupColors, groupKey, paletteMode, breathPeriod, lastGroupSend, cometPlan } from './collab-flow.js';
 import { breathingBorder, borderComet } from './collab-flow-view.js';
 import { workflowNodes, delegationEvents, workflowStatus, sessionChildren, activeWorkflow } from './workflow.js';
-import { watchDocs, currentDocs, docsSection, prepareDocsInput } from './docs.js';
+import { watchDocs, currentDocs } from './docs.js';
+import { docsFinder, docsFinderSignature, setDocsFinderOpen, docsGroup } from './docs-finder.js';
 import { watchAlerts, alertSection, visibleAlerts } from './alerts.js';
-import { workspaceAlertsRow, hasWorkspaceAlerts, openInbox } from './alert-inbox.js';
+import { workspaceAlertsRow, hasWorkspaceAlerts, openInbox, cardAlertCounts, slackAlertsChip, alertsOnMetaLine } from './alert-inbox.js';
+import { startAlertArrivals, alertArrivalLayer, alertCardSignature } from './alert-arrivals.js';
 import { panePet } from './pets.js';
 import { paneUsage } from './session-usage.js';
 import { paneMeta, paneMetaChip, showPaneIndex, showTitle } from './pane-meta.js';
+import { paneWork, paneWorkChip } from './pane-work.js';
 import { watchBadges, workspaceBadges } from './badges.js';
-import { watchAsks, askSection, hasAsks } from './asks.js';
+import { watchAsks, askSection, hasAsks, paneAskButton, askPopup } from './asks.js';
 import { askFor } from './ask-model.js';
 import { watchReports, reportsSection } from './session-reports.js';
 import {reconcilePanelFeed,panelSpacePartners} from './panel-model.js';
@@ -30,6 +33,7 @@ import {createRetainedPanel} from './panel-retained.js';
 import {taskComputerAnchors,taskComputerRecord} from './panel-host.js';
 import {subscribeJsonFile,readJsonSnapshot,fileDelivery,FILE_CHANGED_COMMAND} from './panel-io.js';
 import {watchSidebarFiles} from './sidebar-files.js';
+import {orderSpaceCards,spaceBadges,lineBadges,metaBadges} from './sidebar-meta.js';
 import {watchMic,paneMic,paneMicChip,MIC_KEY} from './mic.js';
 import {subscribeLiveEvents} from './live-events.js';
 import {createRetainedCards} from './retained-cards.js';
@@ -56,6 +60,12 @@ const invokeHelper = (configured, command, args=[]) => {
   return exec(program,argv);
 };
 
+// cx.spawn can throw before its callback runs; that callback's finally then never
+// releases the busy flag and every later tick of the job is skipped. Release it here.
+export function spawnOrRelease(cx, release, task) {
+  try { cx.spawn(task); return true; }
+  catch { release(); return false; }
+}
 const marks = { blocked: '!', done: '✓', working: '●', idle: '○' };
 // One slow pass of the dot along a link pipe while computers work together.
 const LINK_FLOW_MS = 4000;
@@ -64,10 +74,25 @@ const LINK_PULSE = 5;   // the slow "working together" pulse
 const SEND_PULSE = 8;   // one send between computers: longer than the idle pulse
 // Bound the three finite host timers per packet, preserving the installed limit.
 const MAX_ACTIVE_FLOWS = 64;
+// Sends leave one at a time in the order they were made (2026-11-10: a refresh
+// that found several sends started them all at once). The next one waits for the
+// real gap between their timestamps, at least FLOW_GAP_MS and at most
+// FLOW_REAL_GAP_MS. A queue longer than FLOW_CATCH_UP shortens the gap to catch up,
+// and only the newest FLOW_BACKLOG wait; older ones are skipped and counted.
+const FLOW_GAP_MS = 320, FLOW_REAL_GAP_MS = 1200, FLOW_MIN_GAP_MS = 90;
+const FLOW_CATCH_UP = 4, FLOW_BACKLOG = 12, FLOW_TRAVEL_MS = 1600;
+// Sends made while the sidebar was hidden: on return, at most this many, this recent.
+const FLOW_RESUME = 3, FLOW_RESUME_MS = 60000;
+const flowOrder = (a, b) => (Number.isSafeInteger(a.seq) && Number.isSafeInteger(b.seq) && a.seq !== b.seq ? a.seq - b.seq : 0) || (a.at ?? 0) - (b.at ?? 0);
+function departureGap(event, next, waiting) {
+  if (waiting > FLOW_CATCH_UP) return Math.max(FLOW_MIN_GAP_MS, Math.round(FLOW_GAP_MS * FLOW_CATCH_UP / waiting));
+  const real = Number.isFinite(next?.at) && Number.isFinite(event?.at) ? next.at - event.at : 0;
+  return Math.min(FLOW_REAL_GAP_MS, Math.max(FLOW_GAP_MS, real));
+}
 // Right margin kept beside the computer and workspace lists alike: message curves
 // and computer links draw in it, so both lists end on the same line. It stays the
 // same at every sidebar width and equals the task panel's PANEL_FLOW.gutter.
-const LINK_MARGIN = 72;
+const LINK_MARGIN = 48;
 // Computer rows match the workspace header rows now that they hold one status line.
 const COMPUTER_ROW = 36;
 
@@ -111,9 +136,15 @@ export default class SixfoldDesk extends View {
     if (props()?.role !== 'sidebar') return;
     const fileReceiver=fileDelivery(cx);
     this.sidebarVisible=typeof window!=='function'||window()?.visible!==false;
-    this.invalidateSidebar=()=>fileReceiver.enqueue(()=>cx.notify());
-    this.refreshPanelPreferences=()=>fileReceiver.enqueue(()=>this.panelRetained?.preferences());
-    this.refreshPanelNavigation=()=>fileReceiver.enqueue(()=>this.panelRetained?.navigation());
+    // The receiver keeps one entry per callback until a FILE_CHANGED command flushes it, and a
+    // hidden or retired receiver may never get that command. A fresh arrow per call would add an
+    // entry every time; these fixed callbacks keep at most one pending entry each.
+    const notifySidebar=()=>cx.notify();
+    const panelPreferences=()=>this.panelRetained?.preferences();
+    const panelNavigation=()=>this.panelRetained?.navigation();
+    this.invalidateSidebar=()=>fileReceiver.enqueue(notifySidebar);
+    this.refreshPanelPreferences=()=>fileReceiver.enqueue(panelPreferences);
+    this.refreshPanelNavigation=()=>fileReceiver.enqueue(panelNavigation);
     this.classicCards=createRetainedCards(cx);
     this.panelState={feed:null,status:'missing'};
     this.panelEvents=null;
@@ -122,12 +153,15 @@ export default class SixfoldDesk extends View {
     this.panelRetained=typeof cx.new==='function'?createRetainedPanel(cx,{macTitlebar:window()?.platform==='macos',embedded:true,
       onHostChange:()=>this.invalidateSidebar(),
       schedule:fn=>fileReceiver.enqueue(fn),
+      // Counts on the meta line only when it carries the alerts; otherwise the alerts row has them (never both).
+      cardAlerts:(space,motion)=>alertsOnMetaLine(space,space.name)?cardAlertCounts(space.name,motion):null,slackAlerts:slackAlertsChip,
+      cardBadges:metaBadges(this),
       onIssueRequest:(space,key,desired)=>{
         const serial=globalThis.__sixfoldIssueRequestSerial=(globalThis.__sixfoldIssueRequestSerial||0)+1;
         const id=`request-${Date.now().toString(36)}-${serial.toString(36)}-${Math.random().toString(36).slice(2,14)}`;
         return saveIssueRequest(issueRequest(this.panelFeedPath,space,key,desired,id),writeTextFile);
       },
-      onClassic:()=>{this.panelTrackingActive=false;this.panelRetained?.setEnabled(false);this.syncCardActivity?.();this.startLiveMessages?.();this.refreshLegacy?.(cx);this.refreshAlerts?.(cx);this.refreshAsks?.(cx);},onDispose:()=>{for(const stop of this.fileSubscriptions||[])stop();this.stopAsks?.();this.stopReports?.();this.classicCards?.dispose();}}):null;
+      onClassic:()=>{this.panelTrackingActive=false;this.panelRetained?.setEnabled(false);this.syncCardActivity?.();this.startLiveMessages?.();this.refreshLegacy?.(cx);this.refreshAlerts?.(cx);this.refreshLinear?.(cx);this.refreshAsks?.(cx);},onDispose:()=>{for(const stop of this.fileSubscriptions||[])stop();this.stopAsks?.();this.stopReports?.();this.classicCards?.dispose();}}):null;
     this.fileSubscriptions=[];
     const receiveTaskFeed=createTaskFeedSource(snapshot=>{
       this.panelFeedPath=`${appHome()}/${TASK_FEED_FILE}`;
@@ -152,15 +186,16 @@ export default class SixfoldDesk extends View {
       this.startLiveMessages?.();
       this.panelRetained?.setEnabled(this.panelTrackingActive);
       this.panelRetained?.preferences();
+      this.panelRetained?.alertsChanged?.();   // shared workspace badges sit on task meta lines
     }));
     this.fileSubscriptions.push(subscribeJsonFile(cx,`${appHome()}/settings.json`,snapshot=>{
       if(snapshot.status==='ready')this.panelRetained?.preferences();
     }));
     this.projectDocs=null;
-    this.docsSpaces=new Set();this.docsHeights={};
     watchDocs(this,cx);
     this.alerts = [];
     watchAlerts(this, cx);
+    startAlertArrivals(this, cx);   // Linear feed + new alerts folding into their card
     watchBadges(this, cx);
     watchAsks(this, cx);
     watchReports(this, cx);
@@ -174,7 +209,7 @@ export default class SixfoldDesk extends View {
     const refresh = cx => {
       if (this.refreshBusy) return;
       this.refreshBusy = true;
-      cx.spawn(async cx => {
+      spawnOrRelease(cx, () => { this.refreshBusy = false; }, async cx => {
         try {
           const file=this.sidebarFiles||{};
           const events=typeof herdrNative.messageEvents==='function'?(this.nativeMessages||[]):file.messages?.events||[];
@@ -194,11 +229,16 @@ export default class SixfoldDesk extends View {
           this.workflowNodes = workflowNodes(workflow.nodes,[...addresses]);
           this.workflowEvents = delegationEvents(workflow.events,this.workflowNodes);
           this.workflowNodes.forEach(node=>addresses.add(node.id));
-          const delegations = freshMessages(this.previousDelegations,this.workflowEvents);
+          // After the sidebar was hidden, compare with the watermark it left
+          // and replay only the few most recent sends, in order.
+          const resuming=this.previousEvents===null&&Boolean(this.resumeEvents);
+          const delegations = freshMessages(this.previousDelegations??this.resumeDelegations??null,this.workflowEvents);
+          const sends = freshMessages(this.previousEvents??this.resumeEvents??null, events).filter(event => addresses.has(event.source) && addresses.has(event.target));
           // Active rows already show by default; new events must not open history.
-          this.pendingFlows.push(...delegations);
+          const fresh=[...delegations,...sends];
+          this.pendingFlows.push(...(resuming?fresh.filter(event=>event.at>=Date.now()-FLOW_RESUME_MS).sort(flowOrder).slice(-FLOW_RESUME):fresh));
+          this.resumeEvents=null;this.resumeDelegations=null;
           this.previousDelegations = this.workflowEvents;
-          this.pendingFlows.push(...freshMessages(this.previousEvents, events).filter(event => addresses.has(event.source) && addresses.has(event.target)));
           this.previousEvents = events;
           this.messageEvents = events;
           this.routeScript = config?.command || config?.script;
@@ -262,8 +302,10 @@ export default class SixfoldDesk extends View {
     let computersBusy=false, computersAt=0;
     cx.timer.every(1000,cx=>{
       if(!this.computers?.tailscale || computersBusy || Date.now()-computersAt<15000)return;
+      const lastComputers=computersAt;
       computersBusy=true;computersAt=Date.now();
-      cx.spawn(async cx=>{
+      // A rejected spawn is not a poll: the next tick may try again.
+      spawnOrRelease(cx,()=>{computersBusy=false;computersAt=lastComputers;},async cx=>{
         try {
           const result=await exec(native(),['collect_computers']);
           if(result.code!==0)throw Error('status unavailable');
@@ -282,7 +324,7 @@ export default class SixfoldDesk extends View {
     cx.timer.every(1000,cx=>{
       if(this.sidebarVisible===false||!this.messageEvents?.length||readBusy)return;
       readBusy=true;
-      cx.spawn(async cx=>{
+      spawnOrRelease(cx,()=>{readBusy=false;},async cx=>{
         try{
           const path=`${appHome()}/data/sixfold/messages-read.json`;
           const old=await readTextFile(path).catch(()=>null);
@@ -300,7 +342,7 @@ export default class SixfoldDesk extends View {
     cx.timer.every(2000, cx => {
       if (this.routeBusy || !this.routeScript || !this.queuedRoutes.some(item=>!item.hold)) return;
       this.routeBusy = true;
-      cx.spawn(async cx => {
+      spawnOrRelease(cx, () => { this.routeBusy = false; }, async cx => {
         try { await invokeHelper(this.routeScript,'route',['--drain']); }
         finally { this.routeBusy = false; }
       });
@@ -309,7 +351,7 @@ export default class SixfoldDesk extends View {
     cx.timer.every(2000, cx => {
       if (this.collaborationBusy || !this.collaborationScript) return;
       this.collaborationBusy = true;
-      cx.spawn(async cx => {
+      spawnOrRelease(cx, () => { this.collaborationBusy = false; }, async cx => {
         try { await invokeHelper(this.collaborationScript,'collaborate',['drain']); }
         catch { /* The durable lease prevents blind retry after ambiguous delivery. */ }
         finally { this.collaborationBusy = false; }
@@ -323,7 +365,7 @@ export default class SixfoldDesk extends View {
       if(!config?.script&&!config?.command)return;
       if(voiceBusy)return;
       voiceBusy=true;
-      cx.spawn(async cx=>{
+      spawnOrRelease(cx,()=>{voiceBusy=false;},async cx=>{
         try {
           if(!config?.script && !config?.command)return;
           const f=focused(), facts=terminals(), current=facts.find(x=>x.address===f?.terminal);
@@ -337,10 +379,13 @@ export default class SixfoldDesk extends View {
           await writeTextFile(path,JSON.stringify(state),old);
           const key=JSON.stringify([state.active,state.terminal,state.source]);
           if(key!==voiceKey && !voiceActionBusy){
+            const lastKey=voiceKey;
             voiceKey=key;voiceActionBusy=true;
             // Keep publishing focus while a voice connection starts. The helper
             // rechecks that heartbeat before sending any microphone controls.
-            cx.spawn(async cx=>{
+            // A spawn rejected before the action starts must not consume the focus
+            // change; once the helper has been tried, the key stays consumed.
+            spawnOrRelease(cx,()=>{voiceActionBusy=false;voiceKey=lastKey;},async cx=>{
               try {
                 if (Array.isArray(config.command)) await invokeHelper(config.command,'focus_queue',['--app-focus']);
                 else if(config.command) await exec(config.command,[...(config.args || ['focus_queue']),'--app-focus']);
@@ -359,14 +404,15 @@ export default class SixfoldDesk extends View {
           const visible=window()?.visible!==false;
           if(!visible){
             this.sidebarVisible=false;this.syncCardActivity?.();this.panelRetained?.setVisible(false);
-            this.stopLegacyMotion();this.stopLiveMessages?.();this.stopLiveMessages=null;
+            const resumeEvents=this.previousEvents,resumeDelegations=this.previousDelegations;
+            this.stopLegacyMotion();this.resumeEvents=resumeEvents;this.resumeDelegations=resumeDelegations;this.stopLiveMessages?.();this.stopLiveMessages=null;
             fileReceiver.flush();
           }else{
             // Drain the latest queued data while the retained panel is still
             // suspended, then resume from that watermark in this copy's scope.
             fileReceiver.flush();this.sidebarVisible=true;this.syncCardActivity?.();
             this.panelRetained?.setVisible(true);this.panelRetained?.preferences();
-            this.startLiveMessages?.();this.refreshLegacy?.(cx);this.refreshAlerts?.(cx);this.refreshAsks?.(cx);
+            this.startLiveMessages?.();this.refreshLegacy?.(cx);this.refreshAlerts?.(cx);this.refreshLinear?.(cx);this.refreshAsks?.(cx);
             cx.notify();
           }
           continue;
@@ -398,7 +444,8 @@ export default class SixfoldDesk extends View {
           if (a) run('agent.focus', { terminal: a.address });
         } else if (command === 'find-docs') {
           const space=spaces().find(s=>s.active);
-          if(space){prepareDocsInput(this,space);this.docsSpaces.add(space.id);cx.notify();cx.timer.after(30,()=>this.docsInputs?.[space.id]?.focus());}
+          // Opens that space's document finder (the popover on its header's docs button); again closes it.
+          if(space)setDocsFinderOpen(this,space,!this.docsFinders?.get(space.id)?.open,cx);
         } else if (command === 'language') {
           setShared('sixfold.language', this.lang() === 'ko' ? 'en' : 'ko');
         } else if (command.startsWith('inbox-')) {
@@ -415,6 +462,7 @@ export default class SixfoldDesk extends View {
     this.stopLegacyMotion();
     this.stopAsks?.();this.stopReports?.();
     this.classicCards?.dispose();
+    this.stopArrivals?.();
     this.linkFlowTimer?.cancel();this.linkWakeTimer?.cancel();this.cometTimer?.cancel();
     for(const stop of this.fileSubscriptions||[])stop();
     this.fileSubscriptions=[];this.stopLiveMessages?.();this.stopLiveMessages=null;this.panelRetained?.dispose();
@@ -422,8 +470,8 @@ export default class SixfoldDesk extends View {
 
   stopLegacyMotion(){
     for(const timer of this.flowTimers||[])try{timer.cancel();}catch{}
-    this.flowTimers?.clear();this.activeFlows=[];this.pendingFlows=[];
-    this.previousEvents=null;this.previousDelegations=null;
+    this.flowTimers?.clear();this.activeFlows=[];this.pendingFlows=[];this.departTimer=null;this.skippedFlows=0;
+    this.previousEvents=null;this.previousDelegations=null;this.resumeEvents=null;this.resumeDelegations=null;
     this.linkFlowTimer?.cancel();this.linkFlowTimer=null;
     this.linkWakeTimer?.cancel();this.linkWakeTimer=null;this.linkWakeAt=null;
     this.cometTimer?.cancel();this.cometTimer=null;this.cometWake=null;
@@ -488,33 +536,43 @@ export default class SixfoldDesk extends View {
     this.flowTimers??=new Set();
     const after=(ms,callback)=>{
       let timer;timer=cx.timer.after(ms,cx=>{this.flowTimers.delete(timer);callback(cx);});
-      this.flowTimers.add(timer);
+      this.flowTimers.add(timer);return timer;
     };
-    while (this.pendingFlows.length && this.activeFlows.length < MAX_ACTIVE_FLOWS) {
-      const event = this.pendingFlows.shift();
-      // Freshness was checked on ingestion. A real burst must not expire
-      // merely because earlier packets occupied the four visible lanes.
-      const same=this.activeFlows.filter(flow=>flow.source===event.source&&flow.target===event.target);
-      const occupied = new Set(this.activeFlows.map(flow => flow.lane));
-      const lane = same[0]?.lane ?? [0,1,2,3,4,5].find(value=>!occupied.has(value)) ?? this.activeFlows.length%6;
-      const travelMs=1600+(same.length%6)*180;
-      const flow = { ...event, lane, travelMs, phase: 'start' };
-      this.activeFlows.push(flow);
-      after(60, cx => {
-        flow.phase = 'travel';
-        cx.notify();
-      });
-      after(travelMs+60, cx => {
-        flow.phase = 'arrived';
-        cx.notify();
-      });
-      after(travelMs+2200, cx => {
-        this.activeFlows = this.activeFlows.filter(item => item.id !== flow.id);
-        this.startFlows(cx);
-        cx.notify();
-      });
+    this.pendingFlows.sort(flowOrder);
+    if(this.pendingFlows.length>FLOW_BACKLOG){
+      this.skippedFlows=(this.skippedFlows||0)+this.pendingFlows.length-FLOW_BACKLOG;
+      this.pendingFlows=this.pendingFlows.slice(-FLOW_BACKLOG);
     }
+    // One departure per slot: a single pending timer opens the next slot.
+    if(this.departTimer||!this.pendingFlows.length||this.activeFlows.length>=MAX_ACTIVE_FLOWS)return;
+    const event = this.pendingFlows.shift();
+    const same=this.activeFlows.filter(flow=>flow.source===event.source&&flow.target===event.target);
+    const occupied = new Set(this.activeFlows.map(flow => flow.lane));
+    const lane = same[0]?.lane ?? [0,1,2,3,4,5].find(value=>!occupied.has(value)) ?? this.activeFlows.length%6;
+    const travelMs=FLOW_TRAVEL_MS;
+    const flow = { ...event, lane, travelMs, phase: 'start' };
+    this.activeFlows.push(flow);
+    after(60, cx => {
+      flow.phase = 'travel';
+      cx.notify();
+    });
+    after(travelMs+60, cx => {
+      flow.phase = 'arrived';
+      cx.notify();
+    });
+    after(travelMs+2200, cx => {
+      this.activeFlows = this.activeFlows.filter(item => item.id !== flow.id);
+      if(!this.activeFlows.length&&!this.pendingFlows.length)this.skippedFlows=0;
+      this.startFlows(cx);
+      cx.notify();
+    });
+    this.departTimer=after(departureGap(event,this.pendingFlows[0],this.pendingFlows.length),cx=>{
+      this.departTimer=null;
+      this.startFlows(cx);
+      cx.notify();
+    });
   }
+
 
   paneHeader(all, t, w) {
     const p = all.find(p => p.pane === props()?.pane);
@@ -524,7 +582,9 @@ export default class SixfoldDesk extends View {
     const mic = paneMic(p, terminals(), shared(MIC_KEY));
     const style = paneHeaderStyle(p, t);
     // Agent icon, model, speed, effort and permission of the pane's confirmed session, after the title.
-    const meta = paneMeta(p.terminal, shared), name = title(p);
+    const meta = paneMeta(p.terminal, shared), name = title(p), ask = paneAskButton(p, t, this.lang(), name);
+    // Task-list progress and running sub-agents of the same confirmed session.
+    const work = paneWork(p.terminal, shared);
     return div().size_full().bg(style.base).child(h_flex().id(`sixfold-head-${p.pane}`).size_full().items_center().gap(7).px(9)
       .bg(style.background).text_size(11.5)
       .border(1).border_color(style.border)
@@ -538,6 +598,9 @@ export default class SixfoldDesk extends View {
       // Session usage sits in the middle: title and an equal spacer share the room around it.
       .child(paneUsage(p, t, shared))
       .child(div().flex_1().min_w(0))
+      .when(Boolean(work), el => el.child(paneWorkChip(p, t, work, this.headWidth)))
+      // A waiting question/permission opens here, over its own pane, on click only.
+      .when(Boolean(ask), el => el.child(ask))
       // The cat is the status, so it stands beside the status badge.
       .child(panePet(p,t,shared,style))
       .child(this.badge(p.status, p.status ? w[p.status] : '', t, 11, ['working', 'blocked'].includes(p.status) ? t.foreground : null)));
@@ -547,6 +610,8 @@ export default class SixfoldDesk extends View {
     const t = theme();
     const w = WORDS[this.lang()];
     const role = props()?.role;
+    // One pane's cards in a popup (asks.js). It needs none of the layout work below.
+    if (role === 'ask') return askPopup(this, t, this.lang(), cx);
     if(role==='sidebar'){
       const environment=JSON.stringify([t,shared('sixfold.motion'),window()?.visible??null]);
       if(environment!==this.panelEnvironment){this.panelEnvironment=environment;this.refreshPanelPreferences?.();}
@@ -716,7 +781,7 @@ export default class SixfoldDesk extends View {
     const laneOf = (from, to) => lanes.find(lane => !lane.gone && lane.link.machines.includes(from) && lane.link.machines.includes(to));
     // Link lanes sit in a fixed right margin of the computer list (LINK_MARGIN), drawn
     // over it: rows keep their width whether or not a link shows. Offsets are from the right.
-    const laneRight = slot => Math.max(8,LINK_MARGIN-40-slot*8);
+    const laneRight = slot => Math.max(8,LINK_MARGIN-28-slot*4);
     const coveredComputerPair=(a,b)=>{
       const first=taskComputerRecord(taskPanel?.feed,a),second=taskComputerRecord(taskPanel?.feed,b);
       return Boolean(first&&second&&taskPanel.feed.spaces.some(space=>space.share&&
@@ -809,17 +874,21 @@ export default class SixfoldDesk extends View {
     // A workspace's rows are its terminals; a mod pane (document tabs, a usage panel) has no
     // terminal and is not a session, so it gets no row and no count.
     this.classicMembers??=new Map();
-    const groups=workspaceList.map(s=>{
+    const groups=orderSpaceCards(workspaceList.map(s=>{
       const raw=s.tabs.flatMap(tab=>all.filter(p=>p.tab===tab.id&&p.terminal)),key=JSON.stringify(raw);
       let cached=this.classicMembers.get(s.id);
       if(cached?.key!==key){cached={key,members:priority(raw)};this.classicMembers.set(s.id,cached);}
       return {s,members:cached.members};
-    });
+    }),s=>workspacePinned(s,this.workspacePins),s=>taskPanel?.taskFor(s));
     for(const id of this.classicMembers.keys())if(!workspaceIds.has(id))this.classicMembers.delete(id);
-    const extraHeight=s=>{
-      const key=`${s.machine??''}|${String(s.id).split('/').pop()}`;
-      return this.fileBadges?.[key]?.length||shared('sixfold.workspace.badges')?.[key]?.length?20:0;
-    };
+    // A task card's meta line (Slack · Linear) also carries badges with a state; a card without
+    // one keeps them on a badge row. Launcher-only badges ('기억') sit in the header: no row.
+    const metaLine=s=>{const task=taskPanel?.taskFor(s);return Boolean(task&&taskPanel?.bodyFor(s)&&(task.slack||task.work));};
+    const badgeRow=s=>!metaLine(s)&&lineBadges(spaceBadges(this,s));
+    const extraHeight=s=>badgeRow(s)?20:0;
+    // A task card with a meta line carries Slack and Linear alerts there; the separate alerts row is for other cards.
+    const mergedAlerts=s=>Boolean(taskPanel?.bodyFor(s)&&alertsOnMetaLine(taskPanel.taskFor(s),s.name));
+    const alertRowHeight=s=>hasWorkspaceAlerts(s.name)&&!mergedAlerts(s)?26:0;
     const positions={};let offset=0;
     for(const {s,members} of groups){
       const task=taskPanel?.taskFor(s),card=taskPanel?.layout?.cards.find(card=>card.space.id===task?.id);
@@ -827,12 +896,12 @@ export default class SixfoldDesk extends View {
         for(const p of members){
           const agent=task.agents.find(agent=>agent.nav?.pane_id===String(p.pane).split('/').pop()&&agent.nav.machine===(s.machine??null));
           const row=card.rows.find(row=>row.kind==='agent'&&row.agent.id===agent?.id);
-          if(row)positions[p.terminal]=offset+row.y-card.top+6+extraHeight(s)+(hasWorkspaceAlerts(s.name)?26:0)+row.height/2;
+          if(row)positions[p.terminal]=offset+row.y-card.top+6+extraHeight(s)+alertRowHeight(s)+row.height/2;
         }
-        offset+=(this.boxSizes?.[s.id]?.h||card.height+9+extraHeight(s)+(this.docsHeights?.[s.id]||0)+(hasWorkspaceAlerts(s.name)?26:0))+12;
+        offset+=(this.boxSizes?.[s.id]?.h||card.height+9+extraHeight(s)+alertRowHeight(s))+12;
         continue;
       }
-      let row=offset+53+extraHeight(s)+(hasWorkspaceAlerts(s.name)?26:0);
+      let row=offset+51+extraHeight(s)+alertRowHeight(s);
       for (const p of members) {
         positions[p.terminal]=row;row+=30;
         {
@@ -841,7 +910,7 @@ export default class SixfoldDesk extends View {
           }
         }
       }
-      offset=row-3+(this.docsHeights?.[s.id]||0);
+      offset=row-3;
     }
     const workspaceColor = s => { const saved=shared('space.colors')?.[s.id]; if(saved)return saved.startsWith('#')?saved:(t[saved]||t.accent); const local=workspaceLocal(s,this.site)?.color; return workspaceIdentity(s,this.site)==='hub' ? t.accent : local ? (local.startsWith('#')?local:(t[local]||t.accent))
       : [t.accent,t.ansi5,t.ansi6,t.ansi3,t.ansi2,t.ansi4][[...s.id].reduce((hash,c)=>(hash*31+c.charCodeAt(0))>>>0,0)%6]; };
@@ -854,16 +923,28 @@ export default class SixfoldDesk extends View {
           ? svg(icon.path).size(14).text_color(workspaceColor(s)) : image(icon.path).w(14).h(14));
       return box.bg(workspaceColor(s)).child(svg(`mods/sixfold-desk/icons/ws-${workspaceIdentity(s,this.site)||'workspace'}.svg`).size(12).flex_none().text_color(t.background));
     };
+    // The header's docs button: the space's document finder (search, sort, filters) in a popover.
+    const docsButton=s=>{
+      const count=docsGroup(this,s)?.files?.length;
+      const trigger=h_flex().id(`sf-docs-open-${s.id}`).h(18).flex_none().px(3).gap(2).items_center().rounded(4).cursor_pointer()
+        .text_color(t.dim).hover(e=>e.bg(t.hover).text_color(t.foreground))
+        .tooltip(`문서 찾기${Number.isInteger(count)?` · ${count}건`:''}`)
+        .child(svg('mods/sixfold-desk/icons/doc.svg').size(12).flex_none())
+        .when(Number.isInteger(count)&&count>0,e=>e.child(div().text_size(9).font_normal().child(String(count))));
+      // The header's own press starts a drag; a press on the button belongs to the finder.
+      return div().flex_none().on_mouse_down('left',(_e,cx)=>cx.stop_propagation()).on_mouse_up('left',(_e,cx)=>cx.stop_propagation())
+        .child(docsFinder(this,s,trigger,t,{leadingGap:LINK_MARGIN+14,notify:cx=>this.invalidateSidebar?this.invalidateSidebar():cx?.notify?.()}));
+    };
     this.classicCards?.begin();
     const spaceRows=groups.map(({s,members})=>{
       const task=taskPanel?.taskFor(s),taskBody=taskPanel?.bodyFor(s);
       const partner=partnersOf(s),mark=spaceLink(s);
       const badgeKey=`${s.machine??''}|${String(s.id).split('/').pop()}`;
-      const key=JSON.stringify([s,members,task?.id,task?.memory,task?.share,task?.agents.map(agent=>[agent.id,agent.status,agent.closing]),taskPanel?.names&&[...taskPanel.names],taskPanel?.feed?.links,t,w,motion,partner,mark,comets.comets.get(groupKey(partner?.group.name??mark?.lane.link.name)),
+      const key=JSON.stringify([s,members,task?.id,Boolean(taskBody),Boolean(task?.slack||task?.work),task?.memory,task?.share,task?.agents.map(agent=>[agent.id,agent.status,agent.closing]),taskPanel?.names&&[...taskPanel.names],taskPanel?.feed?.links,t,w,motion,partner,mark,comets.comets.get(groupKey(partner?.group.name??mark?.lane.link.name)),
         this.boxSizes?.[s.id],partner?.partners.includes(this.hoverComputer)||false,this.dragSpace,this.overSpace,
         this.workspaceIcons[s.id]||this.workspaceIcons[s.name],workspaceColor(s),workspacePinned(s,this.workspacePins),
-        this.fileBadges?.[badgeKey],shared('sixfold.workspace.badges')?.[badgeKey],this.projectDocs?.spaces?.[s.id]||this.projectDocs?.spaces?.[s.name],
-        this.docsSpaces?.has(s.id),this.docsQueries?.[s.id],this.docsLimits?.[s.id],this.docsErrors?.[s.id],this.docsArchive,
+        this.fileBadges?.[badgeKey],alertCardSignature(s.name,motion),shared('sixfold.workspace.badges')?.[badgeKey],this.projectDocs?.spaces?.[s.id]||this.projectDocs?.spaces?.[s.name],
+        docsFinderSignature(this,s.id),
         members.map(p=>[unseen(p.terminal),endpoint(p.terminal),routeColor(p.terminal),askFor(this.asks,p.terminal),
           sessionChildren(this.workflowNodes,p.terminal,true),this.expandedAgents.has(p.terminal),list.find(a=>a.address===p.terminal)?.program])]);
       const build=()=>{ const mark=spaceLink(s);
@@ -936,10 +1017,6 @@ export default class SixfoldDesk extends View {
           this.dragSpace=s.id;this.overSpace=s.id;
           this.invalidateSidebar?this.invalidateSidebar():cx.notify();
         })
-        .child(div().id(`sf-docs-toggle-${s.id}`).text_size(11).text_color(t.accent).tooltip('프로젝트 문서 펼치기')
-          .on_mouse_down('left',(_e,cx)=>cx.stop_propagation()).on_mouse_up('left',(_e,cx)=>cx.stop_propagation())
-          .on_click((_e,cx)=>{cx.stop_propagation();prepareDocsInput(this,s);this.docsSpaces??=new Set();this.docsSpaces.has(s.id)?this.docsSpaces.delete(s.id):this.docsSpaces.add(s.id);this.invalidateSidebar?this.invalidateSidebar():cx.notify();})
-          .child(this.docsSpaces?.has(s.id)?'▾':'▸'))
         .child(workspaceMark(s))
         .when(workspacePinned(s,this.workspacePins),e=>e.child(div().id(`sf-pinned-${s.id}`).w(14).flex_none()
           .tooltip(this.lang()==='ko'?'고정 워크스페이스 · workspace-pins.local.json':'Pinned workspace · workspace-pins.local.json')
@@ -952,11 +1029,13 @@ export default class SixfoldDesk extends View {
           .text_size(9).text_color(t.ansi6||t.accent).truncate().tooltip(`기억 제안${task.memory.proposals?` ${task.memory.proposals}`:''}`)
           .child(metrics.compact?`◈${task.memory.proposals?` ${task.memory.proposals}`:''}`:`기억 제안${task.memory.proposals?` ${task.memory.proposals}`:''}`)))
         .when(Boolean(metrics?.count),e=>e.child(div().w(metrics.countWidth).flex_none().text_size(10).text_color(t.muted).child(`◌ ${metrics.count}`)))
-        .when(!metrics,e=>e.child(div().text_size(10).text_color(t.muted).child(String(members.length)))))
+        .when(!lineBadges(spaceBadges(this,s)),e=>e.child(workspaceBadges(this,s,t)))
+        .when(!metrics,e=>e.child(div().text_size(10).text_color(t.muted).child(String(members.length))))
+        .child(docsButton(s)))
       .when(extraHeight(s)>0,e=>e.child(h_flex().id(`sf-space-extras-${s.id}`).h(18).flex_none().px(7).gap(4).items_center().min_w(0)
         .child(workspaceBadges(this,s,t))
       ))
-      .child(workspaceAlertsRow(s,t))
+      .when(alertRowHeight(s)>0,e=>e.child(workspaceAlertsRow(s,t,{motion})))
       .children(taskBody?[taskBody]:members.map(p=>{
         const tab=s.tabs.find(tab=>tab.id===p.tab);
         const records=sessionChildren(this.workflowNodes,p.terminal,true);
@@ -993,9 +1072,7 @@ export default class SixfoldDesk extends View {
               .child(div().truncate().text_size(9).text_color(t.dim).child(`${s.name} / ${title(p)} · ${node.label||''}`)))
             .child(div().text_size(9).text_color(t.dim).child(workflowStatus(node,this.lang()))))));
 
-      })).child(div().id(`sf-docs-height-${s.id}`).min_w(0)
-        .on_size_change((size,cx)=>{const height=size.height/(settings().zoom||1);this.docsHeights??={};if(Math.abs((this.docsHeights[s.id]||0)-height)>1){this.docsHeights[s.id]=height;this.invalidateSidebar?this.invalidateSidebar():cx.notify();}})
-        .child(docsSection(this,t,s))).when(Boolean(outline),e=>e.child(outline))
+      })).when(Boolean(outline),e=>e.child(outline))
       // ⑩ While worked on together now (and motion is on), a flow runs around the border.
       .when(Boolean(flowView),e=>e.child(flowView)).when(Boolean(markView),e=>e.child(markView));};
       return this.classicCards?this.classicCards.card(s.id,key,build):build();
@@ -1003,25 +1080,29 @@ export default class SixfoldDesk extends View {
     this.classicCards?.end();
     const taskEntries=groups.map(({s,members})=>{
       const task=taskPanel?.taskFor(s),card=taskPanel?.layout?.cards.find(card=>card.space.id===task?.id);
-      return {task,alertHeight:extraHeight(s)+(hasWorkspaceAlerts(s.name)?26:0),height:this.boxSizes?.[s.id]?.h||
-        (card?card.height+9:(members.length*30+40))+extraHeight(s)+(this.docsHeights?.[s.id]||0)+(hasWorkspaceAlerts(s.name)?26:0)};
+      return {task,alertHeight:extraHeight(s)+alertRowHeight(s),height:this.boxSizes?.[s.id]?.h||
+        (card?card.height+9:(members.length*30+40))+extraHeight(s)+alertRowHeight(s)};
     });
+    // New-alert arrivals: a popup on the card's spot, then a pixel block steps into its badge.
+    const arrivalCards=[];{let top=0;groups.forEach(({s},i)=>{arrivalCards.push({s,top,extra:extraHeight(s),merged:mergedAlerts(s),width:this.boxSizes?.[s.id]?.w||0});top+=taskEntries[i].height+12;});}
+    const arrivalViews=alertArrivalLayer(this,cx,{cards:arrivalCards,motion,t,right:LINK_MARGIN+4});
     const workspaceTree=v_flex().relative().flex_none().children(spaceRows)
       .when(Boolean(taskPanel?.feed),e=>e.child(taskPanel.hostFlows(taskEntries,
         taskComputerAnchors(taskPanel.feed,activeComputers,this.computerBlockHeight??(activeComputers.length*39+3),this.spaceSectionHeight??31),LINK_MARGIN)))
       .children(paths.filter(flow => positions[flow.source] !== undefined && positions[flow.target] !== undefined).map(flow => {
         const from=positions[flow.source], to=positions[flow.target];
-        return pipeline({id:flow.id,width:8+(flow.lane%2)*10,inset:14,from,to,color:workspaceFlowColor(flow),phase:flow.phase,packets:flow.packets,motion})
-          .right(LINK_MARGIN-26-(flow.lane%2)*10);
+        return pipeline({id:flow.id,width:8+(flow.lane%2)*6,inset:6,from,to,color:workspaceFlowColor(flow),phase:flow.phase,packets:flow.packets,motion,unit:1/(Number(settings()?.zoom)||1)})
+          .right(LINK_MARGIN-18-(flow.lane%2)*6);
       }))
       // The far end is on another computer: run the pipe up to the top of this list,
       // just under the computer rows (the far computer's row is marked there).
       .children(remoteRoutes.filter(({route}) => (positions[route.source] === undefined) !== (positions[route.target] === undefined)).map(({route}) => {
         const outgoing = positions[route.source] !== undefined;
         const row = outgoing ? positions[route.source] : positions[route.target];
-        return pipeline({id:`${route.id}-hop`,width:8+(route.lane%2)*10,inset:14,from:outgoing?row:0,to:outgoing?0:row,color:workspaceFlowColor(route),phase:route.phase,packets:route.packets,motion})
-          .right(LINK_MARGIN-26-(route.lane%2)*10);
-      }));
+        return pipeline({id:`${route.id}-hop`,width:8+(route.lane%2)*6,inset:6,from:outgoing?row:0,to:outgoing?0:row,color:workspaceFlowColor(route),phase:route.phase,packets:route.packets,motion,unit:1/(Number(settings()?.zoom)||1)})
+          .right(LINK_MARGIN-18-(route.lane%2)*6);
+      }))
+      .children(arrivalViews);
     return v_flex().id('sixfold-sidebar').size_full().bg(t.chrome).text_color(t.foreground)
       // Width only matters to the task panel's breakpoints; between them the
       // flex layout resizes the cards without a redraw.
@@ -1093,7 +1174,9 @@ export default class SixfoldDesk extends View {
           .when(Boolean(crossMachine(flow,machineOf)),row=>row.child(div().flex_none().px(4).rounded(3).border(1).border_color(palette[flow.lane%palette.length]).text_size(9).text_color(palette[flow.lane%palette.length])
             .child(`⇄ ${this.computerLabel(crossMachine(flow,machineOf).far)}`)))
           .when(flow.count>1,row=>row.child(div().text_color(palette[flow.lane%palette.length]).child(`×${flow.count}`)))))
-        .when(routes.length>2,row=>row.child(div().text_size(9).text_color(t.muted).child(this.lang()==='ko'?`+${routes.length-2}개 경로 전송 중`:`+${routes.length-2} active routes`)))))
+        .when(routes.length>2,row=>row.child(div().text_size(9).text_color(t.muted).child(this.lang()==='ko'?`+${routes.length-2}개 경로 전송 중`:`+${routes.length-2} active routes`)))
+        .when((this.skippedFlows||0)>0,row=>row.child(div().id('sf-transfer-skipped').text_size(9).text_color(t.muted)
+          .child(this.lang()==='ko'?`밀린 전송 ${this.skippedFlows}건은 효과 없이 건너뜀`:`${this.skippedFlows} queued sends skipped`)))))
       .when(this.queuedRoutes.length>0,e=>e.child(h_flex().id('sf-delivery-status').flex_none().px(10).py(6).gap(5).items_center().border_t(1).border_color(t.border)
         .tooltip(this.queuedRoutes.map(item=>`${item.project} · ${item.error || (item.hold?'전달 보류':'수신 pane 대기')}`).join('\n'))
         .child(div().text_size(10).text_color(this.queuedRoutes.some(item=>item.hold||item.error)?t.blocked:t.muted)
