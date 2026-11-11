@@ -15,7 +15,7 @@ export function parseDetail(text, key) {
   if (!v || v.v !== 1 || v.key !== key) return null;
   const i = v.issue && v.issue.key === key ? v.issue : null;
   return {
-    key, error: str(v.error, 200), readAt: str(v.read_at, 40), attempted: str(v.attempted, 40),
+    key, error: str(v.error, 200), readAt: str(v.read_at, 40), attempted: str(v.attempted, 40), stale: Boolean(v.stale),
     issue: i && {
       key, title: str(i.title, 200), description: str(i.description, 12000), status: str(i.status, 40), statusType: str(i.status_type, 20),
       assignee: str(i.assignee, 80), labels: list(i.labels).filter(l => typeof l === 'string'), due: DATE.test(i.due) ? i.due : '',
@@ -56,7 +56,7 @@ export function threads(comments) {
 // Linear has drops the change; a label toggled twice cancels out; replies add up.
 export function addChange(pending, change, issue) {
   const rest = pending.filter(c => c.kind !== change.kind || c.kind === 'reply' || c.kind === 'label' || (c.kind === 'check' && c.line !== change.line));
-  if (change.kind === 'reply') return [...pending, change];
+  if (change.kind === 'reply') return [...pending, { ...change, rid: change.rid || newId() }];
   if (change.kind === 'status') return change.to === issue.status ? rest : [...rest, change];
   if (change.kind === 'assignee') return [...rest, change];
   if (change.kind === 'due') return (change.to || '') === issue.due ? rest : [...rest, change];
@@ -99,16 +99,20 @@ export function describeChange(c) {
   return '';
 }
 
-// The request the apply script reads.
-export function requestOf(key, pending) {
-  return { key, changes: pending.map(c => c.kind === 'label' ? { kind: 'label', add: c.add, remove: c.remove } : c) };
+// Ids for a request and for each reply (the apply script never sends a reply key twice).
+export const newId = () => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+
+// The request the apply script reads; `id` ties the result to it.
+export function requestOf(key, id, pending) {
+  return { key, id, changes: pending.map(c => c.kind === 'label' ? { kind: 'label', add: c.add, remove: c.remove } : c) };
 }
 
 export function parseApply(text, key) {
   let v;
   try { v = typeof text === 'string' ? JSON.parse(text) : text; } catch { return null; }
   if (!v || v.key !== key || typeof v.at !== 'string') return null;
-  return { at: v.at, ok: v.ok === true, error: str(v.error, 200), applied: Number(v.applied) || 0, kept: list(v.kept).filter(c => c && typeof c.kind === 'string') };
+  return { at: v.at, request: str(v.request, 80), ok: v.ok === true, error: str(v.error, 200), applied: Number(v.applied) || 0,
+    kept: list(v.kept).filter(c => c && typeof c.kind === 'string') };
 }
 
 // project › milestone › parent › key

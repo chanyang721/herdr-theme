@@ -2,7 +2,7 @@ import { div } from 'gpui-kit';
 import { h_flex, v_flex, InputState, Input, TextareaState, Textarea } from 'gpui-base';
 import { appHome, exec, readTextFile, writeTextFile, theme, props, run, closeOverlay } from 'herdr';
 import { bridgeFrom, mix, md } from './model.js';
-import { parseDetail, splitDescription, threads, addChange, removeChange, effective, describeChange, requestOf, parseApply,
+import { parseDetail, splitDescription, threads, addChange, removeChange, effective, describeChange, requestOf, parseApply, newId,
   breadcrumb, related, relationLabel, when, isKey } from './detail.js';
 
 // C: the issue popup — a panel on the right over the panes, the rest dimmed. Shows the issue
@@ -59,7 +59,7 @@ function loadDetail(v, cx, maybeRead) {
     if (v.closed) return;
     if (detail && JSON.stringify(detail) !== JSON.stringify(v.detail)) { v.detail = detail; cx.notify(); }
     const age = detail?.readAt ? Date.now() - new Date(detail.readAt).getTime() : Infinity;
-    if (maybeRead && (!detail?.issue || !(age < FRESH_MS))) readDetail(v, cx, false);
+    if (maybeRead && (!detail?.issue || detail.stale || !(age < FRESH_MS))) readDetail(v, cx, false);
   });
 }
 
@@ -72,6 +72,30 @@ function loadCarried(v, cx) {
     v.pending = request.changes.filter(c => c && typeof c.kind === 'string');
     v.carried = true; cx.notify();
   });
+}
+
+// Keeps a left-behind request file in step with the popup, so a cancelled or removed change does
+// not come back on reopen. Only touches the file when one is there (a failed apply wrote it).
+function persist(v, cx) {
+  const key = v.key, pending = v.pending;
+  cx.spawn(async () => {
+    const target = path(key, '.request');
+    const before = await readTextFile(target).catch(() => null);
+    if (before == null) return;
+    await writeTextFile(target, JSON.stringify(requestOf(key, newId(), pending)), before).catch(() => {
+      v.message = '남은 변경 파일을 갱신하지 못함 — 다시 열면 지난 변경이 보일 수 있음';
+    });
+  });
+}
+
+function removeAt(v, index, cx) {
+  if (v.applying) return;
+  v.pending = removeChange(v.pending, index); persist(v, cx); cx.notify();
+}
+
+function cancelAll(v, cx) {
+  if (v.applying) return;
+  v.pending = []; v.carried = false; v.message = ''; persist(v, cx); cx.notify();
 }
 
 function readDetail(v, cx, force) {
@@ -94,7 +118,9 @@ function readDetail(v, cx, force) {
 
 function stage(v, change, cx) {
   if (!v.detail?.issue || v.applying) return;
-  v.pending = addChange(v.pending, change, v.detail.issue); v.result = null; v.menu = null; cx.notify();
+  v.pending = addChange(v.pending, change, v.detail.issue); v.result = null; v.menu = null;
+  if (v.carried) persist(v, cx);
+  cx.notify();
 }
 
 function applyNow(v, cx) {
@@ -106,14 +132,16 @@ function applyNow(v, cx) {
       if (!bridge?.apply) { v.message = '반영 도구 미설정(week-timeline-bridge.json 의 apply)'; return; }
       const target = path(v.key, '.request');
       const before = await readTextFile(target).catch(() => null);
-      await writeTextFile(target, JSON.stringify(requestOf(v.key, v.pending)), before);
-      const started = new Date().toISOString();
+      const id = newId();
+      await writeTextFile(target, JSON.stringify(requestOf(v.key, id, v.pending)), before);
+      v.carried = true;   // the file is there now: later cancels and removals keep it in step
       const done = await exec(bridge.apply.command, [...bridge.apply.args, '--key', v.key], { timeout: APPLY_TIMEOUT });
       const result = parseApply(await readTextFile(path(v.key, '.apply')).catch(() => null), v.key);
-      if (!result || result.at < started.slice(0, 19)) { v.message = `반영 결과 없음(종료 코드 ${done.code}) — 변경은 그대로 둠`; return; }
+      // Only the result that names this request counts; an older one (any time zone) is not this apply's.
+      if (!result || result.request !== id) { v.message = `반영 결과 없음(종료 코드 ${done.code}) — 변경은 그대로 둠`; return; }
       v.result = result;
       v.pending = result.ok ? [] : result.kept;
-      v.carried = false;
+      v.carried = !result.ok;
       if (!result.ok) v.message = result.error || '일부 변경이 Linear 에서 확인되지 않음';
     } catch (error) {
       v.message = `반영 실패: ${String(error?.message || error).slice(0, 100)} — 변경은 그대로 둠`;
@@ -357,12 +385,12 @@ function footer(v, t) {
       .child(v_flex().gap(2).max_h(96).overflow_hidden().children(v.pending.map((c, n) => h_flex().gap(6).items_center().text_size(11)
         .child(div().flex_none().text_color(t.ansi3 || t.accent).child('●')).child(div().flex_1().min_w(0).truncate().child(describeChange(c)))
         .child(stop(div().id(`wi-x-${n}`).flex_none().px(4).text_color(t.muted).cursor_pointer()
-          .on_click((_e, cx) => { cx.stop_propagation(); if (!v.applying) { v.pending = removeChange(v.pending, n); cx.notify(); } }).child('×'))))))
+          .on_click((_e, cx) => { cx.stop_propagation(); removeAt(v, n, cx); }).child('×'))))))
       .child(h_flex().gap(8).items_center()
         .child(v_flex().flex_1().min_w(0)
           .child(div().text_size(12).font_semibold().child(`Linear 에 반영할 변경 ${v.pending.length}건${v.carried ? ' (지난번에 남은 것)' : ''}`))
           .child(div().text_size(10).text_color(t.muted).child('Linear MCP · 누를 때만 반영 · 자동 반영 없음')))
-        .child(button('wi-cancel', '취소', t, cx => { v.pending = []; v.carried = false; v.message = ''; cx.notify(); }, { disabled: v.applying }))
+        .child(button('wi-cancel', '취소', t, cx => cancelAll(v, cx), { disabled: v.applying }))
         .child(button('wi-apply', v.applying ? '반영 중…' : 'Linear 에 반영', t, cx => applyNow(v, cx), { primary: true, disabled: v.applying })));
   }
   if (v.result?.ok) {

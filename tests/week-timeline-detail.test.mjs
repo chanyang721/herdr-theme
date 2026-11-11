@@ -61,7 +61,7 @@ test('pending: later wins, going back drops, labels net out, replies add up', ()
   assert.deepEqual([shown.status, shown.assignee, shown.due, shown.checks['- [x] 둘째']], ['In Progress', '나', '', false]);
   assert.deepEqual(p.map(describeChange).slice(0, 3), ['상태 → In Progress', '할 일 해제: 둘째', '마감 → 없음']);
   assert.equal(removeChange(p, 0).length, 5);
-  assert.deepEqual(requestOf('DEMO-1', p).changes[0], { kind: 'status', to: 'In Progress' });
+  assert.deepEqual(requestOf('DEMO-1', 'r1', p).changes[0], { kind: 'status', to: 'In Progress' });
 });
 
 test('apply result, breadcrumb and relations', () => {
