@@ -16,7 +16,9 @@ export const MESSAGE_TIMING=Object.freeze({startMs:PANEL_TIMING.startMs,packetMs
 // Message routes wait in one bounded line: at most `queue` single packets, then
 // one «메시지 +N» bundle per sender→receiver pair (at most `bundles` at once).
 // Sends past both bounds are only counted (`overflow`), never stored.
-export const MESSAGE_ROUTE=Object.freeze({queue:8,bundles:8,gapMs:260,laneMs:1000});
+// A bundle keeps the IDs it folded (at most bundleIds each) so a correction can
+// take a send back out of it; sends past that are only counted.
+export const MESSAGE_ROUTE=Object.freeze({queue:8,bundles:8,bundleIds:32,gapMs:260,laneMs:1000});
 const MAX = Object.freeze({ computers: 64, spaces: 128, agents: 256, issues: 128, links: 512, events: 256, bytes: 2 * 1024 * 1024 });
 const STATUSES = new Set(['working', 'idle', 'blocked', 'done']);
 const STATES = ['blocked', 'working', 'review', 'waiting', 'done'];
@@ -484,7 +486,15 @@ export function panelEventStates(feed, now, { previous = null, motion = true } =
   for (const event of incoming) {
     if (seen.has(event.id)) {
       // Corrections can revoke a route, but never replay an old ID.
-      if(event.animate===false||!event.from||!event.to){const old=pending.get(event.id);if(old)pending.set(event.id,{...old,drawRoute:false});}
+      if(event.animate===false||!event.from||!event.to){
+        const old=pending.get(event.id);if(old)pending.set(event.id,{...old,drawRoute:false});
+        // A folded send is revoked out of its bundle: fewer, or none left to draw.
+        for(const [key,item] of pending){
+          if(!item.bundle||!item.ids.includes(event.id))continue;
+          const ids=item.ids.filter(id=>id!==event.id);
+          if(ids.length)pending.set(key,{...item,ids,count:ids.length,label:`메시지 +${ids.length}`});else pending.delete(key);
+        }
+      }
       continue;
     }
     seen.add(event.id);
@@ -508,10 +518,13 @@ export function panelEventStates(feed, now, { previous = null, motion = true } =
         // Bounded: an overflowing send joins the not-yet-started bundle of the
         // same sender and receiver (one entry, a count), drawn after the queue.
         const open=lineup.find(item=>item.bundle&&item.from===event.from&&item.to===event.to&&item.routeAt>now);
-        if(open){const count=open.count+1;pending.set(open.id,{...open,count,label:`메시지 +${count}`,lastSourceAt:event.at});continue;}
+        if(open){
+          if(open.ids.length>=MESSAGE_ROUTE.bundleIds){overflow++;continue;}
+          const ids=[...open.ids,event.id];pending.set(open.id,{...open,ids,count:ids.length,label:`메시지 +${ids.length}`,lastSourceAt:event.at});continue;
+        }
         if(lineup.filter(item=>item.bundle).length>=MESSAGE_ROUTE.bundles){overflow++;continue;}
         const {at,lane}=slot(),id=`bundle-${++bundleRevision}`;
-        pending.set(id,{id,kind:'message',bundle:true,count:1,from:event.from,to:event.to,label:'메시지 +1',
+        pending.set(id,{id,kind:'message',bundle:true,ids:[event.id],count:1,from:event.from,to:event.to,label:'메시지 +1',
           sourceAt:event.at,lastSourceAt:event.at,at,routeAt:at,routeLane:lane,drawRoute:true});
         continue;
       }
