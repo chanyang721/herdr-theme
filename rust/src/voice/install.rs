@@ -188,6 +188,7 @@ fn linked(root: &Path, p: Option<&Value>) -> bool {
         .and_then(|p| p.canonicalize().ok())
         == root.canonicalize().ok()
 }
+const CODEX_AGENT_CTYPE: &str = "UTF-8";
 pub fn write_codex_agent(home: &Path, root: &Path, start: bool) -> Result<PathBuf> {
     let binary = executable(root);
     if !binary.is_file() {
@@ -199,7 +200,10 @@ pub fn write_codex_agent(home: &Path, root: &Path, start: bool) -> Result<PathBu
     fs::create_dir_all(&agents)?;
     let name = label(home);
     let path = agents.join(format!("{name}.plist"));
-    let value = json!({"Label":name,"ProgramArguments":[binary.to_string_lossy(),"codex_focus","--serve"],"RunAtLoad":true,"KeepAlive":true,"ThrottleInterval":5,"EnvironmentVariables":{"PATH":format!("{}:/opt/homebrew/bin:/usr/bin:/bin",home.join(".local/bin").display()),"HERDR_PLUGIN_STATE_DIR":state.to_string_lossy()},"StandardOutPath":state.join("codex-focus-monitor.log").to_string_lossy(),"StandardErrorPath":state.join("codex-focus-monitor.log").to_string_lossy()});
+    // launchd starts agents with no locale. The guard decodes its children's output with the
+    // locale's encoding (legacy_text::default_encoding), which is ASCII then, so any Korean pane
+    // name failed every observation. Give the agent a UTF-8 character type.
+    let value = json!({"Label":name,"ProgramArguments":[binary.to_string_lossy(),"codex_focus","--serve"],"RunAtLoad":true,"KeepAlive":true,"ThrottleInterval":5,"EnvironmentVariables":{"PATH":format!("{}:/opt/homebrew/bin:/usr/bin:/bin",home.join(".local/bin").display()),"HERDR_PLUGIN_STATE_DIR":state.to_string_lossy(),"LC_CTYPE":CODEX_AGENT_CTYPE},"StandardOutPath":state.join("codex-focus-monitor.log").to_string_lossy(),"StandardErrorPath":state.join("codex-focus-monitor.log").to_string_lossy()});
     let temp = path.with_extension("tmp");
     let mut bytes = vec![];
     plist::to_writer_xml(&mut bytes, &value)?;
@@ -377,6 +381,18 @@ fn check(root: &Path) -> Result<bool> {
         .unwrap_or(false)
     {
         problems.push(format!("Codex focus LaunchAgent: {arguments:?}"));
+    }
+    let ctype = agent
+        .as_ref()
+        .and_then(|p| p.as_dictionary())
+        .and_then(|d| d.get("EnvironmentVariables"))
+        .and_then(|v| v.as_dictionary())
+        .and_then(|d| d.get("LC_CTYPE"))
+        .and_then(plist::Value::as_string);
+    if agent.is_some() && ctype != Some(CODEX_AGENT_CTYPE) {
+        problems.push(format!(
+            "Codex focus LaunchAgent locale: LC_CTYPE={ctype:?}"
+        ));
     }
     for p in &problems {
         voice_println!("not this copy - {p}");
@@ -1028,6 +1044,8 @@ mod tests {
             dict["Label"].as_string(),
             Some("local.herdr-sixfold.herdr-codex-focus")
         );
+        let env = dict["EnvironmentVariables"].as_dictionary().unwrap();
+        assert_eq!(env["LC_CTYPE"].as_string(), Some("UTF-8"));
         assert!(!home.join(".config").exists());
         assert!(!home.join(".codex").exists());
         assert!(!home.join(".claude").exists());

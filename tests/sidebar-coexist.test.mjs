@@ -9,6 +9,7 @@ const element=()=>{
     if(key==='then')return undefined;if(key in target)return target[key];
     if(key==='child')return value=>{if(value!=null)data.nodes.push(value);return proxy;};
     if(key==='children')return values=>{data.nodes.push(...values.filter(Boolean));return proxy;};
+    if(key==='trigger')return value=>{if(value!=null)data.nodes.push(value);return proxy;};
     if(key==='when')return (condition,fn)=>{if(condition)fn(proxy);return proxy;};
     return (...args)=>{data.calls.push([key,...args]);return proxy;};
   }});return proxy;
@@ -53,17 +54,19 @@ test('native computer navigator, task rows, documents, badges and local question
   const ids=tree=>flatten(tree).flatMap(node=>node.calls.filter(call=>call[0]==='id').map(call=>call[1]));
   const localTree=desk.render(cx),localIds=ids(localTree);
   assert(localIds.includes('sf-computer-local'));assert(localIds.includes('sf-computer-remote:worker'));
-  assert(localIds.includes('sf-docs-toggle-sp-local'));assert(!localIds.includes('sf-docs-toggle-worker/sp-remote'));
+  assert(localIds.includes('sf-docs-open-sp-local'));assert(!localIds.includes('sf-docs-open-worker/sp-remote'));assert(!localIds.some(id=>String(id).startsWith('sf-docs-toggle-')),'the inline ▸ document list is gone');
   assert(localIds.includes('sf-badge-sp-local-memo'));assert(localIds.includes('sf-settings'));assert(localIds.includes('sf-new-space'));
   assert(localIds.includes('sf-space-extras-sp-local'),'workspace badges have their own row instead of taking the title width');
-  assert(localIds.includes('sf-asks'));assert(localIds.includes('sf-ask-demo-question-action-0'));
+  assert(localIds.includes('sf-asks'));assert(localIds.includes('sf-ask-group-0'));
+  // Answers moved to the pane popup: the sidebar keeps a compact, clickable summary only.
+  assert(!localIds.includes('sf-ask-demo-question-action-0'));
   assert(flatten(localTree).some(node=>node.nodes.includes(c.bodyFor(native[0]))),'retained tasks are inside the native workspace card');
   const card=tree=>flatten(tree).find(node=>node.calls.some(call=>call[0]==='id'&&call[1]==='sf-space-sp-local'));
-  assert.equal(card(localTree).calls.find(call=>call[0]==='mr')[1],72,'all lanes stay in the fixed native card gutter');
+  assert.equal(card(localTree).calls.find(call=>call[0]==='mr')[1],48,'all lanes stay in the fixed native card gutter');
   const sized=localTree.calls.find(call=>call[0]==='on_size_change')[1];sized({width:432},cx);
   const gutterTree=desk.render(cx),gutter=flatten(gutterTree).find(node=>node.calls.some(call=>call[0]==='id'&&call[1]==='sf-message-gutter'));
   assert(!gutter,'no extra strip narrows the original card');
-  assert.equal(card(gutterTree).calls.find(call=>call[0]==='mr')[1],72);
+  assert.equal(card(gutterTree).calls.find(call=>call[0]==='mr')[1],48);
   assert.equal(c.panelWidth,432,'the fixed gutter never creates a second content strip');
   const updates=c.stats.updates;
   assert.equal(c.resize(520),false,'widening between breakpoints redraws nothing');
@@ -72,12 +75,14 @@ test('native computer navigator, task rows, documents, badges and local question
   assert(c.stats.updates>updates);
   desk.computerFollow={follow:false};store.set('sixfold.computing.selected','remote:worker');
   const remoteTree=desk.render(cx),remoteIds=ids(remoteTree);
-  assert(remoteIds.includes('sf-docs-toggle-worker/sp-remote'));assert(!remoteIds.includes('sf-docs-toggle-sp-local'));
+  assert(remoteIds.includes('sf-docs-open-worker/sp-remote'));assert(!remoteIds.includes('sf-docs-open-sp-local'));
   assert(flatten(remoteTree).some(node=>node.nodes.includes(c.bodyFor(native[1]))));
   c.resize(224,cx);
   const agent=c.feed.spaces[0].agents[0],row=entities.find(entity=>entity.view.id===agent.id);
-  assert(ids(row.view.render()).includes(`panel-stacked-${agent.id}`),'narrow native cards put the stage below the one-line title');
+  // Compact rows (ROW 24): even a narrow card keeps the stage inline on the one line.
+  assert(!ids(row.view.render()).includes(`panel-stacked-${agent.id}`),'narrow native cards keep the stage inline');
+  assert(ids(row.view.render()).some(id=>id.startsWith(`panel-stage-${agent.id}-`))||!agent.stage,'the stage is still drawn');
   c.resize(280,cx);
-  assert(!ids(row.view.render()).includes(`panel-stacked-${agent.id}`),'wide cards restore the inline stage');
+  assert(!ids(row.view.render()).includes(`panel-stacked-${agent.id}`),'wide cards keep the inline stage');
   c.dispose();delete globalThis.__sidebarCoexist;
 });

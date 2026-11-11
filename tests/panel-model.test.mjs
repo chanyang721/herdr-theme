@@ -118,7 +118,8 @@ test('tool issue groups use the same priority order and keep unassigned agents l
   const item = normalize({ spaces: [space('one', {
     work: { tool: 'jira', key: 'OPS', open: 5 },
     issues: states.map((state, index) => ({ key: `OPS-${index}`, title: state, state, at: NOW + index })),
-    agents: [...states.map((state, index) => agent(`agent-${index}`, { issue: `OPS-${index}` })), agent('unassigned', { issue: 'gone' })],
+    // Folded issues hold only idle agents; a live task never folds away (see below).
+    agents: [...states.map((state, index) => agent(`agent-${index}`, { issue: `OPS-${index}`, status: index < 2 ? 'idle' : 'working' })), agent('unassigned', { issue: 'gone' })],
   })] }).spaces[0];
   const result = agentGroups(item);
   assert.equal(result.grouped, true);
@@ -128,6 +129,24 @@ test('tool issue groups use the same priority order and keep unassigned agents l
   assert.deepEqual(expanded.groups.map(group=>group.issue?.state??null),['blocked','working','review','waiting','done',null]);
   assert.equal(expanded.issuesExpanded,true);assert.equal(expanded.groupsHidden,0);
   assert.deepEqual(result.groups.at(-1).agents.map(a => a.id), ['unassigned']);
+});
+
+test('an issue with a working or blocked agent stays visible past the issue fold', () => {
+  const states = ['done', 'waiting', 'review', 'working', 'blocked', 'done'];
+  const build = statuses => normalize({ spaces: [space('one', {
+    work: { tool: 'jira', key: 'OPS', open: 6 },
+    issues: states.map((state, index) => ({ key: `OPS-${index}`, title: state, state, at: NOW + index })),
+    agents: statuses.map((status, index) => agent(`agent-${index}`, { issue: `OPS-${index}`, status })),
+  })] }).spaces[0];
+  const quiet = agentGroups(build(['idle', 'idle', 'idle', 'idle', 'idle', 'idle']));
+  assert.equal(quiet.groups.length, 3);assert.equal(quiet.groupsHidden, 3);
+  for (const status of ['working', 'blocked']) {
+    const live = agentGroups(build(['idle', 'idle', 'idle', 'idle', 'idle', status]));
+    assert(live.groups.some(group => group.issue?.key === 'OPS-5'), `a ${status} agent keeps its issue out of the fold`);
+    assert(live.agents.some(a => a.id === 'agent-5'));assert.equal(live.groupsHidden, 2);
+  }
+  const idle = agentGroups(build(['idle', 'idle', 'idle', 'idle', 'idle', 'done']));
+  assert(!idle.groups.some(group => group.issue?.key === 'OPS-5'), 'a finished agent still folds');
 });
 
 test('root agent rows are never truncated inside an issue', () => {
@@ -182,7 +201,7 @@ test('initial feed is only a watermark, a newly observed ID plays once', () => {
   const active = advance(historical, initial, 10);
   assert.equal(active.active.length, 1);
   assert.equal(advance(historical, active, 100).pending.length, 1, 'same ID does not start twice');
-  assert.equal(advance(historical, active, 3010).active.length, 0);
+  assert.equal(advance(historical, active, M.packetMs + M.pingMs + M.coolMs + 10).active.length, 0);
 });
 
 test('distribution, review, verdict, acceptance and closing labels occupy the same finite tag slot', () => {
@@ -388,7 +407,7 @@ test('a newly observed old-timestamp event plays once but initial history remain
   const observed = advance(value, boot(normalize({ events: [] })), 0);
   assert.equal(observed.packets[0].phase, 'start');
   assert.equal(observed.packets[0].sourceAt, 0);
-  assert.equal(advance(value, observed, 3000).active.length, 0);
+  assert.equal(advance(value, observed, M.packetMs + M.pingMs + M.coolMs).active.length, 0);
   assert.equal(advance(value, observed, 5000).active.length, 0);
 });
 
@@ -542,7 +561,8 @@ test('parent trees stay inside issue buckets and fold after the last visible des
 test('completed children leave both expanded rows and collapsed branch counts',()=>{
   const initial=space('one',{agents:[agent('root'),...Array.from({length:6},(_,i)=>agent(`child${i}`,{parent_id:'root'}))]});
   assert.equal(agentGroups(initial).folds[0].hidden,3);
-  const next={...initial,agents:initial.agents.map(row=>row.id==='child0'?{...row,status:'done'}:row.id==='child1'?{...row,stage:5}:row)};
+  const next={...initial,agents:initial.agents.map(row=>row.id==='child0'?{...row,status:'done'}:row.id==='child1'?{...row,stage:5,status:'done'}:row)};
+  // A finished child arrives as status done (feed: a record row, or a pane the close scan will clean up).
   const collapsed=agentGroups(next),expanded=agentGroups(next,{expandedParents:new Set(['root'])});
   assert.equal(collapsed.rowMeta.get('root').childCount,4);assert.equal(collapsed.hidden,1);assert.equal(collapsed.folds.length,1);
   assert.deepEqual(expanded.agents.map(row=>row.id),['root','child2','child3','child4','child5']);
@@ -564,6 +584,28 @@ test('completion filtering preserves independent roots, blocked work and active 
   assert.equal(result.rowMeta.get('active-leaf').parent,null);assert.equal(result.rowMeta.get('cross-issue').parent,null);
   const closed=space('closed',{agents:[agent('parent',{closing:{step:4},stage:5,status:'done'}),agent('child',{parent_id:'parent',stage:5,status:'done'})]});
   assert.equal(agentGroups(closed).agents.length,0,'an already hidden parent does not resurrect its completed child as a root');
+});
+
+test('완료 is the harness cleanup target: a finished task whose pane is still kept stays visible and not done',()=>{
+  // The feed (harness panel_feed.settled_status) sends status 'done' for a pane row only when the
+  // close scan left it nothing but idle time; a raw turn end is idle+unseen_result.
+  const nav=pane=>({pane_id:pane,machine:null});
+  for(const status of ['idle','working']){
+    const parent=agent('parent',{status:'idle',stage:5,state:'unseen_result',keep_reason:'경험 저장 전이라 유지',nav:nav('p1')});
+    const child=agent('child',{parent_id:'parent',status,stage:5,state:status==='idle'?'unseen_result':'working',cleanup:null,
+      keep_reason:'하위 작업 있어 유지',nav:nav('p2')});
+    assert.notEqual(agentState(child),'done',status);
+    assert.notEqual(agentState(parent),'done');
+    assert(agentGroups(space('kept',{agents:[parent,child]})).agents.some(row=>row.id==='child'),status);
+  }
+  const target=agent('target',{status:'done',stage:5,state:'cleanup_wait',nav:nav('p3'),
+    cleanup:{idle_since:'2026-11-10T00:00:00Z',limit_s:1800,due_at:'2026-11-10T00:30:00Z'}});
+  assert.equal(agentState(target),'done','the cleanup target is 완료');
+  assert.equal(agentState(agent('record',{status:'done',stage:5,nav:null})),'done','the feed sends a finished record row without a pane as done');
+  // A live pane whose session is not confirmed has no nav; it is still a kept pane, not a record row.
+  const unconfirmed=agent('unconfirmed',{parent_id:'root',status:'idle',stage:5,state:'unseen_result',nav:null,cleanup:null});
+  assert.notEqual(agentState(unconfirmed),'done');
+  assert(agentGroups(space('nav-less',{agents:[agent('root'),unconfirmed]})).agents.some(row=>row.id==='unconfirmed'));
 });
 
 test('issue and parent expansion recompute only the owning space with stable feed references',()=>{

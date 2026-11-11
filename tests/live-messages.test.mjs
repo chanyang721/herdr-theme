@@ -68,9 +68,9 @@ for (const native of [false,true]) test(`background messages refresh through ${n
   source = source.replace(/import \{([^}]+)\} from 'herdr';/, 'const {$1} = globalThis.__sixfoldTest;');
   source = source.replace("import { breathingBorder, borderComet } from './collab-flow-view.js';", 'const breathingBorder=o=>{(globalThis.__breathCalls??=[]).push(o);return div().absolute().top(-1).left(-1).right(-1).bottom(-1).rounded(7).border(2).border_color(o.color);},borderComet=o=>{(globalThis.__flowCalls??=[]).push(o);return null;};');
   for (const name of ['model','flow','workflow','sidebar-identity','collab', 'collab-flow']) source = source.replace(`'./${name}.js'`,JSON.stringify(new URL(`../mods/sixfold-desk/${name}.js`,import.meta.url).href));
-  source = source.replace(/import \{ watchDocs, currentDocs, docsSection, prepareDocsInput \} from '.\/docs.js';/, 'const watchDocs=()=>{};');
+  source = source.replace(/import \{ watchDocs, currentDocs \} from '.\/docs.js';/, 'const watchDocs=()=>{};').replace(/import \{[^}]*\} from '.\/docs-finder.js';/,"const docsFinder=(_view,_space,trigger)=>trigger,docsFinderSignature=()=>null,setDocsFinderOpen=()=>{},docsGroup=()=>null;");
   source = source.replace(/import \{ pipeline \} from '.\/pipeline.js';/, '');
-  source = source.replace(/import .* from '.\/alert-inbox.js';/,'const workspaceAlertsRow=()=>null, hasWorkspaceAlerts=()=>false;');
+  source = source.replace(/import .* from '.\/alert-inbox.js';/,'const workspaceAlertsRow=()=>null, hasWorkspaceAlerts=()=>false;').replace(/import .* from '.\/alert-arrivals.js';/,"const startAlertArrivals=()=>()=>{},alertArrivalLayer=()=>[],alertCardSignature=()=>'';");
   source = source.replace(/import \{ watchAlerts, alertSection, visibleAlerts \} from '.\/alerts.js';/,
     'const watchAlerts=()=>{};');
   source = source.replace(/import \{ panePet \} from '.\/pets.js';/,'const panePet=()=>null;')
@@ -110,15 +110,14 @@ for (const native of [false,true]) test(`background messages refresh through ${n
   log = '{partial';
   await refresh();
   assert.equal(view.messageEvents[0].id,'live','partial writes must preserve the previous badges');
-  // A partial unrelated writer must not stop message ingestion, and a burst
-  // must begin together rather than waiting for the first four to arrive.
+  // A partial unrelated writer must not stop message ingestion. A burst found
+  // by one refresh leaves one send at a time, in the order the sends were made.
   malformedAuxiliary=true;
-  const burst=Array.from({length:12},(_,index)=>({id:`burst-${index}`,source:'source',target:'target',at:Date.now()}));
+  const burst=Array.from({length:12},(_,index)=>({id:`burst-${index}`,source:'source',target:'target',at:Date.now(),seq:index+1}));
   log=JSON.stringify({events:[{id:'live',source:'source',target:'target',at:Date.now()},...burst]});
   await refresh();
-  assert.equal(view.activeFlows.length,13);
-  assert.equal(view.pendingFlows.length,0);
-  assert.equal(new Set(view.activeFlows.map(flow=>flow.id)).size,13);
+  assert.equal(view.activeFlows.length,1,'the burst waits for the next departure slot');
+  assert.deepEqual(view.pendingFlows.map(flow=>flow.id),burst.map(flow=>flow.id),'waiting in send order');
   pinText=JSON.stringify({spaces:[{id:'stable-id',machine:null}]});
   await refresh();
   assert.equal(view.workspacePins.spaces[0].id,'stable-id','config-only edits refresh without a message or focus change');
@@ -142,12 +141,13 @@ for (const native of [false,true]) test(`background messages refresh through ${n
   assert.equal(view.sidebarVisible,false);assert.equal(view.activeFlows.length,0);
   assert(activeTimers.every(timer=>timer.cancelled),'hidden event cancels all pending packet transitions without a render');
   if(native)assert.equal(sampler.cancelled,true,'hidden event cancels the memory sampler');
-  log=JSON.stringify({events:[...burst,{id:'while-hidden',source:'source',target:'target',at:Date.now()}]});
+  const hidden=Array.from({length:5},(_,index)=>({id:`while-hidden-${index}`,source:'source',target:'target',at:Date.now(),seq:13+index}));
+  log=JSON.stringify({events:[...burst,{id:'stale-hidden',source:'source',target:'target',at:Date.now()-120000,seq:12.5},...hidden]});
   if(!native){publishFiles();await settle();}
   assert.equal(view.activeFlows.length,0,'hidden delivery cannot start motion');
   await visibilityEvent(true);
   assert.equal(view.sidebarVisible,true);
-  assert.equal(view.activeFlows.length,0,'showing consumes current messages without a backlog of motion');
+  assert.deepEqual([...view.activeFlows,...view.pendingFlows].map(flow=>flow.id),hidden.slice(-3).map(flow=>flow.id),'showing replays only the latest three hidden sends, in order');
   if(native)assert.equal(timers.filter(item=>item.ms===500&&item.options?.owner===null).at(-1).cancelled,false,'shown event resumes one native sampler');
   view.stopLiveMessages?.();for(const stop of view.fileSubscriptions)stop();assert.equal(subscriptions.size,0);
   delete globalThis.__sixfoldTest;

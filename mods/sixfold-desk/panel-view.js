@@ -1,23 +1,30 @@
 import {div, svg, image, PathBuilder} from 'gpui-kit';
 import {h_flex, v_flex} from 'gpui-base';
 import {spaces, panes, shared, setShared, run, settings} from 'herdr';
-import {agentGroups, panelEventStates, panelSpaces, panelSpacePartners, PANEL_TIMING, MESSAGE_TIMING, MESSAGE_LEGS, PANEL_LEGS, messageLeg, panelLeg, agentRowState, agentHasReason, agentReason} from './panel-model.js';
+import {agentGroups, panelEventStates, panelSpaces, panelSpacePartners, PANEL_TIMING, PANEL_LEGS, agentRowState, agentHasReason, agentReason} from './panel-model.js';
 import {SESSION_STATES, sessionStatusGlyph} from './session-status.js';
 import {groupColors, paletteMode} from './collab-flow.js';
 import {rowDetailParts} from './task-row-details.js';
-import {PANEL_FLOW, panelFlowAnchor, panelMessageAnchors, messageFlowGeometry, messageCurveReach, computerFlow} from './panel-host.js';
+import {PACKET_PIXELS, pixelUnitFor, snap, centred, pixelBlock, pixelRoute as drawPixelRoute, pixelRing, pixelArrival, pixelLanding, ARRIVAL} from './pixel.js';
+import {PANEL_FLOW, panelFlowAnchor, panelMessageAnchors, messageFlowGeometry, computerFlow} from './panel-host.js';
 
 const MARK={working:'●',idle:'○',blocked:'!',done:'✓'};
 const STATUS_LABEL={working:'작업 중',idle:'쉬는 중',blocked:'막힘',done:'완료'};
 const STAGES=['배분','작업','검수','수락 대기'];
 const CLOSE=['보고 작성','경험·결정 저장','기억함 제안','닫힘'];
 const ISSUE={blocked:'막힘',working:'진행 중',review:'검수',waiting:'대기',done:'완료'};
-const RIGHT=PANEL_FLOW.gutter, ROW=28, REASON=14;
+const RIGHT=PANEL_FLOW.gutter, ROW=24, REASON=0;
+// A row gets the done highlight when a task event (never a message) lands on it.
+export const rowArrival=(state,id)=>state.packets.some(event=>event.to===id&&event.phase==='ping'&&event.kind!=='message');
+// Two blinks of the arrival row highlight fit in the ping phase.
+const ROW_BLINK_MS=Math.round(PANEL_TIMING.pingMs/2);
 // A flow pulse on a 1px pipe: as wide as the line, this long (px).
 export const LINK_PULSE=5;
-export const PANEL_GEOMETRY=Object.freeze({header:34,meta:26,issue:18,row:ROW,reason:REASON,child:20,border:1,bottom:4,gap:4,padding:7,rightGutter:RIGHT,popoverGap:10});
-// A root row with a producer reason gets one fixed extra line (mockup 26).
-export const agentRowHeight=(agent,child=false)=>child?PANEL_GEOMETRY.child:ROW+(agentHasReason(agent)?REASON:0);
+export const PANEL_GEOMETRY=Object.freeze({header:34,meta:20,issue:18,row:ROW,reason:REASON,child:20,border:1,bottom:4,gap:4,padding:7,rightGutter:RIGHT,popoverGap:10});
+// Compact rows keep reasons in the tooltip; geometry and rendered height agree.
+// The Slack / work-tool line is drawn, and takes height, only when one is connected.
+export const panelMetaHeight=space=>space.slack||space.work?PANEL_GEOMETRY.meta:0;
+export const agentRowHeight=(agent,child=false)=>child?PANEL_GEOMETRY.child:ROW;
 // Wake time for the earliest countdown text change among the feed's rows.
 export function panelReasonWake(feed,now){
   let at=null;
@@ -62,9 +69,10 @@ export function panelLayout(feed, eventState, nativeSpaces=[],groupMap=null) {
   y+=28;
   for(const space of panelSpaces(feed,nativeSpaces)){
     const groups=groupMap?.get(space.id)||agentGroups(space,{includeClosedIds:new Set(eventState.tags.keys())});
-    const card={space,groups,top:y,rows:[],height:PANEL_GEOMETRY.header+PANEL_GEOMETRY.meta+2};
+    const metaHeight=panelMetaHeight(space);
+    const card={space,groups,top:y,rows:[],height:PANEL_GEOMETRY.header+metaHeight+2};
     anchors.set(space.id,{y:y+PANEL_GEOMETRY.border+PANEL_GEOMETRY.header/2,kind:'space',space:space.id,computer:space.computer});
-    let row=y+PANEL_GEOMETRY.border+PANEL_GEOMETRY.header+PANEL_GEOMETRY.meta;
+    let row=y+PANEL_GEOMETRY.border+PANEL_GEOMETRY.header+metaHeight;
     const groupRows=groups.grouped?groups.groups:[{issue:null,agents:groups.agents,folds:groups.folds}];
     for(const group of groupRows){
       if(groups.grouped){card.rows.push({kind:'issue',group,y:row});row+=PANEL_GEOMETRY.issue;}
@@ -105,7 +113,7 @@ function stageBar(agent,tag,color,t,motion,width){
   const blocked=agent.status==='blocked'||Boolean(closing?.blocked_reason);
   const tone=closing?(t.ansi6||t.accent):color;
   const active=closing?closing.step-1:Math.max(-1,Math.min(4,agent.stage-1));
-  const tip=closing?closing.blocked_reason||CLOSE[active]:agent.stage===5?'완료':STAGES[active]||'대기·계획';
+  const tip=closing?closing.blocked_reason||CLOSE[active]:agent.stage===5?(agent.status==='done'?'완료':'수락됨·정리 전'):STAGES[active]||'대기·계획';
   const slot=h_flex().w(width<300?64:120).h(18).flex_none().gap(2).items_center().justify_end().tooltip(tag?.label||tip);
   if(tag)return slot.child(text(tag.label,blocked?t.blocked:tone,9).flex_1());
   // Mockup ㉑: a blocked task paints only the stage it is stuck on; finished stages keep their colour.
@@ -129,19 +137,17 @@ export function agentRow(view,agent,space,tag,state,color,t,motion){
   const reasonText=child?'':agentReason(agent,view.now??Date.now()).text;
   const stateLabel=rowState?SESSION_STATES[rowState].label:STATUS_LABEL[status]||'';
   const reasonLine=reasonText?(reasonText.startsWith(stateLabel)?reasonText:[stateLabel,reasonText].filter(Boolean).join(' · ')):'';
-  const pulse=state.packets.some(event=>event.to===agent.id&&event.phase==='ping')
-    ||!motion&&state.connections?.some(event=>event.kind==='message'&&event.to===agent.id);
+  const pulse=rowArrival(state,agent.id);
   const born=state.spawning.has(agent.id);
   const birthAge=state.active?.find(event=>(event.kind==='spawn'||event.allocation?.kind==='new')&&event.to===agent.id)?.elapsed||0;
   const ghost=born&&motion&&birthAge<PANEL_TIMING.packetMs;
-  const stacked=view.embedded&&(view.panelWidth||224)<260&&!child;
+  const stacked=false;
   const line=h_flex().id(`panel-agent-content-${agent.id}`).w_full().min_w(0).gap(5).items_center().opacity(ghost?0:1)
     .when(born&&motion,e=>e.transition('opacity',{duration:180,easing:'ease-out'}));
   const dimmed=rowState?rowState==='closed':status==='done';
-  const row=h_flex().id(`panel-agent-${agent.id}`).relative().h(child?PANEL_GEOMETRY.child:ROW+(reasonLine?REASON:0)).flex_none().pl(child?30+(depth-1)*16:7).pr(7).gap(5).items_center().rounded(3)
+  const row=h_flex().id(`panel-agent-${agent.id}`).relative().h(child?PANEL_GEOMETRY.child:ROW).flex_none().pl(child?30+(depth-1)*16:7).pr(7).gap(5).items_center().rounded(3)
     .opacity(dimmed||agent.report_missing?0.52:1)
     .when(born,e=>e.border(1).border_dashed().border_color(color))
-    .when(pulse,e=>e.border(1).border_color(color))
     .tooltip([agent.title,agent.tooltip_addr,agent.closing?.blocked_reason,reasonLine,detail.tooltip].filter(Boolean).join('\n'))
     .when(Boolean(agent.nav)&&agent.closing?.step!==4,e=>e.cursor_pointer().hover(h=>h.bg(t.hover))
       .on_click((_event,cx)=>{cx.stop_propagation();navigatePanelAgent(agent);}));
@@ -164,13 +170,14 @@ export function agentRow(view,agent,space,tag,state,color,t,motion){
     .text_color(detail.statusColor|| (status==='blocked'?t.blocked:status==='working'?color:t.dim))
     .tooltip(remembered?`${remembered.state==='pending'?'기억 저장 대기':remembered.state==='saved'?'기억함에 저장됨':'기억 제안'}${remembered.proposals?` ${remembered.proposals}`:''}`:status)
     .child(detail.statusMark||(remembered?(remembered.state==='pending'?'◌':'◈'):MARK[status])||'?'));
-  const reason=reasonLine?div().id(`panel-reason-${agent.id}`).h(REASON).flex_none().pl(18).min_w(0).truncate().text_size(10).text_color(t.muted)
-    .tooltip(reasonLine).accessibility_label(reasonLine).child(reasonLine):null;
-  if(stacked)row.child(v_flex().id(`panel-stacked-${agent.id}`).w_full().min_w(0).child(line)
-    .when(Boolean(showStage),e=>e.child(stageBar(agent,tag,color,t,motion,224).h(tag?10:7).ml(18).w(52).justify_start().opacity(ghost?0:1)))
-    .when(Boolean(reason),e=>e.child(reason)));
-  else if(reason)row.child(v_flex().id(`panel-lines-${agent.id}`).w_full().min_w(0).child(line.h(ROW-2)).child(reason));
-  else row.child(line);
+  row.child(line);
+  // The arrival ("done") highlight, made to be seen (2026-11-10): an overlay, so
+  // the row never shifts, with a 2px border in the foreground (>=8:1 on every
+  // sixfold surface), a tint of the event colour and two short blinks within
+  // the ping phase. Motion off keeps it steady.
+  if(pulse)row.child(div().id(`panel-arrival-${agent.id}`).absolute().left(0).top(0).right(0).bottom(0).rounded(3)
+    .border(ARRIVAL.thickness).border_color(t.foreground).bg(color+'33')
+    .when(motion,e=>e.loop('opacity',{from:0.35,to:1,period:ROW_BLINK_MS,easing:'ease-in-out'})));
   return row;
 }
 
@@ -201,13 +208,27 @@ export function cardView(view,card,state,color,computerNames,t,motion,rowEntitie
     .when(metrics.hasMemory,e=>e.child(div().id(`panel-memory-${space.id}`).w(memoryWidth).flex_none().px(compact?1:4).h(16).truncate().rounded(3).bg(memory?color:t.selected)
       .text_color(memory?t.background:t.ansi6||t.accent).text_size(compact&&space.memory.proposals>9?8:9).tooltip(`기억 제안${space.memory.proposals?` ${space.memory.proposals}`:''}`).child(compact?`◈${space.memory.proposals?` ${space.memory.proposals}`:''}`:`기억 제안${space.memory.proposals?` ${space.memory.proposals}`:''}`)))
     .when(count>0,e=>e.child(text(`◌ ${count}`,t.muted,compact?8:10).w(countWidth).flex_none())));
-  const tool=h_flex().gap(5).items_center().min_w(0)
+  // One line for both tools: Slack (channel · unread) and the work tool (key · issues · unread).
+  // Linear alerts sit on its chip, which opens the issue search with the alerted issues on top.
+  const alerts=view.cardAlerts?.(space)||null,linearUnread=space.work?.tool==='linear'?alerts?.linear||0:0;
+  const tool=h_flex().id(`panel-tool-${space.id}`).gap(5).items_center().min_w(0).flex_none()
     .when(Boolean(space.work),e=>e.child(toolIcon(space.work.tool,t)))
-    .child(text(space.work?`${space.work.key} · 이슈 ${space.work.open}`:'업무 도구 연결 없음',space.work?t.muted:t.dim,9))
-    .when(Boolean(space.work),e=>e.cursor_pointer().tooltip('이번 주 · 마일스톤 · 전체 이슈'));
-  box.child(h_flex().h(PANEL_GEOMETRY.meta).flex_none().px(7).gap(5).items_center()
-    .when(Boolean(space.slack),e=>e.child(image('mods/sixfold-desk/icons/slack.svg').size(11).flex_none()))
-    .child(text(space.slack?.channel||'Slack 연결 없음',space.slack?t.muted:t.dim,9).flex_1())
+    .child(text(space.work?`${space.work.key} · 이슈 ${space.work.open}`:'',space.work?t.muted:t.dim,9))
+    .when(linearUnread>0,e=>e.child(text(`미확인 ${linearUnread}`,t.accent_foreground||t.background,9).px(4).rounded(3).bg(t.accent).font_bold()
+      .id(`panel-tool-unread-${space.id}`)))
+    .when(Boolean(space.work),e=>e.cursor_pointer().tooltip(linearUnread?`새 알림 ${linearUnread}건 · 이번 주 · 마일스톤 · 전체 이슈`:'이번 주 · 마일스톤 · 전체 이슈'));
+  const slackUnread=alerts?.slack||0,slackShown=Boolean(space.slack)||Boolean(alerts?.hasSlack);
+  const slack=h_flex().id(`panel-slack-${space.id}`).gap(5).items_center().min_w(0).flex_1()
+    .when(slackShown,e=>e.child(image('mods/sixfold-desk/icons/slack.svg').size(11).flex_none()))
+    .child(text(space.slack?.channel||'',space.slack?t.muted:t.dim,9).flex_1())
+    .when(slackUnread>0,e=>e.child(text(String(slackUnread),t.accent_foreground||t.background,9).px(4).rounded(3).bg(t.accent).font_bold().flex_none()))
+    // The Slack copy has stopped: say so rather than show a quiet 0.
+    .when(Boolean(alerts?.delay),e=>e.child(text('사본 지연',t.blocked||t.muted,9).flex_none().id(`panel-slack-delay-${space.id}`)))
+    .when(Boolean(alerts?.hasSlack),e=>e.cursor_pointer().tooltip(`Slack 알림${slackUnread?` 미확인 ${slackUnread}건`:''}${alerts?.delay?`\nSlack 사본이 ${alerts.delay}시간째 멈춤 (마지막 메시지 ${alerts.delayAt}) · 새 멘션이 늦게 보일 수 있음`:''}`));
+  const badges=view.cardBadges?.(space)||null;
+  if(panelMetaHeight(space))box.child(h_flex().h(PANEL_GEOMETRY.meta).flex_none().px(7).gap(5).items_center()
+    .when(Boolean(badges),e=>e.child(badges.view(t)))
+    .child(alerts?.hasSlack&&view.slackAlerts?view.slackAlerts(space,slack,t):slack)
     .child(space.work&&view.issuePopover?view.issuePopover(space,tool,t):tool));
   for(const row of card.rows){
     if(row.kind==='issue')box.child(h_flex().h(PANEL_GEOMETRY.issue).flex_none().px(7).gap(4).items_center().bg(t.surface).opacity(row.group.issue?.state==='done'?0.5:1)
@@ -235,118 +256,82 @@ function routePath(from,to,lane,endX,origin=0,startX=0){
     .cubic_bezier_to(origin+lane-r,to,origin+lane,to,origin+lane,to)
     .line_to(origin+endX,to).build();
 }
-export function route(id,a,b,color,{dashed=false,packet=null,motion=false,relation=false,flow=PANEL_FLOW}={}){
+// Event lines and packets are pixel art (pixel.js), in whole device pixels at
+// the current zoom.
+export function pixelUnit(){return pixelUnitFor(settings()?.zoom);}
+export function pixelRoute(from,to,lane,startX,endX,color,u=pixelUnit(),id=null){return drawPixelRoute(from,to,lane,startX,endX,color,u,id);}
+export function route(id,a,b,color,{dashed=false,packet=null,motion=false,relation=false,flow=PANEL_FLOW,done=color}={}){
   const remote=a.computer&&b.computer&&a.computer!==b.computer;
   const top=Math.min(a.y,b.y),height=Math.max(2,Math.abs(b.y-a.y));
   const lane=relation?6:dashed?flow.computer:packet?(packet.routeLane?flow.messageNext:flow.message):flow.collaboration;
   const startX=a.x??(packet?flow.endpoint:0),endX=b.x??(packet?flow.endpoint:0);
   const base=div().id(`panel-route-${id}`).absolute().right(flow.right).top(top).w(flow.width).h(height+3);
   if(packet?.kind==='message'){
+    // A message uses the same grammar as every other event packet (2026-11-10):
+    // the pixel line, the pixel block, the same corner timing and the same
+    // departure and arrival rings. Motion off draws nothing.
     if(!motion)return base;
-    const start=a.y-top,end=b.y-top,sourceX=startX,targetX=endX;
-    const reach=messageCurveReach(height,packet.routeLane);
-    if(remote){
-      // A remote send follows the same dashed pipe and computer colour. It
-      // never adds a second solid or curved connection across the other lanes.
-      base.child(route(`${id}-pipe`,a,b,color,{dashed:true,flow}).right(0).top(0));
-    }else{
-      const ease=t=>t<.5?4*t*t*t:1-(-2*t+2)**3/2;
-      const points=Array.from({length:25},(_,i)=>{const t=i/24;return {
-        x:t<=.5?sourceX+(reach-sourceX)*ease(t*2):reach+(targetX-reach)*ease(t*2-1),
-        y:start+(end-start)*ease(t),
-      };});
-      const path=PathBuilder.stroke(1.5).move_to(sourceX,start);
-      for(let i=0;i<points.length-1;i++){
-        const a=points[Math.max(0,i-1)],b=points[i],c=points[i+1],d=points[Math.min(points.length-1,i+2)];
-        path.cubic_bezier_to(c.x,c.y,b.x+(c.x-a.x)/6,b.y+(c.y-a.y)/6,c.x-(d.x-b.x)/6,c.y-(d.y-b.y)/6);
-      }
-      base.child(window.paint_path(path.build(),color+'99').absolute().left(0).top(0).w(flow.width+4).h(height+4));
-    }
-    if(['start','travel','ping'].includes(packet.phase)){
-      const initial=packet.phase==='start';let x,y,dx,dy,easing;
-      if(remote){
-        const elapsed=packet.elapsed;
-        const [,out,,back]=MESSAGE_LEGS;
-        [x,y,dx,easing]=initial?[sourceX,start,1,'linear']
-          :elapsed<out?[flow.computer,start,out-MESSAGE_LEGS[0],'ease-in']
-          :elapsed<back?[flow.computer,end,back-out,'linear']
-          :[targetX,end,MESSAGE_TIMING.packetMs-back,'ease-out'];dy=dx;
-      }else{
-        const turn=MESSAGE_LEGS[2],travel=MESSAGE_TIMING.packetMs-MESSAGE_TIMING.startMs;
-        x=initial?sourceX:packet.elapsed>=turn?targetX+.001:reach;y=initial?start:end;
-        dx=initial?1:turn-MESSAGE_LEGS[0];dy=initial?1:travel;easing='ease-in-out';
-      }
-      // Stable native policies across the curve turn avoid reversal jumps.
-      // Two delayed copies form the tail; only finite target changes wake JS.
-      for(const [index,size,tint,opacity,delay] of [[2,2.5,color,.3,80],[1,3.5,color,.75,40],[0,4,'#E9FBFF',1,0]]){
-        const part=div().id(index?`panel-packet-tail-${id}-${index}`:`panel-packet-${id}`).absolute()
-          .left(x-size/2).top(y-size/2).size(size).rounded(size/2).bg(tint).opacity(packet.phase==='ping'?0:opacity);
-        part.transition('left',{duration:dx,delay,easing}).transition('top',{duration:dy,delay,easing})
-          .transition('opacity',{duration:120,easing:'ease-out'});
-        base.child(part);
-      }
-    }
-    const arriving=['ping','fade'].includes(packet.phase),size=arriving?14:0;
-    const ping=div().id(`panel-receiver-${id}`).absolute().left(targetX-size/2).top(end-size/2).w(size).h(size)
-      .border(1).border_color(color).opacity(arriving?0:1);
-    for(const property of ['width','height','left','top','opacity'])ping.transition(property,{duration:420,easing:'ease-out'});
-    base.child(ping);
-    if(packet.phase==='fade')base.opacity(0).transition('opacity',390);
+    // A remote send follows its dashed computer pipe and colour, never a
+    // second solid connection across the other lanes.
+    const line=remote?route(`${id}-pipe`,a,b,color,{dashed:true,flow}).right(0).top(0):pixelRoute(a.y-top,b.y-top,lane,startX,endX,color,undefined,`panel-line-${id}`);
+    // Only the line fades; the arrival mark stays lit for its own hold.
+    base.child(line.opacity(packet.phase==='fade'?0.2:1).transition('opacity',900));
+    packetMarks(base,id,packet,{startX,endX,lane:remote?flow.computer:lane,from:a.y-top,to:b.y-top},color,done);
     return base;
   }
   if(dashed){
     // Dashes remain visible for the lifetime of a connection. A short pulse,
     // exactly as wide as the line, travels slowly down it and stops short of
     // the far stub, so nothing sticks out of the pipe; it is not a message packet.
-    const radius=Math.min(6,height/2);
+    const radius=Math.min(3,height/2);
     for(let y=radius;y<height-radius;y+=8)base.child(div().absolute().left(lane).top(y).w(1).h(Math.min(3,height-radius-y)).bg(color));
     for(const y of [0,height])for(let x=0;x<lane-radius;x+=7)base.child(div().absolute().left(x).top(y).w(Math.min(4,lane-radius-x)).h(2).bg(color));
-    const elbows=PathBuilder.stroke(1).move_to(lane-radius,0)
-      .cubic_bezier_to(lane,radius,lane,0,lane,0)
-      .move_to(lane,height-radius).cubic_bezier_to(lane-radius,height,lane,height,lane,height).build();
-    base.child(window.paint_path(elbows,color).absolute().left(0).top(0).w(flow.width).h(height+3));
+    // Stepped pixel elbows join the dashes to the vertical run.
+    const u=pixelUnit(),x=snap(lane,u);
+    for(const [dx,y] of [[-3,0],[-2,1],[-1,2],[-3,height],[-2,height-1],[-1,height-2]])base.child(pixelBlock(x+dx*u,snap(y,u),u,u,color));
     if(motion&&!relation&&height>LINK_PULSE)base.child(div().id(`panel-link-dot-${id}`).absolute().left(lane).w(1).h(LINK_PULSE).bg(color)
       .loop('top',{from:0,to:height-LINK_PULSE,period:16000,easing:'linear'}));
+  }else if(packet){
+    base.child(pixelRoute(a.y-top,b.y-top,lane,startX,endX,color,undefined,`panel-line-${id}`)
+      .opacity(packet.phase==='fade'?0.2:1).when(motion,e=>e.transition('opacity',900)));
+    if(motion)packetMarks(base,id,packet,{startX,endX,lane,from:a.y-top,to:b.y-top},color,done);
   }else{
+    // Stationary brackets keep their thin vector line.
     const origin=Math.max(0,-startX,-endX);
     const path=routePath(a.y-top,b.y-top,lane,endX,origin,startX);
     base.child(window.paint_path(path,color).absolute().left(-origin).top(0).w(flow.width+origin).h(height+3));
-    if(packet&&motion&&['start','travel'].includes(packet.phase)){
-      const elapsed=packet.elapsed;
-      const [leave,down,enter]=PANEL_LEGS;
-      const point=elapsed<leave?{x:startX,y:a.y-top,ms:1}
-        :elapsed<down?{x:lane,y:a.y-top,ms:down-leave}
-        :elapsed<enter?{x:lane,y:b.y-top,ms:enter-down}
-        :{x:endX,y:b.y-top,ms:PANEL_TIMING.packetMs-enter};
-      // Native delayed copies form a real fading tail, following the same
-      // finite corner targets as the head. No per-frame JavaScript runs.
-      for(const [index,size,opacity,delay] of [[1,6,0.8,40],[2,5,0.6,80],[3,4,0.4,120],[4,3,0.2,160]])
-        base.child(div().id(`panel-packet-tail-${id}-${index}`).absolute().left(point.x-size/2).top(point.y-size/2)
-          .size(size).rounded(1).bg(color).opacity(opacity)
-          .transition('left',{duration:point.ms,delay,easing:'ease-in-out'})
-          .transition('top',{duration:point.ms,delay,easing:'ease-in-out'}));
-      base.child(div().id(`panel-packet-${id}`).absolute().left(point.x-4).top(point.y-4).size(8).rounded(1).bg(color)
-        .child(div().absolute().left(3).top(3).size(2).bg('#FFFFFF'))
-        .transition('left',{duration:point.ms,easing:'ease-in-out'})
-        .transition('top',{duration:point.ms,easing:'ease-in-out'}));
-    }
     if(packet?.phase==='fade')base.opacity(0.2).when(motion,e=>e.transition('opacity',900));
-    if(packet&&motion){
-      // Keep a zero-size receiver keyed throughout travel. At arrival its
-      // native width/height expand while opacity fades from one to zero.
-      const departing=packet.phase!=='start',departureSize=departing?24:0;
-      const departure=div().id(`panel-sender-${id}`).absolute().left(startX-departureSize/2).top(a.y-top-departureSize/2)
-        .w(departureSize).h(departureSize).rounded(1).border(1).border_color(color).opacity(departing?0:1);
-      for(const property of ['width','height','left','top','opacity'])departure.transition(property,{duration:460,easing:'ease-out'});
-      base.child(departure);
-      const arriving=['ping','fade'].includes(packet.phase),size=arriving?24:0;
-      const ring=div().id(`panel-receiver-${id}`).absolute().left(endX-size/2).top(b.y-top-size/2)
-        .w(size).h(size).rounded(1).border(1).border_color(color).opacity(arriving?0:1);
-      for(const property of ['width','height','left','top','opacity'])ring.transition(property,{duration:460,easing:'ease-out'});
-      base.child(ring);
-    }
+    if(packet&&motion)packetMarks(base,id,packet,{startX,endX,lane,from:a.y-top,to:b.y-top},color);
   }
   return base;
+}
+
+// One event packet on its line, shared by messages and task events: a 3x3 pixel
+// block that leaves the source row, runs along the lane and enters the target
+// row, one finite native transition per corner, centred on the 1px line. A
+// square 1px ring opens at departure. A message lands with one small blink in
+// its colour; a task event lights the done mark in `done`, a colour that
+// contrasts with the background. No per-frame JavaScript.
+function packetMarks(base,id,packet,{startX,endX,lane,from,to},color,done=color){
+  const u=pixelUnit();[startX,endX,lane,from,to]=[startX,endX,lane,from,to].map(value=>snap(value,u));
+  if(['start','travel'].includes(packet.phase)){
+    const elapsed=packet.elapsed;
+    const [leave,down,enter]=PANEL_LEGS;
+    const point=elapsed<leave?{x:startX,y:from,ms:1}
+      :elapsed<down?{x:lane,y:from,ms:down-leave}
+      :elapsed<enter?{x:lane,y:to,ms:enter-down}
+      :{x:endX,y:to,ms:PANEL_TIMING.packetMs-enter};
+    const side=PACKET_PIXELS*u,offset=centred(PACKET_PIXELS,u);
+    base.child(pixelBlock(point.x-offset,point.y-offset,side,side,color,`panel-packet-${id}`)
+      .transition('left',{duration:point.ms,easing:'ease-in-out'})
+      .transition('top',{duration:point.ms,easing:'ease-in-out'}));
+  }
+  base.child(pixelRing(`panel-sender-${id}`,startX,from,packet.phase!=='start',color,u));
+  const landed=['ping','fade'].includes(packet.phase);
+  // A message lands with one small blink in its own colour; only a task event
+  // gets the done mark (2px foreground ring, second blink, core block).
+  if(packet.kind==='message')base.child(pixelLanding(`panel-receiver-${id}`,endX,to,landed,color,u));
+  else base.children(pixelArrival(`panel-receiver-${id}`,endX,to,landed,done,u));
 }
 
 export function panelFlowLayer(feed,layout,state,color,t,motion,width,gutter=null){
@@ -403,7 +388,7 @@ export function panelFlowLayer(feed,layout,state,color,t,motion,width,gutter=nul
     }
     if(a&&b){
       const tone=a.computer===b.computer?(paletteMode(t)==='light'?'#006C77':'#79D1DC'):remoteTone(a,b);
-      layer.child(drawRoute(packet.id,a,b,tone,{packet,motion}));
+      layer.child(drawRoute(packet.id,a,b,tone,{packet,motion,done:t.foreground}));
     }
   }
   if(!motion)for(const event of state.connections.filter(event=>event.kind!=='message')){
@@ -419,7 +404,7 @@ export function renderPanelTracking(view,t,cx,{macTitlebar=false}={}){
   const state=panelEventStates(feed,now,{previous:view.panelEvents,motion});view.panelEvents=state;view.now=now;
   let nextAt=state.nextAt;
   const reasonAt=panelReasonWake(feed,now);if(reasonAt!==null&&(nextAt===null||reasonAt<nextAt))nextAt=reasonAt;
-  for(const packet of state.packets)for(const offset of (packet.kind==='message'?MESSAGE_LEGS:PANEL_LEGS.slice(1))){
+  for(const packet of state.packets)for(const offset of PANEL_LEGS.slice(1)){
     const at=packet.at+offset;if(at>now&&(nextAt===null||at<nextAt))nextAt=at;
   }
   if(view.panelWakeAt!==nextAt){

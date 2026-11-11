@@ -64,8 +64,8 @@ let loads = 0;
 async function loadCards(runtime) {
   globalThis.__cardRuntime = runtime;
   let source = (await readFile(new URL('../mods/sixfold-desk/asks.js', import.meta.url), 'utf8')).replace(/\r\n/g, '\n');
-  source = source.replace(/^import .* from 'gpui-kit';\n/m, '').replace(/^import .* from 'gpui-base';\n/m, '');
-  source = source.replace(/^import .* from 'herdr';/m, 'const {run,exec,readTextFile,writeTextFile,appHome} = globalThis.__cardRuntime;');
+  source = source.replace(/^import .* from 'gpui-kit';\n/m, 'const {div} = globalThis.__cardRuntime;\n').replace(/^import .* from 'gpui-base';\n/m, 'const {h_flex,v_flex} = globalThis.__cardRuntime;\n');
+  source = source.replace(/^import \{(.*)\} from 'herdr';/m, (_m, names) => `const {${names}} = globalThis.__cardRuntime;`);
   source = source.replace(/^import .* from '.\/panel-io.js';/m,'const {subscribeJsonFile,readJsonSnapshot}=globalThis.__cardRuntime;');
   source = source.replace("from './ask-model.js'", `from ${JSON.stringify(new URL('../mods/sixfold-desk/ask-model.js', import.meta.url).href)}`);
   return import(`data:text/javascript;base64,${Buffer.from(source + `\n// ${++loads}`).toString('base64')}`);

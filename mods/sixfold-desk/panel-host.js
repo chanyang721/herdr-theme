@@ -1,5 +1,7 @@
 // Join display records only through explicit native navigation identities.
-export const PANEL_FLOW=Object.freeze({gutter:72,right:8,width:64,message:20,messageNext:24,collaboration:30,computer:40,endpoint:0});
+// Lane offsets are from the card edge. Since the pixel-art pipes (1px lines, 3x3
+// blocks, 2026-11-10) the lanes sit 4px apart in a 48px gutter, not 72px.
+export const PANEL_FLOW=Object.freeze({gutter:48,right:8,width:40,message:12,messageNext:16,collaboration:22,computer:28,endpoint:0});
 
 // Only filtered remote endpoints project to their explicitly identified
 // computer. Hidden local rows must not acquire an invented route.
@@ -31,7 +33,8 @@ export function hostedTaskLayout(layout, entries, computerAnchors=[]) {
   for(const entry of entries){
     const card=layout?.cards.find(card=>card.space.id===entry.task?.id);
     if(card){
-      const header=41+(entry.alertHeight||0);
+      // Header 36 + border 1 + the card's 2px gaps; alertHeight adds the badge and alert rows.
+      const header=39+(entry.alertHeight||0);
       const delta=y+header-(card.top+35);
       const next={...card,top:y,rows:card.rows.map(row=>({...row,y:row.y+delta}))};
       cards.push(next);
@@ -80,15 +83,8 @@ export function messageFlowGeometry(gutter){
  return {...PANEL_FLOW,gutter,width,computer:Math.min(PANEL_FLOW.computer,width-5),collaboration:Math.min(PANEL_FLOW.collaboration,width-12)};
 }
 
-// The cubic control width is 12 + 8% of the row distance, capped at32px.
-// Its midpoint is three quarters of that width. A second queued lane remains
-// inside the same 24px message band instead of crossing static links.
-export function messageCurveReach(distance,lane=0){
- return .75*Math.max(8,Math.min(32,12+Math.abs(distance)*.08)-Math.min(1,Math.max(0,lane))*4);
-}
-
 export function computerFlow(feed,computer,flow=PANEL_FLOW){
  const local=taskComputerRecord(feed,null)?.id||feed.computers[0]?.id;
  const index=Math.max(0,feed.computers.filter(item=>item.id!==local).findIndex(item=>item.id===computer));
- return {...flow,computer:Math.min(flow.width,flow.computer+index*8)};
+ return {...flow,computer:Math.min(flow.width,flow.computer+index*4)};
 }

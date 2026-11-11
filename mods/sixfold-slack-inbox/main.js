@@ -1,7 +1,7 @@
 import { View, div, image } from 'gpui-kit';
 import { h_flex, v_flex } from 'gpui-base';
 import { theme, props, appHome, home, readTextFile, writeTextFile, shared, setShared, openOverlay, closeOverlay, exec } from 'herdr';
-import { readable, threadGroups } from './model.js';
+import { readable, threadGroups, freshness } from './model.js';
 
 export default class MentionInbox extends View {
   init(_props,cx) {
@@ -67,6 +67,7 @@ export default class MentionInbox extends View {
       .child(div().text_size(12).text_color(t.muted).child('미확인은 이 팝업에서 확인하지 않은 스레드입니다. Slack 앱의 읽음 상태와 별도로 관리합니다.'))
       .child(div().text_size(12).text_color(health.state==='error'?t.blocked:t.muted).child(`수집: ${healthLabels[health.state] || '상태 확인 전'} · 마지막 성공 ${health.last_success || '아직 없음'} · 60초마다 조회 시도`))
       .when(health.slack_freshness==='unknown',e=>e.child(div().text_size(12).text_color(t.muted).child('MCP 미러 기준 · Slack 최신성·인덱싱 지연 미확인')))
+      .when(Boolean(freshness(health,Date.now())),e=>e.child(div().text_size(12).text_color(t.blocked).child(freshness(health,Date.now()))))
       .child(h_flex().gap(7).items_center()
         .child(button('sf-filter-all-projects',`전체 ${groups.length}`,!this.project,(_e,cx)=>{this.project=null;cx.notify();}))
         .children(projects.map(project=>button(`sf-filter-${project}`,`${project} · ${groups.filter(g=>g.project===project && g.unread>0).length} 미확인`,this.project===project,(_e,cx)=>{this.project=project;cx.notify();}).text_color(color(project)))))

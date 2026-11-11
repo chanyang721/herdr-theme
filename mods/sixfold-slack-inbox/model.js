@@ -24,3 +24,16 @@ export function threadGroups(items,read={}) {
   }
   return [...threads.values()].sort((a,b)=>Number(b.unread>0)-Number(a.unread>0) || String(b.latest.at).localeCompare(String(a.latest.at)));
 }
+// Mirror lag and the Slack app's own unread badge (local app status, no message content).
+// The mirror's newest message stops moving when the mirror stalls; say so instead of "0 new".
+export function freshness(health={},now=Date.now(),staleHours=6) {
+  const parts=[];
+  const latest=Date.parse(health.mirror_latest_at || '');
+  if(Number.isFinite(latest) && now-latest>staleHours*3600e3){
+    const at=new Date(latest);
+    parts.push(`미러 최신 메시지 ${at.getMonth()+1}/${at.getDate()} ${String(at.getHours()).padStart(2,'0')}:${String(at.getMinutes()).padStart(2,'0')} 이후 없음 · 미러 지연 가능`);
+  }
+  const badge=String(health.app_badge ?? '').trim();
+  if(badge && badge!=='0')parts.push(`Slack 앱 미확인 표시 ${badge==='•'?'있음':badge}`);
+  return parts.join(' · ');
+}
