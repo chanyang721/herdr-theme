@@ -37,7 +37,7 @@ The bridge `command`+`args` is run with:
 The bridge `apply` command is run with `--key KEY --request ID` only when **Linear 에 반영** is pressed.
 C writes `<KEY>.request.json` as `{key, id, changes}`; every reply change carries its own
 idempotency key `rid`. The command must write `<KEY>.apply.json` as
-`{key, request, at, ok, error, applied, kept}`, where `request` is the `id` it answered. C uses a
+`{key, request, at, ok, error, applied, kept, unsure, check?}`, where `request` is the `id` it answered. C uses a
 result only when `request` matches the request it just wrote, whatever the exit code; otherwise it
 keeps every change pending. Changes in `kept` stay pending, and the request file then holds them.
 **취소** and removing a change rewrite that file (with a new `id`), so they do not come back on
@@ -47,13 +47,20 @@ command runs only the request named by `--request`; when the file holds another 
 nothing and answers `{request: ID, mismatch: true}`, and C keeps its changes. The command rewrites
 the request file only while its `id` is still the one it ran.
 
-Each reply's `rid` is reserved in `<KEY>.sent.json` by the write guard, synced to disk (fsync),
-before its call is let through; the guard refuses a `rid` already in that file. So a process that
-dies after the call (non-zero exit, timeout, unreadable reply) still leaves the reservation. On the
-next apply a reserved reply is held for a minute, then looked up on Linear: found means confirmed and
-not sent; not found frees the `rid` for one more send (reserved again). A reply whose run finished
-(`sent`) but which Linear does not show stays pending with a note instead of being re-sent.
-Removing it and writing it again makes a new `rid`.
+Field changes (`save_issue`) set values, so a failed run simply sends them again. Replies are not
+idempotent, so:
+
+- Each reply's body ends with its key as a mark (`` `herdr-rid:RID` ``, inline code so Linear keeps it;
+  the popup hides it). A reply counts as on Linear only when that mark is found, never by its words.
+- The write guard reserves the `rid` in `<KEY>.sent.json` (written and fsynced, under a lock that
+  parallel hooks share) before the call is let through, and refuses a `rid` already there.
+- A reserved reply is settled only by a fresh, complete comment lookup (`list_comments` to the last
+  page, no tool errors, one tail per comment counted): mark found → confirmed, not sent; mark absent
+  and the reservation older than a minute → sent once more (reserved again). A lookup that failed,
+  did not finish, or a reservation too recent leaves it reserved and unsent: the result carries
+  `unsure: N` and C shows **확인 필요(댓글 전송 여부 불명)** with **[다시 확인]**, which runs the command
+  with `--check` (look only, send nothing).
+- Removing an unsure reply from C does not free its `rid`; writing it again makes a new one.
 
 The reference producer (kept outside this repo, Python) syncs only what changed: one full read
 when it starts and every 2 hours as a safety net (a failed one keeps the last good values and is
