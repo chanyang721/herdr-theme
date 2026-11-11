@@ -28,7 +28,8 @@ export function paneWork(terminal,shared,now=Date.now()){
   const work=from.terminals?.[terminal]?.work;
   if(!work||typeof work!=='object')return null;
   const tasks=work.tasks?.total>0?work.tasks:null;
-  const agents=work.subagents?.running>0?work.subagents:null;
+  // partial: the collector read only part of the records, so running is a lower bound (maybe 0).
+  const agents=work.subagents?.running>0||work.subagents?.partial===true?work.subagents:null;
   return tasks||agents?{tasks,agents}:null;
 }
 
@@ -38,7 +39,12 @@ export function workParts(work,width){
   const parts=[];
   if(work.tasks)parts.push({kind:'tasks',text:`${wide?'할 일 ':''}${work.tasks.completed}/${work.tasks.total}`,
     done:work.tasks.completed===work.tasks.total});
-  if(work.agents)parts.push({kind:'agents',text:wide?`서브에이전트 ${work.agents.running} 실행 중`:`서브 ${work.agents.running}`});
+  if(work.agents){
+    const {running,partial}=work.agents;
+    const text=!partial?(wide?`서브에이전트 ${running} 실행 중`:`서브 ${running}`)
+      :running>0?(wide?`서브에이전트 ${running}+ 실행 중`:`서브 ${running}+`):(wide?'서브에이전트 확인 불가':'서브 ?');
+    parts.push({kind:'agents',text});
+  }
   return parts;
 }
 
@@ -50,7 +56,9 @@ export function workTip(work){
     if(current)lines.push(`지금: ${current}`);
   }
   if(work.agents){
-    lines.push(`서브에이전트 ${work.agents.running}개 실행 중`);
+    const {running,partial}=work.agents;
+    lines.push(!partial?`서브에이전트 ${running}개 실행 중`
+      :running>0?`서브에이전트 ${running}개 이상 실행 중 (기록이 많아 일부만 확인)`:'서브에이전트 실행 수 확인 불가 (기록이 많아 일부만 확인)');
     for(const name of work.agents.names||[])lines.push(`· ${name}`);
   }
   lines.push('Claude 할 일 목록·서브에이전트 기록 기준 (2분마다 갱신, 6분 넘게 갱신이 없으면 숨김)');

@@ -72,3 +72,17 @@ test('an old or unavailable snapshot shows no work, judged by the terminal\'s ow
  store[module.COMPUTERS_KEY].local.available=false;
  assert.equal(module.paneWork('t1',shared,now),null,'a computer marked unavailable shows no work');
 });
+
+test('a partial sub-agent count is shown as a lower bound, and an unconfirmed zero as unknown',async()=>{
+ const {module}=await load();
+ const now=Date.now(),at=terminals=>key=>key===module.SHARES_KEY?{updated:now,terminals}:undefined;
+ const one=module.paneWork('t1',at({t1:{work:{subagents:{running:1,names:['One'],partial:true}}}}),now);
+ assert.deepEqual(module.workParts(one,700).map(p=>p.text),['서브에이전트 1+ 실행 중']);
+ assert.deepEqual(module.workParts(one,300).map(p=>p.text),['서브 1+']);
+ assert.match(module.workTip(one),/서브에이전트 1개 이상 실행 중 \(기록이 많아 일부만 확인\)/);
+ const zero=module.paneWork('t1',at({t1:{work:{subagents:{running:0,names:[],partial:true}}}}),now);
+ assert.ok(zero,'an unconfirmed zero still gets a chip');
+ assert.deepEqual(module.workParts(zero,700).map(p=>p.text),['서브에이전트 확인 불가']);
+ assert.match(module.workTip(zero),/서브에이전트 실행 수 확인 불가/);
+ assert.equal(module.paneWork('t1',at({t1:{work:{subagents:{running:0,names:[]}}}}),now),null,'a confirmed zero shows nothing');
+});
