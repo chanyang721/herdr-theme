@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { parseFeed, rootOf, weekBar, weekRows, windowOf, dayCells, kindOf, projectRange, projectRows, freshness, bridgeFrom, wantCompact, mix, monday, addDays } from '../mods/week-timeline/model.js';
+import { parseFeed, rootOf, weekMarker, weekRows, windowOf, dayCells, kindOf, projectRange, projectRows, freshness, bridgeFrom, wantCompact, mix, monday, addDays } from '../mods/week-timeline/model.js';
 
 const TODAY = '2026-11-11';
 const issue = (key, state, extra = {}) => ({ key, title: `${key} 제목`, status: state, state, due: '', start: '', done_at: '', parent: '', milestone: '', ...extra });
@@ -45,16 +45,14 @@ test('root issue: the highest known ancestor', () => {
   assert.ok(['A-1', 'A-2'].includes(rootOf('A-1', loop)));
 });
 
-test('week bars: due-only is that day, past the week shows →, no due runs to the end', () => {
+test('week markers: deadline day only, future week is text, no date has no mark', () => {
   const win = windowOf(feed, TODAY, 7);
-  assert.deepEqual(weekBar(issue('X-1', 'todo', { due: '2026-11-12' }), win, TODAY), { from: 3, to: 3, label: '' });
-  assert.deepEqual(weekBar(issue('X-2', 'review', { start: '2026-11-09', due: '2026-12-03' }), win, TODAY), { from: 0, to: 6, label: '→ 12/3' });
-  assert.deepEqual(weekBar(issue('X-3', 'started', { start: '2026-11-09' }), win, TODAY), { from: 0, to: 6, label: '기한 없음' });
-  assert.deepEqual(weekBar(issue('X-4', 'started', { start: '2026-11-02', due: '2026-11-12' }), win, TODAY), { from: 0, to: 3, label: '' });
-  assert.deepEqual(weekBar(issue('X-5', 'todo', { due: '2026-11-05' }), win, TODAY), { from: 0, to: 0, label: '11/5 지남' });
+  assert.deepEqual(weekMarker('2026-11-12', win), { at: 3, edge: '', label: '' });
+  assert.deepEqual(weekMarker('2026-12-03', win), { at: 6, edge: 'future', label: '→ 12/3' });
+  assert.equal(weekMarker('', win), null);
+  assert.deepEqual(weekMarker('2026-11-05', win), { at: 0, edge: 'past', label: '11/5 지남' });
   const two = windowOf(feed, TODAY, 14);
-  assert.equal(two.end, '2026-11-22');
-  assert.deepEqual(weekBar(issue('X-6', 'todo', { due: '2026-11-20' }), two, TODAY), { from: 11, to: 11, label: '' });
+  assert.deepEqual(weekMarker('2026-11-20', two), { at: 11, edge: '', label: '' });
 });
 
 test('lozenge kind: late and due today win over the state', () => {
@@ -70,14 +68,14 @@ test('A rows: project > top issue > work, like the design', () => {
   assert.deepEqual(rows.map(r => [r.kind, r.key]), [
     ['project', 'ALP'],
     ['epic', 'DEMO-373'], ['item', 'DEMO-555'], ['item', 'DEMO-480'], ['item', 'DEMO-400'], ['item', 'DEMO-401'],
-    ['epic', 'DEMO-418'], ['item', 'DEMO-533'],
     ['item', 'DEMO-700'],
+    ['epic', 'DEMO-418'], ['item', 'DEMO-533'],
     ['project', 'Beta'],
   ]);
   const epic = rows[1];
   assert.equal(epic.title, 'DEMO-373 제목');
-  assert.deepEqual([epic.done, epic.total, epic.from], [1, 5, 0]);
-  assert.equal(rows[6].title, '');   // a parent outside my issues is named by key only
+  assert.deepEqual([epic.done, epic.total], [1, 5]);
+  assert.equal(rows.find(r => r.kind === 'epic' && r.key === 'DEMO-418').title, '');   // a parent outside my issues is named by key only
   assert.deepEqual([rows[0].done, rows[0].total], [1, 7]);
   assert.equal(rows[9].empty, true);
   assert.equal(rows.find(r => r.key === 'DEMO-480').look, 'hot');
@@ -164,7 +162,7 @@ test('bridge and colour helpers', () => {
 test('layout: timeline band under the strip, title row gone, chip rows in a stack', () => {
   const layout = JSON.parse(readFileSync(new URL('../layouts/sixfold.json', import.meta.url), 'utf8'));
   const find = (n, id) => n?.id === id ? n : (n?.children || []).map(c => find(c, id)).find(Boolean);
-  assert.deepEqual(find(layout, 'work').children.map(c => c.id), ['monitor-strip', 'week-timeline', 'tabs', 'body', 'status']);
+  assert.deepEqual(find(layout, 'work').children.map(c => c.id), ['monitor-strip', 'week-timeline', 'tabs', 'body']);
   assert.equal(find(layout, 'toolbar'), undefined);
   assert.equal(find(layout, 'monitor-strip').window_drag, true);
   const stack = find(layout, 'mcp-cli');
@@ -174,5 +172,10 @@ test('layout: timeline band under the strip, title row gone, chip rows in a stac
   assert.deepEqual(find(layout, 'mcp-cli-line').children.map(c => c.content.mod), ['mcp-status', 'cli-status']);
   const band = find(layout, 'week-timeline');
   assert.equal(band.content.mod, 'week-timeline');
-  assert.equal(band.max, 202);
+  assert.deepEqual(band.size, { px: 28 });
+  assert.equal(band.min, 28);
+  assert.equal(band.max, 171);
+  assert.equal(find(layout, 'status'), undefined);
+  // Retain the footer renderer for layouts that opt into it.
+  assert.match(readFileSync(new URL('../mods/sixfold-desk/main.js', import.meta.url), 'utf8'), /role === 'footer'/);
 });
