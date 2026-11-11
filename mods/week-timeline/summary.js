@@ -45,12 +45,13 @@ export function bandModel(feed, { today }) {
   return { win, days, ongoing, due, total: due + ongoing.length, range: `${md(win.start)} – ${md(win.end)}` };
 }
 
-// Rough text widths: Hangul and other wide glyphs one em, the rest ~0.6 em.
+// Rough text widths, a few percent wide of the app's rendering (checked against an 11px chip:
+// estimated 255 px for 246 drawn): Hangul ~0.86 em, capitals, digits and marks 0.6, the rest less.
 export function textWidth(text, size = 12) {
   let w = 0;
   for (const ch of String(text)) {
     const c = ch.codePointAt(0);
-    w += c >= 0x1100 ? size : ch === ' ' ? size * 0.3 : /[A-Z0-9→◆●…]/.test(ch) ? size * 0.66 : size * 0.56;
+    w += c >= 0x1100 ? size * 0.86 : ch === ' ' ? size * 0.28 : /[A-Z0-9→◆●…]/.test(ch) ? size * 0.6 : size * 0.52;
   }
   return Math.ceil(w);
 }
