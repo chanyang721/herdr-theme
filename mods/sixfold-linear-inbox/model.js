@@ -61,7 +61,8 @@ export function collectLine(health) {
   const h = health && typeof health === 'object' ? health : {};
   const state = HEALTH_STATE[h.state] || '상태 확인 전';
   const kind = h.state === 'error' ? COLLECT_ERROR[h.error_kind] : '';
-  const source = h.source === 'linear-api' ? 'Linear API 직접 · ' : '';
+  // No API key yet: the collector keeps reading through MCP and says so.
+  const source = h.source === 'linear-api' ? 'Linear API 직접 · ' : h.fallback === 'key_missing' ? 'API 키 없음 · MCP로 수집 · ' : '';
   return `수집: ${source}${state}${kind ? ` · ${kind}` : ''} · 마지막 성공 ${h.last_success || '아직 없음'} · 60초마다 조회 · 읽음은 Linear 기준`;
 }
 export function issueLine(item) {
