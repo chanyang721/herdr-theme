@@ -2,8 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import * as model from '../mods/week-timeline/model.js';
-import * as band from '../mods/week-timeline/band.js';
-
+import { weekSummary } from '../mods/week-timeline/summary.js';
 const today = '2026-11-11';
 const item = (key, extra = {}) => ({ key, title: key, status: 'Todo', state: 'todo', start: '', due: '', parent: '', ...extra });
 const feed = { week: { start: '2026-11-09' }, projects: [
@@ -15,14 +14,11 @@ const feed = { week: { start: '2026-11-09' }, projects: [
   ] }, { key: 'MH', name: 'MH', milestones: [], issues: [item('DEMO-5', { due: today })] },
 ] };
 
-test('summary counts work once, retains counts under folds, and follows project filter', () => {
-  const s = band.bandSummary(feed, { today, filter: 'ALP', open: { ALP: false } });
-  assert.deepEqual([s.total, s.today, s.blocked, s.started], [3, 1, 1, 1]);
-  assert.deepEqual(s.kinds, { hot: 1, review: 1, done: 1 });
-  assert.equal(s.projects.length, 1);
-  assert.equal(band.bandSummary(feed, { today, filter: 'MH' }).total, 1);
-  assert.equal(band.bandSummary(feed, { today, filter: 'all' }).total, 4);
-  assert.equal(band.bandSummary(null, { today }).total, 0);
+test('chip counts selected open work once, ignores tree folds, and highlights dated work', () => {
+  const s=weekSummary(feed,{today,filter:'ALP',open:{ALP:false}});
+  assert.deepEqual([s.total,s.today,s.late],[2,1,0]);
+  assert.equal(weekSummary(feed,{today}).total,3);
+  assert.equal(weekSummary(null,{today}).total,0);
 });
 
 test('processing dates sort late, today, nearest, milestone fallback and undated, then state and key', () => {
@@ -42,7 +38,7 @@ test('processing dates sort late, today, nearest, milestone fallback and undated
   assert.deepEqual(items.map(i => i.key), ['DEMO-9','DEMO-2','DEMO-3','DEMO-10','DEMO-20','DEMO-30','DEMO-40','DEMO-50']);
   assert.deepEqual(items.find(i => i.key === 'DEMO-30').marker, {at:4,edge:'',label:''});
   assert.equal(items.at(-1).marker, null);
-  assert.deepEqual(band.bandSummary(f, {today}).items.map(i => i.key), items.map(i => i.key));
+  assert.deepEqual(weekSummary(f, {today}).items.map(i => i.key), items.map(i => i.key));
   assert.equal(model.processingDate({due:'2026-11-12',milestone:'m1'},new Map([['m1','2026-11-13']])), '2026-11-12');
 });
 
@@ -58,18 +54,11 @@ test('projects and parent groups sort by their earliest work, including a loose 
   ]};
   const rows=model.weekRows(f,{today,open:{'first/DEMO-2':false}}).rows;
   assert.deepEqual(rows.map(r=>r.key),['first','DEMO-2','DEMO-30','DEMO-1','DEMO-10','later','X-1']);
-  assert.deepEqual(band.bandSummary(f,{today}).items.map(r=>r.key),['DEMO-20','DEMO-30','DEMO-10','X-1']);
-});
-
-test('collapsed and expanded heights reclaim space and cap the viewport at five rows', () => {
-  assert.equal(band.bandHeight(false, 100), 28);
-  assert.equal(band.bandHeight(true, 100), 171);
-  assert.equal(band.bandHeight(true, 1), 75);
-  assert.equal(band.bandHeight(true, 3), 123);
+  assert.deepEqual(weekSummary(f,{today}).items.map(r=>r.key),['DEMO-20','DEMO-30','DEMO-10','X-1']);
 });
 
 let copy = 0;
-async function runtime(saved = new Map()) {
+async function runtime(initialProps = {}) {
   const calls = [], jobs = [];
   function element() {
     const node = { calls: [], kids: [] };
@@ -85,12 +74,11 @@ async function runtime(saved = new Map()) {
     } });
     return proxy;
   }
-  const lib = { ...model, ...band, View: class {}, div: element, h_flex: element, v_flex: element,
+  const lib = { ...model, weekSummary, View: class {}, div: element, h_flex: element, v_flex: element,
     initIssue() {}, renderIssue() {}, appHome: () => '/fake', exec: async () => ({ code: 0 }), readTextFile: async () => null,
     theme: () => ({ background: '#111821', foreground: '#d8e3eb', border: '#304050', canvas: '#0c121a', working: '#99b9f5', blocked: '#f5b56c', done: '#91cfaa' }),
-    props: () => ({}), settings: () => ({ zoom: 1 }), isoDay: () => today,
-    run: (name, args) => calls.push([name, args]), openOverlay: args => calls.push(['overlay', args]), closeOverlay() {},
-    shared: k => saved.get(k), setShared: (k, v) => saved.set(k, v) };
+    props: () => initialProps, isoDay: () => today,
+    openOverlay: args => calls.push(['overlay', args]), closeOverlay: id => calls.push(['close', id]) };
   const source = readFileSync(new URL('../mods/week-timeline/main.js', import.meta.url), 'utf8');
   const names = [...source.matchAll(/^import \{([^}]*)\} from/gm)].flatMap(m => m[1].split(',').map(n => n.trim()));
   for (const n of names) assert.ok(n in lib, `runtime lacks ${n}`);
@@ -102,62 +90,48 @@ async function runtime(saved = new Map()) {
   await Promise.all(jobs); view.feed = feed;
   const find = (node, id) => node?.calls?.some(c => c[0] === 'id' && c[1] === id) ? node : node?.kids?.map(c => find(c, id)).find(Boolean);
   const click = node => node.calls.find(c => c[0] === 'on_click')[1]({}, cx);
-  return { view, cx, calls, saved, find, click };
+  return { view, cx, calls, find, click };
 }
 
-test('summary click resizes the block, survives a new view, and collapse frees the space', async () => {
-  const r = await runtime();
-  assert.equal(r.view.expanded, false);
-  assert.deepEqual(r.calls.at(-1), ['layout.resize', { id: 'week-timeline', px: 28 }]);
-  r.click(r.find(r.view.render(), 'wt-summary'));
-  assert.equal(r.saved.get(band.EXPANDED_KEY), true);
-  assert.equal(r.calls.at(-1)[1].px, 171);
-  const body = r.find(r.view.render(), 'wt-body');
-  assert.ok(body.calls.some(c => c[0] === 'overflow_y_scrollbar'));
-  const restarted = await runtime(r.saved);
-  assert.equal(restarted.view.expanded, true);
-  r.click(r.find(r.view.render(), 'wt-collapse'));
-  assert.equal(r.calls.at(-1)[1].px, 28);
-  assert.equal(r.saved.get(band.EXPANDED_KEY), false);
-  assert.equal((await runtime(r.saved)).view.expanded, false);
+test('header chip opens one full-window dialog and never changes the layout or fold state', async () => {
+  const r=await runtime();
+  assert.equal(r.view.mode,'chip');
+  assert.equal(r.calls.length,0);
+  r.click(r.find(r.view.render(),'wt-chip'));
+  assert.deepEqual(r.calls.at(-1),['overlay',{mod:'week-timeline',kind:'dialog',key:'week-timeline-week',width:1,height:1,frame:'none',props:{week:true}}]);
+  assert.equal(r.view.expanded,undefined);
 });
 
-test('full timeline link opens the overlay without toggling the band', async () => {
-  const r = await runtime();
-  r.view.filter = 'MH';
-  r.click(r.find(r.view.render(), 'wt-summary-full'));
-  assert.equal(r.view.expanded, false);
-  assert.equal(r.calls.at(-1)[0], 'overlay');
-  assert.equal(r.calls.at(-1)[1].props.project, 'MH');
-});
-
-test('few rows do not collapse the chip header; only actual squeezing does', async () => {
-  const r = await runtime();
-  Object.assign(r.view, { expanded: true, bandHeight: 75, height: 75, appliedAt: 0 });
-  r.view.fitChips();
-  assert.equal(r.calls.findLast(c => c[0] === 'layout.select')[1].child, 'mcp-cli-stack');
-  Object.assign(r.view, { bandHeight: 171, height: 120, appliedAt: 0 });
-  r.view.fitChips();
-  assert.equal(r.calls.findLast(c => c[0] === 'layout.select')[1].child, 'mcp-cli-line');
-  Object.assign(r.view, { expanded: false, appliedAt: 0 });
-  r.view.fitChips();
-  assert.equal(r.calls.findLast(c => c[0] === 'layout.select')[1].child, 'mcp-cli-stack');
+test('the backdrop and close button dismiss the dialog; panel clicks stay inside', async () => {
+  const r=await runtime({week:true,overlay:'week-dialog'});
+  const tree=r.view.render();
+  r.click(r.find(tree,'wt-dialog'));
+  assert.equal(r.calls.length,0);
+  r.click(r.find(tree,'wt-backdrop'));
+  assert.deepEqual(r.calls.at(-1),['close','week-dialog']);
+  r.click(r.find(tree,'wt-close'));
+  assert.deepEqual(r.calls.at(-1),['close','week-dialog']);
 });
 
 test('the week paints deadline markers and future text, with no parent duration bar', async () => {
-  const r = await runtime(); r.view.expanded = true;
-  const tree = r.view.render();
-  const mark = r.find(tree, 'wt-mark-DEMO-2');
-  assert.ok(mark);
-  const words = node => typeof node === 'string' ? [node] : (node?.kids || []).flatMap(words);
-  assert.ok(words(mark).includes('◆'));
+  const r=await runtime({week:true,overlay:'week-dialog'}),tree=r.view.render();
+  const words=node=>typeof node==='string'?[node]:(node?.kids||[]).flatMap(words);
+  assert.ok(words(r.find(tree,'wt-mark-DEMO-2')).includes('◆'));
   assert.ok(words(tree).includes('→ 12/3'));
-  const parent = r.find(tree, 'wt-r-1');
-  assert.equal(parent.kids[1].kids.length, 0); // Date lane is empty; progress stays on the left.
-  r.click(r.find(tree, 'wt-collapse'));
-  const summary = r.view.render();
-  assert.ok(r.find(summary, 'wt-summary-DEMO-2'));
-  r.click(r.find(summary, 'wt-summary-DEMO-2'));
-  assert.equal(r.calls.at(-1)[1].props.issue, 'DEMO-2');
-  assert.equal(r.view.expanded, false);
+  assert.equal(r.find(tree,'wt-r-1').kids[1].kids.length,0);
+  r.click(r.find(tree,'wt-r-2'));
+  assert.equal(r.calls.at(-1)[1].props.issue,'DEMO-2');
+  assert.ok(r.find(tree,'wt-body').calls.some(c=>c[0]==='overflow_y_scrollbar'));
+});
+
+test('project and two-week controls update the table; full view closes the week dialog first', async () => {
+  const r=await runtime({week:true,overlay:'week-dialog'});
+  r.click(r.find(r.view.render(),'wt-f-MH'));
+  assert.equal(r.view.filter,'MH');
+  r.click(r.find(r.view.render(),'wt-z-14'));
+  assert.equal(r.view.days,14);
+  r.click(r.find(r.view.render(),'wt-open-full'));
+  assert.deepEqual(r.calls.at(-2),['close','week-dialog']);
+  assert.equal(r.calls.at(-1)[1].props.project,'MH');
+  assert.equal(r.calls.at(-1)[1].props.full,true);
 });

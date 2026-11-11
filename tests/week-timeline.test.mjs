@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { parseFeed, rootOf, weekMarker, weekRows, windowOf, dayCells, kindOf, projectRange, projectRows, freshness, bridgeFrom, wantCompact, mix, monday, addDays } from '../mods/week-timeline/model.js';
+import { parseFeed, rootOf, weekMarker, weekRows, windowOf, dayCells, kindOf, projectRange, projectRows, freshness, bridgeFrom, mix, monday, addDays } from '../mods/week-timeline/model.js';
 
 const TODAY = '2026-11-11';
 const issue = (key, state, extra = {}) => ({ key, title: `${key} 제목`, status: state, state, due: '', start: '', done_at: '', parent: '', milestone: '', ...extra });
@@ -142,15 +142,6 @@ test('status line keeps the last value and names a failed refresh', () => {
   assert.equal(freshness(null).text, '아직 읽지 않음');
 });
 
-test('chip rows join on a squeezed timeline, with hysteresis', () => {
-  assert.equal(wantCompact(202, true), false);      // at its max: the window is tall
-  assert.equal(wantCompact(170, false), false);
-  assert.equal(wantCompact(140, false), true);
-  assert.equal(wantCompact(170, true), true);       // stays joined until clearly taller
-  assert.equal(wantCompact(195, true), false);
-  assert.equal(wantCompact(0, true), true);
-});
-
 test('bridge and colour helpers', () => {
   assert.equal(bridgeFrom('{"command":"python3"}'), null);
   assert.deepEqual(bridgeFrom('{"command":"/usr/bin/python3","args":["/x/w.py",1]}'), { command: '/usr/bin/python3', args: ['/x/w.py'], apply: null });
@@ -159,23 +150,17 @@ test('bridge and colour helpers', () => {
   assert.equal(mix('#000000', '#ffffff', 0.5), '#808080');
 });
 
-test('layout: timeline band under the strip, title row gone, chip rows in a stack', () => {
+test('layout: header chip only, no permanent timeline band or footer', () => {
   const layout = JSON.parse(readFileSync(new URL('../layouts/sixfold.json', import.meta.url), 'utf8'));
   const find = (n, id) => n?.id === id ? n : (n?.children || []).map(c => find(c, id)).find(Boolean);
-  assert.deepEqual(find(layout, 'work').children.map(c => c.id), ['monitor-strip', 'week-timeline', 'tabs', 'body']);
+  assert.deepEqual(find(layout, 'work').children.map(c => c.id), ['monitor-strip', 'tabs', 'body']);
+  assert.equal(find(layout, 'week-timeline'), undefined);
+  assert.equal(find(layout, 'status'), undefined);
   assert.equal(find(layout, 'toolbar'), undefined);
   assert.equal(find(layout, 'monitor-strip').window_drag, true);
-  const stack = find(layout, 'mcp-cli');
-  assert.equal(stack.type, 'stack');
-  assert.deepEqual(stack.children.map(c => c.id), ['mcp-cli-stack', 'mcp-cli-line']);
-  assert.deepEqual(find(layout, 'mcp-cli-stack').children.map(c => c.content.mod), ['mcp-status', 'cli-status']);
-  assert.deepEqual(find(layout, 'mcp-cli-line').children.map(c => c.content.mod), ['mcp-status', 'cli-status']);
-  const band = find(layout, 'week-timeline');
-  assert.equal(band.content.mod, 'week-timeline');
-  assert.deepEqual(band.size, { px: 28 });
-  assert.equal(band.min, 28);
-  assert.equal(band.max, 171);
-  assert.equal(find(layout, 'status'), undefined);
-  // Retain the footer renderer for layouts that opt into it.
+  assert.equal(find(layout, 'mcp-cli').type,'column');
+  assert.deepEqual(find(layout, 'mcp-header').children.map(c => c.content.mod), ['mcp-status','week-timeline']);
+  assert.equal(find(layout, 'cli-status').content.mod,'cli-status');
+  assert.equal(find(layout, 'week-timeline-chip').size.px,180);
   assert.match(readFileSync(new URL('../mods/sixfold-desk/main.js', import.meta.url), 'utf8'), /role === 'footer'/);
 });
