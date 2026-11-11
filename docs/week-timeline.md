@@ -50,8 +50,10 @@ the request file only while its `id` is still the one it ran.
 Field changes (`save_issue`) set values, so a failed run simply sends them again. Replies are not
 idempotent, so:
 
-- Each reply's body ends with its key as a mark (`` `herdr-rid:RID` ``, inline code so Linear keeps it;
-  the popup hides it). A reply counts as on Linear only when that mark is found, never by its words.
+- Each reply's body ends with its key as a mark: one visible line `` `herdr-rid:RID` `` (inline code).
+  It stays visible on Linear by decision (2026-11-11; it replaces the earlier wish for an invisible
+  mark); only the popup hides it. A live test on a test issue confirmed Linear keeps the line verbatim
+  and the comment lookup finds the key. A reply counts as on Linear only when that mark is found, never by its words.
 - The write guard reserves the `rid` in `<KEY>.sent.json` (written and fsynced, under a lock that
   parallel hooks share) before the call is let through, and refuses a `rid` already there.
 - A reserved reply is settled only by a fresh, complete comment lookup (`list_comments` to the last
