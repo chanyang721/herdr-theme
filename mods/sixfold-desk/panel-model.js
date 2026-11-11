@@ -13,6 +13,10 @@ export const panelLeg=elapsed=>PANEL_LEGS.filter(at=>elapsed>=at).length;
 // A message moves like every other event packet: same corners, same travel,
 // ping and fade (2026-11-10: a faster, differently shaped send looked foreign).
 export const MESSAGE_TIMING=Object.freeze({startMs:PANEL_TIMING.startMs,packetMs:PANEL_TIMING.packetMs,pingMs:PANEL_TIMING.pingMs,coolMs:PANEL_TIMING.coolMs});
+// Message routes wait in one bounded line: at most `queue` single packets, then
+// one «메시지 +N» bundle per sender→receiver pair (at most `bundles` at once).
+// Sends past both bounds are only counted (`overflow`), never stored.
+export const MESSAGE_ROUTE=Object.freeze({queue:8,bundles:8,gapMs:260,laneMs:1000});
 const MAX = Object.freeze({ computers: 64, spaces: 128, agents: 256, issues: 128, links: 512, events: 256, bytes: 2 * 1024 * 1024 });
 const STATUSES = new Set(['working', 'idle', 'blocked', 'done']);
 const STATES = ['blocked', 'working', 'review', 'waiting', 'done'];
@@ -468,7 +472,7 @@ export function panelEventStates(feed, now, { previous = null, motion = true } =
   const seen = new Set(previous?.seen ?? incoming.map(event => event.id));
   const pending = new Map(previous?.pending ?? []);
   const agentStages=new Map(),stageNames=['대기','배분 중','작업 중','검수 중','수락 대기','수락됨'];  // 완료 is the cleanup target only (agentState)
-  let stageRevision=previous?.stageRevision||0;
+  let stageRevision=previous?.stageRevision||0,bundleRevision=previous?.bundleRevision||0,overflow=previous?.overflow||0;
   for(const agent of (feed?.spaces||[]).flatMap(space=>space.agents)){
     const signature=JSON.stringify([agent.stage,agent.closing?.step||0]);agentStages.set(agent.id,signature);
     if(previous?.agentStages?.has(agent.id)&&previous.agentStages.get(agent.id)!==signature){
@@ -491,13 +495,27 @@ export function panelEventStates(feed, now, { previous = null, motion = true } =
     if(!route&&!label)continue;
     let routeAt=now,routeLane=0,drawRoute=Boolean(route);
     if(event.kind==='message'&&route&&animate){
-      const queued=[...pending.values()].filter(item=>item.kind==='message'&&item.drawRoute&&item.routeAt+MESSAGE_TIMING.packetMs>now);
-      if(queued.length>=8)drawRoute=false;
-      else {
-        const last=queued.at(-1);routeAt=Math.max(now,last?last.routeAt+260:now);
-        const free=[0,1].map(lane=>Math.max(now,...queued.filter(item=>item.routeLane===lane).map(item=>item.routeAt+1000)));
-        routeLane=free[0]<=free[1]?0:1;routeAt=Math.max(routeAt,free[routeLane]);
+      // Everything still waiting or travelling, bundles included, so a later send
+      // never overtakes an earlier one. Only single messages count toward the cap.
+      const lineup=[...pending.values()].filter(item=>item.kind==='message'&&item.drawRoute&&item.routeAt+MESSAGE_TIMING.packetMs>now)
+        .sort((a,b)=>a.routeAt-b.routeAt);
+      const slot=()=>{
+        const last=lineup.at(-1);let at=Math.max(now,last?last.routeAt+MESSAGE_ROUTE.gapMs:now);
+        const free=[0,1].map(lane=>Math.max(now,...lineup.filter(item=>item.routeLane===lane).map(item=>item.routeAt+MESSAGE_ROUTE.laneMs)));
+        const lane=free[0]<=free[1]?0:1;return {at:Math.max(at,free[lane]),lane};
+      };
+      if(lineup.filter(item=>!item.bundle).length>=MESSAGE_ROUTE.queue){
+        // Bounded: an overflowing send joins the not-yet-started bundle of the
+        // same sender and receiver (one entry, a count), drawn after the queue.
+        const open=lineup.find(item=>item.bundle&&item.from===event.from&&item.to===event.to&&item.routeAt>now);
+        if(open){const count=open.count+1;pending.set(open.id,{...open,count,label:`메시지 +${count}`,lastSourceAt:event.at});continue;}
+        if(lineup.filter(item=>item.bundle).length>=MESSAGE_ROUTE.bundles){overflow++;continue;}
+        const {at,lane}=slot(),id=`bundle-${++bundleRevision}`;
+        pending.set(id,{id,kind:'message',bundle:true,count:1,from:event.from,to:event.to,label:'메시지 +1',
+          sourceAt:event.at,lastSourceAt:event.at,at,routeAt:at,routeLane:lane,drawRoute:true});
+        continue;
       }
+      ({at:routeAt,lane:routeLane}=slot());
     }
     pending.set(event.id,{...event,label,sourceAt:event.at,at:now,routeAt,routeLane,drawRoute});
   }
@@ -526,6 +544,14 @@ export function panelEventStates(feed, now, { previous = null, motion = true } =
       if (target && (!old || old.sourceAt < event.sourceAt || (old.sourceAt === event.sourceAt && old.at <= event.at))) tags.set(target, { ...event, elapsed });
       wake(event.at + PANEL_TIMING.tagMs);
     }
+    // A message whose sender is no agent row (the producer had no caller: null,
+    // or only its space / computer) is never drawn as some agent's send. Its
+    // receiver says the sender is unconfirmed.
+    if(event.kind==='message'&&!incoming&&agentIDs.has(event.to)&&!agentIDs.has(event.from)&&elapsed<PANEL_TIMING.tagMs){
+      const old=tags.get(event.to);
+      if(!old||old.sourceAt<=event.sourceAt)tags.set(event.to,{...event,id:`unconfirmed-${event.id}`,label:'← 발신 미확인',elapsed});
+      wake(event.at+PANEL_TIMING.tagMs);
+    }
     if(incoming){
       if(now>=incomingAt&&now<incomingAt+PANEL_TIMING.tagMs)tags.set(event.to,{...event,id:`incoming-${event.id}`,label:`← ${incoming}`,elapsed:now-incomingAt});
       wake(incomingAt);wake(incomingAt+PANEL_TIMING.tagMs);
@@ -545,5 +571,5 @@ export function panelEventStates(feed, now, { previous = null, motion = true } =
     }
     wake(end);
   }
-  return { seen: [...seen].slice(-4096), pending: [...pending], active, tags, spawning, packets, connections, nextAt, motion: animate,agentStages,stageRevision };
+  return { seen: [...seen].slice(-4096), pending: [...pending], active, tags, spawning, packets, connections, nextAt, motion: animate,agentStages,stageRevision,bundleRevision,overflow };
 }
