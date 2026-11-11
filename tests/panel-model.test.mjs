@@ -905,3 +905,42 @@ test('a message without an agent sender is never drawn as an agent send; its rec
  const known=advance(normalize({spaces:[space('one'),space('two')],events:[{id:'known',at:stamp(NOW),kind:'message',from:'two-agent',to,label:'메시지'}]}),prior,10);
  assert.notEqual(known.tags.get(to)?.label,'← 발신 미확인','a known agent sender is not marked unconfirmed');
 });
+
+test('revoking folded sends takes them out of their «메시지 +N» bundle: all before launch, after launch, or some',()=>{
+ const two_spaces={spaces:[space('one'),space('two')]},with2=extra=>normalize({...two_spaces,...extra});
+ const prior=boot(with2()),from='one-agent';
+ const sends=Array.from({length:12},(_,i)=>({id:'r-'+i,at:stamp(NOW+i),kind:'message',from,to:'worker',label:'메시지'}));
+ const feed=revoked=>with2({events:sends.map(event=>revoked.includes(event.id)?{...event,animate:false}:event)});
+ const folded=['r-8','r-9','r-10','r-11'],queued=advance(feed([]),prior,10);
+ const bundle=queued.pending.map(([,event])=>event).find(event=>event.bundle);
+ assert.deepEqual(bundle.ids,folded,'the bundle remembers which sends it folded');
+ const bundles=state=>state.pending.map(([,event])=>event).filter(event=>event.bundle);
+ const startAt=bundle.routeAt-NOW+MESSAGE_TIMING.startMs+1;
+ // 1) Everything revoked before the bundle starts: it never launches.
+ const all=feed(sends.map(event=>event.id)),before=advance(all,queued,20);
+ assert.equal(bundles(before).length,0);
+ const later=advance(all,before,startAt);
+ assert.equal(later.packets.length,0,'no packet launches for revoked sends');
+ assert(!later.tags.has(from)||later.tags.get(from).label!=='메시지 +4');
+ // 2) Revoked after the bundle has started travelling: the packet goes away.
+ const travelling=advance(feed([]),queued,startAt);
+ assert(travelling.packets.some(packet=>packet.bundle));
+ const gone=advance(feed(folded),travelling,startAt+5);
+ assert(!gone.packets.some(packet=>packet.bundle));assert.equal(bundles(gone).length,0);
+ // 3) Only some revoked: the bundle shows the rest, and still launches on time.
+ const some=advance(feed(['r-9','r-11']),queued,20),left=bundles(some);
+ assert.equal(left.length,1);assert.deepEqual(left[0].ids,['r-8','r-10']);assert.equal(left[0].label,'메시지 +2');
+ assert.equal(left[0].routeAt,bundle.routeAt,'its place in the order is kept');
+ const launched=advance(feed(['r-9','r-11']),some,startAt);
+ assert.equal(launched.tags.get(from).label,'메시지 +2');
+ assert(launched.packets.some(packet=>packet.bundle&&packet.count===2));
+});
+
+test('a bundle keeps at most MESSAGE_ROUTE.bundleIds sends; the rest are counted, so memory stays bounded',()=>{
+ const two_spaces={spaces:[space('one'),space('two')]},with2=extra=>normalize({...two_spaces,...extra});
+ const prior=boot(with2()),from='one-agent';
+ const sends=Array.from({length:8+40},(_,i)=>({id:'c-'+i,at:stamp(NOW+i),kind:'message',from,to:'worker'}));
+ const state=advance(with2({events:sends}),prior,10),held=state.pending.map(([,event])=>event).filter(event=>event.bundle);
+ assert.equal(held.length,1);assert.equal(held[0].ids.length,32);assert.equal(held[0].label,'메시지 +32');
+ assert.equal(state.overflow,40-32);
+});
