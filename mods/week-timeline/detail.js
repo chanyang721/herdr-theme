@@ -9,6 +9,9 @@ const list = v => (Array.isArray(v) ? v : []);
 
 export const isKey = key => typeof key === 'string' && KEY.test(key);
 
+// The apply script ends each reply it sends with `herdr-rid:<key>`; people need not see it.
+const unmark = body => body.replace(/\s*`?herdr-rid:[A-Za-z0-9_-]{8,64}`?\s*$/, '');
+
 export function parseDetail(text, key) {
   let v;
   try { v = typeof text === 'string' ? JSON.parse(text) : text; } catch { return null; }
@@ -26,7 +29,7 @@ export function parseDetail(text, key) {
     statuses: list(v.statuses).filter(s => s && str(s.name)).map(s => ({ name: s.name, type: str(s.type, 20), color: str(s.color, 7) })),
     labels: list(v.labels).filter(l => l && str(l.name)).map(l => ({ name: l.name, color: str(l.color, 7) })),
     comments: list(v.comments).filter(c => c && str(c.id) && typeof c.body === 'string')
-      .map(c => ({ id: c.id, parent: str(c.parent, 40), author: str(c.author, 80), at: str(c.at, 40), body: str(c.body, 4000) })),
+      .map(c => ({ id: c.id, parent: str(c.parent, 40), author: str(c.author, 80), at: str(c.at, 40), body: unmark(str(c.body, 4000)) })),
     notices: list(v.notices).filter(n => n && str(n.text)).map(n => ({ type: str(n.type, 40), text: str(n.text, 240), at: str(n.at, 40), read: Boolean(n.read) })),
     slack: list(v.slack).filter(s => s && str(s.text)).map(s => ({ channel: str(s.channel, 80), at: str(s.at, 40), text: str(s.text, 200) })),
     slackReady: Boolean(v.slack_ready),
@@ -111,7 +114,7 @@ export function parseApply(text, key) {
   let v;
   try { v = typeof text === 'string' ? JSON.parse(text) : text; } catch { return null; }
   if (!v || v.key !== key || typeof v.at !== 'string') return null;
-  return { at: v.at, request: str(v.request, 80), mismatch: v.mismatch === true, ok: v.ok === true, error: str(v.error, 200), applied: Number(v.applied) || 0,
+  return { at: v.at, request: str(v.request, 80), mismatch: v.mismatch === true, check: v.check === true, unsure: Number(v.unsure) || 0, ok: v.ok === true, error: str(v.error, 200), applied: Number(v.applied) || 0,
     kept: list(v.kept).filter(c => c && typeof c.kind === 'string') };
 }
 

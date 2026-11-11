@@ -70,7 +70,11 @@ function loadCarried(v, cx) {
     try { request = JSON.parse(await readTextFile(path(v.key, '.request')).catch(() => null) || 'null'); } catch { request = null; }
     if (v.closed || !request || request.key !== v.key || !Array.isArray(request.changes) || !request.changes.length) return;
     v.pending = request.changes.filter(c => c && typeof c.kind === 'string');
-    v.carried = true; cx.notify();
+    v.carried = true;
+    // The last answer for this very request: an unsure reply must stay visible across reopening.
+    const last = parseApply(await readTextFile(path(v.key, '.apply')).catch(() => null), v.key);
+    if (last && last.request === request.id && last.unsure) { v.result = last; v.message = last.error; }
+    cx.notify();
   });
 }
 
@@ -125,7 +129,8 @@ function stage(v, change, cx) {
   cx.notify();
 }
 
-function applyNow(v, cx) {
+// [Linear 에 반영], or with `check` [다시 확인]: look up replies whose sending is unsure, send nothing.
+function applyNow(v, cx, check = false) {
   if (v.applying || !v.pending.length) return;
   v.applying = true; v.message = ''; v.result = null; cx.notify();
   const gen = (v.gen = (v.gen || 0) + 1);   // older saves still in flight now drop out
@@ -139,7 +144,7 @@ function applyNow(v, cx) {
       const id = newId();
       await writeTextFile(target, JSON.stringify(requestOf(v.key, id, v.pending)), before);
       v.carried = true;   // the file is there now: later cancels and removals keep it in step
-      const done = await exec(bridge.apply.command, [...bridge.apply.args, '--key', v.key, '--request', id], { timeout: APPLY_TIMEOUT });
+      const done = await exec(bridge.apply.command, [...bridge.apply.args, '--key', v.key, '--request', id, ...(check ? ['--check'] : [])], { timeout: APPLY_TIMEOUT });
       const result = parseApply(await readTextFile(path(v.key, '.apply')).catch(() => null), v.key);
       // Only the result that names this request counts; an older one (any time zone) is not this apply's.
       if (!result || result.request !== id) { v.message = `반영 결과 없음(종료 코드 ${done.code}) — 변경은 그대로 둠`; return; }
@@ -147,7 +152,7 @@ function applyNow(v, cx) {
       if (result.mismatch) { v.message = result.error || '반영 요청이 바뀜 — 보내지 않음'; return; }
       v.pending = result.ok ? [] : result.kept;
       v.carried = !result.ok;
-      if (!result.ok) v.message = result.error || '일부 변경이 Linear 에서 확인되지 않음';
+      if (!result.ok) v.message = result.error || (result.check ? '확인함 — 보내지 않은 댓글은 [Linear 에 반영]을 누르면 보냄' : '일부 변경이 Linear 에서 확인되지 않음');
     } catch (error) {
       v.message = `반영 실패: ${String(error?.message || error).slice(0, 100)} — 변경은 그대로 둠`;
     } finally {
@@ -394,7 +399,10 @@ function footer(v, t) {
       .child(h_flex().gap(8).items_center()
         .child(v_flex().flex_1().min_w(0)
           .child(div().text_size(12).font_semibold().child(`Linear 에 반영할 변경 ${v.pending.length}건${v.carried ? ' (지난번에 남은 것)' : ''}`))
-          .child(div().text_size(10).text_color(t.muted).child('Linear MCP · 누를 때만 반영 · 자동 반영 없음')))
+          .child(div().text_size(10).text_color(v.result?.unsure ? t.blocked : t.muted).child(v.result?.unsure
+            ? `댓글 ${v.result.unsure}건 확인 필요(전송 여부 불명) · [다시 확인]은 조회만 함`
+            : 'Linear MCP · 누를 때만 반영 · 자동 반영 없음')))
+        .when(Boolean(v.result?.unsure), el => el.child(button('wi-recheck', v.applying ? '확인 중…' : '다시 확인', t, cx => applyNow(v, cx, true), { disabled: v.applying })))
         .child(button('wi-cancel', '취소', t, cx => cancelAll(v, cx), { disabled: v.applying }))
         .child(button('wi-apply', v.applying ? '반영 중…' : 'Linear 에 반영', t, cx => applyNow(v, cx), { primary: true, disabled: v.applying })));
   }
