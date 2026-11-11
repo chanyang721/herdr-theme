@@ -1,11 +1,11 @@
 import { View, div } from 'gpui-kit';
 import { h_flex, v_flex } from 'gpui-base';
-import { appHome, exec, readTextFile, theme, props, run, openOverlay, closeOverlay, settings, shared, setShared } from 'herdr';
+import { appHome, exec, readTextFile, theme, props, openOverlay, closeOverlay } from 'herdr';
 import { initIssue, renderIssue } from './issue.js';
-import { KIND, parseFeed, bridgeFrom, weekRows, dayCells, projectRows, freshness, isoDay, daysBetween, md, mix, wantCompact } from './model.js';
-import { BAND, EXPANDED_KEY, bandHeight, bandSummary } from './band.js';
+import { KIND, parseFeed, bridgeFrom, weekRows, dayCells, projectRows, freshness, isoDay, daysBetween, md, mix } from './model.js';
+import { weekSummary } from './summary.js';
 
-// A: a full-width band under the monitor strip, above the agent panes: this week's Linear work.
+// A: one header chip opens this week's work in a dismissible dialog over the panes.
 // B: "프로젝트 전체 타임라인" opens a window over the panes: milestones and my issues by week.
 // C: clicking an issue opens its popup (issue.js) on the right over the panes.
 // The feed is written by a user-owned producer (week-timeline-bridge.json); nothing here reads Linear.
@@ -15,9 +15,9 @@ const READ_MS = 15 * 1000;
 const PRODUCE_MS = 2 * 60 * 1000;      // a sync: one notifications look; the producer reads in full itself every 2 h
 const PRODUCE_TIMEOUT = 9 * 60 * 1000;
 const FRESH_S = 90;
-const COMPACT = { stack: 'mcp-cli', two: 'mcp-cli-stack', one: 'mcp-cli-line', strip: 'monitor-strip', tall: 48, short: 30, max: BAND.max };
 const FULL_KEY = 'week-timeline-full';
 const ISSUE_KEY = 'week-timeline-issue';
+const WEEK_KEY = 'week-timeline-week';
 
 const stop = el => el.on_mouse_down('left', (_e, cx) => cx.stop_propagation());
 const pct = n => `${Math.max(0, Math.min(100, n)).toFixed(3)}%`;
@@ -54,21 +54,17 @@ export default class WeekTimeline extends View {
     const p = props() || {};
     this.timers = []; this.closed = false;
     if (p.issue) { this.mode = 'issue'; initIssue(this, p, cx); return; }
-    this.mode = p.full ? 'full' : 'week';
+    this.mode = p.full ? 'full' : p.week ? 'week' : 'chip';
     this.full = Boolean(p.full);
     this.project = typeof p.project === 'string' ? p.project : null;
     this.feed = null; this.filter = 'all'; this.days = 7; this.open = {}; this.undated = false;
-    this.expanded = shared(EXPANDED_KEY) === true;
     this.busy = false; this.note = '';
-    this.height = 0; this.compact = null; this.appliedAt = 0;
     this.load(cx);
     this.timers.push(cx.timer.every(READ_MS, cx => this.load(cx)));
     this.timers.push(cx.timer.every(60000, cx => cx.notify()));   // today's line and late marks follow the clock
-    if (!this.full) {
+    if (this.mode === 'chip') {
       this.timers.push(cx.timer.after(5000, cx => this.produce(cx, FRESH_S)));
       this.timers.push(cx.timer.every(PRODUCE_MS, cx => this.produce(cx, FRESH_S)));
-      this.timers.push(cx.timer.every(1000, () => { this.fitBand(); this.fitChips(); }));
-      this.fitBand();
     }
   }
   close() { this.closed = true; for (const timer of this.timers) timer?.cancel?.(); this.timers = []; }
@@ -78,7 +74,7 @@ export default class WeekTimeline extends View {
     cx.spawn(async cx => {
       const feed = parseFeed(await readTextFile(`${appHome()}/${FEED}`).catch(() => null));
       if (this.closed) return;
-      if (feed && JSON.stringify(feed) !== JSON.stringify(this.feed)) { this.feed = feed; if (!this.full) this.fitBand(); cx.notify(); }
+      if (feed && JSON.stringify(feed) !== JSON.stringify(this.feed)) { this.feed = feed; cx.notify(); }
       else if (!feed && !this.loaded) { this.loaded = true; cx.notify(); }
     });
   }
@@ -100,30 +96,12 @@ export default class WeekTimeline extends View {
       }
     });
   }
-  // Two chip rows normally; a squeezed, expanded band may join them.
-  fitChips() {
-    if (this.closed || !this.height) return;
-    const squeezed = this.expanded && this.height + 1 < this.bandHeight;
-    const want = squeezed && wantCompact(this.height, this.compact ?? false, { max: COMPACT.max });
-    if (want === this.compact || Date.now() - this.appliedAt < 1500) return;
-    this.compact = want; this.appliedAt = Date.now();
-    run('layout.select', { stack: COMPACT.stack, child: want ? COMPACT.one : COMPACT.two });
-    run('layout.resize', { id: COMPACT.strip, px: want ? COMPACT.short : COMPACT.tall });
+  openWeek() {
+    openOverlay({ mod: 'week-timeline', kind: 'dialog', key: WEEK_KEY, width: 1, height: 1, frame: 'none', props: { week: true } });
   }
-  fitBand() {
-    if (this.closed || this.full || this.mode === 'issue') return;
-    const { rows } = weekRows(this.feed, { days: this.days, filter: this.filter, open: this.open });
-    const height = bandHeight(this.expanded, this.feed ? rows.length : BAND.maxRows);
-    if (height === this.bandHeight) return;
-    this.bandHeight = height;
-    run('layout.resize', { id: 'week-timeline', px: height });
-  }
-  toggleBand(cx) {
-    this.expanded = !this.expanded;
-    setShared(EXPANDED_KEY, this.expanded);
-    this.fitBand(); cx.notify();
-  }
+  closeWeek() { const id = props()?.overlay; if (id) closeOverlay(id); }
   openFull() {
+    if (this.mode === 'week') this.closeWeek();
     openOverlay({ mod: 'week-timeline', kind: 'window', key: FULL_KEY, width: 0.86, height: 0.8,
       props: { full: true, project: this.filter === 'all' ? null : this.filter } });
   }
@@ -135,60 +113,57 @@ export default class WeekTimeline extends View {
     openOverlay({ mod: 'week-timeline', kind: 'dialog', key: ISSUE_KEY, width: 1, height: 1, frame: 'none',
       props: { issue: r.key, row: { key: r.key, title: r.title || '', url: r.url || '', project: project?.name || '', milestone, parent: r.parent || '' } } });
   }
-  toggle(id, fallback, cx) { this.open = { ...this.open, [id]: !(this.open[id] ?? fallback) }; if (!this.full) this.fitBand(); cx.notify(); }
+  toggle(id, fallback, cx) { this.open = { ...this.open, [id]: !(this.open[id] ?? fallback) }; cx.notify(); }
 
-  render() { return this.mode === 'issue' ? renderIssue(this) : this.full ? this.renderFull() : this.renderWeek(); }
+  render() { return this.mode === 'issue' ? renderIssue(this) : this.full ? this.renderFull() : this.mode === 'week' ? this.renderWeek() : this.renderChip(); }
 
   // --- A ------------------------------------------------------------------------------------------
-  renderSummary(t, today) {
-    const summary = bandSummary(this.feed, { today, days: this.days, filter: this.filter });
-    const counts = summary.projects.map(p => `${p.key} ${p.total}건`).join(' · ');
-    const mini = h_flex().w(80).h(4).flex_none().rounded(2).overflow_hidden().bg(t.border)
-      .tooltip(Object.entries(summary.kinds).map(([k, n]) => `${KIND[k].name} ${n}`).join(' · '))
-      .children(Object.entries(summary.kinds).map(([k, n]) => div().h_full().w(pct(n / summary.total * 100)).bg(mix(t[KIND[k].token] || t.muted, t.background, 0.25))));
-    return h_flex().id('wt-summary').h(27).flex_none().items_center().gap(10).px(12).bg(t.chrome).text_size(12).font_normal().cursor_pointer()
-      .on_click((_e, cx) => this.toggleBand(cx))
-      .child(caret(false, t)).child(div().flex_none().text_color(t.foreground).child(this.days === 14 ? '2주' : '이번 주'))
-      .child(div().min_w(0).truncate().text_color(t.muted).child(counts || (this.loaded ? '아직 수집된 내용이 없습니다' : '읽는 중…')))
-      .when(summary.today > 0, el => el.child(div().flex_none().text_color(t.blocked).child(`오늘 마감 ${summary.today}`)))
-      .when(summary.blocked > 0, el => el.child(div().flex_none().text_color(t.blocked).child(`막힘 ${summary.blocked}`)))
-      .child(div().flex_none().text_color(t.muted).child(`진행 중 ${summary.started}`)).child(mini)
-      .children(summary.items.slice(0, 2).map(r => stop(div().id(`wt-summary-${r.key}`).flex_none().text_size(10)
-        .text_color(t[KIND[r.look].token] || t.muted).cursor_pointer().tooltip(`${r.title}${r.when ? ` · ${r.when}` : ''}`)
-        .on_click((_e, cx) => { cx.stop_propagation(); this.openIssue(r); }).child(r.key))))
-      .when(summary.items.length > 2, el => el.child(div().flex_none().text_size(10).text_color(t.dim).child(`+${summary.items.length - 2}`)))
-      .child(div().flex_1()).child(status(this.feed, t))
-      .child(stop(div().id('wt-summary-full').flex_none().text_size(11).text_color(t.accent).cursor_pointer()
-        .on_click((_e, cx) => { cx.stop_propagation(); this.openFull(); }).child('전체 타임라인 ↗')));
+  renderChip() {
+    const t = theme(), summary = weekSummary(this.feed, { today: isoDay() });
+    const tone = summary.late ? t.ansi1 : summary.today ? t.blocked : t.muted;
+    return h_flex().size_full().items_center()
+      .child(stop(h_flex().id('wt-chip').h(20).px(8).gap(5).rounded(10).border(1).border_color(t.border)
+        .bg(t.chrome).items_center().text_size(11).font_normal().text_color(t.foreground).cursor_pointer()
+        .tooltip(`${freshness(this.feed).text} · 눌러서 이번 주 타임라인${summary.late ? ` · 지난 마감 ${summary.late}` : ''}`)
+        .on_click((_e, cx) => { cx.stop_propagation(); this.openWeek(); })
+        .child(`이번 주 ${this.feed ? summary.total : '—'} · 오늘 ${this.feed ? summary.today : '—'}`)
+        .child(div().text_size(8).text_color(tone).child('●'))));
   }
   renderWeek() {
-    const t = theme(), today = isoDay(), LABEL = 380, ROW = BAND.row;
-    if (!this.expanded) return v_flex().id('wt-week').size_full().bg(t.background).border_b(1).border_color(t.border).child(this.renderSummary(t, today));
+    const t = theme();
+    return v_flex().id('wt-backdrop').size_full().p(24).items_center().justify_center()
+      .on_click((_e, cx) => { cx.stop_propagation(); this.closeWeek(); })
+      .child(stop(v_flex().id('wt-dialog').w_full().max_w(1600).h('65%').min_h(180).max_h(420)
+        .rounded(8).border(1).border_color(t.border).bg(t.background).overflow_hidden()
+        .on_click((_e, cx) => cx.stop_propagation()).child(this.renderWeekTable())));
+  }
+  renderWeekTable() {
+    const t = theme(), today = isoDay(), LABEL = 380, ROW = 24;
     const { win, rows } = weekRows(this.feed, { today, days: this.days, filter: this.filter, open: this.open });
     const cells = dayCells(win, today), D = win.days, todayAt = daysBetween(win.start, today);
     const now = new Date(), hour = now.getHours() + now.getMinutes() / 60;
     const projects = this.feed?.projects ?? [];
     const rule = mix(t.border, t.background, 0.55), weekend = mix(t.canvas, t.background, 0.5);
     const bar = h_flex().flex_none().h(28).items_center().gap(10).px(12).bg(t.chrome).border_b(1).border_color(t.border).text_size(12)
-      .child(stop(h_flex().id('wt-collapse').flex_none().items_center().gap(6).cursor_pointer()
-        .on_click((_e, cx) => { cx.stop_propagation(); this.toggleBand(cx); }).child(caret(true, t))
-        .child(div().text_color(t.foreground).child('이번 주'))))
+      .child(div().flex_none().text_color(t.foreground).child('타임라인'))
       .child(div().flex_none().text_color(t.muted).child(D === 7 ? `이번 주 ${md(win.start)}(월) – ${md(win.end)}(일)` : `2주 ${md(win.start)} – ${md(win.end)}`))
       .child(div().flex_none().w(1).h(14).bg(t.border))
-      .child(pill('wt-f-all', '전체', this.filter === 'all', t, cx => { this.filter = 'all'; this.fitBand(); cx.notify(); }))
-      .children(projects.map(p => pill(`wt-f-${p.key}`, p.key, this.filter === p.key, t, cx => { this.filter = p.key; this.fitBand(); cx.notify(); })))
+      .child(pill('wt-f-all', '전체', this.filter === 'all', t, cx => { this.filter = 'all'; cx.notify(); }))
+      .children(projects.map(p => pill(`wt-f-${p.key}`, p.key, this.filter === p.key, t, cx => { this.filter = p.key; cx.notify(); })))
       .child(div().flex_1())
       .child(legend(t, ['todo', 'started', 'review', 'hot']))
       .child(h_flex().flex_none().rounded(6).border(1).border_color(t.border).overflow_hidden()
         .children([[7, '1주'], [14, '2주']].map(([n, label]) => stop(div().id(`wt-z-${n}`).h(20).px(10).flex().items_center().text_size(11).cursor_pointer()
           .bg(D === n ? t.selected : t.chrome).text_color(D === n ? t.foreground : t.muted)
-          .on_click((_e, cx) => { cx.stop_propagation(); this.days = n; this.fitBand(); cx.notify(); }).child(label)))))
+          .on_click((_e, cx) => { cx.stop_propagation(); this.days = n; cx.notify(); }).child(label)))))
       .child(status(this.feed, t))
       .child(stop(div().id('wt-open-full').flex_none().text_size(11).text_color(t.accent).cursor_pointer()
-        .on_click((_e, cx) => { cx.stop_propagation(); this.openFull(); }).child('프로젝트 전체 타임라인 ↗')));
+        .on_click((_e, cx) => { cx.stop_propagation(); this.openFull(); }).child('프로젝트 전체 타임라인 ↗')))
+      .child(stop(div().id('wt-close').flex_none().px(5).text_size(13).text_color(t.muted).cursor_pointer().tooltip('닫기 · Esc')
+        .on_click((_e, cx) => { cx.stop_propagation(); this.closeWeek(); }).child('✕')));
     const head = h_flex().flex_none().h(22).border_b(1).border_color(t.border).text_size(11).text_color(t.muted)
       .child(div().w(LABEL).flex_none().h_full().px(12).flex().items_center().border_r(1).border_color(t.border)
-        .child(rows.length > BAND.maxRows ? `이슈 · ${rows.length}행 · 스크롤 ↕` : '이슈'))
+        .child(`이슈 · ${rows.length}행 · 스크롤 ↕`))
       .child(h_flex().flex_1().h_full().children(cells.map((c, i) => div().flex_1().h_full().pl(6).flex().items_center().when(i > 0, el => el.border_l(1).border_color(rule))
         .bg(c.weekend ? weekend : t.background).text_color(t.muted)
         .child(c.label))));
@@ -242,7 +217,6 @@ export default class WeekTimeline extends View {
       : div().id('wt-body').flex_1().min_h(0).overflow_y_scrollbar()
         .child(div().relative().h(rows.length * ROW).child(grid).child(v_flex().absolute().inset_0().children(body)));
     return v_flex().id('wt-week').size_full().bg(t.background).text_color(t.foreground).border_b(1).border_color(t.border)
-      .on_size_change((size, cx) => { this.height = Math.round(size.height / (settings()?.zoom || 1)); })
       .child(bar).child(head).child(content);
   }
 

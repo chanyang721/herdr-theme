@@ -248,11 +248,3 @@ export function bridgeFrom(text) {
     ? { command: value.apply.command, args: args(value.apply.args) } : null;
   return { command: value.command, args: args(value.args), apply };
 }
-
-// A caller first checks that the expanded block is actually squeezed below its requested
-// height. Hysteresis keeps chip rows from flipping at the edge.
-export function wantCompact(height, compact, { max = 202, low = 150, high = 190 } = {}) {
-  if (!(height > 0)) return compact;
-  if (height >= max - 1) return false;
-  return compact ? height < high : height < low;
-}

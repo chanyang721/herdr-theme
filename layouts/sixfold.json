@@ -70,15 +70,18 @@
             },
             {
               "id": "mcp-cli",
-              "type": "stack",
-              "active": "mcp-cli-stack",
+              "type": "column",
               "size": {
                 "px": 700
               },
               "children": [
                 {
-                  "id": "mcp-cli-stack",
-                  "type": "column",
+                  "id": "mcp-header",
+                  "type": "row",
+                  "gap": 6,
+                  "size": {
+                    "weight": 1
+                  },
                   "children": [
                     {
                       "id": "mcp-status",
@@ -91,43 +94,26 @@
                       }
                     },
                     {
-                      "id": "cli-status",
+                      "id": "week-timeline-chip",
                       "type": "block",
                       "size": {
-                        "weight": 1
+                        "px": 180
                       },
                       "content": {
-                        "mod": "cli-status"
+                        "mod": "week-timeline"
                       }
                     }
                   ]
                 },
                 {
-                  "id": "mcp-cli-line",
-                  "type": "row",
-                  "gap": 6,
-                  "children": [
-                    {
-                      "id": "mcp-status-line",
-                      "type": "block",
-                      "size": {
-                        "weight": 1
-                      },
-                      "content": {
-                        "mod": "mcp-status"
-                      }
-                    },
-                    {
-                      "id": "cli-status-line",
-                      "type": "block",
-                      "size": {
-                        "weight": 1
-                      },
-                      "content": {
-                        "mod": "cli-status"
-                      }
-                    }
-                  ]
+                  "id": "cli-status",
+                  "type": "block",
+                  "size": {
+                    "weight": 1
+                  },
+                  "content": {
+                    "mod": "cli-status"
+                  }
                 }
               ]
             },
@@ -156,18 +142,6 @@
             }
           ],
           "window_drag": true
-        },
-        {
-          "id": "week-timeline",
-          "type": "block",
-          "size": {
-            "px": 28
-          },
-          "min": 28,
-          "max": 171,
-          "content": {
-            "mod": "week-timeline"
-          }
         },
         {
           "id": "tabs",
