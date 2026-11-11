@@ -249,8 +249,8 @@ export function bridgeFrom(text) {
   return { command: value.command, args: args(value.args), apply };
 }
 
-// Whether the two chip rows should sit on one line: the timeline block is weight-sized, so its
-// height tells the window's. Hysteresis keeps it from flipping at the edge.
+// A caller first checks that the expanded block is actually squeezed below its requested
+// height. Hysteresis keeps chip rows from flipping at the edge.
 export function wantCompact(height, compact, { max = 202, low = 150, high = 190 } = {}) {
   if (!(height > 0)) return compact;
   if (height >= max - 1) return false;

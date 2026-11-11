@@ -102,8 +102,9 @@ export default class WeekTimeline extends View {
   }
   // Two chip rows normally; a squeezed, expanded band may join them.
   fitChips() {
-    if (this.closed || !this.expanded || !this.height) return;
-    const want = wantCompact(this.height, this.compact ?? false, { max: COMPACT.max });
+    if (this.closed || !this.height) return;
+    const squeezed = this.expanded && this.height + 1 < this.bandHeight;
+    const want = squeezed && wantCompact(this.height, this.compact ?? false, { max: COMPACT.max });
     if (want === this.compact || Date.now() - this.appliedAt < 1500) return;
     this.compact = want; this.appliedAt = Date.now();
     run('layout.select', { stack: COMPACT.stack, child: want ? COMPACT.one : COMPACT.two });
