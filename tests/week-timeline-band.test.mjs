@@ -131,6 +131,19 @@ test('full timeline link opens the overlay without toggling the band', async () 
   assert.equal(r.calls.at(-1)[1].props.project, 'MH');
 });
 
+test('few rows do not collapse the chip header; only actual squeezing does', async () => {
+  const r = await runtime();
+  Object.assign(r.view, { expanded: true, bandHeight: 75, height: 75, appliedAt: 0 });
+  r.view.fitChips();
+  assert.equal(r.calls.findLast(c => c[0] === 'layout.select')[1].child, 'mcp-cli-stack');
+  Object.assign(r.view, { bandHeight: 171, height: 120, appliedAt: 0 });
+  r.view.fitChips();
+  assert.equal(r.calls.findLast(c => c[0] === 'layout.select')[1].child, 'mcp-cli-line');
+  Object.assign(r.view, { expanded: false, appliedAt: 0 });
+  r.view.fitChips();
+  assert.equal(r.calls.findLast(c => c[0] === 'layout.select')[1].child, 'mcp-cli-stack');
+});
+
 test('the week paints deadline markers and future text, with no parent duration bar', async () => {
   const r = await runtime(); r.view.expanded = true;
   const tree = r.view.render();
