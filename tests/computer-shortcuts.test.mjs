@@ -77,7 +77,7 @@ test('computer commands select the listed computer without moving focus, running
     .replace(/import \{ watchBadges[^}]*\} from '.\/badges.js';/,'const watchBadges=()=>{},workspaceBadges=()=>null;').replace(/import \{ watchAsks[^}]*\} from '.\/asks.js';/,'const watchAsks=()=>{},askSection=()=>null,hasAsks=()=>false;').replace(/import \{ askFor \} from '.\/ask-model.js';/,'const askFor=()=>null;').replace(/import \{ watchReports[^}]*\} from '.\/session-reports.js';/,'const watchReports=()=>{},reportsSection=()=>null;')
     .replace(/import .* from '.\/alert-inbox.js';/,'const workspaceAlertsRow=()=>null,hasWorkspaceAlerts=()=>false,openInbox=()=>{};').replace(/import .* from '.\/alert-arrivals.js';/,"const startAlertArrivals=()=>()=>{},alertArrivalLayer=()=>[],alertCardSignature=()=>'';")
     .replace(/import \{ panePet \} from '.\/pets.js';/,'const panePet=()=>null;')
-    .replace(/import \{ paneUsage \} from '.\/session-usage.js';/,'const paneUsage=()=>null;')
+    .replace(/import \{ paneUsage \} from '.\/session-usage.js';/,'const paneUsage=()=>null;').replace(/import \{ paneWork, paneWorkChip \} from '.\/pane-work.js';/,'const paneWork=()=>null,paneWorkChip=()=>null;')
     .replace(/import \{ paneMeta[^}]*\} from '.\/pane-meta.js';/,'const paneMeta=()=>null,paneMetaChip=()=>null,showPaneIndex=()=>false,showTitle=()=>true;')
     .replace(/import \{ breathingBorder[^}]*\} from '.\/collab-flow-view.js';/,'const breathingBorder=()=>null,borderComet=()=>null;')
     .replace(/import \{ pipeline \} from [^;]+;/,'const pipeline=()=>null;');

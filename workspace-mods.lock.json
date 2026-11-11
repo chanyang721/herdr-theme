@@ -1,6 +1,6 @@
 {
   "repository": "https://github.com/chanyang721/herdr-workspace-mods.git",
-  "commit": "8b5174a7aecb9b121fa6c2b5fd8841e3e532dbb1",
+  "commit": "3a76085bcc97d2dcb977c70c8c258fa6defa7e63",
   "mods": {
     "agent-usage": "agent-usage/mods/agent-usage",
     "cli-status": "cli-status/mods/cli-status",

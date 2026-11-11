@@ -20,6 +20,7 @@ import { startAlertArrivals, alertArrivalLayer, alertCardSignature } from './ale
 import { panePet } from './pets.js';
 import { paneUsage } from './session-usage.js';
 import { paneMeta, paneMetaChip, showPaneIndex, showTitle } from './pane-meta.js';
+import { paneWork, paneWorkChip } from './pane-work.js';
 import { watchBadges, workspaceBadges } from './badges.js';
 import { watchAsks, askSection, hasAsks, paneAskButton, askPopup } from './asks.js';
 import { askFor } from './ask-model.js';
@@ -577,6 +578,8 @@ export default class SixfoldDesk extends View {
     const style = paneHeaderStyle(p, t);
     // Agent icon, model, speed, effort and permission of the pane's confirmed session, after the title.
     const meta = paneMeta(p.terminal, shared), name = title(p), ask = paneAskButton(p, t, this.lang(), name);
+    // Task-list progress and running sub-agents of the same confirmed session.
+    const work = paneWork(p.terminal, shared);
     return div().size_full().bg(style.base).child(h_flex().id(`sixfold-head-${p.pane}`).size_full().items_center().gap(7).px(9)
       .bg(style.background).text_size(11.5)
       .border(1).border_color(style.border)
@@ -589,6 +592,7 @@ export default class SixfoldDesk extends View {
       // Session usage sits in the middle: title and an equal spacer share the room around it.
       .child(paneUsage(p, t, shared))
       .child(div().flex_1().min_w(0))
+      .when(Boolean(work), el => el.child(paneWorkChip(p, t, work, this.headWidth)))
       // A waiting question/permission opens here, over its own pane, on click only.
       .when(Boolean(ask), el => el.child(ask))
       // The cat is the status, so it stands beside the status badge.
