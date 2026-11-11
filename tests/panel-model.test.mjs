@@ -798,7 +798,8 @@ test('unresolved messages are quiet; new messages stagger in two bounded native 
  const quiet=advance(missing,prior,1);assert.equal(quiet.nextAt,null);assert.equal(quiet.pending.length,0);
  const value=normalize({events:Array.from({length:12},(_,i)=>({id:'burst-'+i,at:stamp(NOW),kind:'message',from,to:'worker'}))});
  const queued=advance(value,prior,10),pending=queued.pending.map(([,event])=>event);
- assert.equal(pending.filter(event=>event.drawRoute).length,8);assert.equal(queued.packets.length,1);
+ assert.equal(pending.filter(event=>event.drawRoute&&!event.bundle).length,8);assert.equal(queued.packets.length,1);
+ assert.deepEqual(pending.filter(event=>event.bundle).map(event=>[event.count,event.label]),[[4,'메시지 +4']],'the four past the cap are one visible bundle');
  const moving=pending.filter(event=>event.drawRoute);
  for(let i=1;i<moving.length;i++)assert(moving[i].routeAt-moving[i-1].routeAt>=260);
  for(const lane of [0,1]){const own=moving.filter(event=>event.routeLane===lane);for(let i=1;i<own.length;i++)assert(own[i].routeAt-own[i-1].routeAt>=1000);}
@@ -852,4 +853,55 @@ test('optional tool links are preserved only as explicit web URLs, never guessed
  const value=normalize({spaces:[space('one',{work:{tool:'linear',key:'DEMO',url:'https://issues.example.invalid/project'}})]});
  assert.equal(projectPanelFeed(value).feed.spaces[0].work.url,'https://issues.example.invalid/project');
  assert(!('url' in normalize({spaces:[space('one',{work:{tool:'linear',key:'DEMO'}})]}).spaces[0].work));
+});
+
+test('a burst past the bounded queue draws 8 sends then one «메시지 +N» bundle per pair, in order, with bounded memory',()=>{
+ const two_spaces={spaces:[space('one'),space('two')]},with2=extra=>normalize({...two_spaces,...extra});
+ const initial=with2(),prior=boot(initial),agents=initial.spaces.flatMap(space=>space.agents).map(agent=>agent.id);
+ const [from,other]=agents;
+ // 12 sends to one receiver: 8 single packets, then +4, routed after the eighth.
+ const twelve=with2({events:Array.from({length:12},(_,i)=>({id:'b12-'+i,at:stamp(NOW+i),kind:'message',from,to:'worker',label:'메시지'}))});
+ let state=advance(twelve,prior,10),pending=state.pending.map(([,event])=>event);
+ const singles=pending.filter(event=>event.kind==='message'&&event.drawRoute&&!event.bundle),bundles=pending.filter(event=>event.bundle);
+ assert.deepEqual(singles.map(event=>event.id),Array.from({length:8},(_,i)=>'b12-'+i),'the first eight, in arrival order');
+ assert.equal(bundles.length,1);assert.equal(bundles[0].count,4);assert.equal(bundles[0].label,'메시지 +4');
+ assert.equal(bundles[0].from,from);assert.equal(bundles[0].to,'worker');
+ assert(bundles[0].routeAt>Math.max(...singles.map(event=>event.routeAt)),'the bundle travels after the queue');
+ assert(!pending.some(event=>['b12-8','b12-9','b12-10','b12-11'].includes(event.id)),'folded sends are not stored one by one');
+ // When it starts, the sender row carries the +N tag and the bundle is a drawn packet.
+ const startAt=bundles[0].routeAt-NOW;state=advance(twelve,state,startAt+1);
+ assert.equal(state.tags.get(from).label,'메시지 +4');
+ assert(state.packets.some(packet=>packet.bundle&&packet.to==='worker'));
+ // A later send arriving while the queue is full and the bundle has not started joins it; it never overtakes it.
+ const more=with2({events:[...twelve.events,{id:'b12-late',at:stamp(NOW+20),kind:'message',from,to:'worker'}]});
+ const joined=advance(more,advance(twelve,prior,10),20).pending.map(([,event])=>event).filter(event=>event.bundle);
+ assert.equal(joined.length,1);assert.equal(joined[0].count,5);assert.equal(joined[0].label,'메시지 +5');
+ // Another pair gets its own bundle; bundles are capped and the rest only counted.
+ const mixed=with2({events:[...Array.from({length:8},(_,i)=>({id:'m-'+i,at:stamp(NOW),kind:'message',from,to:'worker'})),
+  {id:'m-x',at:stamp(NOW),kind:'message',from:other,to:'worker'},{id:'m-y',at:stamp(NOW),kind:'message',from,to:'worker'}]});
+ const two=advance(mixed,prior,10).pending.map(([,event])=>event).filter(event=>event.bundle);
+ assert.deepEqual(two.map(event=>[event.from,event.count]),[[other,1],[from,1]]);
+ assert(two[1].routeAt>two[0].routeAt,'bundles keep the arrival order of their first send');
+ const nodes=['one-agent','two-agent','one','two','studio','worker'],pairs=nodes.flatMap(a=>nodes.filter(b=>b!==a).map(b=>[a,b]));
+ const flood=with2({events:[...Array.from({length:8},(_,i)=>({id:'f-'+i,at:stamp(NOW),kind:'message',from,to:'worker'})),
+  ...pairs.map(([a,b],i)=>({id:'p-'+i,at:stamp(NOW),kind:'message',from:a,to:b}))]});
+ const flooded=advance(flood,prior,10),held=flooded.pending.map(([,event])=>event).filter(event=>event.bundle);
+ assert.equal(held.length,8,'at most eight bundles at once');
+ assert.equal(held.reduce((sum,event)=>sum+event.count,0)+flooded.overflow,pairs.length,'every overflowing send is in a bundle or counted');
+ assert(flooded.overflow>0);
+ assert(flooded.pending.length<=8+8,'memory stays bounded');
+ // The queue drains completely.
+ const drained=advance(twelve,advance(twelve,prior,10),60000);assert.equal(drained.pending.length,0);assert.equal(drained.nextAt,null);
+});
+
+test('a message without an agent sender is never drawn as an agent send; its receiver says the sender is unconfirmed',()=>{
+ const initial=normalize({spaces:[space('one'),space('two')]}),prior=boot(initial),space0=initial.spaces[0],to=space0.agents[0].id;
+ const value=normalize({spaces:[space('one'),space('two')],events:[{id:'nobody',at:stamp(NOW),kind:'message',from:null,to,label:'메시지'},
+  {id:'spaceonly',at:stamp(NOW+1),kind:'message',from:space0.id,to,label:'메시지'}]});
+ const state=advance(value,prior,10);
+ assert.equal(state.tags.get(to).label,'← 발신 미확인');
+ assert(!state.packets.some(packet=>packet.id==='nobody'),'no route without a sender');
+ assert(![...state.tags.keys()].some(key=>key!==to&&initial.spaces.flatMap(s=>s.agents).some(agent=>agent.id===key)),'no other agent row is tagged as the sender');
+ const known=advance(normalize({spaces:[space('one'),space('two')],events:[{id:'known',at:stamp(NOW),kind:'message',from:'two-agent',to,label:'메시지'}]}),prior,10);
+ assert.notEqual(known.tags.get(to)?.label,'← 발신 미확인','a known agent sender is not marked unconfirmed');
 });
