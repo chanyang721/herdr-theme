@@ -95,7 +95,25 @@ when it starts and every 2 hours as a safety net (a failed one keeps the last go
 tried again 10 minutes later), otherwise one Linear notifications look per
 sync and only the issues those notifications name are read again (a notification counts as
 seen only once its issue was read; a failed read is retried on the next sync); after an apply only that
-issue is read again. Notifications are never marked read. Reads and writes are separate
-`claude -p` processes with only the Linear MCP server; reads allow only read tools, writes only
-`save_issue`/`save_comment` with a guard that lets through exactly the prepared calls for that
-one issue.
+issue is read again. Notifications are never marked read.
+
+When a Linear API key is set up, C's reads and writes call the Linear GraphQL API directly, with no
+model in between:
+
+- `--detail` reads the issue, its relations, every comment page, the team's statuses and labels and
+  this issue's notifications in a few requests (about a second). The file is written as soon as that
+  part is in, so C shows it on its next 3-second look; the Herdr links (a local scan) and Slack
+  mentions follow in later writes. Slack is not a Linear API, so only that part still runs a
+  read-only `claude -p` with the Slack search tool alone. The re-read after an apply skips Slack.
+- **Linear 에 반영** sends the same prepared changes as one `issueUpdate` (status, assignee, due date,
+  labels by id; a to-do toggle rewrites only that whole line of the description as just read, and is
+  refused if the line changed meanwhile) and one `commentCreate` per reply. A reply's `rid` is reserved
+  in `<KEY>.sent.json` (fsynced, under the same lock) before its request; when Linear certainly refused
+  it (no key, 401/403, 429) the reservation is freed and the reply stays pending; otherwise the mark
+  lookup settles it as above. The lookup reads every comment page and fails as unsure when any page
+  fails or the page limit is hit.
+- Only a fixed set of mutation texts can be sent at all.
+
+Without the key, reads and writes are separate `claude -p` processes with only the Linear MCP server;
+reads allow only read tools, writes only `save_issue`/`save_comment` with a guard that lets through
+exactly the prepared calls for that one issue.
