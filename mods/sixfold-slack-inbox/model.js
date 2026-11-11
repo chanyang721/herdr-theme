@@ -45,14 +45,15 @@ export const SLACK_COLLECT_ERROR=Object.freeze({
   config:'설정 확인 필요',no_tool:'커넥터 도구 없음',needs_auth_cache:'커넥터 인증 캐시 확인 필요',timeout:'시간 초과',
   parse:'결과 형식 오류',cli:'claude 실행 실패',budget:'비용 상한',policy:'허용 밖 도구 결과 버림',ingest:'로컬 기록 실패',
 });
-const TRIGGER={badge:'배지 변화',catchup:'따라잡기',manual:'수동'};
+const TRIGGER={badge:'배지 변화',continue:'이어 읽기',catchup:'따라잡기',manual:'수동'};
+const PARTIAL={missing_search:'빠진 검색 다시',pages_left:'남은 쪽 이어 읽기',untrusted:'모호한 결과 다시 읽기'};
 const clock=value=>{const at=new Date(value||'');return Number.isFinite(at.getTime())?`${String(at.getHours()).padStart(2,'0')}:${String(at.getMinutes()).padStart(2,'0')}`:'';};
 export function collectLine(health){
   const h=health && typeof health==='object'?health:{};
   const state=HEALTH_STATE[h.state] || '상태 확인 전';
   if(h.source!=='claude-slack-connector')
     return `수집: ${state} · 마지막 성공 ${h.last_success || '아직 없음'} · 60초마다 조회 시도`;
-  const kind=h.state==='error'?SLACK_COLLECT_ERROR[h.error_kind]:'';
+  const kind=h.state==='error'?SLACK_COLLECT_ERROR[h.error_kind]:h.state==='partial'?PARTIAL[h.checkpoint_reason]:'';
   const last=TRIGGER[h.last_trigger]?` · 마지막 수집 ${clock(h.last_trigger_at)} ${TRIGGER[h.last_trigger]}`:'';
   return `수집: Slack 커넥터 · ${state}${kind?` · ${kind}`:''}${last} · 마지막 성공 ${clock(h.last_success) || '아직 없음'} · 배지 변화 때와 평일 ${h.catchup_minutes || 30}분 따라잡기`;
 }

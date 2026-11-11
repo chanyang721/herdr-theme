@@ -40,6 +40,8 @@ test('collection line names the Slack connector, the trigger and a fixed error l
   assert.match(line,/^수집: Slack 커넥터 · 확인됨 · 마지막 수집 \d\d:\d\d 배지 변화 · 마지막 성공 \d\d:\d\d · 배지 변화 때와 평일 30분 따라잡기$/);
   assert.match(collectLine({source:'claude-slack-connector',state:'error',error_kind:'needs_auth_cache',last_trigger:'catchup',last_trigger_at:at}),/조회 실패 · 커넥터 인증 캐시 확인 필요 · 마지막 수집 \d\d:\d\d 따라잡기 · 마지막 성공 아직 없음/);
   assert.match(collectLine({source:'claude-slack-connector',state:'error',error_kind:'timeout'}),/조회 실패 · 시간 초과 · 마지막 성공/);
+  assert.match(collectLine({source:'claude-slack-connector',state:'partial',checkpoint_reason:'pages_left',last_trigger:'continue',last_trigger_at:at}),/일부 확인 · 남은 쪽 이어 읽기 · 마지막 수집 \d\d:\d\d 이어 읽기/);
+  assert.match(collectLine({source:'claude-slack-connector',state:'partial',checkpoint_reason:'untrusted'}),/일부 확인 · 모호한 결과 다시 읽기/);
   assert.doesNotMatch(collectLine({source:'claude-slack-connector',state:'error',error_kind:'xoxb-SECRET',error:'xoxb-SECRET raw'}),/xoxb|SECRET|raw/);
   assert.equal(collectLine({state:'ok',last_success:'10:00'}),'수집: 확인됨 · 마지막 성공 10:00 · 60초마다 조회 시도');
   assert.match(collectLine(null),/^수집: 상태 확인 전/);
