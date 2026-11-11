@@ -1,7 +1,7 @@
 import { View, div, image } from 'gpui-kit';
 import { h_flex, v_flex } from 'gpui-base';
 import { theme, props, appHome, home, readTextFile, writeTextFile, shared, setShared, openOverlay, closeOverlay, exec } from 'herdr';
-import { readable, threadGroups, freshness } from './model.js';
+import { readable, threadGroups, freshness, collectLine } from './model.js';
 
 export default class MentionInbox extends View {
   init(_props,cx) {
@@ -44,7 +44,6 @@ export default class MentionInbox extends View {
     const t=theme(),read=shared('sixfold.alertRead') ?? {};
     const groups=threadGroups(this.items,read),unread=groups.filter(g=>g.unread>0).length;
     const health=shared('sixfold.slackHealth') ?? {},workflows=shared('sixfold.slackWorkflows') ?? {};
-    const healthLabels={collecting:'조회 중',partial:'일부 확인',ok:'확인됨',paused:'일시 중지',error:'조회 실패'};
     const stateLabels={queued:'처리 대기',dispatching:'세션 전달 중',working:'수정안 준비 중',ready:'검토 준비 완료',needs_decision:'사용자 결정 필요',blocked:'처리 막힘',delivery_unknown:'전달 확인 필요'};
     const projects=[...new Set(groups.map(g=>g.project))];
     // Project colours, the Slack workspace and the reports folder are machine-local (site.local.json).
@@ -65,7 +64,7 @@ export default class MentionInbox extends View {
         .child(div().px(10).py(5).rounded(5).bg(t.selected).text_color(t.accent).font_bold().text_size(15).child(`미확인 ${unread}`))
         .child(button('sf-mentions-close','닫기',false,()=>closeOverlay(props()?.overlay))))
       .child(div().text_size(12).text_color(t.muted).child('미확인은 이 팝업에서 확인하지 않은 스레드입니다. Slack 앱의 읽음 상태와 별도로 관리합니다.'))
-      .child(div().text_size(12).text_color(health.state==='error'?t.blocked:t.muted).child(`수집: ${healthLabels[health.state] || '상태 확인 전'} · 마지막 성공 ${health.last_success || '아직 없음'} · 60초마다 조회 시도`))
+      .child(div().text_size(12).text_color(health.state==='error'?t.blocked:t.muted).child(collectLine(health)))
       .when(health.slack_freshness==='unknown',e=>e.child(div().text_size(12).text_color(t.muted).child('MCP 미러 기준 · Slack 최신성·인덱싱 지연 미확인')))
       .when(Boolean(freshness(health,Date.now())),e=>e.child(div().text_size(12).text_color(t.blocked).child(freshness(health,Date.now()))))
       .child(h_flex().gap(7).items_center()
