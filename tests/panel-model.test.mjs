@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { cleanPanelFeed, reconcilePanelFeed, panelSpaces, panelSpacePartners, agentGroups, agentState, panelEventStates, projectPanelFeed, createPanelProjection, PANEL_TIMING, MESSAGE_TIMING } from '../mods/sixfold-desk/panel-model.js';
+import { cleanPanelFeed, reconcilePanelFeed, panelSpaces, panelSpacePartners, agentGroups, agentState, panelEventStates, projectPanelFeed, createPanelProjection, PANEL_TIMING, MESSAGE_TIMING, MESSAGE_ROUTE } from '../mods/sixfold-desk/panel-model.js';
 const T = PANEL_TIMING, M = MESSAGE_TIMING, AFTER = T.packetMs + T.pingMs + T.coolMs + 100;
 import { makePanelFixture, makePanelMatrix, makePanelLoadFixture, PANEL_IDS, eventSequence, makePanelScenario, localCollaborationMessage } from './panel-fixtures.mjs';
 
@@ -943,4 +943,28 @@ test('a bundle keeps at most MESSAGE_ROUTE.bundleIds sends; the rest are counted
  const state=advance(with2({events:sends}),prior,10),held=state.pending.map(([,event])=>event).filter(event=>event.bundle);
  assert.equal(held.length,1);assert.equal(held[0].ids.length,32);assert.equal(held[0].label,'메시지 +32');
  assert.equal(state.overflow,40-32);
+});
+
+test('bundles that have arrived (ping, fade) still count toward the cap: never more than 8 bundles or 8x32 IDs held',()=>{
+ const two_spaces={spaces:[space('one'),space('two')]},with2=extra=>normalize({...two_spaces,...extra});
+ const nodes=['one-agent','two-agent','one','two','studio','worker'],pairs=nodes.flatMap(a=>nodes.filter(b=>b!==a).map(b=>[a,b]));
+ const held=state=>{const bundles=state.pending.map(([,event])=>event).filter(event=>event.bundle);return {bundles:bundles.length,ids:bundles.reduce((sum,event)=>sum+event.ids.length,0)};};
+ const cap={bundles:MESSAGE_ROUTE.bundles,ids:MESSAGE_ROUTE.bundles*MESSAGE_ROUTE.bundleIds};
+ const burst=(tag,pairList)=>[...Array.from({length:8},(_,i)=>({id:`${tag}-s${i}`,at:stamp(NOW),kind:'message',from:'one-agent',to:'worker'})),
+  ...pairList.flatMap(([a,b],p)=>Array.from({length:32},(_,i)=>({id:`${tag}-p${p}-${i}`,at:stamp(NOW),kind:'message',from:a,to:b})))];
+ // A feed carries at most 256 events, so the first burst arrives in two snapshots.
+ const first=burst('a',pairs.slice(0,8));
+ let state=advance(with2({events:first.slice(0,8+7*32)}),boot(with2()),10);
+ state=advance(with2({events:first.slice(8+7*32)}),state,11);
+ assert.deepEqual(held(state),cap,'the first burst fills the cap exactly');
+ const firstBundle=state.pending.map(([,event])=>event).filter(event=>event.bundle).sort((a,b)=>a.routeAt-b.routeAt)[0];
+ // Walk through travel, ping and fade of the first bundle while new bursts keep arriving.
+ const steps=[MESSAGE_TIMING.packetMs+1,MESSAGE_TIMING.packetMs+MESSAGE_TIMING.pingMs+1,MESSAGE_TIMING.packetMs+MESSAGE_TIMING.pingMs+MESSAGE_TIMING.coolMs-1];
+ steps.forEach((offset,n)=>{
+  state=advance(with2({events:burst('n'+n,pairs.slice(8+n*2,10+n*2))}),state,firstBundle.routeAt-NOW+offset);
+  const now=held(state);
+  assert(now.bundles<=cap.bundles,`step ${n}: ${now.bundles} bundles`);
+  assert(now.ids<=cap.ids,`step ${n}: ${now.ids} IDs`);
+ });
+ assert(state.overflow>0,'sends past the cap are counted');
 });
