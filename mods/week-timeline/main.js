@@ -1,11 +1,12 @@
 import { View, div } from 'gpui-kit';
 import { h_flex, v_flex } from 'gpui-base';
-import { appHome, exec, readTextFile, theme, props, openOverlay, closeOverlay } from 'herdr';
+import { appHome, exec, readTextFile, theme, props, settings, openOverlay, closeOverlay } from 'herdr';
 import { initIssue, renderIssue } from './issue.js';
 import { KIND, parseFeed, bridgeFrom, weekRows, dayCells, projectRows, freshness, isoDay, daysBetween, md, mix } from './model.js';
-import { weekSummary } from './summary.js';
+import { bandModel, fitCell, fitLine, textWidth, BAND } from './summary.js';
 
-// A: one header chip opens this week's work in a dismissible dialog over the panes.
+// A: a band under the header: seven day cells with that day's deadline chips and one "진행 중" line.
+//    Its summary or a +N opens the week in a dismissible dialog over the panes; a chip opens the issue (C).
 // B: "프로젝트 전체 타임라인" opens a window over the panes: milestones and my issues by week.
 // C: clicking an issue opens its popup (issue.js) on the right over the panes.
 // The feed is written by a user-owned producer (week-timeline-bridge.json); nothing here reads Linear.
@@ -54,7 +55,7 @@ export default class WeekTimeline extends View {
     const p = props() || {};
     this.timers = []; this.closed = false;
     if (p.issue) { this.mode = 'issue'; initIssue(this, p, cx); return; }
-    this.mode = p.full ? 'full' : p.week ? 'week' : 'chip';
+    this.mode = p.full ? 'full' : p.week ? 'week' : 'band';
     this.full = Boolean(p.full);
     this.project = typeof p.project === 'string' ? p.project : null;
     this.feed = null; this.filter = 'all'; this.days = 7; this.open = {}; this.undated = false;
@@ -62,7 +63,7 @@ export default class WeekTimeline extends View {
     this.load(cx);
     this.timers.push(cx.timer.every(READ_MS, cx => this.load(cx)));
     this.timers.push(cx.timer.every(60000, cx => cx.notify()));   // today's line and late marks follow the clock
-    if (this.mode === 'chip') {
+    if (this.mode === 'band') {
       this.timers.push(cx.timer.after(5000, cx => this.produce(cx, FRESH_S)));
       this.timers.push(cx.timer.every(PRODUCE_MS, cx => this.produce(cx, FRESH_S)));
     }
@@ -115,19 +116,74 @@ export default class WeekTimeline extends View {
   }
   toggle(id, fallback, cx) { this.open = { ...this.open, [id]: !(this.open[id] ?? fallback) }; cx.notify(); }
 
-  render() { return this.mode === 'issue' ? renderIssue(this) : this.full ? this.renderFull() : this.mode === 'week' ? this.renderWeek() : this.renderChip(); }
+  render() { return this.mode === 'issue' ? renderIssue(this) : this.full ? this.renderFull() : this.mode === 'week' ? this.renderWeek() : this.renderBand(); }
 
   // --- A ------------------------------------------------------------------------------------------
-  renderChip() {
-    const t = theme(), summary = weekSummary(this.feed, { today: isoDay() });
-    const tone = summary.late ? t.ansi1 : summary.today ? t.blocked : t.muted;
-    return h_flex().size_full().items_center()
-      .child(stop(h_flex().id('wt-chip').h(20).px(8).gap(5).rounded(10).border(1).border_color(t.border)
-        .bg(t.chrome).items_center().text_size(11).font_normal().text_color(t.foreground).cursor_pointer()
-        .tooltip(`${freshness(this.feed).text} · 눌러서 이번 주 타임라인${summary.late ? ` · 지난 마감 ${summary.late}` : ''}`)
-        .on_click((_e, cx) => { cx.stop_propagation(); this.openWeek(); })
-        .child(`이번 주 ${this.feed ? summary.total : '—'} · 오늘 ${this.feed ? summary.today : '—'}`)
-        .child(div().text_size(8).text_color(tone).child('●'))));
+  // Under the header, ~80px: the week label, seven day cells with that day's deadline chips, and one
+  // "진행 중" line. No tree, table or bars here; those stay in the dialog (+N) and B.
+  renderBand() {
+    const t = theme(), today = isoDay(), f = freshness(this.feed);
+    const hex = v => v && /^#[0-9a-f]{6}/i.test(v) ? v : null, ground = hex(t.canvas) || t.background;
+    const rule = mix(t.border, t.background, 0.45), weekend = ground, todayBg = mix(t.blocked, t.background, 0.9);
+    const root = h_flex().id('wt-band').size_full().bg(mix(t.chrome, ground, 0.45)).border_b(1).border_color(t.border)
+      .text_size(12).font_normal().text_color(t.foreground).whitespace_nowrap().overflow_hidden()
+      .on_size_change((size, cx) => { const w = size.width / (settings()?.zoom || 1); if (Math.abs((this.width || 0) - w) > 1) { this.width = w; cx.notify(); } });
+    if (!this.feed) return root.items_center().px(12).child(div().min_w(0).truncate().text_color(t.dim || t.muted)
+      .child(this.note || (this.loaded ? '이번 주 타임라인: 아직 수집된 내용이 없습니다' : '이번 주 타임라인 읽는 중…')));
+    const m = bandModel(this.feed, { today });
+    const tone = c => ({ late: t.ansi1 || t.blocked, soon: t.blocked, review: t.ansi5 || t.accent }[c.tone] || t.working);
+    const tip = r => `${r.key} ${r.title}\n${r.status}${r.when ? ` · ${r.due ? '마감' : '마일스톤 목표'} ${r.when}` : ''}\n눌러서 이슈 보기`;
+    const issue = (c, el) => stop(el.id(`wt-chip-${c.key}`).cursor_pointer().tooltip(tip(c.item))
+      .on_click((_e, cx) => { cx.stop_propagation(); this.openIssue(c.item); }));
+    const more = (id, n, keys, h) => stop(div().id(id).flex_none().h(h).px(7).rounded(h / 2).border(1).border_color(t.border).bg(t.chrome)
+      .flex().items_center().text_size(11).text_color(t.muted).cursor_pointer().tooltip(`${keys.join(' · ')}\n눌러서 이번 주 전체`)
+      .on_click((_e, cx) => { cx.stop_propagation(); this.openWeek(); }).child(`+${n}`));
+    const dueChip = c => {
+      const color = tone(c), hot = c.tone === 'late' || c.tone === 'soon';
+      return issue(c, h_flex().min_w(0).h(20).px(8).gap(BAND.gap).items_center().rounded(10).border(1)
+        .border_color(hot ? mix(color, t.background, 0.55) : t.border).bg(hot ? mix(color, t.background, 0.86) : t.chrome)
+        .hover(el => el.border_color(color))
+        .child(div().flex_none().text_size(11).text_color(color).child('◆'))
+        .child(div().flex_none().text_color(t.muted).child(c.key))
+        .child(div().min_w(0).truncate().child(c.title)));
+    };
+    const lineChip = c => issue(c, h_flex().flex_none().h(18).px(8).gap(BAND.gap).items_center().rounded(9).border(1).border_color(t.border)
+      .bg(t.chrome).text_size(11).hover(el => el.border_color(tone(c)))
+      .child(div().flex_none().text_color(tone(c)).child('●'))
+      .child(div().flex_none().text_color(t.muted).child(c.key))
+      .child(div().flex_none().child(c.title))
+      .when(Boolean(c.due), el => el.child(div().flex_none().text_color(t.muted).child(`→ ${c.due}`))));
+    const right = Math.max(0, (this.width || 0) - BAND.label), cell = right / 7;
+    const label = stop(v_flex().id('wt-summary').w(BAND.label).flex_none().h_full().px(12).py(7).gap(3).border_r(1).border_color(rule).cursor_pointer()
+      .tooltip(`${f.text} · 눌러서 이번 주 타임라인`).on_click((_e, cx) => { cx.stop_propagation(); this.openWeek(); })
+      .child(div().font_semibold().child('이번 주'))
+      .child(div().text_size(11).text_color(t.muted).child(m.range))
+      .child(div().text_size(11).text_color(t.muted).child(`마감 ${m.due} · 진행 ${m.ongoing.length}`)));
+    const cellBox = (c, i, h) => div().flex_1().min_w(0).h(h).when(i < 6, el => el.border_r(1).border_color(rule))
+      .when(c.today || c.weekend, el => el.bg(c.today ? todayBg : weekend));
+    const head = h_flex().id('wt-days').h(BAND.head).flex_none().children(m.days.map((c, i) => cellBox(c, i, BAND.head).px(10).flex().items_center()
+      .text_size(11).when(c.today, el => el.font_semibold()).text_color(c.today ? t.blocked : c.weekend ? (t.dim || t.muted) : t.muted).child(c.label)));
+    const dues = h_flex().id('wt-due').h(BAND.due).flex_none().children(m.days.map((c, i) => {
+      const fit = fitCell(c.items.length, cell);
+      return cellBox(c, i, BAND.due).id(`wt-day-${i}`).px(BAND.cellPad).flex().items_center().gap(BAND.gap).overflow_hidden()
+        .children(c.items.slice(0, fit.shown).map(dueChip))
+        .when(fit.more > 0, el => el.child(more(`wt-more-${i}`, fit.more, c.items.slice(fit.shown).map(x => x.key), 20)));
+    }));
+    const tail = f.failed || this.note ? (this.note || f.text) : '';
+    const room = right - BAND.linePad * 2 - textWidth('진행 중', 11) - BAND.gap * 3 - textWidth('프로젝트 전체 ↗', 11) - (tail ? textWidth(tail, 11) + BAND.gap : 0);
+    const line = fitLine(m.ongoing, room);
+    const ongoing = h_flex().id('wt-ongoing').h(BAND.line).flex_none().px(BAND.linePad).gap(BAND.gap).items_center().border_t(1).border_color(rule).overflow_hidden()
+      .child(div().flex_none().text_size(11).text_color(t.muted).child('진행 중'))
+      .when(!m.total, el => el.child(div().flex_none().text_size(11).text_color(t.muted).child('· 이번 주 할 일 없음')))
+      .when(m.total > 0 && !m.ongoing.length, el => el.child(div().flex_none().text_size(11).text_color(t.dim || t.muted).child('없음')))
+      .children(line.shown.map(lineChip))
+      .when(line.more > 0, el => el.child(more('wt-more-ongoing', line.more, m.ongoing.slice(line.shown.length).map(x => x.key), 18)))
+      .child(div().flex_1())
+      .when(Boolean(tail), el => el.child(div().id('wt-band-status').flex_none().text_size(11).text_color(t.dim || t.muted)
+        .tooltip(f.failed ? `${f.detail}${f.since ? `\n${f.since}을 보여 주는 중` : ''}` : tail).child(tail)))
+      .child(stop(div().id('wt-band-full').flex_none().text_size(11).text_color(t.accent).cursor_pointer()
+        .on_click((_e, cx) => { cx.stop_propagation(); this.openFull(); }).child('프로젝트 전체 ↗')));
+    return root.child(label).child(v_flex().flex_1().min_w(0).h_full().child(head).child(dues).child(ongoing));
   }
   renderWeek() {
     const t = theme();
