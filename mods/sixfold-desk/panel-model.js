@@ -522,7 +522,10 @@ export function panelEventStates(feed, now, { previous = null, motion = true } =
           if(open.ids.length>=MESSAGE_ROUTE.bundleIds){overflow++;continue;}
           const ids=[...open.ids,event.id];pending.set(open.id,{...open,ids,count:ids.length,label:`메시지 +${ids.length}`,lastSourceAt:event.at});continue;
         }
-        if(lineup.filter(item=>item.bundle).length>=MESSAGE_ROUTE.bundles){overflow++;continue;}
+        // The cap counts every bundle still held, arrived (ping, fade) included,
+        // so at most bundles x bundleIds IDs are ever kept.
+        let held=0;for(const item of pending.values())if(item.bundle)held++;
+        if(held>=MESSAGE_ROUTE.bundles){overflow++;continue;}
         const {at,lane}=slot(),id=`bundle-${++bundleRevision}`;
         pending.set(id,{id,kind:'message',bundle:true,ids:[event.id],count:1,from:event.from,to:event.to,label:'메시지 +1',
           sourceAt:event.at,lastSourceAt:event.at,at,routeAt:at,routeLane:lane,drawRoute:true});
