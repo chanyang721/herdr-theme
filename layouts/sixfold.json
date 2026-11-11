@@ -38,20 +38,6 @@
       "type": "column",
       "children": [
         {
-          "id": "toolbar",
-          "type": "block",
-          "size": {
-            "px": 32
-          },
-          "window_drag": true,
-          "content": {
-            "mod": "sixfold-desk",
-            "props": {
-              "role": "toolbar"
-            }
-          }
-        },
-        {
           "id": "monitor-strip",
           "type": "row",
           "size": {
@@ -83,31 +69,65 @@
               }
             },
             {
-              "id": "mcp-cli-stack",
-              "type": "column",
+              "id": "mcp-cli",
+              "type": "stack",
+              "active": "mcp-cli-stack",
               "size": {
                 "px": 700
               },
               "children": [
                 {
-                  "id": "mcp-status",
-                  "type": "block",
-                  "size": {
-                    "weight": 1
-                  },
-                  "content": {
-                    "mod": "mcp-status"
-                  }
+                  "id": "mcp-cli-stack",
+                  "type": "column",
+                  "children": [
+                    {
+                      "id": "mcp-status",
+                      "type": "block",
+                      "size": {
+                        "weight": 1
+                      },
+                      "content": {
+                        "mod": "mcp-status"
+                      }
+                    },
+                    {
+                      "id": "cli-status",
+                      "type": "block",
+                      "size": {
+                        "weight": 1
+                      },
+                      "content": {
+                        "mod": "cli-status"
+                      }
+                    }
+                  ]
                 },
                 {
-                  "id": "cli-status",
-                  "type": "block",
-                  "size": {
-                    "weight": 1
-                  },
-                  "content": {
-                    "mod": "cli-status"
-                  }
+                  "id": "mcp-cli-line",
+                  "type": "row",
+                  "gap": 6,
+                  "children": [
+                    {
+                      "id": "mcp-status-line",
+                      "type": "block",
+                      "size": {
+                        "weight": 1
+                      },
+                      "content": {
+                        "mod": "mcp-status"
+                      }
+                    },
+                    {
+                      "id": "cli-status-line",
+                      "type": "block",
+                      "size": {
+                        "weight": 1
+                      },
+                      "content": {
+                        "mod": "cli-status"
+                      }
+                    }
+                  ]
                 }
               ]
             },
@@ -134,7 +154,20 @@
                 }
               }
             }
-          ]
+          ],
+          "window_drag": true
+        },
+        {
+          "id": "week-timeline",
+          "type": "block",
+          "size": {
+            "weight": 0.3
+          },
+          "min": 120,
+          "max": 202,
+          "content": {
+            "mod": "week-timeline"
+          }
         },
         {
           "id": "tabs",
