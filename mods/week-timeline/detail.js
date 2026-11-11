@@ -111,7 +111,7 @@ export function parseApply(text, key) {
   let v;
   try { v = typeof text === 'string' ? JSON.parse(text) : text; } catch { return null; }
   if (!v || v.key !== key || typeof v.at !== 'string') return null;
-  return { at: v.at, request: str(v.request, 80), ok: v.ok === true, error: str(v.error, 200), applied: Number(v.applied) || 0,
+  return { at: v.at, request: str(v.request, 80), mismatch: v.mismatch === true, ok: v.ok === true, error: str(v.error, 200), applied: Number(v.applied) || 0,
     kept: list(v.kept).filter(c => c && typeof c.kind === 'string') };
 }
 

@@ -76,12 +76,14 @@ function loadCarried(v, cx) {
 
 // Keeps a left-behind request file in step with the popup, so a cancelled or removed change does
 // not come back on reopen. Only touches the file when one is there (a failed apply wrote it).
+// Each save and each apply takes a new generation; a save whose read finishes after a newer one
+// started is dropped, and the write itself only lands on the file it read (expected snapshot).
 function persist(v, cx) {
-  const key = v.key, pending = v.pending;
+  const key = v.key, pending = v.pending, gen = (v.gen = (v.gen || 0) + 1);
   cx.spawn(async () => {
     const target = path(key, '.request');
     const before = await readTextFile(target).catch(() => null);
-    if (before == null) return;
+    if (before == null || v.gen !== gen) return;
     await writeTextFile(target, JSON.stringify(requestOf(key, newId(), pending)), before).catch(() => {
       v.message = '남은 변경 파일을 갱신하지 못함 — 다시 열면 지난 변경이 보일 수 있음';
     });
@@ -126,20 +128,23 @@ function stage(v, change, cx) {
 function applyNow(v, cx) {
   if (v.applying || !v.pending.length) return;
   v.applying = true; v.message = ''; v.result = null; cx.notify();
+  const gen = (v.gen = (v.gen || 0) + 1);   // older saves still in flight now drop out
   cx.spawn(async cx => {
     try {
       const bridge = bridgeFrom(await readTextFile(`${appHome()}/${BRIDGE}`).catch(() => null));
       if (!bridge?.apply) { v.message = '반영 도구 미설정(week-timeline-bridge.json 의 apply)'; return; }
       const target = path(v.key, '.request');
       const before = await readTextFile(target).catch(() => null);
+      if (v.gen !== gen) { v.message = '반영 준비 중 변경이 바뀜 — 다시 눌러 주세요'; return; }
       const id = newId();
       await writeTextFile(target, JSON.stringify(requestOf(v.key, id, v.pending)), before);
       v.carried = true;   // the file is there now: later cancels and removals keep it in step
-      const done = await exec(bridge.apply.command, [...bridge.apply.args, '--key', v.key], { timeout: APPLY_TIMEOUT });
+      const done = await exec(bridge.apply.command, [...bridge.apply.args, '--key', v.key, '--request', id], { timeout: APPLY_TIMEOUT });
       const result = parseApply(await readTextFile(path(v.key, '.apply')).catch(() => null), v.key);
       // Only the result that names this request counts; an older one (any time zone) is not this apply's.
       if (!result || result.request !== id) { v.message = `반영 결과 없음(종료 코드 ${done.code}) — 변경은 그대로 둠`; return; }
       v.result = result;
+      if (result.mismatch) { v.message = result.error || '반영 요청이 바뀜 — 보내지 않음'; return; }
       v.pending = result.ok ? [] : result.kept;
       v.carried = !result.ok;
       if (!result.ok) v.message = result.error || '일부 변경이 Linear 에서 확인되지 않음';
