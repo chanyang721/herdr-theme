@@ -42,7 +42,10 @@ Two message lanes stagger bursts, with at most eight scheduled routes. A send
 past those eight is not dropped silently: it joins one **메시지 +N** bundle for
 its sender and receiver, which travels after the queued sends (a later send never
 overtakes it) and tags the sender row with the count. At most eight bundles wait
-at once; sends past that are only counted, so memory stays bounded. A message
+at once, each keeping the IDs of at most 32 sends; sends past that are only
+counted, so memory stays bounded. A correction (`animate: false`, or a lost
+endpoint) takes its send back out of the bundle, before or after it starts: the
+count drops, and a bundle with nothing left is not drawn. A message
 whose `from` is not an agent row (no caller, or only its space or computer) is
 never drawn as an agent's send: its receiving row reads **← 발신 미확인**. Native
 interpolation uses finite targets rather than a JavaScript frame loop. A remote
