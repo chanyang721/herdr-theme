@@ -147,11 +147,12 @@ export default class WeekTimeline extends View {
         .child(div().flex_none().text_color(t.muted).child(c.key))
         .child(div().min_w(0).truncate().child(c.title)));
     };
-    const lineChip = c => issue(c, h_flex().flex_none().h(18).px(8).gap(BAND.gap).items_center().rounded(9).border(1).border_color(t.border)
+    // Shrinkable: if the width estimate is short, a title is cut with … and the +N stays in view.
+    const lineChip = c => issue(c, h_flex().flex_shrink_1().min_w(0).h(18).px(8).gap(BAND.gap).items_center().rounded(9).border(1).border_color(t.border)
       .bg(t.chrome).text_size(11).hover(el => el.border_color(tone(c)))
       .child(div().flex_none().text_color(tone(c)).child('●'))
       .child(div().flex_none().text_color(t.muted).child(c.key))
-      .child(div().flex_none().child(c.title))
+      .child(div().min_w(0).truncate().child(c.title))
       .when(Boolean(c.date), el => el.child(div().flex_none().text_color(t.muted).child(`→ ${c.date}`))));
     const measured = this.width > 0, right = measured ? Math.max(0, this.width - BAND.label) : null, cell = measured ? right / 7 : null;
     const label = stop(v_flex().id('wt-summary').w(BAND.label).flex_none().h_full().px(12).py(7).gap(3).border_r(1).border_color(rule).cursor_pointer()

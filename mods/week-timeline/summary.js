@@ -45,13 +45,15 @@ export function bandModel(feed, { today }) {
   return { win, days, ongoing, due, total: due + ongoing.length, range: `${md(win.start)} – ${md(win.end)}` };
 }
 
-// Rough text widths, a few percent wide of the app's rendering (checked against an 11px chip:
-// estimated 255 px for 246 drawn): Hangul ~0.86 em, capitals, digits and marks 0.6, the rest less.
+// Text widths, estimated wide on purpose so a fold is never missed: Hangul and other wide glyphs
+// and the widest Latin letters (W, M, m, w, @, %) one em, other capitals, digits and marks 0.72 em,
+// the rest 0.6 em. Measured against the app font at 11px this runs 10-25% over. The view also lets
+// chips shrink, so a wrong guess cuts a title rather than the "+N".
 export function textWidth(text, size = 12) {
   let w = 0;
   for (const ch of String(text)) {
     const c = ch.codePointAt(0);
-    w += c >= 0x1100 ? size * 0.86 : ch === ' ' ? size * 0.28 : /[A-Z0-9→◆●…]/.test(ch) ? size * 0.6 : size * 0.52;
+    w += c >= 0x1100 || /[WMmw@%]/.test(ch) ? size : ch === ' ' ? size * 0.32 : /[A-Z0-9→◆●…]/.test(ch) ? size * 0.72 : size * 0.6;
   }
   return Math.ceil(w);
 }

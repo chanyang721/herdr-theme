@@ -178,3 +178,15 @@ test('band: when a long status leaves no room, the 진행 중 line keeps one +N 
   assert.equal(['DEMO-40','DEMO-41','DEMO-42','DEMO-43','DEMO-44'].some(k=>has(line,`wt-chip-${k}`)),false);
   assert.ok(words(r.find(line,'wt-more-ongoing')).includes('+5'));
 });
+
+test('band: 진행 중 chips can shrink with a cut title, while +N, the label and 전체 never shrink (review HOLD 2)', async () => {
+  const r=await runtime();
+  r.view.feed={week:feed.week,projects:[{key:'ALP',name:'Alpha',milestones:[],issues:Array.from({length:6},(_,i)=>item(`DEMO-${50+i}`,{state:'started',due:'2026-12-03',title:'W'.repeat(16)}))}]};
+  r.view.width=972;
+  const line=r.find(r.view.render(),'wt-ongoing'), calls=n=>n.calls.map(c=>c[0]);
+  const chip=r.find(line,'wt-chip-DEMO-50');
+  assert.ok(calls(chip).includes('flex_shrink_1') && calls(chip).includes('min_w') && !calls(chip).includes('flex_none'));
+  assert.ok(calls(chip.kids[2]).includes('truncate'));   // ●, key, title, date
+  assert.ok(calls(r.find(line,'wt-more-ongoing')).includes('flex_none'));
+  assert.ok(calls(r.find(line,'wt-band-full')).includes('flex_none'));
+});

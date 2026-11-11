@@ -108,3 +108,22 @@ test('no room on the line still shows one +N for every chip (review P2-4)', () =
   assert.deepEqual(fitLine(chips, 0), { shown: [], more: 5 });
   assert.deepEqual(fitLine([], -1), { shown: [], more: 0 });
 });
+
+test('wide titles still fold: three W×16 chips do not fit in 700px (review HOLD 2)', () => {
+  const m = bandModel(feedOf([1, 2, 3].map(n => item(`DEMO-${n}`, { state: 'started', due: '2026-12-03', title: 'W'.repeat(16) }))), { today });
+  const r = fitLine(m.ongoing, 700);
+  assert.deepEqual([r.shown.map(c => c.key), r.more], [['DEMO-1', 'DEMO-2'], 1]);
+  // Never under the app font's drawn width: three such chips with gaps measure about 854px.
+  const total = m.ongoing.reduce((n, c, i) => n + chipWidth(c) + (i ? BAND.gap : 0), 0);
+  assert.ok(total >= 854, String(total));
+});
+
+test('width estimates stay at or above chips measured in the app (11px)', () => {
+  const drawn = [   // [chip, width drawn in the isolated app with the synthetic feed]
+    [{ key: 'DEMO-28', title: '목표일만 있는 진행 작업', date: '11/14 목표' }, 254],
+    [{ key: 'DEMO-21', title: '인프라 설계 문서 작성과 공유', date: '11/25' }, 254],
+    [{ key: 'DEMO-22', title: '공개 대기 현황과 CDN 캐시', date: '12/3' }, 248],
+    [{ key: 'DEMO-20', title: '부하 시험 도구 안전장치', date: '11/24' }, 235],
+  ];
+  for (const [chip, px] of drawn) assert.ok(chipWidth(chip) >= px, `${chip.key} ${chipWidth(chip)} < ${px}`);
+});
