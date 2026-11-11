@@ -101,7 +101,8 @@ test('issues with new alerts show in one group above the tabs; a tab row only ge
     const tree=issuePopover(model({scope,groups:[{id:'g',name:'G',items:rows}],alerted,alertsFor:key=>counts[key]||null,
       onLink:(url,context)=>{assert.equal(context,cx);opened.push(url);}}),theme);
     const body=byId(tree,'task-issues-body-demo'),ids=body.nodes.map(node=>call(node,'id')?.[1]).filter(Boolean);
-    assert(ids.indexOf('task-issues-alerted-demo')>=0&&ids.indexOf('task-issues-alerted-demo')<ids.indexOf('task-issues-list-demo'),scope);   // above the tab list, every tab
+    assert(ids.indexOf('task-issues-top-demo')>=0&&ids.indexOf('task-issues-top-demo')<ids.indexOf('task-issues-list-demo'),scope);   // above the tab list, every tab
+    assert(byId(byId(tree,'task-issues-top-demo'),'task-issues-alerted-demo'),scope);   // inside the capped scroll area
     const group=words(byId(tree,'task-issues-alerted-demo'));
     for(const word of ['알림 온 이슈','미확인 4','DEMO-9','Made after the list','Kim replied: second','Kim commented: first','외 1건','3건','배정','Lee assigned you'])assert(group.includes(word),`${scope}: ${word}`);
     assert.deepEqual(words(byId(tree,'task-issue-alerts-demo-DEMO-2')),['새 1']);          // the tab row: a count only
@@ -154,4 +155,28 @@ test('each alert line carries its own kind badge, colored by kind',async()=>{
   assert.equal(call(byId(tree,'task-issues-alerted-kind-demo-DEMO-9-0'),'bg')[1],'#5fafff');
   assert.equal(call(byId(tree,'task-issues-alerted-kind-demo-DEMO-9-1'),'bg')[1],'#ffd75f');
   assert(words(byId(tree,'task-issues-alerted-demo')).includes('상태 Todo → In Progress'));
+});
+
+test('many auto-work cards and alerted issues stay in one capped scroll area above the tabs, which are never pushed out',async()=>{
+  const {issuePopover,TOP_MAX_H}=await renderer();
+  const auto=element('column');auto.calls.push(['id','task-issues-auto-demo']);
+  for(let i=0;i<24;i++)auto.nodes.push(element('row'));
+  const alerted=Array.from({length:12},(_,i)=>({key:`DEMO-${i+10}`,title:`Alerted ${i}`,at:'2026-11-10T04:45:00Z',
+    alerts:{unread:1,more:0,lines:[{id:`n${i}`,category:'댓글',text:`c${i}`,at:'2026-11-10T04:45:00Z',url:''}]}}));
+  const tree=issuePopover(model({auto,alerted}),theme);
+  const body=byId(tree,'task-issues-body-demo'),top=byId(tree,'task-issues-top-demo');
+  assert(top,'one wrapper');
+  for(const name of ['max_h','overflow_y_scroll','flex_none'])assert(call(top,name),name);
+  assert.equal(call(top,'max_h')[1],TOP_MAX_H);
+  assert(TOP_MAX_H<=300,'leaves room for tabs, list and footer inside the 700 body');
+  assert(top.nodes.includes(auto)&&byId(top,'task-issues-alerted-demo'),'both groups live inside it');
+  const ids=body.nodes.map(node=>call(node,'id')?.[1]).filter(Boolean);
+  const tabRow=body.nodes.findIndex(node=>typeof node==='object'&&node.nodes.some(child=>String(call(child,'id')?.[1]||'').startsWith('task-issues-scope-')));
+  const bodyIds=body.nodes.map(node=>call(node,'id')?.[1]||null),topAt=bodyIds.indexOf('task-issues-top-demo');
+  assert(topAt>=0&&tabRow>topAt&&tabRow<bodyIds.indexOf('task-issues-list-demo'),'wrapper, then tabs, then list');
+  assert(!body.nodes.includes(auto),'the groups are not direct body children');
+  assert.equal(walk(byId(tree,'task-issues-alerted-demo')).filter(n=>String(call(n,'id')?.[1]||'').startsWith('task-issues-alerted-line-')).length,12);
+  assert(call(byId(tree,'task-issues-list-demo'),'overflow_y_scroll'),'the list scrolls too');
+  const lone=byId(issuePopover(model({}),theme),'task-issues-body-demo');
+  assert(!byId(lone,'task-issues-top-demo'),'no wrapper when neither group shows');
 });

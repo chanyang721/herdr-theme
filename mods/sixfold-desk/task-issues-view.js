@@ -9,6 +9,8 @@ export const ISSUE_SCOPES=Object.freeze([
   {id:'milestone',label:'마일스톤'},
   {id:'all',label:'전체'},
 ]);
+// Cap of the 자동 작업 + 알림 온 이슈 area; the popover is 700 high, the tabs, filters, footer and a list row need the rest.
+export const TOP_MAX_H=260;
 const states={blocked:'막힘',working:'진행 중',review:'검수',waiting:'대기',done:'완료'};
 const text=(value,color,size=11)=>div().min_w(0).truncate().text_size(size).text_color(color).child(value);
 const kindBadge=(item,t,id)=>div().id(id).px(5).rounded(3).flex_none().text_size(9).font_bold()
@@ -42,9 +44,16 @@ export function issuePopover(model,t){
     return popover.content(body);
   }
   if(model.search)body.child(model.search);
-  if(model.auto)body.child(model.auto);   // '자동 작업' (linear-auto-view.js): approvals above the alerts
+  // '자동 작업' (linear-auto-view.js) holds approvals above the alerts. Both groups grow with their
+  // item count, so they share one capped scroll area: a long list scrolls inside it instead of
+  // spilling over the tabs and the list below (the tabs stay in reach whatever the counts).
   const group=alertedGroup(model,t);
-  if(group)body.child(group);
+  if(model.auto||group){
+    const top=v_flex().id(`task-issues-top-${id}`).flex_none().min_h(0).max_h(TOP_MAX_H).overflow_y_scroll().gap(8);
+    if(model.auto)top.child(model.auto);
+    if(group)top.child(group);
+    body.child(top);
+  }
   body.child(h_flex().gap(4).pb(8).border_b(1).border_color(t.border)
     .children(ISSUE_SCOPES.map(item=>{
       const count=model.scopeCounts?.[item.id];
