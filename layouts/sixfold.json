@@ -161,10 +161,10 @@
           "id": "week-timeline",
           "type": "block",
           "size": {
-            "weight": 0.3
+            "px": 28
           },
-          "min": 120,
-          "max": 202,
+          "min": 28,
+          "max": 171,
           "content": {
             "mod": "week-timeline"
           }
@@ -222,19 +222,6 @@
               }
             }
           ]
-        },
-        {
-          "id": "status",
-          "type": "block",
-          "size": {
-            "px": 30
-          },
-          "content": {
-            "mod": "sixfold-desk",
-            "props": {
-              "role": "footer"
-            }
-          }
         }
       ]
     }

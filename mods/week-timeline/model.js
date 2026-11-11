@@ -48,7 +48,7 @@ export const md = day => `${+day.slice(5, 7)}/${+day.slice(8, 10)}`;
 export const KIND = {
   todo: { token: 'idle', name: '할 일' }, started: { token: 'working', name: '진행 중' },
   review: { token: 'ansi5', name: '검토 중' }, done: { token: 'done', name: '완료' },
-  hot: { token: 'blocked', name: '오늘 마감' }, late: { token: 'blocked', name: '기한 지남' },
+  hot: { token: 'blocked', name: '오늘 마감' }, late: { token: 'ansi1', name: '기한 지남' },
   blocked: { token: 'blocked', name: '막힘' },
 };
 export const EPIC_TOKENS = ['accent', 'ansi3', 'ansi5', 'ansi2', 'ansi4', 'ansi1', 'ansi6'];
@@ -90,38 +90,38 @@ export function rootOf(key, byKey) {
   }
 }
 
-// Where an item's bar sits in the window, in day columns:
-// { from, to, label } — label: "→ 11/25" past the window, "기한 없음" without a due day.
-export function weekBar(item, win, today) {
-  const at = day => daysBetween(win.start, day), last = win.days - 1;
-  if (item.state === 'done') {
-    const d = at(item.done_at || today);
-    return { from: Math.max(0, Math.min(last, at(item.start || item.done_at || today))), to: Math.max(0, Math.min(last, d)), label: '' };
-  }
-  const due = item.due ? at(item.due) : null;
-  const started = item.state === 'started' || item.state === 'review';
-  let from = started ? (item.start ? at(item.start) : at(today)) : (due ?? at(today));
-  let to = due ?? (started ? last : from);
-  let label = due == null ? (started ? '기한 없음' : '') : '';
-  if (due != null && due > last) { to = last; label = `→ ${md(item.due)}`; }
-  if (due != null && due < 0) { from = 0; to = 0; label = `${md(item.due)} 지남`; }
-  from = Math.max(0, Math.min(last, Math.min(from, to)));
-  to = Math.max(from, Math.min(last, to));
-  return { from, to, label };
+// Processing order is shared by the tree and the collapsed summary. Dates are ISO days.
+export const processingDate = (item, targets = new Map()) => item.due || targets.get(item.milestone) || '';
+export function compareIssues(a, b) {
+  const rank = { started: 0, todo: 1, review: 2, done: 3 };
+  return (a.when || a.due || '9999').localeCompare(b.when || b.due || '9999')
+    || (rank[a.state] ?? 4) - (rank[b.state] ?? 4)
+    || a.key.localeCompare(b.key, 'en', { numeric: true });
 }
 
-// Rows for A. Work for the window: open items in progress or due by its last day (late ones too),
-// grouped under their top issue. A top issue shows only as a group (thin bar + progress); a
-// loose item with a due day stays visible under its project. Done this week counts toward progress.
+// A shows deadline markers, never a start/end duration. A past-week deadline is clamped
+// to Monday with its date; a future-week deadline is text alone at the right edge.
+export function weekMarker(day, win) {
+  if (!day) return null;
+  const at = daysBetween(win.start, day);
+  if (at < 0) return { at: 0, edge: 'past', label: `${md(day)} 지남` };
+  if (at >= win.days) return { at: win.days - 1, edge: 'future', label: `→ ${md(day)}` };
+  return { at, edge: '', label: '' };
+}
+
+// Membership is unchanged: in-progress or due work (late work too), and done this
+// week for progress counts. Sorting doesn't change which issues the feed selects.
 export function weekRows(feed, { today = isoDay(), days = 7, filter = 'all', open = {} } = {}) {
-  const win = windowOf(feed, today, days), rows = [];
+  const win = windowOf(feed, today, days), blocks = [];
   for (const p of feed?.projects ?? []) {
     if (filter !== 'all' && filter !== p.key) continue;
-    const byKey = new Map(p.issues.map(i => [i.key, i]));
+    const rows = [], targets = new Map((p.milestones || []).map(m => [m.id, m.target]));
+    const issues = p.issues.map(i => ({ ...i, when: processingDate(i, targets) }));
+    const byKey = new Map(issues.map(i => [i.key, i]));
     const live = i => i.state !== 'done' && (i.state === 'started' || i.state === 'review' || (i.due && i.due <= win.end));
     const doneHere = i => i.state === 'done' && i.done_at >= win.start && i.done_at <= win.end;
     const groups = new Map(), loose = [];
-    for (const i of p.issues) {
+    for (const i of issues) {
       if (!live(i) && !doneHere(i)) continue;
       const root = rootOf(i.key, byKey);
       if (root === i.key) { if (live(i)) loose.push(i); continue; }
@@ -130,25 +130,27 @@ export function weekRows(feed, { today = isoDay(), days = 7, filter = 'all', ope
       if (live(i)) g.items.push(i); else g.done++;
     }
     for (const g of groups.values()) if (!g.items.length) groups.delete(g.key);
-    // A loose top issue with open work beneath it is the group, not an item of its own.
     const shown = loose.filter(i => !groups.has(i.key) && i.due);
-    const order = list => [...list].sort((a, b) => (a.due || '9999').localeCompare(b.due || '9999') || a.key.localeCompare(b.key, 'en', { numeric: true }));
+    const entries = [...groups.values()].map(g => ({ ...g, group: true, first: [...g.items].sort(compareIssues)[0] }))
+      .concat(shown.map(i => ({ key: i.key, group: false, first: i })));
+    entries.sort((a, b) => compareIssues(a.first, b.first) || a.key.localeCompare(b.key, 'en', { numeric: true }));
     const total = [...groups.values()].reduce((n, g) => n + g.items.length + g.done, 0) + shown.length;
     const done = [...groups.values()].reduce((n, g) => n + g.done, 0);
     const pOpen = open[p.key] !== false;
-    rows.push({ kind: 'project', key: p.key, title: p.name || p.workspace, depth: 0, open: pOpen, done, total, empty: !groups.size && !shown.length, read: p.read });
-    if (!pOpen) continue;
-    const list = [...groups.values()].sort((a, b) => (order(a.items)[0].due || '9999').localeCompare(order(b.items)[0].due || '9999') || a.key.localeCompare(b.key, 'en', { numeric: true }));
-    list.forEach((g, n) => {
-      const epic = byKey.get(g.key), gOpen = open[`${p.key}/${g.key}`] !== false;
-      const from = Math.min(...g.items.map(i => weekBar(i, win, today).from));
-      rows.push({ kind: 'epic', key: g.key, title: epic?.title || '', depth: 1, open: gOpen, color: EPIC_TOKENS[n % EPIC_TOKENS.length],
-        done: g.done, total: g.items.length + g.done, from, to: win.days - 1, url: epic?.url || '', id: `${p.key}/${g.key}` });
-      if (gOpen) for (const i of order(g.items)) rows.push({ kind: 'item', depth: 2, ...i, look: kindOf(i, today), bar: weekBar(i, win, today) });
+    rows.push({ kind: 'project', key: p.key, title: p.name || p.workspace, depth: 0, open: pOpen, done, total, empty: !entries.length, read: p.read });
+    const itemRow = (i, depth) => ({ kind: 'item', depth, ...i, look: kindOf({ ...i, due: i.when }, today), marker: weekMarker(i.when, win) });
+    if (pOpen) entries.forEach(entry => {
+      if (!entry.group) { rows.push(itemRow(entry.first, 1)); return; }
+      const g = entry, epic = byKey.get(g.key), id = `${p.key}/${g.key}`, gOpen = open[id] !== false;
+      rows.push({ kind: 'epic', key: g.key, title: epic?.title || '', depth: 1, open: gOpen,
+        color: EPIC_TOKENS[rows.filter(r => r.kind === 'epic').length % EPIC_TOKENS.length],
+        done: g.done, total: g.items.length + g.done, url: epic?.url || '', id });
+      if (gOpen) for (const i of [...g.items].sort(compareIssues)) rows.push(itemRow(i, 2));
     });
-    for (const i of order(shown)) rows.push({ kind: 'item', depth: 1, ...i, look: kindOf(i, today), bar: weekBar(i, win, today) });
+    blocks.push({ first: entries[0]?.first || { key: p.key }, rows });
   }
-  return { win, rows };
+  blocks.sort((a, b) => compareIssues(a.first, b.first));
+  return { win, rows: blocks.flatMap(b => b.rows) };
 }
 
 // Day header cells for A.
