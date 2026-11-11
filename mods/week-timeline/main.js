@@ -12,8 +12,10 @@ import { bandModel, fitCell, fitLine, textWidth, BAND } from './summary.js';
 // The feed is written by a user-owned producer (week-timeline-bridge.json); nothing here reads Linear.
 const FEED = 'data/sixfold/week-timeline.json';
 const BRIDGE = 'data/sixfold/week-timeline-bridge.json';
-const READ_MS = 15 * 1000;
-const PRODUCE_MS = 2 * 60 * 1000;      // a sync: one notifications look; the producer reads in full itself every 2 h
+// The producer may keep the feed current within seconds (its --live loop on the Linear API), so the
+// file is looked at often; an unchanged text is not parsed again.
+const READ_MS = 2 * 1000;
+const PRODUCE_MS = 2 * 60 * 1000;      // a sync: one light look (API: issues changed since; claude: notifications)
 const PRODUCE_TIMEOUT = 9 * 60 * 1000;
 const FRESH_S = 90;
 const FULL_KEY = 'week-timeline-full';
@@ -47,7 +49,7 @@ function pill(id, label, active, t, onClick) {
 function status(feed, t) {
   const f = freshness(feed);
   return div().flex_none().text_size(10).text_color(f.failed ? t.blocked : t.dim)
-    .tooltip(f.failed ? `${f.detail}${f.since ? `\n${f.since}을 보여 주는 중` : ''}` : 'Linear 읽기 전용 · 담당 = 나 · 알림이 오면 그 이슈만 다시 읽음 · 2시간마다 전체 대조').child(f.text);
+    .tooltip(f.failed ? `${f.detail}${f.since ? `\n${f.since}을 보여 주는 중` : ''}` : 'Linear 읽기 전용 · 담당 = 나 · 바뀐 이슈만 다시 읽음 · 주기적으로 전체 대조').child(f.text);
 }
 
 export default class WeekTimeline extends View {
@@ -73,8 +75,10 @@ export default class WeekTimeline extends View {
   load(cx) {
     if (this.closed) return;
     cx.spawn(async cx => {
-      const feed = parseFeed(await readTextFile(`${appHome()}/${FEED}`).catch(() => null));
-      if (this.closed) return;
+      const text = await readTextFile(`${appHome()}/${FEED}`).catch(() => null);
+      if (this.closed || (text !== null && text === this.feedText)) return;
+      this.feedText = text;
+      const feed = parseFeed(text);
       if (feed && JSON.stringify(feed) !== JSON.stringify(this.feed)) { this.feed = feed; cx.notify(); }
       else if (!feed && !this.loaded) { this.loaded = true; cx.notify(); }
     });
