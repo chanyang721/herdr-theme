@@ -38,7 +38,13 @@ seconds and open a square 1px ring at departure and arrival. All lines occupy th
 message lanes run 20px and 24px beyond the card, stationary purple links
 use 30px, and remote-computer pipes start at 40px with 8px spacing. Explicit
 row endpoints stay on their rows; space-wide endpoints use their headers.
-Two message lanes stagger bursts, with at most eight scheduled routes. Native
+Two message lanes stagger bursts, with at most eight scheduled routes. A send
+past those eight is not dropped silently: it joins one **메시지 +N** bundle for
+its sender and receiver, which travels after the queued sends (a later send never
+overtakes it) and tags the sender row with the count. At most eight bundles wait
+at once; sends past that are only counted, so memory stays bounded. A message
+whose `from` is not an agent row (no caller, or only its space or computer) is
+never drawn as an agent's send: its receiving row reads **← 발신 미확인**. Native
 interpolation uses finite targets rather than a JavaScript frame loop. A remote
 packet follows its computer-coloured dashed pipe, and its receiving row briefly
 shows that computer's name. Motion off omits message lines and packets while
