@@ -104,10 +104,10 @@ test('band shows seven day cells with deadline chips and a 진행 중 line, and 
   assert.deepEqual(r.find(tree,'wt-days').kids.map(k=>k.kids[0]),['월 11/9','화 11/10','수 11/11 오늘','목 11/12','금 11/13','토 11/14','일 11/15']);
   assert.ok(has(r.find(tree,'wt-day-2'),'wt-chip-DEMO-2'));
   assert.ok(has(r.find(tree,'wt-day-2'),'wt-chip-DEMO-5'));
-  assert.equal(has(tree,'wt-chip-DEMO-1'),false);   // a parent stays a group, as in the dialog
+  assert.ok(has(r.find(tree,'wt-day-3'),'wt-chip-DEMO-1'));   // a parent shows on its own deadline too
   assert.ok(has(r.find(tree,'wt-ongoing'),'wt-chip-DEMO-3'));
   assert.ok(words(r.find(tree,'wt-ongoing')).includes('→ 12/3'));
-  assert.ok(words(r.find(tree,'wt-summary')).includes('마감 2 · 진행 1'));
+  assert.ok(words(r.find(tree,'wt-summary')).includes('마감 3 · 진행 1'));
   assert.equal(r.calls.length,0);
 });
 
@@ -168,4 +168,13 @@ test('project and two-week controls update the table; full view closes the week 
   assert.deepEqual(r.calls.at(-2),['close','week-dialog']);
   assert.equal(r.calls.at(-1)[1].props.project,'MH');
   assert.equal(r.calls.at(-1)[1].props.full,true);
+});
+
+test('band: when a long status leaves no room, the 진행 중 line keeps one +N (review P2-4)', async () => {
+  const r=await runtime();
+  r.view.feed={week:feed.week,projects:[{key:'ALP',name:'Alpha',milestones:[],issues:Array.from({length:5},(_,i)=>item(`DEMO-${40+i}`,{state:'started',due:'2026-12-01'}))}]};
+  r.view.note='수집 실패 '.repeat(12); r.view.width=900;
+  const line=r.find(r.view.render(),'wt-ongoing');
+  assert.equal(['DEMO-40','DEMO-41','DEMO-42','DEMO-43','DEMO-44'].some(k=>has(line,`wt-chip-${k}`)),false);
+  assert.ok(words(r.find(line,'wt-more-ongoing')).includes('+5'));
 });

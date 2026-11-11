@@ -152,8 +152,8 @@ export default class WeekTimeline extends View {
       .child(div().flex_none().text_color(tone(c)).child('●'))
       .child(div().flex_none().text_color(t.muted).child(c.key))
       .child(div().flex_none().child(c.title))
-      .when(Boolean(c.due), el => el.child(div().flex_none().text_color(t.muted).child(`→ ${c.due}`))));
-    const right = Math.max(0, (this.width || 0) - BAND.label), cell = right / 7;
+      .when(Boolean(c.date), el => el.child(div().flex_none().text_color(t.muted).child(`→ ${c.date}`))));
+    const measured = this.width > 0, right = measured ? Math.max(0, this.width - BAND.label) : null, cell = measured ? right / 7 : null;
     const label = stop(v_flex().id('wt-summary').w(BAND.label).flex_none().h_full().px(12).py(7).gap(3).border_r(1).border_color(rule).cursor_pointer()
       .tooltip(`${f.text} · 눌러서 이번 주 타임라인`).on_click((_e, cx) => { cx.stop_propagation(); this.openWeek(); })
       .child(div().font_semibold().child('이번 주'))
@@ -170,7 +170,7 @@ export default class WeekTimeline extends View {
         .when(fit.more > 0, el => el.child(more(`wt-more-${i}`, fit.more, c.items.slice(fit.shown).map(x => x.key), 20)));
     }));
     const tail = f.failed || this.note ? (this.note || f.text) : '';
-    const room = right - BAND.linePad * 2 - textWidth('진행 중', 11) - BAND.gap * 3 - textWidth('프로젝트 전체 ↗', 11) - (tail ? textWidth(tail, 11) + BAND.gap : 0);
+    const room = !measured ? null : right - BAND.linePad * 2 - textWidth('진행 중', 11) - BAND.gap * 3 - textWidth('프로젝트 전체 ↗', 11) - (tail ? textWidth(tail, 11) + BAND.gap : 0);
     const line = fitLine(m.ongoing, room);
     const ongoing = h_flex().id('wt-ongoing').h(BAND.line).flex_none().px(BAND.linePad).gap(BAND.gap).items_center().border_t(1).border_color(rule).overflow_hidden()
       .child(div().flex_none().text_size(11).text_color(t.muted).child('진행 중'))
@@ -179,7 +179,7 @@ export default class WeekTimeline extends View {
       .children(line.shown.map(lineChip))
       .when(line.more > 0, el => el.child(more('wt-more-ongoing', line.more, m.ongoing.slice(line.shown.length).map(x => x.key), 18)))
       .child(div().flex_1())
-      .when(Boolean(tail), el => el.child(div().id('wt-band-status').flex_none().text_size(11).text_color(t.dim || t.muted)
+      .when(Boolean(tail), el => el.child(div().id('wt-band-status').min_w(0).truncate().text_size(11).text_color(t.dim || t.muted)
         .tooltip(f.failed ? `${f.detail}${f.since ? `\n${f.since}을 보여 주는 중` : ''}` : tail).child(tail)))
       .child(stop(div().id('wt-band-full').flex_none().text_size(11).text_color(t.accent).cursor_pointer()
         .on_click((_e, cx) => { cx.stop_propagation(); this.openFull(); }).child('프로젝트 전체 ↗')));
