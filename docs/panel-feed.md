@@ -42,7 +42,8 @@ Two message lanes stagger bursts, with at most eight scheduled routes. A send
 past those eight is not dropped silently: it joins one **메시지 +N** bundle for
 its sender and receiver, which travels after the queued sends (a later send never
 overtakes it) and tags the sender row with the count. At most eight bundles wait
-at once, each keeping the IDs of at most 32 sends; sends past that are only
+at once, counting bundles that have already arrived and are still pinging or
+fading, each keeping the IDs of at most 32 sends; sends past that are only
 counted, so memory stays bounded. A correction (`animate: false`, or a lost
 endpoint) takes its send back out of the bundle, before or after it starts: the
 count drops, and a bundle with nothing left is not drawn. A message
