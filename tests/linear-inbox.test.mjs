@@ -493,6 +493,6 @@ test('collection line names the API source and a fixed error label, never raw te
   assert.match(collectLine(null), /상태 확인 전/);
 });
 
-test('collection line says MCP fallback while the API key is missing', () => {
-  assert.match(collectLine({state: 'ok', source: 'linear-mcp', fallback: 'key_missing'}), /^수집: API 키 없음 · MCP로 수집 · 확인됨/);
+test('collection line shows a missing key as an error, not a fallback', () => {
+  assert.match(collectLine({state: 'error', source: 'linear-api', error_kind: 'key_missing'}), /조회 실패 · API 키 없음/);
 });
