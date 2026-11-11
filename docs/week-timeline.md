@@ -63,6 +63,9 @@ idempotent, so:
   `unsure: N` and C shows **확인 필요(댓글 전송 여부 불명)** with **[다시 확인]**, which runs the command
   with `--check` (look only, send nothing).
 - Removing an unsure reply from C does not free its `rid`; writing it again makes a new one.
+- After anything was written, or a reply was found by its mark (also on **[다시 확인]**), the command
+  re-reads the issue detail so C lists the new comment. Field changes need that re-read to be
+  confirmed; for replies alone a failed re-read is reported as `refresh` and does not undo them.
 
 The reference producer (kept outside this repo, Python) syncs only what changed: one full read
 when it starts and every 2 hours as a safety net (a failed one keeps the last good values and is
