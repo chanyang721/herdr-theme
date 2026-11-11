@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {linearReadsUrl} from './linear-reads-url.mjs';
-import {categoryLabel, linearLink, visibleItems, spacesOf, issueLine, buildRequest, requestId, resultLabel} from '../mods/sixfold-linear-inbox/model.js';
+import {categoryLabel, linearLink, visibleItems, spacesOf, issueLine, buildRequest, requestId, resultLabel, collectLine} from '../mods/sixfold-linear-inbox/model.js';
 import {linearUnread, linearScoped} from '../mods/sixfold-desk/alert-model.js';
 
 const N = '11111111-1111-4111-8111-111111111111';
@@ -479,4 +479,16 @@ test('a read mark with no answer in 5 minutes goes back to unread with a line sa
   await reads.checkReads({read: async () => null, now: now.getTime() + 5 * 60_000 + 1});
   assert.equal(reads.readState(a.id), '');
   assert.match(reads.lastReadError(now.getTime() + 5 * 60_000 + 2), /응답이 없어 되돌렸습니다/);
+});
+
+test('collection line names the API source and a fixed error label, never raw text', () => {
+  assert.match(collectLine({state: 'ok', source: 'linear-api', last_success: '10:00'}), /^수집: Linear API 직접 · 확인됨 · 마지막 성공 10:00/);
+  assert.match(collectLine({state: 'ok', source: 'linear-mcp'}), /^수집: 확인됨 · 마지막 성공 아직 없음/);
+  assert.match(collectLine({state: 'error', source: 'linear-api', error_kind: 'key_missing'}), /^수집: Linear API 직접 · 조회 실패 · API 키 없음 · /);
+  assert.match(collectLine({state: 'error', source: 'linear-api', error_kind: 'unauthorized'}), /조회 실패 · API 키 확인 필요/);
+  assert.match(collectLine({state: 'error', source: 'linear-api', error_kind: 'rate_limited'}), /호출 한도/);
+  assert.match(collectLine({state: 'error', source: 'linear-api', error_kind: 'network'}), /네트워크 오류/);
+  assert.doesNotMatch(collectLine({state: 'error', source: 'linear-api', error_kind: 'lin_api_SECRET', error: 'lin_api_SECRET failed'}), /lin_api|SECRET/);
+  assert.match(collectLine({}), /상태 확인 전/);
+  assert.match(collectLine(null), /상태 확인 전/);
 });

@@ -51,6 +51,19 @@ export function visibleItems(items, {space = null, unreadOnly = false} = {}) {
 export function spacesOf(items) {
   return [...new Set((items ?? []).map(i => i.workspace).filter(Boolean))].sort();
 }
+// The "수집:" line of the inbox. Shows where the data comes from (source 'linear-api' = direct GraphQL)
+// and, on failure, only a fixed label for the error kind — never the raw error text or any key.
+const HEALTH_STATE = {collecting: '조회 중', partial: '일부 확인', ok: '확인됨', error: '조회 실패'};
+export const COLLECT_ERROR = Object.freeze({
+  key_missing: 'API 키 없음', unauthorized: 'API 키 확인 필요', rate_limited: 'API 호출 한도 · 잠시 뒤 재시도', network: '네트워크 오류',
+});
+export function collectLine(health) {
+  const h = health && typeof health === 'object' ? health : {};
+  const state = HEALTH_STATE[h.state] || '상태 확인 전';
+  const kind = h.state === 'error' ? COLLECT_ERROR[h.error_kind] : '';
+  const source = h.source === 'linear-api' ? 'Linear API 직접 · ' : '';
+  return `수집: ${source}${state}${kind ? ` · ${kind}` : ''} · 마지막 성공 ${h.last_success || '아직 없음'} · 60초마다 조회 · 읽음은 Linear 기준`;
+}
 export function issueLine(item) {
   return [item.status, item.assignee && `담당 ${item.assignee}`, item.priority && `우선순위 ${item.priority}`, item.due && `기한 ${item.due}`]
     .filter(Boolean).join(' · ');

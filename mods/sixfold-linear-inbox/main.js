@@ -1,7 +1,7 @@
 import { View, div, image } from 'gpui-kit';
 import { h_flex, v_flex, InputState, Input } from 'gpui-base';
 import { theme, props, appHome, readTextFile, writeTextFile, openOverlay, closeOverlay, exec, spaces } from 'herdr';
-import { categoryLabel, linearLink, visibleItems, spacesOf, issueLine, buildRequest, resultLabel, changeLines, placeItems, readAllTargets } from './model.js';
+import { categoryLabel, linearLink, visibleItems, spacesOf, issueLine, buildRequest, resultLabel, changeLines, placeItems, readAllTargets, collectLine } from './model.js';
 
 // Linear inbox. Reads data/sixfold/linear-alerts.json (written by a local collector).
 // Writes never happen here: a pressed button leaves one request file that the
@@ -73,7 +73,6 @@ export default class LinearInbox extends View {
     const t = theme(), health = this.health || {};
     const shown = visibleItems(this.items, {space: this.space, unreadOnly: this.unreadOnly});
     const spaces = spacesOf(this.items), unread = visibleItems(this.items, {space: this.space, unreadOnly: true}).length;
-    const healthLabels = {collecting:'조회 중', partial:'일부 확인', ok:'확인됨', error:'조회 실패'};
     const button = (id, label, selected, action) => div().id(id).px(11).py(6).rounded(5).text_size(13).font_semibold()
       .bg(selected ? t.selected : t.surface).text_color(selected ? t.accent : t.muted).hover(s => s.bg(t.hover)).on_click(action).child(label);
     const feedback = key => this.pending.has(key) ? resultLabel(null) : this.results.has(key) ? resultLabel(this.results.get(key)) : '';
@@ -84,7 +83,7 @@ export default class LinearInbox extends View {
         .child(div().px(10).py(5).rounded(5).bg(t.selected).text_color(t.accent).font_bold().text_size(15).child(`미확인 ${unread}`))
         .child(button('sf-linear-close', '닫기', false, () => closeOverlay(props()?.overlay))))
       .child(div().text_size(12).text_color(health.state === 'error' ? t.blocked : t.muted)
-        .child(`수집: ${healthLabels[health.state] || '상태 확인 전'} · 마지막 성공 ${health.last_success || '아직 없음'} · 60초마다 조회 · 읽음은 Linear 기준`))
+        .child(collectLine(health)))
       .child(h_flex().gap(7).items_center()
         .child(button('sf-linear-all-spaces', '전체 공간', !this.space, (_e, cx) => { this.space = null; cx.notify(); }))
         .children(spaces.map(space => button(`sf-linear-space-${space}`, `${space} · ${visibleItems(this.items, {space, unreadOnly: true}).length}`,
