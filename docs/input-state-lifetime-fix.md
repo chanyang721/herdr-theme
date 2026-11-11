@@ -44,6 +44,7 @@
 - 설치 전 `panel-retained.js` sha256 `24184035…7538` = `a64d040` 원본과 같음을 확인했다. 백업은 `~/Documents/Reports/input-state-lifetime-20261111/panel-retained.js.before-20261111T152024`이다.
 - `panel-retained.js` 1파일만 교체했다(설치 후 sha256 `b2c0efd8…0052`, worktree와 같음).
 - 설치 후 `herdr-app status`: `errors: []`, space·focused_pane 변화 없음. 마지막 프레임에서 Demo 카드가 정상으로 그려졌다. UI 조작·포커스 이동은 하지 않았다.
+- 원 세션이 실제 Herdr 화면을 직접 확인(CUA)했다. 기존 오류 배너가 사라지고 Demo 카드가 정상 렌더링됐다. 입력창 실제 타이핑 재시험은 하지 않았다.
 
 ## 남은 것
 
