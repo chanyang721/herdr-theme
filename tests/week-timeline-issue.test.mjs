@@ -152,3 +152,22 @@ test('reopening after an unsure apply still says 확인 필요', async () => {
   assert.equal(v.result?.unsure, 1);
   assert.match(v.message, /확인 필요/);
 });
+
+test('after a reply-only apply the popup lists the new comment from the re-read detail', async () => {
+  const { m, v, cx, drain, files, setApply } = await popup();
+  const detailFile = `${DIR}/${KEY}.json`;
+  const issue = { key: KEY, title: 't', status: 'Todo', labels: [], due: '', description: '' };
+  files.set(detailFile, JSON.stringify({ v: 1, key: KEY, read_at: 'a', issue, comments: [] }));
+  setApply(files => {
+    const request = JSON.parse(files.get(REQ));
+    const c = request.changes[0];
+    files.set(detailFile, JSON.stringify({ v: 1, key: KEY, read_at: 'b', issue,                       // the producer's re-read
+      comments: [{ id: 'c1', parent: '', author: 'Me', at: '', body: `${c.body}\n\n\`herdr-rid:${c.rid}\`` }] }));
+    files.set(RES, JSON.stringify({ key: KEY, at: 'x', request: request.id, ok: true, applied: 1, kept: [], unsure: 0 }));
+    return { code: 0 };
+  });
+  m.stage(v, { kind: 'reply', parent: '', body: '새 댓글' }, cx);
+  m.applyNow(v, cx); await drain();
+  assert.deepEqual(v.pending, []);
+  assert.deepEqual(v.detail.comments.map(c => c.body), ['새 댓글']);
+});
