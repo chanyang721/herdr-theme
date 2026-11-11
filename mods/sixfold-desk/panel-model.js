@@ -277,6 +277,28 @@ export function agentReason(agent, now = Date.now()) {
   }
   return { text: parts.join(' · '), nextAt };
 }
+// The short cleanup label drawn inside a one-line row (docs/panel-feed.md), from
+// the producer's state only: 정리 대기 (with the time left on this clock),
+// 보관 중 (close requested: the session is saving its report), 닫는 중 (the
+// report is saved, or a memory proposal is pending: the pane closes next) and
+// 닫힘. Other rows, a blocked closing and feeds without `state` get null.
+const shortLeft = ms => {
+  const minutes = Math.ceil(ms / 60000);
+  return minutes < 60 ? `${minutes}분` : `${Math.ceil(minutes / 60)}시간`;
+};
+export function agentCleanupLabel(agent, now = Date.now()) {
+  const state = agentRowState(agent);
+  if (state === 'cleanup_wait') {
+    const due = agent.cleanup?.due_at;
+    const left = Number.isFinite(due) ? due - now : 0;
+    return { kind: state, text: left > 0 ? `정리 대기 ${shortLeft(left)}` : '정리 대기' };
+  }
+  if (state === 'closing' && agent.closing && !agent.closing.blocked_reason) {
+    return { kind: state, text: agent.closing.step === 1 ? '보관 중' : '닫는 중' };
+  }
+  if (state === 'closed') return { kind: state, text: '닫힘' };
+  return null;
+}
 // The producer supplies recent-first arrays. Stable sorting keeps that order
 // within each display state; opaque IDs and extra fields carry no date meaning.
 const byState = (a, b) => STATES.indexOf(a.state) - STATES.indexOf(b.state) || a.index - b.index;
