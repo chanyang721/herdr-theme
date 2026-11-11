@@ -16,14 +16,15 @@ A is an 80 px band under the header, above the tabs: a 132 px label (`이번 주
 `마감 N · 진행 N`), then seven day cells (Mon–Sun; today accented with `오늘`, weekend darker).
 Rows are 22 px day names, 30 px deadline chips and a 26 px `진행 중` line.
 
-- A deadline in this week puts `◆ KEY 제목` (title cut with …) in that day's cell: today and
-  tomorrow orange, late red. Late work from before this week sits first in Monday's cell.
-  A crowded cell folds into `+N`.
-- Started or in-review work dated after this week (or a group member with no date) goes on
-  the `진행 중` line as `● KEY 제목 → 12/3`, folding into `+N` past one line. `프로젝트 전체 ↗`
-  at its end opens B.
-- The selection is the week model's, as in the dialog. There is no tree, table, long bar or
-  epic progress in the band. A missing feed is one grey line; an empty week says
+- A real deadline (`due`) this week puts `◆ KEY 제목` (title cut with …) in that day's cell:
+  today and tomorrow orange. All late work (before today, this week or earlier) is red and sits
+  first in Monday's cell, oldest first. A crowded cell folds into `+N`.
+- Other started or in-review work goes on the `진행 중` line as `● KEY 제목 → 12/3`, or
+  `→ 11/14 목표` when only its milestone has a target, or `→ 날짜 없음`. A milestone target is
+  never a deadline chip or count. The line folds into `+N` past one row; with no room at all it
+  still shows one `+N`. `프로젝트 전체 ↗` at its end opens B.
+- The band picks issues one by one, not by the dialog's parent groups: a parent and its child
+  each appear on their own deadline. There is no tree, table, long bar or epic progress in it. A missing feed is one grey line; an empty week says
   `이번 주 할 일 없음`. A failed refresh or an unset producer is grey text before `프로젝트 전체 ↗`.
 
 A chip opens its issue (C). The summary or a `+N` opens the week `dialog` over the panes.
@@ -45,7 +46,7 @@ the tooltip names that source. Parent issue rows keep progress only on the left.
 The tree sorts by deadline, else milestone target, with undated work last. On the same day:
 in progress, to do, review, then issue key. Projects and parent groups sort by the earliest
 work inside them, including when folded. Issue membership and the feed/collector contracts
-are unchanged. `summary.js` builds the band (day cells, 진행 중 line, +N folding) from that same selection.
+are unchanged. `summary.js` keeps the dialog's selection for its counts and builds the band issue by issue.
 
 ## Files
 
