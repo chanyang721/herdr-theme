@@ -1,4 +1,5 @@
 pub mod dictation;
+pub mod mic;
 use super::{
     alive, append_json, json_unchecked, mtime, now, output_unchecked, policy, self_launch,
     settings, Result,
@@ -550,13 +551,20 @@ pub fn reconcile<B: GuardBackend>(
         log(&format!("codex focus guard observation failed: {e}"));
     }
 }
-struct RuntimeGuard;
+/// Remembers the last footer reading per pane, so publishing the microphone state
+/// costs no extra screen reads.
+#[derive(Default)]
+struct RuntimeGuard {
+    seen: BTreeMap<String, (bool, bool)>,
+}
 impl GuardBackend for RuntimeGuard {
     fn focus(&mut self) -> Option<String> {
         selected()
     }
     fn voice(&mut self, id: &str) -> Result<(bool, bool)> {
-        codex_voice(id)
+        let status = codex_voice(id)?;
+        self.seen.insert(id.to_owned(), status);
+        Ok(status)
     }
     fn identity(&mut self, p: &Value) -> Result<String> {
         session_of(p)
@@ -593,8 +601,28 @@ pub fn codex_sync() -> Result<()> {
         .cloned()
         .unwrap_or_default();
     owned.retain(|id, _| current.contains_key(id));
-    reconcile(&current, &mut owned, &mut RuntimeGuard);
+    let mut guard = RuntimeGuard::default();
+    reconcile(&current, &mut owned, &mut guard);
+    let states = codex_mics(&current, &guard.seen);
+    let at = now() * 1000.;
+    if let Err(e) = mic::update(|record| mic::replace_agent(record, "codex", &states, at)) {
+        log(&format!("mic state not written for codex: {e}"));
+    }
     super::replace_json(&path, &path.with_extension("tmp"), &Value::Object(owned))
+}
+/// Codex footers: `voice ● listening` is recording, `voice ◌ muted` is paused.
+pub fn codex_mics(
+    current: &BTreeMap<String, Value>,
+    seen: &BTreeMap<String, (bool, bool)>,
+) -> BTreeMap<String, mic::Mic> {
+    current
+        .keys()
+        .filter_map(|id| match seen.get(id) {
+            Some((true, false)) => Some((id.clone(), mic::Mic::Recording)),
+            Some((_, true)) => Some((id.clone(), mic::Mic::Paused("muted"))),
+            _ => None,
+        })
+        .collect()
 }
 pub fn codex_run(args: &[String]) -> Result<()> {
     if !args.iter().any(|s| s == "--serve") {
@@ -803,6 +831,8 @@ pub trait VoiceOnBackend {
     fn press_on(&mut self, id: &str) -> Result<bool>;
     fn clock(&self) -> f64;
     fn report(&mut self, message: &str);
+    /// Publish what the pane header shows; test doubles see nothing by default.
+    fn mic(&mut self, _id: &str, _change: mic::Change) {}
 }
 pub fn set_voice_on<B: VoiceOnBackend>(
     pane: &Value,
@@ -835,6 +865,7 @@ pub fn set_voice_on<B: VoiceOnBackend>(
     if voice_key_locked(&state["voice_key_failures"][&session], backend.clock())
         && !text.contains("Voice mode enabled")
     {
+        backend.mic(id, mic::Change::State(Some(mic::Mic::Off("key_ignored"))));
         return Ok(());
     }
     let status = pane["agent_status"].as_str().unwrap_or("");
@@ -906,6 +937,9 @@ impl VoiceOnBackend for RuntimeVoiceOn {
     }
     fn report(&mut self, message: &str) {
         log(message)
+    }
+    fn mic(&mut self, id: &str, change: mic::Change) {
+        mic::publish(id, "claude", change)
     }
 }
 fn set_voice(pane: &Value, on: bool, state: &mut Value) -> Result<()> {
@@ -1093,7 +1127,18 @@ pub fn main_event(advance: bool) -> Result<()> {
         ));
         focused = Some(target);
     }
-    settle_voice_with(current, focused, &mut state, &mut RuntimeFocus)?;
+    settle_voice_with(current, focused.clone(), &mut state, &mut RuntimeFocus)?;
+    // A Claude entry lives while its watcher does; "key ignored" has no watcher and
+    // stays only while its pane keeps focus.
+    let pruned = mic::update(|record| {
+        mic::prune(record, "claude", |id, entry| {
+            alive(&listen_pid(id))
+                || (entry["reason"] == "key_ignored" && focused.as_deref() == Some(id))
+        })
+    });
+    if let Err(e) = pruned {
+        log(&format!("mic state not pruned: {e}"));
+    }
     state["queue"] = json!(queue);
     super::write_json_direct(&path, &state, true, false, false)
 }
