@@ -110,6 +110,9 @@ export function parseTimelineFeed(text) {
   let value;
   try { value = typeof text === 'string' ? JSON.parse(text) : text; } catch { return null; }
   if (!value || value.v !== 2 || !Array.isArray(value.projects) || !Number.isFinite(Date.parse(value.updated || ''))) return null;
+  // A file that is not whole (a project without an issues array, a bad week) is 'none', never an empty list.
+  if (!DAY.test(value.week?.start || '') || value.projects.some(p => !p || typeof p !== 'object' || typeof p.workspace !== 'string' || !p.workspace
+    || !Array.isArray(p.issues) || (p.milestones !== undefined && !Array.isArray(p.milestones)))) return null;
   const week = {start: DAY.test(value.week?.start || '') ? value.week.start : '', end: DAY.test(value.week?.end || '') ? value.week.end : ''};
   if (week.start && !week.end) week.end = addDay(week.start, 6);
   return {updated: value.updated, week,
@@ -142,6 +145,14 @@ export function spaceWithTimeline(space, feed) {
   return {...space, issue_catalog: {
     ...(old || {}), week, milestone: all.filter(i => weekMilestones.has(i.milestone_id)), all,
     milestones: project.milestones, import_request: old?.import_request ?? null,
-    cache: {state: all.length ? 'ready' : 'empty', at: feed.updated}, updated_at: feed.updated,
+    cache: {state: all.length ? 'ready' : 'empty', at: feed.updated}, updated_at: feed.updated, from_timeline: true,
   }};
+}
+
+// The Linear project cache feeds the milestone tab only while it is newer than a timeline-made catalog;
+// an older cache never overrides the newer timeline's milestones (names, progress).
+export function milestoneSource(space, project) {
+  if (space.issue_catalog?.from_timeline !== true || !project) return project;
+  const at = Date.parse(project.at || ''), catalogAt = Date.parse(space.issue_catalog.updated_at || '');
+  return Number.isFinite(at) && at > catalogAt ? project : null;
 }

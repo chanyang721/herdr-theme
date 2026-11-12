@@ -10,7 +10,7 @@ import {projectPanelFeed,panelEventStates,panelSpaces,panelSpacePartners,PANEL_T
 import {panelLayout,cardView,agentRow,panelFlowLayer,panelCounts,PANEL_GEOMETRY,toolIcon,panelReasonWake,agentRowHeight,panelMetaHeight,rowArrival} from './panel-view.js';
 import {groupColors,paletteMode} from './collab-flow.js';
 import {issuePopover,alertedGroup} from './task-issues-view.js';
-import {issueScopeData,issueCacheLabel,parseTimelineFeed,spaceWithTimeline,rowStatus} from './task-issue-state.js';
+import {issueScopeData,issueCacheLabel,parseTimelineFeed,spaceWithTimeline,rowStatus,milestoneSource} from './task-issue-state.js';
 import {ensure,cached,waiting,checkCaches,anyWaiting,CACHE_POLL_MS} from './linear-cache.js';
 import {statusIndex,teamStatuses,statusFilters,filterRows,foldedCount,milestoneList,detailData} from './issue-model.js';
 import {nativeTaskSpace,hostedTaskLayout,panelWidthClass} from './panel-host.js';
@@ -209,7 +209,7 @@ export function createRetainedPanel(cx,{macTitlebar=false,onClassic=null,onDispo
     const rows=data.rows||[];
     const lookup=statusOf||(()=>null);
     const unreadKeys=new Set(items.filter(i=>!i.read&&i.workspace===space.name&&i.issue).map(i=>i.issue));
-    const milestones=milestoneList(project,space.issue_catalog,unreadKeys);
+    const milestones=milestoneList(milestoneSource(space,project),space.issue_catalog,unreadKeys);
     const writes=shared('sixfold.linearWrites')??[];
     const onDetail=key=>{
       state.detail=key||null;state.menu=null;state.writeNote='';state.hoverKey=null;
@@ -335,7 +335,8 @@ export function createRetainedPanel(cx,{macTitlebar=false,onClassic=null,onDispo
   c.timeline=null;c.timelineMemo=new Map();
   c.loadTimeline=()=>{if(typeof c.cx.spawn!=='function')return;c.cx.spawn(async()=>{
     let next=null;try{next=parseTimelineFeed(await readTextFile(`${appHome()}/data/sixfold/week-timeline.json`));}catch{}
-    if(c.disposed||!next||next.updated===c.timeline?.updated)return;
+    // A file that cannot be read or is not whole is 'none': the catalog comes back, no older timeline is kept.
+    if(c.disposed||(next?.updated??null)===(c.timeline?.updated??null))return;
     c.timeline=next;c.repaintIssues();});};
   c.withTimeline=space=>{
     const memo=c.timelineMemo.get(space.id);
