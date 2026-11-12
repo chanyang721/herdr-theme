@@ -11,7 +11,7 @@ import {panelLayout,cardView,agentRow,panelFlowLayer,panelCounts,PANEL_GEOMETRY,
 import {groupColors,paletteMode} from './collab-flow.js';
 import {issuePopover,alertedGroup} from './task-issues-view.js';
 import {issueScopeData,issueCacheLabel,parseTimelineFeed,spaceWithTimeline,rowStatus,milestoneSource} from './task-issue-state.js';
-import {ensure,cached,waiting,checkCaches,anyWaiting,CACHE_POLL_MS} from './linear-cache.js';
+import {ensure,cached,waiting,checkCaches,anyWaiting,CACHE_POLL_MS,LOOK_POLL_MS} from './linear-cache.js';
 import {statusIndex,teamStatuses,statusFilters,filterRows,foldedCount,milestoneList,detailData} from './issue-model.js';
 import {nativeTaskSpace,hostedTaskLayout,panelWidthClass} from './panel-host.js';
 
@@ -164,7 +164,21 @@ export function createRetainedPanel(cx,{macTitlebar=false,onClassic=null,onDispo
   // the space's milestones, issues and statuses when its issue search opens, an issue when its
   // detail opens. While anything is read, or a pressed write runs, its file is checked.
   c.cacheTimer=null;c.statusMemo=new Map();
-  c.askLinear=(kind,target,force=false)=>{if(typeof c.cx.spawn!=='function')return;c.cx.spawn(async()=>{try{await ensure(kind,target,{force});}catch{}c.pollCaches();c.repaintIssues();});};
+  c.askLinear=(kind,target,force=false)=>{if(typeof c.cx.spawn!=='function')return;c.cx.spawn(async()=>{try{await ensure(kind,target,{force});}catch{}c.pollCaches();c.repaintIssues();});c.pollLook();};
+  // While an issue search stays open, its reads (and the open detail's) are asked again every
+  // LOOK_POLL_MS: ensure asks nothing while they are fresh, so this stays quiet; it repaints only
+  // through the cache check when an answer comes. Stops once every search is closed.
+  c.lookTimer=null;
+  c.pollLook=()=>{
+    if(c.disposed||c.lookTimer||typeof c.cx.spawn!=='function'||![...c.issueStates.values()].some(state=>state.open))return;
+    c.lookTimer=c.cx.timer.after(LOOK_POLL_MS,()=>{c.lookTimer=null;if(c.disposed)return;
+      c.cx.spawn(async()=>{
+        for(const [id,state] of c.issueStates){
+          const space=c.spaceMap.get(id);if(!state.open||!space)continue;
+          try{await ensure('project',space.name);if(state.detail)await ensure('issue',state.detail);}catch{}
+        }
+        c.pollCaches();c.pollLook();});});
+  };
   c.repaintIssues=()=>{for(const [id,state] of c.issueStates)if(state.open)c.notify(c.cards.get(id));};
   c.pollCaches=()=>{
     const writing=[...c.issueStates.values()].some(state=>state.write&&!state.write.done);
@@ -574,7 +588,7 @@ export function createRetainedPanel(cx,{macTitlebar=false,onClassic=null,onDispo
   };
   c.setEnabled=enabled=>{if(c.enabled!==enabled){c.enabled=enabled;c.preferences();}};
   c.dispose=()=>{
-    if(c.disposed)return;c.disposed=true;c.readTimer?.cancel?.();c.readTimer=null;c.cacheTimer?.cancel?.();c.cacheTimer=null;c.autoTimer?.cancel?.();c.autoTimer=null;c.statusMemo?.clear();
+    if(c.disposed)return;c.disposed=true;c.readTimer?.cancel?.();c.readTimer=null;c.cacheTimer?.cancel?.();c.cacheTimer=null;c.lookTimer?.cancel?.();c.lookTimer=null;c.autoTimer?.cancel?.();c.autoTimer=null;c.statusMemo?.clear();
     try{c.wake?.cancel();}catch{/* The old source generation may already be released. */}
     try{c.life?.cancel();}catch{}
     for(const entity of [...c.rows.values(),...c.cards.values(),c.computers,c.summary,c.flows,c.list,c.entity])try{entity?.release();}catch{}
