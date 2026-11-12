@@ -13,7 +13,13 @@ export const panelLeg=elapsed=>PANEL_LEGS.filter(at=>elapsed>=at).length;
 // A message moves like every other event packet: same corners, same travel,
 // ping and fade (2026-11-10: a faster, differently shaped send looked foreign).
 export const MESSAGE_TIMING=Object.freeze({startMs:PANEL_TIMING.startMs,packetMs:PANEL_TIMING.packetMs,pingMs:PANEL_TIMING.pingMs,coolMs:PANEL_TIMING.coolMs});
-const MAX = Object.freeze({ computers: 64, spaces: 128, agents: 256, issues: 128, links: 512, events: 256, bytes: 2 * 1024 * 1024 });
+// Message routes wait in one bounded line: at most `queue` single packets, then
+// one «메시지 +N» bundle per sender→receiver pair (at most `bundles` at once).
+// Sends past both bounds are only counted (`overflow`), never stored.
+// A bundle keeps the IDs it folded (at most bundleIds each) so a correction can
+// take a send back out of it; sends past that are only counted.
+export const MESSAGE_ROUTE=Object.freeze({queue:8,bundles:8,bundleIds:32,gapMs:260,laneMs:1000});
+const MAX = Object.freeze({ computers: 64, spaces: 128, agents: 256, issues: 512, links: 512, events: 256, bytes: 2 * 1024 * 1024 });
 const STATUSES = new Set(['working', 'idle', 'blocked', 'done']);
 const STATES = ['blocked', 'working', 'review', 'waiting', 'done'];
 const KINDS = new Set(['dispatch', 'review_request', 'verdict', 'accept', 'message', 'spawn', 'close_step', 'memory', 'resume', 'error']);
@@ -277,6 +283,30 @@ export function agentReason(agent, now = Date.now()) {
   }
   return { text: parts.join(' · '), nextAt };
 }
+// The short cleanup label drawn inside a one-line row (docs/panel-feed.md), from
+// the producer's state only: 정리 대기 (with the time left on this clock),
+// 보관 중 (close requested: the session is saving its report), 닫는 중 (the
+// report is saved, or a memory proposal is pending: the pane closes next) and
+// 닫힘. Other rows, a blocked closing and feeds without `state` get null.
+const shortLeft = ms => {
+  const minutes = Math.ceil(ms / 60000);
+  return minutes < 60 ? `${minutes}분` : `${Math.ceil(minutes / 60)}시간`;
+};
+export function agentCleanupLabel(agent, now = Date.now()) {
+  const state = agentRowState(agent);
+  // An unseen result with a cleanup timer is closed on time too (the producer's
+  // TIMER_STATES); live closes go straight from it to closed, so it says so.
+  if (state === 'cleanup_wait' || state === 'unseen_result' && agent.cleanup) {
+    const due = agent.cleanup?.due_at;
+    const left = Number.isFinite(due) ? due - now : 0;
+    return { kind: 'cleanup_wait', text: left > 0 ? `정리 대기 ${shortLeft(left)}` : '정리 대기' };
+  }
+  if (state === 'closing' && agent.closing && !agent.closing.blocked_reason) {
+    return { kind: state, text: agent.closing.step === 1 ? '보관 중' : '닫는 중' };
+  }
+  if (state === 'closed') return { kind: state, text: '닫힘' };
+  return null;
+}
 // The producer supplies recent-first arrays. Stable sorting keeps that order
 // within each display state; opaque IDs and extra fields carry no date meaning.
 const byState = (a, b) => STATES.indexOf(a.state) - STATES.indexOf(b.state) || a.index - b.index;
@@ -301,11 +331,11 @@ export function agentGroups(space, { includeClosedIds = new Set(), expandedIssue
     return agent.closing?.step !== 4 || agent.closing.blocked_reason || includeClosedIds.has(agent.id);
   }));
   if (!space?.work) return { grouped: false, groups: [], groupsHidden: 0, issueHidden: 0, issuesExpanded: false, groupsExpandable: false, ...treeAgents(agents, expandedParents) };
-  const groupsExpandable = issues.length > 4, issuesExpanded = groupsExpandable && expandedIssueSpaces.has(space.id);
-  // A live task must not disappear behind the generic issue fold.
-  const activeIssues = new Set(agents.filter(agent => ['working','blocked'].includes(agent.status)).map(agent => agent.issue));
-  const visibleIssues = groupsExpandable && !issuesExpanded
-    ? issues.filter((issue,index) => index < 3 || activeIssues.has(issue.key)) : issues;
+  // Every issue to work on is always shown, each with its panes right under it (2026-11-12,
+  // "처리해야 하는 이슈를 접지 말고 전부"): there is no issue fold (no issues-more row).
+  // `expandedIssueSpaces` is accepted and ignored so older callers keep working.
+  void expandedIssueSpaces;
+  const groupsExpandable = false, issuesExpanded = false, visibleIssues = issues;
   const groups = visibleIssues.map(issue => ({ issue, ...treeAgents(agents.filter(agent => agent.issue === issue.key), expandedParents) }));
   const unassigned = agents.filter(agent => !assigned.has(agent.issue));
   if (unassigned.length) groups.push({ issue: null, ...treeAgents(unassigned, expandedParents) });
@@ -444,7 +474,7 @@ export function panelEventStates(feed, now, { previous = null, motion = true } =
   const seen = new Set(previous?.seen ?? incoming.map(event => event.id));
   const pending = new Map(previous?.pending ?? []);
   const agentStages=new Map(),stageNames=['대기','배분 중','작업 중','검수 중','수락 대기','수락됨'];  // 완료 is the cleanup target only (agentState)
-  let stageRevision=previous?.stageRevision||0;
+  let stageRevision=previous?.stageRevision||0,bundleRevision=previous?.bundleRevision||0,overflow=previous?.overflow||0;
   for(const agent of (feed?.spaces||[]).flatMap(space=>space.agents)){
     const signature=JSON.stringify([agent.stage,agent.closing?.step||0]);agentStages.set(agent.id,signature);
     if(previous?.agentStages?.has(agent.id)&&previous.agentStages.get(agent.id)!==signature){
@@ -456,7 +486,15 @@ export function panelEventStates(feed, now, { previous = null, motion = true } =
   for (const event of incoming) {
     if (seen.has(event.id)) {
       // Corrections can revoke a route, but never replay an old ID.
-      if(event.animate===false||!event.from||!event.to){const old=pending.get(event.id);if(old)pending.set(event.id,{...old,drawRoute:false});}
+      if(event.animate===false||!event.from||!event.to){
+        const old=pending.get(event.id);if(old)pending.set(event.id,{...old,drawRoute:false});
+        // A folded send is revoked out of its bundle: fewer, or none left to draw.
+        for(const [key,item] of pending){
+          if(!item.bundle||!item.ids.includes(event.id))continue;
+          const ids=item.ids.filter(id=>id!==event.id);
+          if(ids.length)pending.set(key,{...item,ids,count:ids.length,label:`메시지 +${ids.length}`});else pending.delete(key);
+        }
+      }
       continue;
     }
     seen.add(event.id);
@@ -467,13 +505,33 @@ export function panelEventStates(feed, now, { previous = null, motion = true } =
     if(!route&&!label)continue;
     let routeAt=now,routeLane=0,drawRoute=Boolean(route);
     if(event.kind==='message'&&route&&animate){
-      const queued=[...pending.values()].filter(item=>item.kind==='message'&&item.drawRoute&&item.routeAt+MESSAGE_TIMING.packetMs>now);
-      if(queued.length>=8)drawRoute=false;
-      else {
-        const last=queued.at(-1);routeAt=Math.max(now,last?last.routeAt+260:now);
-        const free=[0,1].map(lane=>Math.max(now,...queued.filter(item=>item.routeLane===lane).map(item=>item.routeAt+1000)));
-        routeLane=free[0]<=free[1]?0:1;routeAt=Math.max(routeAt,free[routeLane]);
+      // Everything still waiting or travelling, bundles included, so a later send
+      // never overtakes an earlier one. Only single messages count toward the cap.
+      const lineup=[...pending.values()].filter(item=>item.kind==='message'&&item.drawRoute&&item.routeAt+MESSAGE_TIMING.packetMs>now)
+        .sort((a,b)=>a.routeAt-b.routeAt);
+      const slot=()=>{
+        const last=lineup.at(-1);let at=Math.max(now,last?last.routeAt+MESSAGE_ROUTE.gapMs:now);
+        const free=[0,1].map(lane=>Math.max(now,...lineup.filter(item=>item.routeLane===lane).map(item=>item.routeAt+MESSAGE_ROUTE.laneMs)));
+        const lane=free[0]<=free[1]?0:1;return {at:Math.max(at,free[lane]),lane};
+      };
+      if(lineup.filter(item=>!item.bundle).length>=MESSAGE_ROUTE.queue){
+        // Bounded: an overflowing send joins the not-yet-started bundle of the
+        // same sender and receiver (one entry, a count), drawn after the queue.
+        const open=lineup.find(item=>item.bundle&&item.from===event.from&&item.to===event.to&&item.routeAt>now);
+        if(open){
+          if(open.ids.length>=MESSAGE_ROUTE.bundleIds){overflow++;continue;}
+          const ids=[...open.ids,event.id];pending.set(open.id,{...open,ids,count:ids.length,label:`메시지 +${ids.length}`,lastSourceAt:event.at});continue;
+        }
+        // The cap counts every bundle still held, arrived (ping, fade) included,
+        // so at most bundles x bundleIds IDs are ever kept.
+        let held=0;for(const item of pending.values())if(item.bundle)held++;
+        if(held>=MESSAGE_ROUTE.bundles){overflow++;continue;}
+        const {at,lane}=slot(),id=`bundle-${++bundleRevision}`;
+        pending.set(id,{id,kind:'message',bundle:true,ids:[event.id],count:1,from:event.from,to:event.to,label:'메시지 +1',
+          sourceAt:event.at,lastSourceAt:event.at,at,routeAt:at,routeLane:lane,drawRoute:true});
+        continue;
       }
+      ({at:routeAt,lane:routeLane}=slot());
     }
     pending.set(event.id,{...event,label,sourceAt:event.at,at:now,routeAt,routeLane,drawRoute});
   }
@@ -502,6 +560,14 @@ export function panelEventStates(feed, now, { previous = null, motion = true } =
       if (target && (!old || old.sourceAt < event.sourceAt || (old.sourceAt === event.sourceAt && old.at <= event.at))) tags.set(target, { ...event, elapsed });
       wake(event.at + PANEL_TIMING.tagMs);
     }
+    // A message whose sender is no agent row (the producer had no caller: null,
+    // or only its space / computer) is never drawn as some agent's send. Its
+    // receiver says the sender is unconfirmed.
+    if(event.kind==='message'&&!incoming&&agentIDs.has(event.to)&&!agentIDs.has(event.from)&&elapsed<PANEL_TIMING.tagMs){
+      const old=tags.get(event.to);
+      if(!old||old.sourceAt<=event.sourceAt)tags.set(event.to,{...event,id:`unconfirmed-${event.id}`,label:'← 발신 미확인',elapsed});
+      wake(event.at+PANEL_TIMING.tagMs);
+    }
     if(incoming){
       if(now>=incomingAt&&now<incomingAt+PANEL_TIMING.tagMs)tags.set(event.to,{...event,id:`incoming-${event.id}`,label:`← ${incoming}`,elapsed:now-incomingAt});
       wake(incomingAt);wake(incomingAt+PANEL_TIMING.tagMs);
@@ -521,5 +587,5 @@ export function panelEventStates(feed, now, { previous = null, motion = true } =
     }
     wake(end);
   }
-  return { seen: [...seen].slice(-4096), pending: [...pending], active, tags, spawning, packets, connections, nextAt, motion: animate,agentStages,stageRevision };
+  return { seen: [...seen].slice(-4096), pending: [...pending], active, tags, spawning, packets, connections, nextAt, motion: animate,agentStages,stageRevision,bundleRevision,overflow };
 }
