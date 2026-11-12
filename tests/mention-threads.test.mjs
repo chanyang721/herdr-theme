@@ -23,7 +23,7 @@ test('explicit parent is authoritative, and top-level messages have distinct thr
 test('Slack display markup is readable without losing its content',()=>{
  assert.equal(readable('<@U1|홍길동> &amp; <https://example.com|자료>'),'@홍길동 & 자료');
  assert.equal(readable('<@U00000001> 확인',{U00000001:'나'}),'@나 확인');
- assert.equal(readable('<@U00000001> 확인'),'<@U00000001> 확인');
+ assert.equal(readable('<@U00000001> 확인'),'@U00000001 확인','an unknown tag reads as its ID');
 });
 
 test('a stalled mirror and the Slack app badge are spelled out', () => {

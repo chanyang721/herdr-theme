@@ -1,11 +1,11 @@
 import { View, div, image } from 'gpui-kit';
-import { h_flex, v_flex } from 'gpui-base';
+import { h_flex, v_flex, Popover } from 'gpui-base';
 import { theme, props, appHome, home, readTextFile, writeTextFile, shared, setShared, openOverlay, closeOverlay, exec } from 'herdr';
-import { readable, threadGroups, freshness } from './model.js';
+import { readable, threadGroups, freshness, feedNames, namesFor, alertTitle, attachments, fileTextPath, fileTextShown } from './model.js';
 
 export default class MentionInbox extends View {
   init(_props,cx) {
-    this.items=[];this.site={};this.project=null;this.onlyUnread=!props()?.review;this.expanded=new Set();this.error='';
+    this.items=[];this.feed={};this.fileOpen=null;this.fileTexts=new Map();this.site={};this.project=null;this.onlyUnread=!props()?.review;this.expanded=new Set();this.error='';
     if(props()?.overlay && !props()?.window && !props()?.newMessages){
       openOverlay({mod:'sixfold-slack-inbox',kind:'window',key:'slack-mentions',keep:true,width:1040,height:800,props:{window:true}});
       closeOverlay(props().overlay);
@@ -24,6 +24,7 @@ export default class MentionInbox extends View {
           try{const site=JSON.parse(siteText);if(site && typeof site==='object' && !Array.isArray(site))this.site=site;}catch{/* Keep the last local names. */}
           if(snapshot===previous)return;
           const data=JSON.parse(text);const read=JSON.parse(readText || '{}');
+          this.feed=feedNames(data.items ?? []);
           this.items=(data.items ?? []).filter(i=>!props()?.project || i.project.toLowerCase()===props().project.toLowerCase());
           this.scope=data.scope;setShared('sixfold.alertRead',read);
           previous=snapshot;cx.notify();
@@ -39,6 +40,38 @@ export default class MentionInbox extends View {
     const old=await readTextFile(path).catch(()=>null);const read=old?JSON.parse(old):{};
     for(const item of group.items)read[item.id]=item.id;
     await writeTextFile(path,JSON.stringify(read),old);setShared('sixfold.alertRead',read);
+  }
+  // 본문 보기: the collector's local text copy of the file, read when its popover opens.
+  viewFile(key,file,cx){
+    this.fileOpen=key;cx.notify();
+    if(!key)return;
+    cx.spawn(async cx=>{
+      const path=fileTextPath(appHome(),file.id),text=path?await readTextFile(path).catch(()=>null):null;
+      this.fileTexts.set(file.id,typeof text==='string' && text.trim()?fileTextShown(text):null);cx.notify();
+    });
+  }
+  // Attachment chips under a message: kind, name, size; 본문 보기 opens a popover with the text,
+  // 다운로드 hands the Slack link to the default browser. Both only on a press.
+  files(item,id,t){
+    const list=attachments(item);
+    if(!list.length)return null;
+    const small=(key,label)=>div().id(key).flex_none().px(8).py(3).rounded(4).text_size(11).font_semibold().bg(t.chrome).text_color(t.accent).hover(s=>s.bg(t.hover)).cursor_pointer().child(label);
+    return v_flex().id(`${id}-files`).gap(5).children(list.map((file,i)=>{
+      const key=`${item.id}|${file.id}`,open=this.fileOpen===key,text=this.fileTexts.get(file.id);
+      const tone={PDF:t.blocked,이미지:t.ansi5,동영상:t.ansi5,표:t.ansi2,슬라이드:t.ansi3,문서:t.ansi4,압축:t.dim,코드:t.ansi6}[file.kind] || t.muted;
+      const view=Popover.new(`${id}-file-pop-${i}`).anchor('top_left').open(open)
+        .on_open_change((value,cx)=>this.viewFile(value?key:null,file,cx))
+        .trigger(small(`${id}-file-view-${i}`,open?'본문 닫기':'본문 보기'));
+      return h_flex().id(`${id}-file-${i}`).h(32).px(8).gap(8).items_center().rounded(6).border(1).border_color(open?t.accent:t.border).bg(t.chrome)
+        .child(div().flex_none().w(36).h(20).rounded(4).bg(tone).text_color(t.accent_foreground || t.background).text_size(10).font_bold().flex().items_center().justify_center().child(file.ext))
+        .child(div().id(`${id}-file-name-${i}`).min_w(0).flex_1().truncate().text_size(13).tooltip(file.name).child(file.name))
+        .child(div().flex_none().text_size(11).text_color(t.dim).child([file.kind,file.size].filter(Boolean).join(' · ')))
+        .child(open?view.content(v_flex().id(`${id}-file-text-${i}`).w(560).max_h(420).overflow_y_scroll().p(12).gap(6).rounded(8)
+          .border(1).border_color(t.border).bg(t.popover || t.surface).text_color(t.foreground)
+          .child(div().min_w(0).truncate().text_size(12).font_bold().child(`${file.name} · 본문`))
+          .child(div().text_size(13).text_color(text?t.foreground:t.muted).child(this.fileTexts.has(file.id)?(text || '본문 준비 중'):'본문 읽는 중'))):view)
+        .when(Boolean(file.link),e=>e.child(small(`${id}-file-download-${i}`,'다운로드').on_click((_e,cx)=>cx.open_url(file.link))));
+    }));
   }
   render(){
     const t=theme(),read=shared('sixfold.alertRead') ?? {};
@@ -87,24 +120,29 @@ export default class MentionInbox extends View {
           .children(shown.filter(g=>g.project===project).map(group=>{
             const expanded=this.expanded.has(group.key),latest=group.latest;
             const workflow=workflows[group.key];
-            const body=readable(latest.text,names),preview=body.length>260?body.slice(0,260)+'…':body;
+            const body=readable(latest.text,namesFor(latest,this.feed,names)),preview=body.length>260?body.slice(0,260)+'…':body;
+            const title=alertTitle(latest,this.feed,names),files=this.files(latest,`sf-thread-${group.key}`,t);
             return v_flex().id(`sf-thread-${group.key}`).p(14).gap(9).rounded(7).bg(t.surface).border(1).border_color(group.unread?color(project):t.border)
               .child(h_flex().gap(8).items_center()
                 .child(div().px(8).py(3).rounded(4).bg(group.unread?t.selected:t.chrome).text_color(group.unread?t.accent:t.muted).text_size(12).font_bold().child(group.unread?`● 미확인 ${group.unread}건`:'✓ 확인함'))
                 .child(div().font_bold().text_size(14).child(group.channel))
                 .child(div().flex_1())
                 .child(div().text_size(11).text_color(t.muted).child(`${latest.at || ''} · 멘션 ${group.items.length}건`)))
-              .child(div().text_size(16).font_bold().child(group.title.length>105?group.title.slice(0,105)+'…':group.title))
-              .child(div().text_size(12).text_color(t.muted).child((latest.author || '작성자 미확인').replace(/ <[^>]+>/g,'')))
+              .child(div().text_size(16).font_bold().child(title.length>105?title.slice(0,105)+'…':title))
               .child(div().text_size(14).child(preview))
+              .when(Boolean(files),e=>e.child(files))
               .when(Boolean(workflow),e=>e.child(v_flex().p(10).gap(5).rounded(4).bg(t.chrome)
                 .child(div().text_size(13).font_bold().text_color(t.accent).child(`자동 처리 · ${stateLabels[workflow?.state] || workflow?.state} · ${workflow?.workspace || group.project} 기존 세션`))
                 .when(Boolean(workflow?.summary),e=>e.child(div().text_size(13).child(workflow.summary)))
                 .children((workflow?.artifacts ?? []).filter(path=>path.startsWith(reports)).map((path,index)=>button(`sf-artifact-${group.key}-${index}`,'수정안 문서 열기',false,(_e,cx)=>cx.spawn(async()=>{await exec('herdr-doc',[path,'--space',workflow.workspace]);}))))))
               .when(expanded,e=>e.child(v_flex().gap(10).pt(8).border_t(1).border_color(t.border)
-                .children(group.items.map(item=>v_flex().id(`sf-detail-${item.id}`).gap(4)
-                  .child(div().text_size(11).text_color(t.muted).child(`${item.at || ''} · ${item.author || ''}`))
-                  .child(div().text_size(14).child(readable(item.text,names)))))))
+                .children(group.items.map(item=>{
+                  const files=item===latest?null:this.files(item,`sf-detail-${item.id}`,t);
+                  return v_flex().id(`sf-detail-${item.id}`).gap(4)
+                    .child(div().text_size(11).text_color(t.muted).child(`${item.at || ''} · ${alertTitle(item,this.feed,names)}`))
+                    .child(div().text_size(14).child(readable(item.text,namesFor(item,this.feed,names))))
+                    .when(Boolean(files),e=>e.child(files));
+                }))))
               .child(h_flex().gap(7)
                 .child(button(`sf-expand-${group.key}`,expanded?'본문 접기':`스레드 멘션 ${group.items.length}건 보기`,expanded,(_e,cx)=>{expanded?this.expanded.delete(group.key):this.expanded.add(group.key);cx.notify();}))
                 .when(slackLink(latest.link || ''),e=>e.child(button(`sf-source-${group.key}`,'원문 열기',false,(_e,cx)=>cx.spawn(async()=>{await exec('open',[latest.link]);}))))
