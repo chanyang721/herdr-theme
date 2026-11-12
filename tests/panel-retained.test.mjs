@@ -16,9 +16,9 @@ let loads=0;
 async function runtime(motion=false,options={}){
   const objects=[],timers=[],store=new Map([['sixfold.motion',motion]]);let rendering=false;globalThis.__retainedThemePatch={};globalThis.__retainedHostVisible=true;globalThis.__retainedNativeSpaces=[];
   const cx={notify(entity){assert(!rendering,'notify during render');entity.dirty=true;},timer:{after(ms,fn){assert(!rendering);const timer={ms,fn,cancelled:false,cancel(){this.cancelled=true;}};timers.push(timer);return timer;}},
-    new(Class,props){assert(!rendering,'new view during render');const view=new Class();view.init?.(props,cx);const entity={view,dirty:true,released:false,release(){this.released=true;return true;}};objects.push(entity);return entity;}};
+    new(Class,props){assert(!rendering,'new view during render');const view=new Class();view.init?.(props,cx);const entity={view,dirty:true,released:false,release(){this.released=true;return true;},set_props(next){assert(!rendering,'set_props during render');view.update?.(next,cx);this.dirty=true;}};objects.push(entity);return entity;}};
   const path=()=>new Proxy({},{get:(_t,key)=>key==='build'?()=>[]:()=>path()});
-  globalThis.__retainedRuntime={View:class{},div:element,svg:element,image:element,h_flex:element,v_flex:element,Popover:{new:element},Input:{new:element},InputState:{new:()=>({events:new Map(),text:'',on(name,callback){this.events.set(name,callback);},value(){return this.text;}})},PathBuilder:{stroke:path},
+  globalThis.__retainedRuntime={View:class{},div:element,svg:element,image:element,h_flex:element,v_flex:element,Popover:{new:element},Input:{new:state=>{if(state?.released)throw TypeError('this input state has been released and can no longer be rendered');const value=element();value.calls.push(['input',state]);return value;}},InputState:{new:(options={})=>{assert(!rendering,'InputState.new during render');const state={options,events:new Map(),text:options.value||'',released:false,on(name,callback){this.events.set(name,callback);},value(){if(this.released)throw TypeError('this input state has been released');return this.text;},set_value(next){if(this.released)throw TypeError('this input state has been released');this.text=next;},release(){const was=!this.released;this.released=true;return was;}};(globalThis.__retainedInputs??=[]).push(state);return state;}},PathBuilder:{stroke:path},
     theme:()=>({background:'#101318',chrome:'#14191f',surface:'#1b232d',border:'#39434f',selected:'#253249',foreground:'#e5edf5',muted:'#a6b0bf',dim:'#788594',accent:'#a9b8ff',ansi6:'#68c9bc',blocked:'#edac67',hover:'#253249',...globalThis.__retainedThemePatch}),
     window:()=>({active:false,visible:globalThis.__retainedHostVisible}),spaces:()=>globalThis.__retainedNativeSpaces,panes:()=>[],shared:key=>store.get(key),setShared:(key,value)=>store.set(key,value),run(){},settings:()=>({zoom:1}),appHome:()=>'/home',readTextFile:path=>globalThis.__retainedFiles?.[path]===undefined?Promise.reject(new Error('missing')):Promise.resolve(globalThis.__retainedFiles[path])};
   globalThis.window={paint_path:element};
@@ -135,7 +135,7 @@ test('native issue popover opens with retained input; completion returns via own
   popup.calls.find(call=>call[0]==='on_open_change')[1](true);
   assert.equal(r.controller.issueStates.get(space.id).open,true);r.flush();
   const state=r.controller.issueStates.get(space.id);state.scope='all';
-  state.input.text='manual';state.input.events.get('change')();
+  const search=r.controller.issueInputs.get(space.id).search;search.text='manual';search.events.get('change')();
   state.hoverKey='DEMO-99';   // the pull button shows under the mouse
   popup=r.controller.issuePopover(card,element(),t);
   const body=popup.calls.find(call=>call[0]==='content')[1];
@@ -418,4 +418,120 @@ test('a timeline that breaks after a good read gives the catalog back instead of
   globalThis.__retainedFiles={};await settle();
   assert.equal(r.controller.timeline,null,'a missing file is none');
   delete globalThis.__retainedFiles;
+});
+
+// Native retained state belongs to the view whose call created it. An input made in an event
+// handler (a peek title, a popup) dies with that view while the card still draws it, and drawing
+// a released input throws, which failed the whole card. The card now owns its inputs (init/update)
+// and a released one is left out of render and replaced by the card's update.
+const walkTree=(node,seen=new Set())=>{
+  if(!node||typeof node!=='object'||!Array.isArray(node.nodes)||seen.has(node))return [];seen.add(node);
+  const children=[...node.nodes,...(node.calls||[]).flatMap(call=>call.slice(1))];
+  return [node,...children.flatMap(child=>walkTree(child,seen))];
+};
+const drawnInputs=tree=>walkTree(tree).flatMap(node=>(node.calls||[]).filter(call=>call[0]==='input').map(call=>call[1]));
+test('a card owns its issue inputs: created in init, never by the opening event or render',async()=>{
+  const r=await runtime();
+  try{
+    const raw=makePanelFixture({tool:'linear'}),space=raw.spaces[0];
+    globalThis.__retainedInputs=[];
+    r.controller.apply(cleanPanelFeed(raw),'ready');
+    const inputs=r.controller.issueInputs.get(space.id);
+    assert(inputs?.search&&inputs?.comment,'the card init made both inputs');
+    const made=globalThis.__retainedInputs.length;
+    r.flush();
+    const t=r.native.theme(),card=r.controller.spaceMap.get(space.id);
+    r.controller.issuePopover(card,element(),t).calls.find(call=>call[0]==='on_open_change')[1](true,{});
+    assert.equal(globalThis.__retainedInputs.length,made,'opening creates no input in the event owner');
+    r.flush();
+    assert.deepEqual(drawnInputs(r.controller.issuePopover(card,element(),t)),[inputs.search],'the open search draws the card input');
+    // The peek title opens the same search without making an input of its own.
+    r.controller.issuePopover(card,element(),t).calls.find(call=>call[0]==='on_open_change')[1](false,{});
+    r.store.set('sixfold.linearItems',[{id:'n-1',issue:space.issues[0].key,workspace:space.name,read:false,category:'mentions',at:'1',url:''}]);
+    const peek=r.controller.peekIssues(space.name,['n-1'],t);
+    const head=walkTree(peek).find(node=>node.calls?.some(call=>call[0]==='id'&&call[1]===`task-issues-peek-head-${space.id}`));
+    head.calls.find(call=>call[0]==='on_click')[1]({},{stop_propagation(){}});
+    assert.equal(r.controller.issueStates.get(space.id).open,true);
+    assert.equal(globalThis.__retainedInputs.length,made,'the peek path creates no input either');
+    assert.equal(r.controller.issueInputs.get(space.id).search,inputs.search);
+  }finally{r.controller.dispose();}
+});
+
+test('a released issue input leaves the card drawable and the card update replaces it',async()=>{
+  const r=await runtime();
+  try{
+    const raw=makePanelFixture({tool:'linear'}),space=raw.spaces[0];
+    r.controller.apply(cleanPanelFeed(raw),'ready');r.flush();
+    const t=r.native.theme(),card=r.controller.spaceMap.get(space.id),entity=r.controller.cards.get(space.id);
+    const open=value=>r.controller.issuePopover(r.controller.spaceMap.get(space.id),element(),t).calls.find(call=>call[0]==='on_open_change')[1](value,{});
+    open(true);r.flush();
+    const first=r.controller.issueInputs.get(space.id).search;
+    first.text='DEMO';first.events.get('change')();
+    assert.equal(r.controller.issueStates.get(space.id).query,'DEMO');
+    // The owner of the input went away (a closed peek, a retired popup): the handle is released.
+    first.release();
+    r.controller.notify(entity);
+    assert.doesNotThrow(()=>r.flush(),'the card still renders with a released input');
+    assert.deepEqual(drawnInputs(r.controller.issuePopover(card,element(),t)),[],'a released input is left out, not drawn');
+    assert(r.controller.staleInputs.has(space.id),'render only marks the card');
+    assert.equal(r.controller.issueInputs.get(space.id).search,first,'render does not replace it');
+    // A closed search never draws its input, so a released one cannot fail the card either.
+    open(false);r.controller.issueInputs.get(space.id).search.release();r.controller.notify(entity);
+    assert.doesNotThrow(()=>r.flush());
+    assert.deepEqual(drawnInputs(r.controller.issuePopover(card,element(),t)),[]);
+    // The next apply (outside render) gives the card new props; its update makes the new inputs.
+    r.controller.apply(cleanPanelFeed(makePanelFixture({tool:'linear'})),'ready');
+    const second=r.controller.issueInputs.get(space.id).search;
+    assert.notEqual(second,first,'update replaced the released input');
+    assert.equal(second.released,false);assert.equal(second.text,'DEMO','the query survives the replacement');
+    assert.equal(r.controller.staleInputs.size,0);
+    open(true);r.flush();
+    assert.deepEqual(drawnInputs(r.controller.issuePopover(r.controller.spaceMap.get(space.id),element(),t)),[second]);
+    second.text='DEMO-2';second.events.get('change')();
+    assert.equal(r.controller.issueStates.get(space.id).query,'DEMO-2','the new input is wired to the search');
+    // The open event repairs a released input too (no apply needed).
+    second.release();open(false);open(true);
+    const third=r.controller.issueInputs.get(space.id).search;
+    assert.notEqual(third,second);assert.equal(third.released,false);
+    // The comment box: a released comment input is left out; the menu event replaces it.
+    const comment=r.controller.issueInputs.get(space.id).comment;comment.release();
+    const state=r.controller.issueStates.get(space.id);state.menu='comment';
+    const extra=r.controller.issueExtra(r.controller.spaceMap.get(space.id),state,{});
+    assert.equal(extra.commentBox,null,'a released comment input is not drawn');
+    extra.onMenu('comment');
+    const fresh=r.controller.issueInputs.get(space.id).comment;
+    assert.notEqual(fresh,comment);assert.equal(fresh.released,false);
+    assert(drawnInputs(r.controller.issueExtra(r.controller.spaceMap.get(space.id),state,{}).commentBox).includes(fresh));
+  }finally{r.controller.dispose();}
+});
+
+test('issue inputs keep the query across close/reopen, follow a card that leaves and returns, and go with dispose',async()=>{
+  const r=await runtime();
+  const raw=makePanelFixture({tool:'linear'}),space=raw.spaces[0];
+  r.controller.apply(cleanPanelFeed(raw),'ready');r.flush();
+  const t=r.native.theme();
+  const open=value=>r.controller.issuePopover(r.controller.spaceMap.get(space.id),element(),t).calls.find(call=>call[0]==='on_open_change')[1](value,{});
+  const first=r.controller.issueInputs.get(space.id).search;
+  assert.equal(first.options.value,'','the card init had no query yet');
+  open(true);first.text='DEMO-1';first.events.get('change')();open(false);open(true);
+  assert.equal(r.controller.issueInputs.get(space.id).search,first,'a live input survives close/reopen');
+  assert.equal(r.controller.issueStates.get(space.id).query,'DEMO-1');
+  assert.equal(first.text,'DEMO-1');
+  // The card leaves: its entity, state and inputs go; a returning card starts with its own.
+  const firstCard=r.controller.cards.get(space.id),{search,comment}=r.controller.issueInputs.get(space.id);
+  r.controller.apply(cleanPanelFeed({...raw,spaces:raw.spaces.slice(1)}),'ready');
+  assert.equal(firstCard.released,true);
+  assert(!r.controller.issueInputs.has(space.id)&&!r.controller.issueStates.has(space.id));
+  assert(search.released&&comment.released,'the removed card releases its inputs');
+  r.controller.apply(cleanPanelFeed(raw),'ready');r.flush();
+  const back=r.controller.issueInputs.get(space.id);
+  assert(back&&back.search!==search&&!back.search.released&&!back.comment.released,'the returning card made new inputs in its init');
+  assert.notEqual(r.controller.cards.get(space.id),firstCard);
+  open(true);r.flush();
+  assert.deepEqual(drawnInputs(r.controller.issuePopover(r.controller.spaceMap.get(space.id),element(),t)),[back.search]);
+  // Dispose releases every card (the native store releases what each card owns with it).
+  const cards=[...r.controller.cards.values()];
+  r.controller.dispose();
+  assert(cards.every(card=>card.released),'dispose releases the cards that own the inputs');
+  assert.equal(r.controller.issueInputs.size,0,'dispose clears the input map');
 });
