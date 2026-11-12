@@ -70,3 +70,47 @@ export async function saveIssueRequest(request,writeTextFile){
   await writeTextFile(request.path,JSON.stringify(request.value),'');
   return request.value.id;
 }
+
+// --- week-timeline.json as the newer source of the issue window -------------------------------
+// The collector behind the weekly timeline refreshes data/sixfold/week-timeline.json on a schedule,
+// while the feed's issue_catalog only changes when something writes it. When the timeline is newer,
+// the window shows it (same-named project only); pins, import requests and results stay as they were.
+const TIMELINE_STATE = {todo: 'waiting', started: 'working', review: 'review', done: 'done'};
+const KEY = /^[A-Z][A-Z0-9]{0,9}-\d{1,7}$/;
+const DAY = /^\d{4}-\d{2}-\d{2}$/;
+const str = (value, limit) => typeof value === 'string' ? value.slice(0, limit) : '';
+export function parseTimelineFeed(text) {
+  let value;
+  try { value = typeof text === 'string' ? JSON.parse(text) : text; } catch { return null; }
+  if (!value || value.v !== 2 || !Array.isArray(value.projects) || !Number.isFinite(Date.parse(value.updated || ''))) return null;
+  return {updated: value.updated, week: {start: DAY.test(value.week?.start || '') ? value.week.start : '', end: DAY.test(value.week?.end || '') ? value.week.end : ''},
+    projects: value.projects.slice(0, 8).filter(p => p && typeof p.workspace === 'string' && p.workspace).map(p => ({
+      workspace: p.workspace,
+      milestones: (Array.isArray(p.milestones) ? p.milestones : []).slice(0, 100).filter(m => m && typeof m.id === 'string' && m.id && typeof m.name === 'string')
+        .map(m => ({id: m.id.slice(0, 80), name: m.name.slice(0, 100), due: DAY.test(m.target || '') ? m.target : '',
+          progress: typeof m.progress === 'number' && m.progress >= 0 && m.progress <= 100 ? m.progress : null})),
+      issues: (Array.isArray(p.issues) ? p.issues : []).slice(0, 800).filter(i => i && KEY.test(i.key) && i.state in TIMELINE_STATE).map(i => ({
+        key: i.key, title: str(i.title, 200), state: i.blocked === true && i.state !== 'done' ? 'blocked' : TIMELINE_STATE[i.state],
+        due: DAY.test(i.due || '') ? i.due : '', done_at: DAY.test(i.done_at || '') ? i.done_at : '', milestone_id: str(i.milestone, 80),
+        ...(typeof i.url === 'string' && /^https:\/\/linear\.app\//.test(i.url) ? {url: i.url} : {}),
+      })),
+    }))};
+}
+
+// The space with a catalog made from the timeline, or the same space when the timeline is missing,
+// has no project of that name, or is not newer than the catalog.
+export function spaceWithTimeline(space, feed) {
+  const project = feed?.projects?.find(p => p.workspace === space.name);
+  if (!project) return space;
+  const old = space.issue_catalog, oldAt = Date.parse(old?.updated_at || old?.cache?.at || '');
+  if (Number.isFinite(oldAt) && oldAt >= Date.parse(feed.updated)) return space;
+  const end = feed.week.end;
+  const week = project.issues.filter(i => i.state === 'done' ? Boolean(end) && i.done_at >= feed.week.start && i.done_at <= end
+    : i.state === 'working' || i.state === 'review' || i.state === 'blocked' || Boolean(i.due) && (!end || i.due <= end));
+  const weekMilestones = new Set(week.map(i => i.milestone_id).filter(Boolean));
+  return {...space, issue_catalog: {
+    ...(old || {}), week, milestone: project.issues.filter(i => weekMilestones.has(i.milestone_id)), all: project.issues,
+    milestones: project.milestones, import_request: old?.import_request ?? null,
+    cache: {state: project.issues.length ? 'ready' : 'empty', at: feed.updated}, updated_at: feed.updated,
+  }};
+}
