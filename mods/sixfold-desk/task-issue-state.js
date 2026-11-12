@@ -98,12 +98,20 @@ export function weekMembers(issues, end) {
 }
 
 // Linear status -> the window's status mark ({name, type}); a status the feed does not name is unknown.
-export function rowStatus(row) {
+// The type comes from what is known first: the provider's own status_type, then a typed status of the
+// same name (the project cache's team statuses, `known`), then the name (English or Korean), and last
+// the row's timeline/catalog state. A custom or Korean name ('완료', '취소') keeps its real kind.
+const STATUS_TYPES = new Set(['triage', 'backlog', 'unstarted', 'started', 'completed', 'canceled']);
+const STATE_TYPE = {done: 'completed', working: 'started', review: 'started', started: 'started', waiting: 'unstarted', todo: 'unstarted'};
+export function rowStatus(row, known = null) {
   if (!row?.status) return null;
   const name = String(row.status), lower = name.toLowerCase();
-  const type = /cancel|duplicate/.test(lower) ? 'canceled' : /done|complete/.test(lower) ? 'completed' : /backlog/.test(lower) ? 'backlog'
-    : /progress|review/.test(lower) ? 'started' : /todo/.test(lower) ? 'unstarted' : '';
-  return {name, type, color: ''};
+  const knownType = known?.get?.(name)?.type;
+  const type = STATUS_TYPES.has(row.status_type) ? row.status_type : STATUS_TYPES.has(knownType) ? knownType
+    : /cancel|duplicate/.test(lower) || /취소|중복/.test(name) ? 'canceled' : /done|complete/.test(lower) || /완료/.test(name) ? 'completed'
+    : /backlog/.test(lower) || /백로그/.test(name) ? 'backlog' : /progress|review/.test(lower) || /진행|검토|리뷰/.test(name) ? 'started'
+    : /todo/.test(lower) || /할 ?일/.test(name) ? 'unstarted' : STATE_TYPE[row.state] || '';
+  return {name, type, color: known?.get?.(name)?.color || ''};
 }
 
 export function parseTimelineFeed(text) {
@@ -119,7 +127,7 @@ export function parseTimelineFeed(text) {
     projects: value.projects.slice(0, 8).filter(p => p && typeof p.workspace === 'string' && p.workspace).map(p => {
       const raw = (Array.isArray(p.issues) ? p.issues : []).slice(0, 800).filter(i => i && KEY.test(i.key) && i.state in TIMELINE_STATE).map(i => ({
         key: i.key, title: str(i.title, 200), raw: i.state, state: i.blocked === true && i.state !== 'done' ? 'blocked' : TIMELINE_STATE[i.state],
-        status: str(i.status, 40), due: DAY.test(i.due || '') ? i.due : '', done_at: DAY.test(i.done_at || '') ? i.done_at : '',
+        status: str(i.status, 40), ...(STATUS_TYPES.has(i.status_type) ? {status_type: i.status_type} : {}), due: DAY.test(i.due || '') ? i.due : '', done_at: DAY.test(i.done_at || '') ? i.done_at : '',
         parent: KEY.test(i.parent || '') && i.parent !== i.key ? i.parent : '', milestone_id: str(i.milestone, 80),
         ...(typeof i.url === 'string' && /^https:\/\/linear\.app\//.test(i.url) ? {url: i.url} : {}),
       }));
