@@ -118,8 +118,8 @@ test('tool issue groups use the same priority order and keep unassigned agents l
   const item = normalize({ spaces: [space('one', {
     work: { tool: 'jira', key: 'OPS', open: 5 },
     issues: states.map((state, index) => ({ key: `OPS-${index}`, title: state, state, at: NOW + index })),
-    // Folded issues hold only idle agents; a live task never folds away (see below).
-    agents: [...states.map((state, index) => agent(`agent-${index}`, { issue: `OPS-${index}`, status: index < 2 ? 'idle' : 'working' })), agent('unassigned', { issue: 'gone' })],
+    // Only issues without panes fold; an issue with any pane never folds away (see below).
+    agents: [...states.slice(2).map((state, index) => agent(`agent-${index + 2}`, { issue: `OPS-${index + 2}`, status: 'working' })), agent('unassigned', { issue: 'gone' })],
   })] }).spaces[0];
   const result = agentGroups(item);
   assert.equal(result.grouped, true);
@@ -131,22 +131,40 @@ test('tool issue groups use the same priority order and keep unassigned agents l
   assert.deepEqual(result.groups.at(-1).agents.map(a => a.id), ['unassigned']);
 });
 
-test('an issue with a working or blocked agent stays visible past the issue fold', () => {
+test('an issue with any pane, working or idle or done, stays visible past the issue fold', () => {
   const states = ['done', 'waiting', 'review', 'working', 'blocked', 'done'];
   const build = statuses => normalize({ spaces: [space('one', {
     work: { tool: 'jira', key: 'OPS', open: 6 },
     issues: states.map((state, index) => ({ key: `OPS-${index}`, title: state, state, at: NOW + index })),
-    agents: statuses.map((status, index) => agent(`agent-${index}`, { issue: `OPS-${index}`, status })),
+    agents: statuses.flatMap((status, index) => status ? [agent(`agent-${index}`, { issue: `OPS-${index}`, status })] : []),
   })] }).spaces[0];
-  const quiet = agentGroups(build(['idle', 'idle', 'idle', 'idle', 'idle', 'idle']));
-  assert.equal(quiet.groups.length, 3);assert.equal(quiet.groupsHidden, 3);
-  for (const status of ['working', 'blocked']) {
-    const live = agentGroups(build(['idle', 'idle', 'idle', 'idle', 'idle', status]));
-    assert(live.groups.some(group => group.issue?.key === 'OPS-5'), `a ${status} agent keeps its issue out of the fold`);
-    assert(live.agents.some(a => a.id === 'agent-5'));assert.equal(live.groupsHidden, 2);
+  const none = agentGroups(build([]));
+  assert.equal(none.groups.length, 3);assert.equal(none.groupsHidden, 3, 'issues without panes still fold');
+  for (const status of ['working', 'blocked', 'idle', 'done']) {
+    const live = agentGroups(build([null, null, null, null, null, status]));
+    assert(live.groups.some(group => group.issue?.key === 'OPS-5'), `a ${status} pane keeps its issue out of the fold`);
+    assert(live.agents.some(a => a.id === 'agent-5'), `a ${status} pane is drawn`);assert.equal(live.groupsHidden, 2);
   }
-  const idle = agentGroups(build(['idle', 'idle', 'idle', 'idle', 'idle', 'done']));
-  assert(!idle.groups.some(group => group.issue?.key === 'OPS-5'), 'a finished agent still folds');
+  const all = agentGroups(build(['idle', 'idle', 'idle', 'idle', 'idle', 'done']));
+  assert.equal(all.groupsHidden, 0);assert.equal(all.agents.length, 6, 'every pane is drawn under its issue');
+  for (const group of all.groups) assert(group.agents.every(a => a.issue === group.issue.key));
+});
+
+test('each pane sits right under its issue row; only key-less panes go to 이슈 없음', () => {
+  const issues = [...Array.from({ length: 6 }, (_, i) => ({ key: `ZED-${i + 1}`, title: `이슈 ${i + 1}`, state: 'waiting', week: true, pinned: false })),
+    { key: 'ZED-844', title: '', state: 'waiting', week: false, pinned: false }];
+  const item = normalize({ spaces: [space('zed', { work: { tool: 'linear', key: 'P-ZED-21', open: 6 }, issues, agents: [
+    agent('uncached', { issue: 'ZED-844', status: 'done' }), agent('review', { issue: 'ZED-844', status: 'idle' }),
+    agent('idle', { issue: 'ZED-6', status: 'idle' }), agent('sub', { issue: 'ZED-6', status: 'working', parent_id: 'idle' }),
+    agent('plain', { issue: null, status: 'idle' }),
+  ] })] }).spaces[0];
+  const result = agentGroups(item);
+  const under = key => result.groups.find(group => (group.issue?.key ?? null) === key)?.agents.map(a => a.id);
+  assert.deepEqual(under('ZED-844').sort(), ['review', 'uncached']);
+  assert.deepEqual(under('ZED-6'), ['idle', 'sub']);
+  assert.deepEqual(under(null), ['plain']);
+  assert.equal(result.groups.find(group => group.issue?.key === 'ZED-844').issue.title, '', 'an uncached issue keeps its key-only row');
+  assert.equal(result.groupsHidden, 2, 'issues without panes still fold (ZED-4, ZED-5)');
 });
 
 test('root agent rows are never truncated inside an issue', () => {

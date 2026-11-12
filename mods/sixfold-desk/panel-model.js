@@ -332,8 +332,10 @@ export function agentGroups(space, { includeClosedIds = new Set(), expandedIssue
   }));
   if (!space?.work) return { grouped: false, groups: [], groupsHidden: 0, issueHidden: 0, issuesExpanded: false, groupsExpandable: false, ...treeAgents(agents, expandedParents) };
   const groupsExpandable = issues.length > 4, issuesExpanded = groupsExpandable && expandedIssueSpaces.has(space.id);
-  // A live task must not disappear behind the generic issue fold.
-  const activeIssues = new Set(agents.filter(agent => ['working','blocked'].includes(agent.status)).map(agent => agent.issue));
+  // A pane is always drawn right under its issue (2026-11-12): any issue with a pane that is
+  // not closed yet — working, blocked, idle or done — stays out of the generic issue fold,
+  // which folds only issues without panes.
+  const activeIssues = new Set(agents.map(agent => agent.issue));
   const visibleIssues = groupsExpandable && !issuesExpanded
     ? issues.filter((issue,index) => index < 3 || activeIssues.has(issue.key)) : issues;
   const groups = visibleIssues.map(issue => ({ issue, ...treeAgents(agents.filter(agent => agent.issue === issue.key), expandedParents) }));
