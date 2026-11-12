@@ -1,6 +1,8 @@
 import test from 'node:test';
+import {weekSummary} from '../mods/week-timeline/summary.js';
+import {parseFeed} from '../mods/week-timeline/model.js';
 import assert from 'node:assert/strict';
-import {issueScopeData,issueCacheLabel,issueRequest,saveIssueRequest,parseTimelineFeed,spaceWithTimeline} from '../mods/sixfold-desk/task-issue-state.js';
+import {issueScopeData,issueCacheLabel,issueRequest,saveIssueRequest,parseTimelineFeed,spaceWithTimeline,rowStatus,weekMembers} from '../mods/sixfold-desk/task-issue-state.js';
 const a={key:'DEMO-1',title:'Build panel',state:'working'},b={key:'DEMO-2',title:'Search é',state:'done',pinned:true,milestone_id:'m1'};
 const space={id:'s-demo',work:{tool:'linear'},issues:[a,b],issue_catalog:{week:[a],milestone:[b],all:[a,b],milestones:[{id:'m1',name:'Release',due:'2026-11-13',progress:0}],import_request:{path:'panel-issue-requests',space:'s-demo'}}};
 test('scopes preserve natural week and explicit pins; search remains local',()=>{
@@ -60,7 +62,7 @@ test('a newer week-timeline replaces the old catalog for the same-named project 
   const feed=parseTimelineFeed(feedText('2026-11-12T15:30:00+09:00'));
   const out=spaceWithTimeline(named,feed),rows=issueScopeData(out,'all').rows;
   assert.deepEqual(rows.map(r=>r.key),['DEMO-7','DEMO-8','DEMO-9','DEMO-6']);
-  assert.deepEqual(issueScopeData(out,'week').rows.map(r=>r.key),['DEMO-7','DEMO-8','DEMO-6']);
+  assert.deepEqual(issueScopeData(out,'week').rows.map(r=>r.key),['DEMO-7'],'week = the band rule: not done, due this week or in progress');
   assert.deepEqual(issueScopeData(out,'milestone').rows.map(r=>r.key),['DEMO-7','DEMO-8']);
   assert.equal(rows[1].state,'blocked');
   const group=issueScopeData(out,'milestone').groups[0];assert.equal(group.name,'Launch');assert.equal(group.progress,'40%');
@@ -76,4 +78,28 @@ test('pins survive and an older or unreadable timeline never replaces the catalo
   assert.equal(spaceWithTimeline(named,parseTimelineFeed(feedText('2026-11-09T00:00:00+09:00'))),named);
   assert.equal(parseTimelineFeed('{bad'),null);assert.equal(parseTimelineFeed('{"v":1,"projects":[]}'),null);
   assert.equal(spaceWithTimeline(named,null),named);
+});
+
+test('this week is exactly what the top weekday band lists, with no done, later or dateless group parents',()=>{
+  const issue=(key,state,extra={})=>({key,title:key,status:state==='done'?'Done':state==='started'?'In Progress':state==='review'?'In Review':'Todo',state,blocked:false,due:'',start:'',done_at:'',parent:'',milestone:'',url:'',...extra});
+  const issues=[issue('DEMO-1','started',{due:'2026-11-12'}),issue('DEMO-2','todo',{due:'2026-11-14'}),issue('DEMO-3','todo',{due:'2026-12-09'}),
+    issue('DEMO-4','review',{due:'2027-01-08'}),issue('DEMO-5','done',{due:'2026-11-10',done_at:'2026-11-10'}),issue('DEMO-6','todo',{due:'2026-11-02'}),
+    issue('DEMO-10','todo'),issue('DEMO-11','started',{parent:'DEMO-10',due:'2026-11-13'}),issue('DEMO-12','todo',{parent:'DEMO-10',due:'2026-12-20'}),
+    issue('DEMO-13','started'),issue('DEMO-14','done',{parent:'DEMO-10',done_at:'2026-11-11'})];
+  const text=JSON.stringify({v:2,updated:'2026-11-12T10:00:00+09:00',week:{start:'2026-11-09',end:'2026-11-15'},projects:[{key:'DEM',name:'Demo',workspace:'Demo',milestones:[],issues}]});
+  const band=weekSummary(parseFeed(text),{today:'2026-11-12'}).items.map(i=>i.key).sort();
+  const space=spaceWithTimeline({...named,issue_catalog:{...named.issue_catalog,updated_at:'2020-01-01T00:00:00Z'}},parseTimelineFeed(text));
+  assert.deepEqual(issueScopeData(space,'week').rows.map(r=>r.key).sort(),band);
+  assert.deepEqual(band,['DEMO-1','DEMO-11','DEMO-2','DEMO-4','DEMO-6'],'due this week, late, or in progress/review (a child shows, its parent header does not)');
+  for(const out of ['DEMO-3','DEMO-5','DEMO-10','DEMO-12','DEMO-13','DEMO-14'])assert(!band.includes(out),`${out} is not on the band`);
+  assert.equal(issueScopeData(space,'all').rows.length,issues.length,'all tab keeps every issue');
+  assert.deepEqual([...weekMembers([{key:'A-1',state:'done',due:'2026-11-10'},{key:'A-2',state:'started',due:''},{key:'A-3',state:'started',due:'2026-11-11'}],'2026-11-15')],['A-3']);
+});
+test('Linear status names from the timeline become the window status mark',()=>{
+  assert.deepEqual(rowStatus({status:'In Progress'}),{name:'In Progress',type:'started',color:''});
+  assert.equal(rowStatus({status:'Done'}).type,'completed');assert.equal(rowStatus({status:'Canceled'}).type,'canceled');
+  assert.equal(rowStatus({status:'Backlog'}).type,'backlog');assert.equal(rowStatus({status:'Todo'}).type,'unstarted');
+  assert.equal(rowStatus({status:'In Review'}).type,'started');assert.equal(rowStatus({}),null);
+  const out=spaceWithTimeline(named,parseTimelineFeed(feedText('2026-11-12T15:30:00+09:00')));
+  assert.equal(out.issue_catalog.all.find(i=>i.key==='DEMO-7').status,'In Progress');
 });
