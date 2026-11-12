@@ -8,6 +8,7 @@ import {arrivalTarget,ARRIVAL} from './arrival-model.js';
 
 const SHOWN = new Set(['needs-you']);  // Only what a person must decide; the rest stays in the project.
 const MARKS = { 'needs-you': '!', info: '✓', processing: '●' };
+const ALERT_LOAD_STUCK_MS = 120000;   // a refresh still loading after this no longer blocks the next one
 
 function popupEvents(mentions, read) {
   const events = [];
@@ -65,21 +66,27 @@ export function watchAlerts(view, cx) {
   const base=`${appHome()}/data/sixfold`;
   const inputs=[['legacy','alerts.json',()=>({items:[]})],['tracked','project-alerts.json',()=>({items:[]})],['read','slack-alerts-read.json',()=>({})],['mentions','slack-mentions.json',()=>({items:[]})],['health','slack-live-health.json',()=>({})],['workflows','slack-workflows.json',()=>({jobs:{}})]];
   const cached=new Map(),subscriptions=[];
-  let loading=false,previous,disposed=false,scheduled=null,dirty=false,version=0;
+  let loading=false,loadingAt=0,run=0,previous,disposed=false,scheduled=null,dirty=false,version=0;
   const allowed=()=>!disposed&&view.sidebarVisible!==false;
+  // A refresh whose native read or write never settles stops holding the next one after ALERT_LOAD_STUCK_MS.
+  const busy=()=>loading&&Date.now()-loadingAt<ALERT_LOAD_STUCK_MS;
   const schedule=()=>{
     dirty=true;
-    if(!allowed()||loading||scheduled||cached.size!==inputs.length)return;
+    if(!allowed()||busy()||scheduled||cached.size!==inputs.length)return;
     scheduled=cx.timer.after(20,()=>{scheduled=null;refresh(cx);});
   };
   const refresh = context => {
     if(!allowed()||cached.size!==inputs.length)return;
-    if(loading){dirty=true;return;}
+    if(busy()){dirty=true;return;}
     dirty=false;
     const signature=JSON.stringify(inputs.map(([key])=>cached.get(key).token));
     if(signature===previous)return;
-    loading = true;
-    (context??cx).spawn(async cx => {
+    const mine=++run;
+    loading = true;loadingAt=Date.now();
+    // cx.spawn can refuse before the task runs (the host's outstanding-task limit under load); its
+    // finally then never runs, so `loading` would stay true and every later change be skipped.
+    // Release here; the next input change retries (no immediate retry against a refusing host).
+    try{(context??cx).spawn(async cx => {
       try {
         const get=key=>cached.get(key).value;
         const legacy=get('legacy'),feed=get('tracked'),read=get('read'),mentions=get('mentions'),health=get('health'),workflows=get('workflows');
@@ -99,8 +106,8 @@ export function watchAlerts(view, cx) {
         cx.notify();
         view.panelRetained?.alertsChanged?.();   // the cards' meta lines show the new counts
       } catch { /* Retry after the next input/ledger change or classic-view activation. */ }
-      finally { loading = false;if(dirty)schedule(); }
-    });
+      finally { if(mine===run){loading = false;if(dirty)schedule();} }
+    });}catch{if(mine===run)loading=false;dirty=true;}
   };
   for(const [key,name,fallback] of inputs){
     subscriptions.push(subscribeJsonFile(cx,`${base}/${name}`,snapshot=>{
