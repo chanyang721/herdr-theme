@@ -167,7 +167,8 @@ export function createRetainedPanel(cx,{macTitlebar=false,onClassic=null,onDispo
   c.askLinear=(kind,target,force=false)=>{if(typeof c.cx.spawn!=='function')return;c.cx.spawn(async()=>{try{await ensure(kind,target,{force});}catch{}c.pollCaches();c.repaintIssues();});c.pollLook();};
   // While an issue search stays open, its reads (and the open detail's) are asked again every
   // LOOK_POLL_MS: ensure asks nothing while they are fresh, so this stays quiet; it repaints only
-  // through the cache check when an answer comes. Stops once every search is closed.
+  // through the cache check when an answer comes. The timeline file is read again too (it repaints
+  // only when its `updated` changes). Stops once every search is closed.
   c.lookTimer=null;
   c.pollLook=()=>{
     if(c.disposed||c.lookTimer||typeof c.cx.spawn!=='function'||![...c.issueStates.values()].some(state=>state.open))return;
@@ -177,7 +178,7 @@ export function createRetainedPanel(cx,{macTitlebar=false,onClassic=null,onDispo
           const space=c.spaceMap.get(id);if(!state.open||!space)continue;
           try{await ensure('project',space.name);if(state.detail)await ensure('issue',state.detail);}catch{}
         }
-        c.pollCaches();c.pollLook();});});
+        c.loadTimeline();c.pollCaches();c.pollLook();});});
   };
   c.repaintIssues=()=>{for(const [id,state] of c.issueStates)if(state.open)c.notify(c.cards.get(id));};
   c.pollCaches=()=>{
@@ -221,13 +222,21 @@ export function createRetainedPanel(cx,{macTitlebar=false,onClassic=null,onDispo
     let memo=c.statusMemo.get(space.id);
     if(!memo||memo.project!==project){memo={project,index:statusIndex(project)};c.statusMemo.set(space.id,memo);}
     for(const id of c.statusMemo.keys())if(!c.spaceMap.has(id))c.statusMemo.delete(id);
-    // The timeline names each issue's Linear status; it wins over an older project cache.
+    // The catalog (the feed's, or one made from the timeline) and the Linear project cache both name
+    // each issue's status; whichever was read later wins, the other fills the keys it lacks. A
+    // catalog status takes its type from the cache's same-named team status when it has one.
     let rowIndex=c.rowStatusMemo?.get(space.id);
-    if(!rowIndex||rowIndex.catalog!==space.issue_catalog){
-      rowIndex={catalog:space.issue_catalog,map:new Map((space.issue_catalog?.all||[]).filter(i=>i.status).map(i=>[i.key,rowStatus(i)]))};
+    if(!rowIndex||rowIndex.catalog!==space.issue_catalog||rowIndex.project!==project){
+      const known=new Map();
+      for(const list of Object.values(project?.statuses&&typeof project.statuses==='object'?project.statuses:{}))
+        for(const s of Array.isArray(list)?list:[])if(s?.name&&!known.has(s.name))known.set(s.name,s);
+      rowIndex={catalog:space.issue_catalog,project,map:new Map((space.issue_catalog?.all||[]).filter(i=>i.status).map(i=>[i.key,rowStatus(i,known)]))};
       (c.rowStatusMemo||(c.rowStatusMemo=new Map())).set(space.id,rowIndex);
     }
-    const statusOf=project||rowIndex.map.size?key=>rowIndex.map.get(key)||memo.index.get(key)||null:null;
+    const projectAt=project&&(project.state===undefined||project.state==='ok')?Date.parse(project.at||''):NaN;
+    const catalogAt=Date.parse(space.issue_catalog?.updated_at||space.issue_catalog?.cache?.at||'');
+    const cacheFirst=Number.isFinite(projectAt)&&(!Number.isFinite(catalogAt)||projectAt>catalogAt);
+    const statusOf=project||rowIndex.map.size?key=>(cacheFirst?memo.index.get(key)||rowIndex.map.get(key):rowIndex.map.get(key)||memo.index.get(key))||null:null;
     const rows=data.rows||[];
     const lookup=statusOf||(()=>null);
     const unreadKeys=new Set(items.filter(i=>!i.read&&i.workspace===space.name&&i.issue).map(i=>i.issue));
