@@ -1,7 +1,7 @@
 import test from 'node:test';
 import {weekSummary} from '../mods/week-timeline/summary.js';
 import {parseFeed} from '../mods/week-timeline/model.js';
-import {milestoneList} from '../mods/sixfold-desk/issue-model.js';
+import {milestoneList,statusLook,folded} from '../mods/sixfold-desk/issue-model.js';
 import assert from 'node:assert/strict';
 import {issueScopeData,issueCacheLabel,issueRequest,saveIssueRequest,parseTimelineFeed,spaceWithTimeline,rowStatus,weekMembers,milestoneSource} from '../mods/sixfold-desk/task-issue-state.js';
 const a={key:'DEMO-1',title:'Build panel',state:'working'},b={key:'DEMO-2',title:'Search é',state:'done',pinned:true,milestone_id:'m1'};
@@ -123,4 +123,21 @@ test('a timeline file that is not whole is none and keeps the old catalog',()=>{
     assert.equal(spaceWithTimeline(named,parseTimelineFeed(JSON.stringify(value))),named,'old catalog stays, never an empty list');
   }
   assert.equal(parseTimelineFeed(JSON.stringify({...good,projects:[{...good.projects[0],issues:[]}]})).projects[0].issues.length,0,'a whole file with no issues is still valid');
+});
+
+test('a Korean or custom status keeps its kind: provider type, same-named typed status, name, then timeline state',()=>{
+  const feed=parseTimelineFeed({v:2,updated:'2026-11-12T00:00:00Z',week:{start:'2026-11-09'},projects:[{workspace:'Demo',issues:[
+    {key:'DEMO-2',title:'Done',state:'done',status:'완료'},{key:'DEMO-3',title:'Dropped',state:'done',status:'취소'},
+    {key:'DEMO-4',title:'Shipped',state:'done',status:'Shipped'},{key:'DEMO-5',title:'Typed',state:'todo',status:'Parked',status_type:'backlog'},
+    {key:'DEMO-6',title:'Bad type',state:'started',status:'Doing',status_type:'nonsense'}]}]});
+  const [done,dropped,shipped,typed,bad]=feed.projects[0].issues.map(row=>rowStatus(row));
+  assert.equal(done.type,'completed');assert.equal(statusLook(done).kind,'completed');assert.equal(folded(done),true);
+  assert.equal(dropped.type,'canceled');assert.equal(statusLook(dropped).kind,'canceled');assert.equal(folded(dropped),true);
+  assert.equal(shipped.type,'completed','a custom name falls back to the timeline state');
+  assert.equal(typed.type,'backlog','the provider status_type is kept through the parser');
+  assert.equal(bad.type,'started','an unknown status_type is ignored');
+  const known=new Map([['Shipped',{name:'Shipped',type:'canceled',color:'#aabbcc'}]]);
+  assert.deepEqual(rowStatus({status:'Shipped',state:'done'},known),{name:'Shipped',type:'canceled',color:'#aabbcc'},'a same-named typed project status wins over the state');
+  assert.equal(rowStatus({status:'완료',status_type:'started'},known).type,'started','the provider type wins over the name');
+  assert.equal(rowStatus({status:'진행 중'}).type,'started');assert.equal(rowStatus({status:'할 일'}).type,'unstarted');assert.equal(rowStatus({status:'백로그'}).type,'backlog');
 });
