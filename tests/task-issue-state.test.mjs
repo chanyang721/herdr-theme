@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {issueScopeData,issueCacheLabel,issueRequest,saveIssueRequest} from '../mods/sixfold-desk/task-issue-state.js';
+import {issueScopeData,issueCacheLabel,issueRequest,saveIssueRequest,parseTimelineFeed,spaceWithTimeline} from '../mods/sixfold-desk/task-issue-state.js';
 const a={key:'DEMO-1',title:'Build panel',state:'working'},b={key:'DEMO-2',title:'Search é',state:'done',pinned:true,milestone_id:'m1'};
 const space={id:'s-demo',work:{tool:'linear'},issues:[a,b],issue_catalog:{week:[a],milestone:[b],all:[a,b],milestones:[{id:'m1',name:'Release',due:'2026-11-13',progress:0}],import_request:{path:'panel-issue-requests',space:'s-demo'}}};
 test('scopes preserve natural week and explicit pins; search remains local',()=>{
@@ -45,4 +45,35 @@ test('outbox is fixed beneath selected feed with one explicit import/remove',()=
   assert.equal(issueRequest('/demo/task-feed.json',{...space,issue_catalog:{...space.issue_catalog,import_request:{path:'../escape',space:space.id}}},'DEMO-2',true,'request-demo-001'),null);
   for(const tool of ['linear','jira'])assert.equal(issueRequest('/demo/task-feed.json',{...space,work:{tool}},'DEMO-2',true,`request-${tool}-001`).value.tool,tool);
   assert.equal(issueRequest('/demo/task-feed.json',{...space,work:{tool:'unknown'}},'DEMO-2',true,'request-demo-001'),null);
+});
+
+const feedText=updated=>JSON.stringify({v:2,updated,week:{start:'2026-11-09',end:'2026-11-15'},projects:[
+  {key:'DEM',name:'Demo',workspace:'Demo',milestones:[{id:'m9',name:'Launch',target:'2026-11-20',progress:40}],issues:[
+    {key:'DEMO-7',title:'Fresh work',status:'In Progress',state:'started',blocked:false,due:'2026-11-12',milestone:'m9',url:'https://linear.app/demo/issue/DEMO-7'},
+    {key:'DEMO-8',title:'Blocked thing',state:'todo',blocked:true,due:'2026-12-30',milestone:'m9'},
+    {key:'DEMO-9',title:'Later',state:'todo',due:'2026-12-30'},
+    {key:'DEMO-6',title:'Done this week',state:'done',done_at:'2026-11-10'},
+    {key:'bad',title:'ignored',state:'started'}]},
+  {key:'OTH',name:'Other',workspace:'Other',milestones:[],issues:[{key:'OTH-1',title:'x',state:'started'}]}]});
+const named={...space,name:'Demo',issue_catalog:{...space.issue_catalog,updated_at:'2026-11-10T10:02:00+09:00'}};
+test('a newer week-timeline replaces the old catalog for the same-named project only',()=>{
+  const feed=parseTimelineFeed(feedText('2026-11-12T15:30:00+09:00'));
+  const out=spaceWithTimeline(named,feed),rows=issueScopeData(out,'all').rows;
+  assert.deepEqual(rows.map(r=>r.key),['DEMO-7','DEMO-8','DEMO-9','DEMO-6']);
+  assert.deepEqual(issueScopeData(out,'week').rows.map(r=>r.key),['DEMO-7','DEMO-8','DEMO-6']);
+  assert.deepEqual(issueScopeData(out,'milestone').rows.map(r=>r.key),['DEMO-7','DEMO-8']);
+  assert.equal(rows[1].state,'blocked');
+  const group=issueScopeData(out,'milestone').groups[0];assert.equal(group.name,'Launch');assert.equal(group.progress,'40%');
+  assert.match(issueCacheLabel(out,'week',new Date('2026-11-12T16:00:00+09:00')).label,/갱신/);
+  assert.equal(out.issue_catalog.import_request,named.issue_catalog.import_request);
+  const other={...named,name:'Nobody'};
+  assert.equal(spaceWithTimeline(other,feed),other);
+});
+test('pins survive and an older or unreadable timeline never replaces the catalog',()=>{
+  const pinned={...named,issues:[{key:'DEMO-9',title:'Later',state:'waiting'}]};
+  const out=spaceWithTimeline(pinned,parseTimelineFeed(feedText('2026-11-12T15:30:00+09:00')));
+  assert.equal(issueScopeData(out,'all').rows.find(r=>r.key==='DEMO-9').pinned,true);
+  assert.equal(spaceWithTimeline(named,parseTimelineFeed(feedText('2026-11-09T00:00:00+09:00'))),named);
+  assert.equal(parseTimelineFeed('{bad'),null);assert.equal(parseTimelineFeed('{"v":1,"projects":[]}'),null);
+  assert.equal(spaceWithTimeline(named,null),named);
 });
