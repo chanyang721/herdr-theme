@@ -19,7 +19,7 @@ export const MESSAGE_TIMING=Object.freeze({startMs:PANEL_TIMING.startMs,packetMs
 // A bundle keeps the IDs it folded (at most bundleIds each) so a correction can
 // take a send back out of it; sends past that are only counted.
 export const MESSAGE_ROUTE=Object.freeze({queue:8,bundles:8,bundleIds:32,gapMs:260,laneMs:1000});
-const MAX = Object.freeze({ computers: 64, spaces: 128, agents: 256, issues: 128, links: 512, events: 256, bytes: 2 * 1024 * 1024 });
+const MAX = Object.freeze({ computers: 64, spaces: 128, agents: 256, issues: 512, links: 512, events: 256, bytes: 2 * 1024 * 1024 });
 const STATUSES = new Set(['working', 'idle', 'blocked', 'done']);
 const STATES = ['blocked', 'working', 'review', 'waiting', 'done'];
 const KINDS = new Set(['dispatch', 'review_request', 'verdict', 'accept', 'message', 'spawn', 'close_step', 'memory', 'resume', 'error']);
@@ -331,13 +331,11 @@ export function agentGroups(space, { includeClosedIds = new Set(), expandedIssue
     return agent.closing?.step !== 4 || agent.closing.blocked_reason || includeClosedIds.has(agent.id);
   }));
   if (!space?.work) return { grouped: false, groups: [], groupsHidden: 0, issueHidden: 0, issuesExpanded: false, groupsExpandable: false, ...treeAgents(agents, expandedParents) };
-  const groupsExpandable = issues.length > 4, issuesExpanded = groupsExpandable && expandedIssueSpaces.has(space.id);
-  // A pane is always drawn right under its issue (2026-11-12): any issue with a pane that is
-  // not closed yet — working, blocked, idle or done — stays out of the generic issue fold,
-  // which folds only issues without panes.
-  const activeIssues = new Set(agents.map(agent => agent.issue));
-  const visibleIssues = groupsExpandable && !issuesExpanded
-    ? issues.filter((issue,index) => index < 3 || activeIssues.has(issue.key)) : issues;
+  // Every issue to work on is always shown, each with its panes right under it (2026-11-12,
+  // "처리해야 하는 이슈를 접지 말고 전부"): there is no issue fold (no issues-more row).
+  // `expandedIssueSpaces` is accepted and ignored so older callers keep working.
+  void expandedIssueSpaces;
+  const groupsExpandable = false, issuesExpanded = false, visibleIssues = issues;
   const groups = visibleIssues.map(issue => ({ issue, ...treeAgents(agents.filter(agent => agent.issue === issue.key), expandedParents) }));
   const unassigned = agents.filter(agent => !assigned.has(agent.issue));
   if (unassigned.length) groups.push({ issue: null, ...treeAgents(unassigned, expandedParents) });

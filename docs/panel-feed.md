@@ -63,10 +63,10 @@ each other's names and a stationary purple solid bracket with hollow square
 endpoints. Names, bundle IDs and messages alone never create a partnership.
 
 Issue groups and flat rows sort blocked, working, review, waiting and done.
-Within a state, producer ordering is preserved. More than four issue groups show
-three and an expandable **+N**; agents inside an issue are not truncated. An issue
-with any pane not yet closed (working, blocked, idle or done) never folds, so each
-pane stays right under its issue; only issues without panes fold. Explicit
+Within a state, producer ordering is preserved. Issue groups never fold: every
+issue the producer lists (all issues to work on) is drawn, each with its panes
+right under it, and there is no issue **+N** row. A space takes up to 512 issues.
+Agents inside an issue are not truncated. Explicit
 `parent_id` relationships form trees within the same issue. More than three child
 branches show three and their own **+N**. Child rows use a compact status dot,
 without another stage bar. Agents without an issue follow the issue groups.

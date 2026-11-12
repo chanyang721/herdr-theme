@@ -118,20 +118,19 @@ test('tool issue groups use the same priority order and keep unassigned agents l
   const item = normalize({ spaces: [space('one', {
     work: { tool: 'jira', key: 'OPS', open: 5 },
     issues: states.map((state, index) => ({ key: `OPS-${index}`, title: state, state, at: NOW + index })),
-    // Only issues without panes fold; an issue with any pane never folds away (see below).
     agents: [...states.slice(2).map((state, index) => agent(`agent-${index + 2}`, { issue: `OPS-${index + 2}`, status: 'working' })), agent('unassigned', { issue: 'gone' })],
   })] }).spaces[0];
   const result = agentGroups(item);
   assert.equal(result.grouped, true);
-  assert.deepEqual(result.groups.map(group => group.issue?.state ?? null), ['blocked', 'working', 'review', null]);
-  assert.equal(result.groupsHidden,2);
+  // Every issue shows, folded or not (no issue fold since 2026-11-12).
+  assert.deepEqual(result.groups.map(group => group.issue?.state ?? null), ['blocked', 'working', 'review', 'waiting', 'done', null]);
+  assert.equal(result.groupsHidden,0);assert.equal(result.groupsExpandable,false);
   const expanded=agentGroups(item,{expandedIssueSpaces:new Set(['one'])});
-  assert.deepEqual(expanded.groups.map(group=>group.issue?.state??null),['blocked','working','review','waiting','done',null]);
-  assert.equal(expanded.issuesExpanded,true);assert.equal(expanded.groupsHidden,0);
+  assert.deepEqual(expanded.groups.map(group=>group.issue?.key),result.groups.map(group=>group.issue?.key),'the old expansion switch changes nothing');
   assert.deepEqual(result.groups.at(-1).agents.map(a => a.id), ['unassigned']);
 });
 
-test('an issue with any pane, working or idle or done, stays visible past the issue fold', () => {
+test('no issue ever folds: every issue to work on is drawn, with or without panes', () => {
   const states = ['done', 'waiting', 'review', 'working', 'blocked', 'done'];
   const build = statuses => normalize({ spaces: [space('one', {
     work: { tool: 'jira', key: 'OPS', open: 6 },
@@ -139,15 +138,18 @@ test('an issue with any pane, working or idle or done, stays visible past the is
     agents: statuses.flatMap((status, index) => status ? [agent(`agent-${index}`, { issue: `OPS-${index}`, status })] : []),
   })] }).spaces[0];
   const none = agentGroups(build([]));
-  assert.equal(none.groups.length, 3);assert.equal(none.groupsHidden, 3, 'issues without panes still fold');
+  assert.equal(none.groups.length, 6);assert.equal(none.groupsHidden, 0);assert.equal(none.groupsExpandable, false);
   for (const status of ['working', 'blocked', 'idle', 'done']) {
     const live = agentGroups(build([null, null, null, null, null, status]));
-    assert(live.groups.some(group => group.issue?.key === 'OPS-5'), `a ${status} pane keeps its issue out of the fold`);
-    assert(live.agents.some(a => a.id === 'agent-5'), `a ${status} pane is drawn`);assert.equal(live.groupsHidden, 2);
+    assert(live.groups.some(group => group.issue?.key === 'OPS-5' && group.agents.some(a => a.id === 'agent-5')), `a ${status} pane is drawn under its issue`);
   }
   const all = agentGroups(build(['idle', 'idle', 'idle', 'idle', 'idle', 'done']));
-  assert.equal(all.groupsHidden, 0);assert.equal(all.agents.length, 6, 'every pane is drawn under its issue');
+  assert.equal(all.agents.length, 6, 'every pane is drawn under its issue');
   for (const group of all.groups) assert(group.agents.every(a => a.issue === group.issue.key));
+  const many = normalize({ spaces: [space('many', { work: { tool: 'linear', key: 'P-ZED-21' },
+    issues: Array.from({ length: 174 }, (_, i) => ({ key: `ZED-${i + 1}`, title: `이슈 ${i + 1}`, state: 'waiting' })) })] }).spaces[0];
+  assert.equal(many.issues.length, 174, 'a real project list (174 open issues) is not cut at the old 128 cap');
+  assert.equal(agentGroups(many).groups.filter(group => group.issue).length, 174);
 });
 
 test('each pane sits right under its issue row; only key-less panes go to 이슈 없음', () => {
@@ -164,7 +166,8 @@ test('each pane sits right under its issue row; only key-less panes go to 이슈
   assert.deepEqual(under('ZED-6'), ['idle', 'sub']);
   assert.deepEqual(under(null), ['plain']);
   assert.equal(result.groups.find(group => group.issue?.key === 'ZED-844').issue.title, '', 'an uncached issue keeps its key-only row');
-  assert.equal(result.groupsHidden, 2, 'issues without panes still fold (ZED-4, ZED-5)');
+  assert.equal(result.groupsHidden, 0, 'issues without panes are drawn too');
+  assert.equal(result.groups.filter(group => group.issue).length, 7);
 });
 
 test('root agent rows are never truncated inside an issue', () => {
@@ -523,7 +526,7 @@ test('issue catalog scopes have independent bounds and only an exact neutral imp
   const issues=Array.from({length:2050},(_,index)=>({key:`DEMO-${index}`,title:`Demo ${index}`,state:'working',private:'omit'}));
   const value=normalize({spaces:[space('one',{issues,issue_catalog:{week:issues,milestone:[{key:'DEMO-X',title:'Milestone',state:'unknown'}],all:issues,import_request:{path:'panel-issue-requests',space:'one',command:'omit'}}}),space('two',{issue_catalog:{week:[],milestone:null,all:[],import_request:{path:'../escape',space:'two'}}}),space('three',{issue_catalog:{import_request:{path:'panel-issue-requests',space:'one'}}})]});
   const catalog=value.spaces[0].issue_catalog;
-  assert.equal(value.spaces[0].issues.length,128);assert.equal(catalog.week.length,2048);assert.equal(catalog.all.length,2048);
+  assert.equal(value.spaces[0].issues.length,512);assert.equal(catalog.week.length,2048);assert.equal(catalog.all.length,2048);
   assert.deepEqual(catalog.milestone,[{id:'DEMO-X',key:'DEMO-X',title:'Milestone',state:'waiting'}]);
   assert.deepEqual(catalog.import_request,{path:'panel-issue-requests',space:'one'});
   assert.equal(value.spaces[1].issue_catalog.import_request,null);assert.deepEqual(value.spaces[1].issue_catalog.milestone,[]);
@@ -551,12 +554,12 @@ test('extended projection copies typed data and reuses every unaffected entity a
   }finally{JSON.parse=parse;}
 });
 
-test('only issue groups overflow, with unassigned rows outside the issue count',()=>{
+test('issue groups never overflow, with unassigned rows last',()=>{
   for(const size of [4,5,9]){
     const item=normalize({spaces:[space('one',{work:{tool:'linear',key:'DEMO'},issues:Array.from({length:size},(_,i)=>({key:`DEMO-${i}`,title:'Demo',state:'working'})),agents:[agent('unassigned')]})]}).spaces[0];
-    const result=agentGroups(item),expanded=agentGroups(item,{expandedIssueSpaces:new Set(['one'])});
-    assert.equal(result.groups.length,(size>4?3:size)+1);assert.equal(result.issueHidden,size>4?size-3:0);
-    assert.equal(result.groups.at(-1).issue,null);assert.equal(expanded.groups.length,size+1);assert.equal(expanded.groupsExpandable,size>4);
+    const result=agentGroups(item);
+    assert.equal(result.groups.length,size+1);assert.equal(result.issueHidden,0);
+    assert.equal(result.groups.at(-1).issue,null);assert.equal(result.groupsExpandable,false);
   }
 });
 
@@ -637,11 +640,11 @@ test('issue and parent expansion recompute only the owning space with stable fee
   assert.equal(expanded.stats.groupsComputed,1);assert.equal(expanded.stats.spacesChanged,0);assert.equal(expanded.feed,first.feed);
   assert.notEqual(expanded.groups.get(target.id),first.groups.get(target.id));assert.equal(expanded.groups.get(raw.spaces[1].id),first.groups.get(raw.spaces[1].id));
   const issues=new Set([target.id]),both=projectPanelFeed(input,expanded,{expandedParents:parents,expandedIssueSpaces:issues});
-  assert.equal(both.stats.groupsComputed,1);assert.equal(both.groups.get(target.id).issuesExpanded,true);
+  assert.equal(both.stats.groupsComputed,1);assert.equal(both.groups.get(target.id).issuesExpanded,false,'no issue fold to expand');
   const same=projectPanelFeed(input,both,{expandedParents:new Set([parent,'not-present']),expandedIssueSpaces:issues});
   assert.equal(same.stats.groupsComputed,0);assert.equal(same.stats.signaturesComputed,0);
   const collapsed=projectPanelFeed(input,both);
-  assert.equal(collapsed.stats.groupsComputed,1);assert.equal(collapsed.groups.get(target.id).issueHidden,2);
+  assert.equal(collapsed.stats.groupsComputed,1);assert.equal(collapsed.groups.get(target.id).issueHidden,0);
 });
 
 test('candidate issue catalog metadata is bounded display data and omitted fields stay absent',()=>{
