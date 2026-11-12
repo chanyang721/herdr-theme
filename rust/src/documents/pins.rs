@@ -18,10 +18,25 @@ pub fn documents(
         } else {
             s(&entry["path"])
         });
-        if !root.is_dir() {
+        // The generic code stays for existing readers; the detailed one names the
+        // folder and tells a missing path from a denied one (e.g. macOS privacy).
+        let detail = match fs::metadata(&root) {
+            Ok(meta) if meta.is_dir() => match fs::read_dir(&root) {
+                Ok(_) => None,
+                Err(error) => Some(source_problem(&error)),
+            },
+            Ok(_) => Some("source_not_dir"),
+            Err(error) => Some(source_problem(&error)),
+        };
+        if let Some(code) = detail {
             warnings.push("source_unavailable".into());
+            warnings.push(format!("{code}:{}", root.display()));
             continue;
         }
+        // `source_empty` means the whole folder was read and nothing matched; a
+        // subtree that failed to read may hold the documents, so it never says so.
+        let mut matched = 0usize;
+        let mut complete = true;
         let filters = if entry["match"].is_string() {
             vec![fold(s(&entry["match"]))]
         } else {
@@ -41,8 +56,12 @@ pub fn documents(
         }) {
             let entry = match next {
                 Ok(x) => x,
-                Err(_) => {
+                Err(error) => {
+                    complete = false;
                     warnings.push("source_unavailable".into());
+                    if let (Some(path), Some(io)) = (error.path(), error.io_error()) {
+                        warnings.push(format!("{}:{}", source_problem(io), path.display()));
+                    }
                     continue;
                 }
             };
@@ -55,18 +74,30 @@ pub fn documents(
             {
                 continue;
             }
-            let archived = is_archived(path);
-            if archived && !include_archived {
+            // `match` terms test the path below the source folder, the same rule
+            // `herdr-doc` uses to pick a space, so `보고서/프로젝트/세부/가이드.md`
+            // belongs to a `프로젝트` rule even when the file name omits it.
+            let relative = path.strip_prefix(&root).unwrap_or(path);
+            if !filters.is_empty()
+                && !filters
+                    .iter()
+                    .any(|t| fold(&relative.to_string_lossy()).contains(t))
+            {
                 continue;
             }
-            if !filters.is_empty() && !filters.iter().any(|t| fold(&name).contains(t)) {
+            matched += 1;
+            let archived = is_archived(path);
+            if archived && !include_archived {
                 continue;
             }
             let Ok(meta) = fs::metadata(path) else {
                 continue;
             };
             let source = resolved(path);
-            found.insert(source.to_string_lossy().into_owned(),json!({"path":source,"name":name,"mtime":mtime(path),"size":meta.len(),"archived":archived,"folder":source.parent(),"sourceRoot":resolved(&root),"relativePath":path.strip_prefix(&root).unwrap()}));
+            found.insert(source.to_string_lossy().into_owned(),json!({"path":source,"name":name,"mtime":mtime(path),"size":meta.len(),"archived":archived,"folder":source.parent(),"sourceRoot":resolved(&root),"relativePath":relative}));
+        }
+        if matched == 0 && complete {
+            warnings.push(format!("source_empty:{}", root.display()));
         }
     }
     let mut values = found.into_values().collect::<Vec<_>>();
@@ -77,6 +108,13 @@ pub fn documents(
             .then_with(|| s(&a["path"]).cmp(s(&b["path"])))
     });
     values
+}
+fn source_problem(error: &std::io::Error) -> &'static str {
+    match error.kind() {
+        std::io::ErrorKind::NotFound => "source_missing",
+        std::io::ErrorKind::PermissionDenied => "source_denied",
+        _ => "source_unreadable",
+    }
 }
 pub fn owned_links(folder: &Path, items: &[Value]) -> Result<Option<String>> {
     fs::create_dir_all(folder)?;

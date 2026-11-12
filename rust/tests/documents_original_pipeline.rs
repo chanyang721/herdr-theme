@@ -183,9 +183,126 @@ fn test_stable_index_and_manifest_conflict_preserve_user_files() {
 fn test_inaccessible_or_missing_source_is_not_silently_reported_as_empty() {
     let f = Temp::new();
     let mut warnings = vec![];
-    assert!(pins::documents(&[json!(f.root.join("missing"))], &mut warnings, false).is_empty());
-    assert_eq!(warnings, vec!["source_unavailable"]);
+    let missing = f.root.join("missing");
+    assert!(pins::documents(&[json!(missing)], &mut warnings, false).is_empty());
+    assert_eq!(
+        warnings,
+        vec![
+            "source_unavailable".to_owned(),
+            format!("source_missing:{}", missing.display())
+        ]
+    );
 }
+#[test]
+fn test_match_terms_cover_the_folder_below_the_source_root() {
+    let f = Temp::new();
+    let guide = f.file("프로젝트/연동/Staging_가이드.md", "guide");
+    f.file("프로젝트_현황.md", "status");
+    f.file("다른곳/Staging_가이드.md", "other");
+    let rows = docs(
+        &[json!({"path":f.root,"match":["프로젝트".nfd().collect::<String>()]})],
+        false,
+    );
+    let mut paths = rows
+        .iter()
+        .map(|r| s(&r["path"]).to_owned())
+        .collect::<Vec<_>>();
+    paths.sort();
+    let mut expected = vec![
+        guide.to_string_lossy().into_owned(),
+        f.root
+            .join("프로젝트_현황.md")
+            .to_string_lossy()
+            .into_owned(),
+    ];
+    expected.sort();
+    assert_eq!(paths, expected);
+    let row = rows
+        .iter()
+        .find(|r| s(&r["path"]) == guide.to_string_lossy())
+        .unwrap();
+    assert_eq!(
+        row["relativePath"],
+        json!("프로젝트/연동/Staging_가이드.md")
+    );
+    assert_eq!(row["folder"], json!(f.root.join("프로젝트/연동")));
+}
+#[test]
+fn test_empty_and_unmatched_folders_are_named_not_silent() {
+    let f = Temp::new();
+    let empty = f.root.join("empty");
+    fs::create_dir_all(&empty).unwrap();
+    f.file("reports/other.md", "x");
+    let mut warnings = vec![];
+    let folders = [
+        json!(empty),
+        json!({"path":f.root.join("reports"),"match":["프로젝트"]}),
+    ];
+    assert!(pins::documents(&folders, &mut warnings, false).is_empty());
+    assert_eq!(
+        warnings,
+        vec![
+            format!("source_empty:{}", empty.display()),
+            format!("source_empty:{}", f.root.join("reports").display())
+        ]
+    );
+}
+#[test]
+fn test_a_file_given_as_a_folder_is_reported() {
+    let f = Temp::new();
+    let file = f.file("note.md", "x");
+    let mut warnings = vec![];
+    assert!(pins::documents(&[json!(file)], &mut warnings, false).is_empty());
+    assert_eq!(warnings[1], format!("source_not_dir:{}", file.display()));
+}
+#[test]
+#[cfg(unix)]
+fn test_unreadable_folder_is_reported_as_denied_and_others_still_list() {
+    use std::os::unix::fs::PermissionsExt;
+    if unsafe { libc::geteuid() } == 0 {
+        return; // root ignores mode bits
+    }
+    let f = Temp::new();
+    let locked = f.root.join("locked");
+    write(&locked, "secret.md", "x");
+    let open = f.file("open/plan.md", "x");
+    fs::set_permissions(&locked, fs::Permissions::from_mode(0o000)).unwrap();
+    let mut warnings = vec![];
+    let rows = pins::documents(
+        &[json!(locked), json!(f.root.join("open"))],
+        &mut warnings,
+        false,
+    );
+    fs::set_permissions(&locked, fs::Permissions::from_mode(0o755)).unwrap();
+    assert_eq!(rows.len(), 1);
+    assert_eq!(s(&rows[0]["path"]), open.to_string_lossy());
+    assert!(warnings.contains(&"source_unavailable".to_owned()));
+    assert!(warnings.contains(&format!("source_denied:{}", locked.display())));
+}
+#[test]
+#[cfg(unix)]
+fn test_unreadable_subfolder_with_no_matches_is_not_reported_empty() {
+    use std::os::unix::fs::PermissionsExt;
+    if unsafe { libc::geteuid() } == 0 {
+        return;
+    }
+    let f = Temp::new();
+    let locked = f.root.join("reports/프로젝트");
+    write(&locked, "가이드.md", "x");
+    f.file("reports/other.md", "x");
+    fs::set_permissions(&locked, fs::Permissions::from_mode(0o000)).unwrap();
+    let mut warnings = vec![];
+    let folders = [json!({"path":f.root.join("reports"),"match":["프로젝트"]})];
+    let rows = pins::documents(&folders, &mut warnings, false);
+    fs::set_permissions(&locked, fs::Permissions::from_mode(0o755)).unwrap();
+    assert!(rows.is_empty());
+    assert!(warnings.contains(&format!("source_denied:{}", locked.display())));
+    assert!(
+        !warnings.iter().any(|w| w.starts_with("source_empty:")),
+        "{warnings:?}"
+    );
+}
+
 #[test]
 fn test_korean_filename_and_match_accept_both_nfc_and_nfd_without_renaming() {
     for file_nfd in [false, true] {
