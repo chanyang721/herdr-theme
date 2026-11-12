@@ -1,72 +1,54 @@
 # Herdr Theme
 
-Coordinate coding agents across projects from one sidebar: see every workspace, follow live status and concurrent message routes, and expand subagent trees without leaving your current terminal.
+A workspace sidebar and terminal layout for Herdr. Follow coding agents, shared projects and messages across computers, with tools and usage limits beside your terminals.
 
-![Herdr Theme](preview.png)
+![Herdr Theme native demo](preview.png)
 
-## Why use it
+## Workflow and feature gallery
 
-| Capability | What it helps you do |
-| --- | --- |
-| All projects in one sidebar | Find the right workspace and agent without switching through tabs. |
-| Live agent state | See working, waiting, completed and blocked agents beside their names. |
-| Concurrent message routes | Follow who is sending work to whom, with multiple moving signals and per-agent unread counts. |
-| Expandable subagent trees | Trace delegated work to its parent and distinguish reported state from activity estimates. |
-| Project identity and deliberate focus | Recognize projects by icons and colored group borders while keeping keyboard and voice input on the intended pane. |
+![Nine workflow chapters, assembled from native demo captures](preview.gif)
+
+The walkthrough covers issue context, allocation, parallel work, messages, review requests, verdicts, acceptance, retained context and cleanup. It uses synthetic fixtures and editorial captions: it is not a recording of a real end-to-end task. The still above is a native demo capture, not a guarantee that every optional integration is configured.
+
+[English feature gallery](https://github.com/chanyang721/herdr-theme/blob/main/README.md) · [한국어 기능 안내](https://github.com/chanyang721/herdr-theme/blob/main/README.ko.md) · [Capture sources and timings](https://github.com/chanyang721/herdr-theme/blob/main/docs/media/workflow-manifest.json).
 
 ## What you see
 
-Left: a 224 px sidebar with the Herdr Theme title, language toggle, blocked/done/working counters,
-workspace navigation and agent rows under every workspace, even when inactive. Each group has a rounded border, more space between groups and a stable colored header marker.
-Workspace headers drag to reorder; incoming message badges update without changing focus. The center shows the active tab's actual terminals.
-Each pane has a 27 px title/status header, 5 px gaps and a 2 px accent border while focused.
-A 30 px footer names the actual input target. Terminals use the full work area. The default layout has no right panel or activity rail. Configured project documents appear in a compact left-sidebar section.
-The toolbar is 32 px and native tabs 34 px. Terminal fonts inherit personal settings.
-Night colors use #111821 terminals, #151f2a chrome, #79d1dc focus, #f5b56c blockers and #91cfaa completion.
-Day uses #f8fafb terminals and #176878 focus. Layout theme selection follows system appearance.
+- Computers and workspace groups with agent state, shared-project indicators, unread messages and optional issue-linked task trees.
+- Terminal headers with model, effort, session usage and animated agent state. Motion can be disabled.
+- Optional Workspace Mods indicators for CPU/RAM, MCP connections, CLI sign-in and account plan limits.
+- Workspace documents with search, pins and a document tab; an optional file viewer can preview Markdown.
+- A compact weekly header chip opening project work, a full timeline and issue detail in overlays. It does not need a permanent large timeline strip. The README shows a navigation diagram; a fresh native screenshot of this feature is not yet included.
+
+Keep the terminal area central. The default layout does not include the old input-target footer. Select rows deliberately; incoming messages and status changes must not steal keyboard focus. Preserve other layouts, user palettes and terminal settings.
 
 ## How it behaves
 
-Working is a solid dot, blocked an exclamation mark, done a check, idle an empty circle.
-Only reported states count; an unreported shell is never invented as a successful task.
-Click a row to focus it. Status changes never automatically jump keyboard focus.
-Agent rows carry their own status; there is no duplicate attention area or per-agent Ping control.
-All controls use the app's live IDs. Keyboard shortcuts are layout-scoped; the current tab layout is
-preserved across theme switches. Korean is the initial label language; the language toggle persists English/Korean.
-Terminal navigation never needs a network request. A 250 ms reconciliation reads an optional local message log without changing focus.
-Messages begin immediately on independent native, color-coded routes. Each route carries one moving packet per message, including simultaneous sends and replies.
-Completed routes remain dimly visible with direction-specific counts; replay never re-sends a message.
-The toolbar can disable motion. A logged send is not a read receipt or a verified reply.
+The theme displays observations supplied by Herdr and optional local feed producers. Working, idle, needs-human, unseen-result, cleanup-wait, closing and closed are distinct states. A finished response or a full progress bar alone is not task acceptance or proof of cleanup.
+
+The external harness owns task allocation, file ownership, result retention, acceptance and pane closure. The theme displays its events; installing this layout does not install or configure that service. Parent/child task trees and retained-result stages require the corresponding feed. Account connections and issue updates need separate setup and explicit application.
+
+Message animations require a compatible event adapter or configured local collector. As checked on 2026-11-12, core PR #90 closed unmerged and its successor #167 remains open. Do not assume stock core releases emit those native events. The proposed event uses `data.from` for the sender and envelope `terminal` for the recipient. A send observation is not a read receipt or completion. Automatic launch tasks, keys and automatic parent notes are excluded; allocation is represented separately by the harness feed. See the README compatibility section before enabling routes.
 
 ## Built from
 
-`layouts/sixfold.json` is a root row with a sidebar block and work column. The work column contains a toolbar,
-layout-local tabs, active-tab block with custom pane headers and input-target footer.
-`mods/sixfold-desk` renders sidebar/toolbar/pane/footer through `props.role`, using `spaces`, `panes`,
-`agents`, `terminals`, `focused`, `theme`, `shared`, `setShared`, `setAgentOrder`, `run` and `nextCommand`.
-The optional TUI attachment is a native POSIX PTY relay. `herdr-theme balance_grid` uses `doc.get` / `doc.set` over `hc connect`.
-Claude and Codex glyphs are original monochrome SVGs. Active glyphs gain color and move subtly; Motion off disables movement. Workspace headers support local project icons configured by workspace ID or exact name; unconfigured projects retain the colored letter mark. A native Bezier curve connects the actual sender and recipient rows inside the scrolling workspace tree; a moving clip reveals its bright transmission segment once. There are no external art assets. The preview in Settings is an original SVG schematic; `preview.png` is a real native capture.
+Use `layouts/sixfold.json`, `themes/sixfold-night.json`, `themes/sixfold-day.json` and the repository's `mods/` sources. The Rust `herdr-theme` helper installs the layout and pinned Workspace Mods described in `workspace-mods.lock.json`. Follow the README's build, install and update instructions instead of recreating an older screenshot's dimensions or chrome.
+
+Optional document-viewer and system-metrics packages are maintained at https://github.com/chanyang721/herdr-workspace-mods. Local project configuration belongs in ignored `*.local.json` files; start from `config/site.example.json`. No private project folders, credentials or real session identifiers belong in published media.
 
 ## Watch out
 
-Native TUI processes are not imported into the core; keep their source server running.
-A color theme cannot grant microphone permissions, restore authentication or implement dictation by itself.
-Core layout updates use the current document version and fail on a concurrent change instead of overwriting it.
-Herdr Theme's labels and status counters describe observations, not a task-completion guarantee.
-On small windows, reduce the sidebar width or zoom a pane rather than pretending all output fits.
-The package must not contain private project folders or session IDs. Demo fixtures are explicitly labelled.
+A theme cannot grant microphone access, restore authentication or implement dictation. Native TUI processes are not imported into core. Remote connections and optional producers need their own configuration. Linux has native helper support but its desktop UI has not been verified; voice and HTML snapshots require macOS.
 
 ## Done when
 
-- Model tests and JavaScript syntax checks pass.
-- `herdr-app check` passes for the installed mod, and live `status` has no errors.
-- Six real panes retain their IDs through balancing and theme changes.
-- Both appearances and label languages render correctly.
-- Keyboard pane navigation works; right-panel entry buttons stay hidden when no panel exists.
-- The gallery preview comes from actual rendered, clearly labelled demo terminals.
+- JavaScript and Rust checks pass for the source being installed.
+- The installed affected mods pass `herdr-app check`, and live status has no errors.
+- Existing terminal identities and user focus survive layout changes.
+- Both appearances and label languages render correctly; motion can be disabled.
+- Task and message labels distinguish observed input, acceptance and actual closure.
+- README links and tracked media resolve; synthetic captures are clearly labelled.
 
-Message counts reconcile every 250 ms independently of focus and file watcher consumers. Partial writes retain the previous snapshot. Optional routing files may be absent. Common-to-project routing uses an atomic idle guard and protects drafts, recording and pending questions; queue drain runs every two seconds while configured. Common alerts are a separate compact section above message flow and show only items needing the user. Subagent trees expand under each parent from local workflow metadata, including explicit status sources and labelled activity estimates. Parent agents remain visible without children. Workspace headers show agent totals but no message sum.
+## Public gallery synchronization
 
-Independent document-viewer and system-metrics packages, each with its own recipe and native demo, are published at https://github.com/chanyang721/herdr-workspace-mods. These optional mods are separate from the base layout.
-
-Configured project documents are collected by herdr-theme collect_docs from local folders. docs.js reads the index every two seconds and displays the latest five documents for the active workspace. Explicit file/folder clicks invoke VS Code with --reuse-window; nonzero exits stay visibly failed. Sources are never moved; only collector-owned links to vanished sources are removed. No schedule or project-specific settings are installed automatically.
+Herdr's gallery discovers the public repository using its `herdr-layout` topic. It reads this `RECIPE.md` and uses `preview.png` for the catalog thumbnail; the README's animated walkthrough is `preview.gif`. The gallery documents discovery within an hour and screens community pictures. A successful Git push does not prove that its cached page or thumbnail has refreshed: verify https://herdr.dev/layouts/chanyang721/herdr-theme/ separately.
