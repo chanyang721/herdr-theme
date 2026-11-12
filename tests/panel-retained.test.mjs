@@ -563,3 +563,53 @@ test('issue inputs keep the query across close/reopen, follow a card that leaves
   assert(cards.every(card=>card.released),'dispose releases the cards that own the inputs');
   assert.equal(r.controller.issueInputs.size,0,'dispose clears the input map');
 });
+
+// The catalog and the Linear project cache both name issue statuses; the one read later wins, and an
+// open window reads the timeline again on its look, so a change shows without reopening it.
+test('a newer project cache beats an older timeline status, an older one does not, and the cache fills missing keys',async()=>{
+  const now=Date.now(),file='/home/data/sixfold/week-timeline.json';let answer=null,timeline=null;globalThis.__retainedWrites=[];
+  globalThis.__retainedRead=path=>path===file?timeline:path.includes('/linear-cache/project-')?answer:null;
+  const r=await runtime(),tasks=[];
+  try{
+    r.controller.cx.spawn=fn=>{tasks.push(fn());};const settle=async()=>{while(tasks.length)await tasks.shift();};
+    const raw=makePanelFixture({tool:'linear'}),sp=raw.spaces[0];sp.name='Demo';
+    sp.issue_catalog={all:[],week:[],milestone:[],updated_at:new Date(now-600000).toISOString()};
+    r.controller.apply(cleanPanelFeed(raw),'ready');r.flush();
+    const feed=at=>JSON.stringify({v:2,updated:new Date(at).toISOString(),week:{start:'2026-11-09',end:'2026-11-15'},
+      projects:[{workspace:'Demo',milestones:[],issues:[{key:'DEMO-1',title:'One',state:'todo',status:'Todo'},{key:'DEMO-2',title:'Two',state:'todo'}]}]});
+    timeline=feed(now-120000);
+    answer=JSON.stringify({schema:1,state:'ok',space:'Demo',at:new Date(now-60000).toISOString(),milestones:[],
+      statuses:{Team:[{name:'Done',type:'completed'},{name:'Todo',type:'unstarted'}]},issues:[{key:'DEMO-1',status:'Done',team:'Team'},{key:'DEMO-2',status:'Todo',team:'Team'}]});
+    r.controller.issuePopover(r.controller.spaceMap.get(sp.id),element(),r.native.theme()).calls.find(c=>c[0]==='on_open_change')[1](true,{});await settle();
+    const statusOf=key=>{const card=r.controller.withTimeline(r.controller.spaceMap.get(sp.id));
+      return r.controller.issueExtra(card,{pending:new Map(),scope:'all'},{rows:card.issue_catalog.all}).statusOf(key);};
+    assert.deepEqual(statusOf('DEMO-1'),{name:'Done',type:'completed',color:''},'the cache read 60 s after the timeline wins');
+    assert.equal(statusOf('DEMO-2').name,'Todo','a key the timeline names no status for comes from the cache');
+    timeline=feed(now);r.controller.lookTimer.fn();await settle();
+    assert.equal(statusOf('DEMO-1').name,'Todo','a timeline newer than the cache wins');
+    assert.equal(statusOf('DEMO-1').type,'unstarted','its type is the cache team status of the same name');
+    assert.equal(statusOf('DEMO-2').name,'Todo');
+  }finally{r.controller.dispose();delete globalThis.__retainedWrites;delete globalThis.__retainedRead;}
+});
+
+test('an open issue window reads the timeline again on its look and shows a status changed meanwhile',async()=>{
+  const now=Date.now(),file='/home/data/sixfold/week-timeline.json';let timeline=null;
+  globalThis.__retainedWrites=[];globalThis.__retainedRead=path=>path===file?timeline:null;
+  const r=await runtime(),tasks=[];
+  try{
+    r.controller.cx.spawn=fn=>{tasks.push(fn());};const settle=async()=>{while(tasks.length)await tasks.shift();};
+    const raw=makePanelFixture({tool:'linear'}),sp=raw.spaces[0];sp.name='Demo';
+    sp.issue_catalog={all:[{key:'DEMO-1',title:'One',state:'waiting',status:'Todo'}],week:[],milestone:[],updated_at:new Date(now-600000).toISOString()};
+    r.controller.apply(cleanPanelFeed(raw),'ready');r.flush();
+    const feed=(at,state,status)=>JSON.stringify({v:2,updated:new Date(at).toISOString(),week:{start:'2026-11-09',end:'2026-11-15'},
+      projects:[{workspace:'Demo',milestones:[],issues:[{key:'DEMO-1',title:'One',state,status}]}]});
+    timeline=feed(now-60000,'todo','Todo');
+    r.controller.issuePopover(r.controller.spaceMap.get(sp.id),element(),r.native.theme()).calls.find(c=>c[0]==='on_open_change')[1](true,{});await settle();
+    const statusOf=()=>{const card=r.controller.withTimeline(r.controller.spaceMap.get(sp.id));
+      return r.controller.issueExtra(card,{pending:new Map(),scope:'all'},{rows:card.issue_catalog.all}).statusOf('DEMO-1');};
+    assert.equal(statusOf().name,'Todo');
+    timeline=feed(now,'done','완료');
+    const look=r.controller.lookTimer;assert(look,'the open window keeps looking');look.fn();await settle();
+    assert.deepEqual(statusOf(),{name:'완료',type:'completed',color:''},'the look read the newer timeline');
+  }finally{r.controller.dispose();delete globalThis.__retainedWrites;delete globalThis.__retainedRead;}
+});
