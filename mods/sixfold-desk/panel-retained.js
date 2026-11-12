@@ -10,7 +10,7 @@ import {projectPanelFeed,panelEventStates,panelSpaces,panelSpacePartners,PANEL_T
 import {panelLayout,cardView,agentRow,panelFlowLayer,panelCounts,PANEL_GEOMETRY,toolIcon,panelReasonWake,agentRowHeight,panelMetaHeight,rowArrival} from './panel-view.js';
 import {groupColors,paletteMode} from './collab-flow.js';
 import {issuePopover,alertedGroup} from './task-issues-view.js';
-import {issueScopeData,issueCacheLabel} from './task-issue-state.js';
+import {issueScopeData,issueCacheLabel,parseTimelineFeed,spaceWithTimeline,rowStatus,milestoneSource} from './task-issue-state.js';
 import {ensure,cached,waiting,checkCaches,anyWaiting,CACHE_POLL_MS} from './linear-cache.js';
 import {statusIndex,teamStatuses,statusFilters,filterRows,foldedCount,milestoneList,detailData} from './issue-model.js';
 import {nativeTaskSpace,hostedTaskLayout,panelWidthClass} from './panel-host.js';
@@ -199,11 +199,17 @@ export function createRetainedPanel(cx,{macTitlebar=false,onClassic=null,onDispo
     let memo=c.statusMemo.get(space.id);
     if(!memo||memo.project!==project){memo={project,index:statusIndex(project)};c.statusMemo.set(space.id,memo);}
     for(const id of c.statusMemo.keys())if(!c.spaceMap.has(id))c.statusMemo.delete(id);
-    const statusOf=project?key=>memo.index.get(key)||null:null;
+    // The timeline names each issue's Linear status; it wins over an older project cache.
+    let rowIndex=c.rowStatusMemo?.get(space.id);
+    if(!rowIndex||rowIndex.catalog!==space.issue_catalog){
+      rowIndex={catalog:space.issue_catalog,map:new Map((space.issue_catalog?.all||[]).filter(i=>i.status).map(i=>[i.key,rowStatus(i)]))};
+      (c.rowStatusMemo||(c.rowStatusMemo=new Map())).set(space.id,rowIndex);
+    }
+    const statusOf=project||rowIndex.map.size?key=>rowIndex.map.get(key)||memo.index.get(key)||null:null;
     const rows=data.rows||[];
     const lookup=statusOf||(()=>null);
     const unreadKeys=new Set(items.filter(i=>!i.read&&i.workspace===space.name&&i.issue).map(i=>i.issue));
-    const milestones=milestoneList(project,space.issue_catalog,unreadKeys);
+    const milestones=milestoneList(milestoneSource(space,project),space.issue_catalog,unreadKeys);
     const writes=shared('sixfold.linearWrites')??[];
     const onDetail=key=>{
       state.detail=key||null;state.menu=null;state.writeNote='';state.hoverKey=null;
@@ -324,7 +330,24 @@ export function createRetainedPanel(cx,{macTitlebar=false,onClassic=null,onDispo
     }
     if(changed)c.notify(c.cards.get(id));
   };
+  // The timeline feed (data/sixfold/week-timeline.json), read when an issue search opens; the window
+  // shows it instead of the catalog when it is newer. Memoized so the catalog identity stays stable.
+  c.timeline=null;c.timelineMemo=new Map();
+  c.loadTimeline=()=>{if(typeof c.cx.spawn!=='function')return;c.cx.spawn(async()=>{
+    let next=null;try{next=parseTimelineFeed(await readTextFile(`${appHome()}/data/sixfold/week-timeline.json`));}catch{}
+    // A file that cannot be read or is not whole is 'none': the catalog comes back, no older timeline is kept.
+    if(c.disposed||(next?.updated??null)===(c.timeline?.updated??null))return;
+    c.timeline=next;c.repaintIssues();});};
+  c.withTimeline=space=>{
+    const memo=c.timelineMemo.get(space.id);
+    if(memo&&memo.space===space&&memo.timeline===c.timeline)return memo.result;
+    const result=spaceWithTimeline(space,c.timeline);
+    c.timelineMemo.set(space.id,{space,timeline:c.timeline,result});
+    for(const id of c.timelineMemo.keys())if(!c.spaceMap.has(id))c.timelineMemo.delete(id);
+    return result;
+  };
   c.issuePopover=(space,trigger,t)=>{
+    space=c.withTimeline(space);
     const state=c.issueStates.get(space.id);
     let data={};
     if(state?.open){
@@ -367,7 +390,7 @@ export function createRetainedPanel(cx,{macTitlebar=false,onClassic=null,onDispo
         if(open)for(const [id,other] of c.issueStates)if(id!==space.id&&other.open){other.open=false;c.notify(c.cards.get(id));}
         current.open=open;
         if(!open){current.detail=null;current.menu=null;current.hoverKey=null;}
-        else c.askLinear('project',space.name);
+        else{c.askLinear('project',space.name);c.loadTimeline();}
         c.notify(c.cards.get(space.id));
       }),
       onScope:scope=>{if(state&&state.scope!==scope){state.scope=scope;c.notify(c.cards.get(space.id));}},

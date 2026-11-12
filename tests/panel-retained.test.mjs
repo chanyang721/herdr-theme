@@ -20,7 +20,7 @@ async function runtime(motion=false,options={}){
   const path=()=>new Proxy({},{get:(_t,key)=>key==='build'?()=>[]:()=>path()});
   globalThis.__retainedRuntime={View:class{},div:element,svg:element,image:element,h_flex:element,v_flex:element,Popover:{new:element},Input:{new:element},InputState:{new:()=>({events:new Map(),text:'',on(name,callback){this.events.set(name,callback);},value(){return this.text;}})},PathBuilder:{stroke:path},
     theme:()=>({background:'#101318',chrome:'#14191f',surface:'#1b232d',border:'#39434f',selected:'#253249',foreground:'#e5edf5',muted:'#a6b0bf',dim:'#788594',accent:'#a9b8ff',ansi6:'#68c9bc',blocked:'#edac67',hover:'#253249',...globalThis.__retainedThemePatch}),
-    window:()=>({active:false,visible:globalThis.__retainedHostVisible}),spaces:()=>globalThis.__retainedNativeSpaces,panes:()=>[],shared:key=>store.get(key),setShared:(key,value)=>store.set(key,value),run(){},settings:()=>({zoom:1})};
+    window:()=>({active:false,visible:globalThis.__retainedHostVisible}),spaces:()=>globalThis.__retainedNativeSpaces,panes:()=>[],shared:key=>store.get(key),setShared:(key,value)=>store.set(key,value),run(){},settings:()=>({zoom:1}),appHome:()=>'/home',readTextFile:path=>globalThis.__retainedFiles?.[path]===undefined?Promise.reject(new Error('missing')):Promise.resolve(globalThis.__retainedFiles[path])};
   globalThis.window={paint_path:element};
   const transform=source=>source.replace(/import \{([^}]+)\} from '(?:gpui-kit|gpui-base|herdr)';/g,'const {$1}=globalThis.__retainedRuntime;');
   const localModule=async name=>`data:text/javascript;base64,${Buffer.from(transform(await readFile(new URL(`../mods/sixfold-desk/${name}.js`,import.meta.url),'utf8')).replace("'./alert-model.js'",JSON.stringify(new URL('../mods/sixfold-desk/alert-model.js',import.meta.url).href)).replace("'./issue-model.js'",JSON.stringify(new URL('../mods/sixfold-desk/issue-model.js',import.meta.url).href)).replace("'./issue-detail-view.js'",JSON.stringify(globalThis.__detailViewUrl||''))).toString('base64')}#${loads++}`;
@@ -396,4 +396,26 @@ test('a peek is the alerted-issues top of a space issue search with the new aler
     assert.equal(r.controller.issueStates.get(space.id).open,true);
     assert.equal(r.controller.anyIssuesOpen(),true,'an open issue search: new alerts only count on the chip');
   }finally{r.controller.dispose();}
+});
+
+test('a timeline that breaks after a good read gives the catalog back instead of the old timeline',async()=>{
+  const r=await runtime(false);
+  const raw=makePanelFixture({tool:'linear'}),space=raw.spaces[0];
+  space.name='Demo';space.issue_catalog={week:[space.issues[0]],milestone:[],all:[space.issues[0]],import_request:null,updated_at:'2026-11-10T01:00:00Z'};
+  r.controller.apply(cleanPanelFeed(raw),'ready');r.flush();
+  const card=r.controller.spaceMap.get(space.id),file='/home/data/sixfold/week-timeline.json';
+  r.controller.cx.spawn=fn=>fn();
+  const good=JSON.stringify({v:2,updated:'2026-11-12T06:30:00Z',week:{start:'2026-11-09',end:'2026-11-15'},projects:[{key:'D',workspace:'Demo',milestones:[],
+    issues:[{key:'NEW-1',title:'From timeline',state:'started',due:'2026-11-12'}]}]});
+  const settle=async()=>{r.controller.loadTimeline();for(let i=0;i<5;i++)await Promise.resolve();};
+  globalThis.__retainedFiles={[file]:good};await settle();
+  assert.deepEqual(r.controller.withTimeline(card).issue_catalog.all.map(i=>i.key),['NEW-1']);
+  globalThis.__retainedFiles={[file]:'{broken'};await settle();
+  assert.equal(r.controller.timeline,null,'the old timeline is not kept');
+  assert.equal(r.controller.withTimeline(card).issue_catalog,card.issue_catalog,'the catalog is back');
+  globalThis.__retainedFiles={[file]:good};await settle();
+  assert.equal(r.controller.withTimeline(card).issue_catalog.all[0].key,'NEW-1','a repaired file is used again');
+  globalThis.__retainedFiles={};await settle();
+  assert.equal(r.controller.timeline,null,'a missing file is none');
+  delete globalThis.__retainedFiles;
 });
