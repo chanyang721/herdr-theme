@@ -1,8 +1,9 @@
 import test from 'node:test';
 import {weekSummary} from '../mods/week-timeline/summary.js';
 import {parseFeed} from '../mods/week-timeline/model.js';
+import {milestoneList} from '../mods/sixfold-desk/issue-model.js';
 import assert from 'node:assert/strict';
-import {issueScopeData,issueCacheLabel,issueRequest,saveIssueRequest,parseTimelineFeed,spaceWithTimeline,rowStatus,weekMembers} from '../mods/sixfold-desk/task-issue-state.js';
+import {issueScopeData,issueCacheLabel,issueRequest,saveIssueRequest,parseTimelineFeed,spaceWithTimeline,rowStatus,weekMembers,milestoneSource} from '../mods/sixfold-desk/task-issue-state.js';
 const a={key:'DEMO-1',title:'Build panel',state:'working'},b={key:'DEMO-2',title:'Search é',state:'done',pinned:true,milestone_id:'m1'};
 const space={id:'s-demo',work:{tool:'linear'},issues:[a,b],issue_catalog:{week:[a],milestone:[b],all:[a,b],milestones:[{id:'m1',name:'Release',due:'2026-11-13',progress:0}],import_request:{path:'panel-issue-requests',space:'s-demo'}}};
 test('scopes preserve natural week and explicit pins; search remains local',()=>{
@@ -102,4 +103,24 @@ test('Linear status names from the timeline become the window status mark',()=>{
   assert.equal(rowStatus({status:'In Review'}).type,'started');assert.equal(rowStatus({}),null);
   const out=spaceWithTimeline(named,parseTimelineFeed(feedText('2026-11-12T15:30:00+09:00')));
   assert.equal(out.issue_catalog.all.find(i=>i.key==='DEMO-7').status,'In Progress');
+});
+
+test('an older project cache never overrides the newer timeline milestones; a newer cache still does',()=>{
+  const out=spaceWithTimeline(named,parseTimelineFeed(feedText('2026-11-12T15:30:00+09:00')));
+  const old={at:'2026-11-10T01:00:00Z',milestones:[{id:'m-old',name:'Old name',progress:5}],issues:[{key:'DEMO-1',milestone_id:'m-old'}]};
+  assert.equal(milestoneSource(out,old),null);
+  const list=milestoneList(milestoneSource(out,old),out.issue_catalog);
+  assert.deepEqual(list.map(m=>[m.id,m.name,m.progress]),[['m9','Launch',40]],'catalog (timeline) milestones, not the old cache');
+  assert.equal(milestoneSource(out,{...old,at:'2026-11-12T08:00:00Z'}).milestones[0].id,'m-old','a cache newer than the timeline wins');
+  assert.equal(milestoneSource(named,old),old,'a catalog not made from the timeline keeps the cache');
+});
+test('a timeline file that is not whole is none and keeps the old catalog',()=>{
+  const good=JSON.parse(feedText('2026-11-12T15:30:00+09:00'));
+  const broken=[{...good,projects:[{key:'DEM',workspace:'Demo'}]},{...good,projects:[{key:'DEM',workspace:'Demo',issues:'broken'}]},
+    {...good,projects:[{...good.projects[0],milestones:'x'}]},{...good,projects:[null]},{...good,week:{}},{...good,projects:'x'},{...good,updated:'nope'}];
+  for(const value of broken){
+    assert.equal(parseTimelineFeed(JSON.stringify(value)),null,JSON.stringify(value).slice(0,80));
+    assert.equal(spaceWithTimeline(named,parseTimelineFeed(JSON.stringify(value))),named,'old catalog stays, never an empty list');
+  }
+  assert.equal(parseTimelineFeed(JSON.stringify({...good,projects:[{...good.projects[0],issues:[]}]})).projects[0].issues.length,0,'a whole file with no issues is still valid');
 });
