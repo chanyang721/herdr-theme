@@ -1,0 +1,80 @@
+{
+  "schema": 1,
+  "kind": "editorial walkthrough of native fixtures",
+  "canvas": [
+    1280,
+    1000
+  ],
+  "duration_ms": 45600,
+  "intro": {
+    "source": "docs/images/overview-native.gif",
+    "frames": 34,
+    "duration_ms": 5100,
+    "source_sha256": "17053ce3c180d5e71a0a6b4efcc1eaccfa9266634587694b76f5cba38c2f6bfc"
+  },
+  "scenes": [
+    {
+      "step": "01",
+      "title": "Choose the project",
+      "source": "docs/images/panel-feed/issues-milestone.png",
+      "source_sha256": "17bb8ca21453ed458d93e080422f0e7632e568d810b9ea07c91816d61a4a7ddb",
+      "duration_ms": 4500
+    },
+    {
+      "step": "02",
+      "title": "Delegate the work",
+      "source": "docs/images/panel-feed/event-dispatch-existing.png",
+      "source_sha256": "5f265c64bcf7139ad658e5d76d44b954ebe4772bca5964e05ddf866fcf2d7a02",
+      "duration_ms": 4500
+    },
+    {
+      "step": "03",
+      "title": "Work in parallel",
+      "source": "docs/images/panel-feed/tree-expanded.png",
+      "source_sha256": "888e2a6a053cdc9a9d6c48dd14ac874253a904592742db2259b26c7d86494f59",
+      "duration_ms": 4500
+    },
+    {
+      "step": "04",
+      "title": "Follow messages",
+      "source": "docs/images/panel-feed/local-message.png",
+      "source_sha256": "3328827457fc73702598cb9b07d9d994e500fd417cd8e95b8d4ac64bca1d0c16",
+      "duration_ms": 4500
+    },
+    {
+      "step": "05",
+      "title": "Request a review",
+      "source": "docs/images/panel-feed/event-review_request.png",
+      "source_sha256": "4020a86c642f8339a6f6ca053dd4eda2df669a3b57313717698f060b5f9955b1",
+      "duration_ms": 4500
+    },
+    {
+      "step": "06",
+      "title": "Inspect the result",
+      "source": "docs/images/panel-feed/event-verdict.png",
+      "source_sha256": "6939c3ec0253a534fc7a2f8ae8b7aea0e08367ba684efe4c3ccd3bce01416687",
+      "duration_ms": 4500
+    },
+    {
+      "step": "07",
+      "title": "Accept the report",
+      "source": "docs/images/panel-feed/event-accept.png",
+      "source_sha256": "8ce86ef834223e9c40554ddb65bf532f4574675a1dbe3aaa80bb988f4aa76c05",
+      "duration_ms": 4500
+    },
+    {
+      "step": "08",
+      "title": "Preserve the context",
+      "source": "docs/images/panel-feed/closing-memory-2.png",
+      "source_sha256": "a3bd79b5253d34654f2fb7f5180cd3eb4bd0300ea7d0bba221f089103683b2a3",
+      "duration_ms": 4500
+    },
+    {
+      "step": "09",
+      "title": "Finish the lifecycle",
+      "source": "docs/images/panel-feed/closing-memory-4-hidden.png",
+      "source_sha256": "1f2e0708519dbd1c13af5a331ca28d14e9cb4ba202457f417810cf5f38af22ac",
+      "duration_ms": 4500
+    }
+  ]
+}
