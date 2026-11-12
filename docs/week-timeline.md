@@ -1,28 +1,40 @@
-# Week timeline (헤더 칩과 타임라인 오버레이)
+# Week timeline (헤더 아래 요일 띠와 타임라인 오버레이)
 
 `mods/week-timeline` draws three things from files under `~/.config/herdr-app/data/sixfold/`.
 The theme never talks to Linear itself.
 
 | | What | Where |
 |---|---|---|
-| A | This week's open work count and today's deadline count; click for project › top issue › work item, with deadline markers | one `week-timeline-chip` in the MCP header row; its dialog floats over the panes |
+| A | This week by day: deadline chips in each day cell and one 진행 중 line; +N or the summary opens project › top issue › work item, with deadline markers | an 80 px `week-timeline` block under the header; its dialog floats over the panes |
 | B | Project timeline: milestones ①… with progress bars and target ◆, my issues under them | a window over the panes, from **프로젝트 전체 타임라인 ↗**; **이번 주로 접기** closes it |
 | C | One issue: 요약 (description, to-do list, related issues, Herdr 작업 연결), 댓글, 알림 | a panel on the right over the panes (dialog, the rest dimmed); ✕, Esc or a click beside it closes it |
 
 The title row (`HERDR THEME / WORKSPACE`) and bottom `입력 대상` footer are gone. The footer
 renderer in `sixfold-desk` remains available to other layouts.
 
-A is a 20 px chip in the existing header row: `이번 주 5 · 오늘 1 ●`. It counts open work
-selected by the week model (completed work contributes to parent progress, not the chip count).
-Today's count uses the deadline, else milestone target. The dot is red for overdue work,
-accented for today's work, otherwise muted. A missing feed shows dashes until data loads.
+A is an 80 px band under the header, above the tabs: a 132 px label (`이번 주`, the dates,
+`마감 N · 진행 N`), then seven day cells (Mon–Sun; today accented with `오늘`, weekend darker).
+Rows are 22 px day names, 30 px deadline chips and a 26 px `진행 중` line.
 
-Clicking the chip opens a `dialog` over the panes. It takes no layout space. The transparent
+- A real deadline (`due`) this week puts `◆ KEY 제목` (title cut with …) in that day's cell:
+  today and tomorrow orange. All late work (before today, this week or earlier) is red and sits
+  first in Monday's cell, oldest first. A crowded cell folds into `+N`.
+- Other started or in-review work goes on the `진행 중` line as `● KEY 제목 → 12/3`, or
+  `→ 11/14 목표` when only its milestone has a target, or `→ 날짜 없음`. A milestone target is
+  never a deadline chip or count. The line folds into `+N` past one row; with no room at all it
+  still shows one `+N`. `프로젝트 전체 ↗` at its end opens B.
+- The band picks issues one by one, not by the dialog's parent groups: a parent and its child
+  each appear on their own deadline. There is no tree, table, long bar or epic progress in it. A missing feed is one grey line; an empty week says
+  `이번 주 할 일 없음`. A failed refresh or an unset producer is grey text before `프로젝트 전체 ↗`.
+
+A chip opens its issue (C). The summary or a `+N` opens the week `dialog` over the panes.
+
+The dialog takes no layout space. The transparent
 backdrop, ✕, or native Esc closes it; inside clicks stay inside. Herdr owns dialog focus and
 returns to the original pane on close. The table has project filters, 1/2-week controls,
 issue detail links, and the full project timeline link. The latter closes the week dialog
-before opening B. Only the chip runs the existing producer timer; the open dialog reads
-the same local feed. There is no expansion state, dynamic band height, or chip-row resizing.
+before opening B. Only the band runs the existing producer timer; the open dialog reads
+the same local feed. The band's height is fixed; there is no expansion state or dynamic resizing.
 
 The dialog fits the window (65% height, at most 420 px) and scrolls within it. Text is 12 px,
 with only parent issue titles semibold, and rows are 24 px with quiet theme-derived rules.
@@ -34,7 +46,7 @@ the tooltip names that source. Parent issue rows keep progress only on the left.
 The tree sorts by deadline, else milestone target, with undated work last. On the same day:
 in progress, to do, review, then issue key. Projects and parent groups sort by the earliest
 work inside them, including when folded. Issue membership and the feed/collector contracts
-are unchanged. `summary.js` computes chip counts from that same selection.
+are unchanged. `summary.js` keeps the dialog's selection for its counts and builds the band issue by issue.
 
 ## Files
 
