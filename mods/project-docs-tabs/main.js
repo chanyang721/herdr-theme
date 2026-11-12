@@ -4,7 +4,7 @@ import { props, appHome, readTextFile, exec, watchFolder, theme, settings, share
 import { stageMarkdown } from './vendor/markdown.js';
 import { dirname, resolveLink } from './vendor/paths.js';
 import { mermaidFences, applyDiagrams } from './mermaid.js';
-import { locations, locate, listTree, searchTree, kindCounts, foldersOf } from './tree.js';
+import { locations, locate, listTree, searchTree, kindCounts, foldersOf, describeWarnings } from './tree.js';
 import { columnView } from './column-view.js';
 import { listView, breadcrumb, icon } from './finder.js';
 
@@ -454,7 +454,7 @@ export default class ProjectDocuments extends View {
       .child(h_flex().flex_none().border_b(1).border_color(t.border).child(breadcrumb(crumbRoot, crumbs, { id: 'docs-path', theme: t,
         onJump: (depth, cx) => { if (this.query.trim()) return; this.colPath = depth < 0 ? '' : crumbs[depth]?.path ?? this.colPath; this.remember(); cx.notify(); } })))
       .when(Boolean(this.listError), el => el.child(notice(`목록 확인 실패 · 마지막 목록 유지: ${this.listError}`)))
-      .when(Boolean(this.warnings?.length), el => el.child(notice(`조회 주의: ${this.warnings.join(', ')}`)))
+      .when(Boolean(this.warnings?.length), el => el.child(v_flex().children(describeWarnings(this.warnings).map(line => notice(`조회 주의 · ${line}`)))))
       .when(Boolean(this.actionError), el => el.child(notice(this.actionError)))
       .when(Boolean(this.copied), el => el.child(notice(this.copied)));
     const browserWidth = this.view === 'list' || this.query.trim() ? 480 : 2 * COLUMN + 24;

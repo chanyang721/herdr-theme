@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { resolveLink } from '../mods/project-docs-tabs/vendor/paths.js';
 import { mermaidFences, applyDiagrams } from '../mods/project-docs-tabs/mermaid.js';
-import { locations, locate, listTree, searchTree, kindCounts, foldersOf, shortDate, matches } from '../mods/project-docs-tabs/tree.js';
+import { locations, locate, listTree, searchTree, kindCounts, foldersOf, shortDate, matches, describeWarnings } from '../mods/project-docs-tabs/tree.js';
 
 const document = (id, path = `/docs/${id}.md`, pinned = true) => ({ id, path, pinned, label: id, name: path.split('/').at(-1), status: 'ok' });
 const deferred = () => { let resolve, reject; const promise = new Promise((yes, no) => { resolve = yes; reject = no; }); return { promise, resolve, reject }; };
@@ -423,4 +423,14 @@ test('old tabs use the native resolver and an explicit native command remains co
   assert.deepEqual(external.calls[0], {command:'python3',args:['/custom/resolve_doc_pins.py','--config','/app/data/sixfold/project-docs-pins.json','--space','Demo']});
   const similar = await localViews({ props: { python:'/custom/python', resolverScript: '/custom/data/sixfold/doc-tabs/resolve_doc_pins.py' } });
   assert.deepEqual(similar.calls[0], {command:'/custom/python',args:['/custom/data/sixfold/doc-tabs/resolve_doc_pins.py','--config','/app/data/sixfold/project-docs-pins.json','--space','Demo']});
+});
+
+test('folder warnings name the path and tell missing, denied and empty apart', () => {
+  assert.deepEqual(describeWarnings(['source_unavailable', 'source_denied:/Users/u/Documents/Reports', 'source_missing:/x/자료']), [
+    '접근 불가(접근 권한 확인): /Users/u/Documents/Reports',
+    '경로 없음: /x/자료',
+  ]);
+  assert.deepEqual(describeWarnings(['source_empty:/r/연동']), ['맞는 문서 없음: /r/연동']);
+  assert.deepEqual(describeWarnings(['source_unavailable']), ['문서 폴더를 읽지 못함']);
+  assert.deepEqual(describeWarnings(['manifest_conflict']), ['manifest_conflict']);
 });
