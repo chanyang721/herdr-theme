@@ -2,6 +2,8 @@ import { div, image } from 'gpui-kit';
 import { h_flex, v_flex, Popover } from 'gpui-base';
 import { shared, setShared } from 'herdr';
 import { scopedAlerts, alertVersion, linearScoped, changeLines, linearCategory, popoverOpen, popoverRows, projectKey, alertKind, alertLine, kindTone } from './alert-model.js';
+import { feedNames, namesFor, alertTitle, readable } from './alert-slack.js';
+import { fileChips, loadFileText, localNames } from './alert-files.js';
 
 // A small surface beside a space card: the newest Slack and Linear alerts of that
 // space, opened by its alert badges or by a new alert. The full inboxes stay one
@@ -15,6 +17,14 @@ export function showPopover(space, source, {auto = false} = {}) {
   setShared(STATE, {space, source, auto, boot: BOOT, at: Date.now()});
 }
 export const hidePopover = () => setShared(STATE, {});
+// Which attachment's text the open popover shows (`<alert id>|<file id>`, or none). It lives in the
+// popover state, which the retained card's key already carries, so the card redraws with it.
+const showFile = key => { const state = popoverState(); if (state?.space) setShared(STATE, {...state, file: key, at: Date.now()}); };
+const viewFile = (key, file, cx) => {
+  showFile(key); cx.notify();
+  if (key) cx.spawn(async cx => { await loadFileText(file.id); if (popoverState()?.file === key) { showFile(key); cx.notify(); } });
+};
+const downloadFile = (file, cx) => cx.open_url(file.link);
 // A card's alert popover is open now: this run's own state, not expired (a value left from
 // an earlier run or an hour ago does not count).
 export const alertPopoverOpen = (now = Date.now()) => {
@@ -30,18 +40,26 @@ const short = at => {
 };
 const line = (value, color, size = 12) => div().min_w(0).truncate().text_size(size).text_color(color).child(String(value ?? ''));
 
-function slackRows(project, t, fresh = new Set()) {
+// A Slack row: "보낸 사람 → 받는 사람" and the time, the text with its tags spelled as names, and
+// its attachments. `interactive` is off for the arrival peek (read-only, takes no focus).
+function slackRows(project, t, fresh = new Set(), interactive = true) {
   const read = shared('sixfold.alertRead') ?? {};
   const unread = item => read[item.id] !== alertVersion(item);
-  const items = scopedAlerts(shared('sixfold.alertItems') ?? [], {project});
-  return {unread: items.filter(unread).length, rows: popoverRows(items, 5, unread).map((item, i) =>
-    v_flex().id(`sf-alert-pop-slack-${i}`).gap(2).p(8).rounded(6).bg(unread(item) ? t.selected : t.chrome)
+  const all = shared('sixfold.alertItems') ?? [], feed = feedNames(all), site = localNames(), items = scopedAlerts(all, {project});
+  const open = interactive ? popoverState()?.file ?? null : null;
+  return {unread: items.filter(unread).length, rows: popoverRows(items, 5, unread).map((item, i) => {
+    const text = readable(item.text || item.title || '', namesFor(item, feed, site), item.mentions);
+    const files = fileChips(item, t, {id: `sf-alert-pop-slack-${i}`, open,
+      onView: interactive ? viewFile : null, onDownload: interactive ? downloadFile : null});
+    return v_flex().id(`sf-alert-pop-slack-${i}`).gap(2).p(8).rounded(6).bg(unread(item) ? t.selected : t.chrome)
       .when(fresh.has(item.id), e => e.border(1).border_color(t.ansi5 || t.accent))
       .child(h_flex().gap(6).items_center()
         .child(div().size(6).flex_none().rounded(3).bg(unread(item) ? t.accent : t.border))
-        .child(line(item.author || 'Slack', t.foreground, 12).font_bold().flex_1())
+        .child(line(alertTitle(item, feed, site), t.foreground, 12).font_bold().flex_1())
         .child(line(short(item.at), t.dim, 10).flex_none()))
-      .child(line(item.text || item.title || '', t.muted, 12).tooltip(String(item.text || item.title || '').slice(0, 400))))};
+      .child(line(text, t.muted, 12).tooltip(text.slice(0, 400)))
+      .when(Boolean(files), e => e.child(files));
+  })};
 }
 
 function linearRows(project, t) {
@@ -101,7 +119,7 @@ export function alertPopover({id, project, trigger, t, hasSlack, hasLinear, onAl
 // A peek: the Slack alerts of a space opened by new alerts beside its card (the arrival layer
 // draws it in a Popup, which takes no focus); the ones just arrived are lit. Read-only.
 export function slackPeek(project, t, fresh = [], onAll = null) {
-  const data = slackRows(project, t, new Set(fresh));
+  const data = slackRows(project, t, new Set(fresh), false);
   if (!data.rows.length) return null;
   return v_flex().id(`sf-alert-peek-${projectKey(project)}`).w(400).gap(8).p(12).rounded(10).border(1).border_color(t.ansi5 || t.accent)
     .bg(t.popover || t.surface).text_color(t.foreground)
