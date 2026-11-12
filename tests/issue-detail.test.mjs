@@ -164,8 +164,9 @@ test('read requests only when missing or old; force at most every 30 s; answered
   files.set('/home/data/sixfold/linear-cache/issue-DEMO-1.json',JSON.stringify({schema:1,key:'DEMO-1',at:new Date(now+5000).toISOString(),state:'ok',issue:{key:'DEMO-1'}}));
   assert.equal(await cache.checkCaches({read:stub.readTextFile,home:'/home',now:now+6000}),true);
   assert(!cache.waiting('issue','DEMO-1',now+6000));assert.equal(cache.cached('issue','DEMO-1').issue.key,'DEMO-1');
-  await cache.ensure('issue','DEMO-1',{now:now+2*60*1000,...io});assert.equal(written.length,1,'fresh for 5 minutes');
+  await cache.ensure('issue','DEMO-1',{now:now+35*1000,...io});assert.equal(written.length,1,'fresh for 40 s');
   await cache.ensure('issue','DEMO-1',{now:now+6*60*1000,...io});assert.equal(written.length,2,'old: read again');
+  assert.equal(written.at(-1)[1].force,true,'a good answer old here is asked past the runner’s own 5 min freshness');
   await cache.ensure('issue','DEMO-1',{now:now+6*60*1000+1000,force:true,...io});assert.equal(written.at(-1)[1].force,true);
   await cache.ensure('issue','DEMO-1',{now:now+6*60*1000+5000,force:true,...io});assert.equal(written.length,3,'force at most every 30 s');
   await cache.ensure('issue','../etc',{now,...io});await cache.ensure('project','',{now,...io});assert.equal(written.length,3,'invalid targets ask nothing');
@@ -177,6 +178,26 @@ test('read requests only when missing or old; force at most every 30 s; answered
   // The same table as the collector's test (space_slug): one '-' per code point, ASCII-only lowering.
   for(const [name,slug] of [['가나','---a2ecb730'],['Team 🚀 X','team---x-ed51bf5b'],['İx','-x-c8fa95b3'],['\ud800a','-a-54bad7b1']])
     assert.equal(cache.projectSlug(name),slug,name);
+});
+
+test('the panel’s one-minute rule: a space read 61 s or 599 s ago is asked for again, with force while the answer is good',async()=>{
+  const files=new Map(),written=[];
+  const stub={appHome:()=>'/home',readTextFile:async path=>{if(!files.has(path))throw new Error('missing');return files.get(path);},
+    writeTextFile:async(path,text)=>{written.push(JSON.parse(text));}};
+  const now=Date.parse('2026-11-12T08:00:00Z'),io={read:stub.readTextFile,write:stub.writeTextFile,home:'/home'};
+  for(const age of [61,599]){
+    const cache=await cacheModule(stub);written.length=0;
+    files.set(`/home/data/sixfold/linear-cache/project-${cache.projectSlug('Alpha')}.json`,JSON.stringify({schema:1,space:'Alpha',at:new Date(now).toISOString(),state:'ok',milestones:[],issues:[]}));
+    await cache.ensure('project','Alpha',{now:now+30*1000,...io});assert.equal(written.length,0,`${age}: fresh at 30 s`);
+    await cache.ensure('project','Alpha',{now:now+age*1000,...io});
+    assert.equal(written.length,1,`${age}: asked again`);assert.equal(written[0].force,true);assert.equal(written[0].space,'Alpha');
+    await cache.ensure('project','Alpha',{now:now+age*1000+10*1000,...io});assert.equal(written.length,1,`${age}: not asked twice while the answer is on its way`);
+    assert(!cache.waiting('project','Alpha',now+age*1000)||cache.cached('project','Alpha'),'what was read stays on screen meanwhile');
+  }
+  // A failed answer is read again without force (the runner reads anything not ok).
+  const cache=await cacheModule(stub);written.length=0;
+  files.set(`/home/data/sixfold/linear-cache/project-${cache.projectSlug('Alpha')}.json`,JSON.stringify({schema:1,space:'Alpha',at:new Date(now).toISOString(),state:'error',error:'x',milestones:[],issues:[]}));
+  await cache.ensure('project','Alpha',{now:now+61*1000,...io});assert.equal(written.length,1);assert.equal(written[0].force,undefined);
 });
 
 test('a late answer still lands after the 읽는 중 spinner has ended',async()=>{

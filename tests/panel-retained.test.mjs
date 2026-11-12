@@ -20,7 +20,9 @@ async function runtime(motion=false,options={}){
   const path=()=>new Proxy({},{get:(_t,key)=>key==='build'?()=>[]:()=>path()});
   globalThis.__retainedRuntime={View:class{},div:element,svg:element,image:element,h_flex:element,v_flex:element,Popover:{new:element},Input:{new:element},InputState:{new:()=>({events:new Map(),text:'',on(name,callback){this.events.set(name,callback);},value(){return this.text;}})},PathBuilder:{stroke:path},
     theme:()=>({background:'#101318',chrome:'#14191f',surface:'#1b232d',border:'#39434f',selected:'#253249',foreground:'#e5edf5',muted:'#a6b0bf',dim:'#788594',accent:'#a9b8ff',ansi6:'#68c9bc',blocked:'#edac67',hover:'#253249',...globalThis.__retainedThemePatch}),
-    window:()=>({active:false,visible:globalThis.__retainedHostVisible}),spaces:()=>globalThis.__retainedNativeSpaces,panes:()=>[],shared:key=>store.get(key),setShared:(key,value)=>store.set(key,value),run(){},settings:()=>({zoom:1})};
+    window:()=>({active:false,visible:globalThis.__retainedHostVisible}),appHome:()=>'/home',
+    readTextFile:async path=>{const text=globalThis.__retainedRead?.(path);if(text==null)throw new Error('missing');return text;},
+    writeTextFile:async(path,text)=>{if(!globalThis.__retainedWrites)throw new Error('no writes here');globalThis.__retainedWrites.push([path,JSON.parse(text)]);},spaces:()=>globalThis.__retainedNativeSpaces,panes:()=>[],shared:key=>store.get(key),setShared:(key,value)=>store.set(key,value),run(){},settings:()=>({zoom:1})};
   globalThis.window={paint_path:element};
   const transform=source=>source.replace(/import \{([^}]+)\} from '(?:gpui-kit|gpui-base|herdr)';/g,'const {$1}=globalThis.__retainedRuntime;');
   const localModule=async name=>`data:text/javascript;base64,${Buffer.from(transform(await readFile(new URL(`../mods/sixfold-desk/${name}.js`,import.meta.url),'utf8')).replace("'./alert-model.js'",JSON.stringify(new URL('../mods/sixfold-desk/alert-model.js',import.meta.url).href)).replace("'./issue-model.js'",JSON.stringify(new URL('../mods/sixfold-desk/issue-model.js',import.meta.url).href)).replace("'./issue-detail-view.js'",JSON.stringify(globalThis.__detailViewUrl||''))).toString('base64')}#${loads++}`;
@@ -272,6 +274,32 @@ test('an explicit local partner rename updates its chips without invalidating ag
   r.controller.apply(cleanPanelFeed(next),'ready');r.flush();
   assert.deepEqual(Object.keys(r.controller.stats.renders).filter(key=>renamed[key]!==r.controller.stats.renders[key]).sort(),[`space:${a.id}`,`space:${b.id}`,'flows:all'].sort());
   r.controller.dispose();
+});
+
+test('an open issue search asks again as its answer gets old (within a minute); closing it stops the look',async()=>{
+  const original=Date.now;let now=Date.parse('2026-11-12T08:00:00Z');Date.now=()=>now;
+  const writes=[];let answer=null;globalThis.__retainedWrites=writes;
+  globalThis.__retainedRead=path=>path.includes('/linear-cache/project-')?answer:null;
+  const r=await runtime(),tasks=[];
+  try{
+    r.controller.cx.spawn=fn=>{tasks.push(fn());};const settle=async()=>{while(tasks.length)await tasks.shift();};
+    r.controller.apply(cleanPanelFeed(makePanelLoadFixture({spaces:1,agentsPerSpace:1,now})),'ready');r.flush();
+    const [space]=r.controller.feed.spaces;
+    const popup=()=>r.controller.issuePopover(space,element(),r.native.theme()).calls.find(c=>c[0]==='on_open_change')[1];
+    popup()(true,{});await settle();
+    assert.equal(writes.length,1);assert.equal(writes[0][1].space,space.name);assert.equal(writes[0][1].force,undefined,'nothing read yet');
+    assert(r.controller.lookTimer,'the open search keeps looking');assert.equal(r.controller.lookTimer.ms,5000);
+    answer=JSON.stringify({schema:1,space:space.name,at:new Date(now+1000).toISOString(),state:'ok',milestones:[],issues:[]});
+    now+=1500;r.controller.cacheTimer.fn();await settle();
+    const look=async seconds=>{now=Date.parse('2026-11-12T08:00:00Z')+seconds*1000;const timer=r.controller.lookTimer;assert(timer,'look timer');timer.fn();await settle();};
+    await look(6);assert.equal(writes.length,1,'fresh: nothing asked, no repaint work');
+    await look(40);assert.equal(writes.length,1,'39 s after the read (at 1 s): still fresh');
+    await look(46);assert.equal(writes.length,2,'old: asked again within a minute of the read');assert.equal(writes[1][1].force,true);
+    answer=JSON.stringify({schema:1,space:space.name,at:new Date(now+1500).toISOString(),state:'ok',milestones:[],issues:[]});
+    await look(61);assert.equal(writes.length,2,'answered meanwhile or asked a moment ago');
+    popup()(false,{});await look(66);
+    assert.equal(writes.length,2);assert.equal(r.controller.lookTimer,null,'closed: no more looks');
+  }finally{r.controller.dispose();Date.now=original;delete globalThis.__retainedWrites;delete globalThis.__retainedRead;}
 });
 
 test('opening another space closes the previous issue popup and only its retained card changes',async()=>{

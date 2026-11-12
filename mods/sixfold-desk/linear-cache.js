@@ -1,13 +1,15 @@
 import { appHome, readTextFile, writeTextFile } from 'herdr';
 
-// Linear details read only when the person looks: an issue when its detail opens (fresh 5 min), a
-// space's milestones, issues and statuses when its issue search opens (fresh 10 min). The sidebar
-// drops a request file; the local collector's read-only runner answers into linear-cache/. Nothing
-// here calls Linear, and every map below is bounded.
-export const ISSUE_FRESH_MS = 5 * 60 * 1000, PROJECT_FRESH_MS = 10 * 60 * 1000;
+// Linear details read only when the person looks: an issue when its detail opens, a space's
+// milestones, issues and statuses when its issue search opens. While either stays open the panel
+// asks again every LOOK_POLL_MS, and an answer older than its FRESH_MS is read again, so a change by
+// anyone shows within about a minute (40 s + 5 s + the runner's 1 s look and ~1-2 s read + 1.5 s).
+// The sidebar drops a request file; the local collector's read-only runner answers into
+// linear-cache/. Nothing here calls Linear, and every map below is bounded.
+export const ISSUE_FRESH_MS = 40 * 1000, PROJECT_FRESH_MS = 40 * 1000, LOOK_POLL_MS = 5 * 1000;
 // WAIT_MS: how long '읽는 중' shows. WATCH_MS: how long the cache file is still checked for the answer —
 // the collector takes a request up to 10 min old and a read lasts up to 7 min, so a late answer still lands.
-const ASKED_MS = 60 * 1000, WAIT_MS = 8 * 60 * 1000, WATCH_MS = 18 * 60 * 1000, KEEP = {issue: 30, project: 10};
+const ASKED_MS = 30 * 1000, WAIT_MS = 8 * 60 * 1000, WATCH_MS = 18 * 60 * 1000, KEEP = {issue: 30, project: 10};
 export const CACHE_POLL_MS = 1500;
 const ISSUE_KEY = /^[A-Z][A-Z0-9]{0,9}-\d{1,7}$/;
 // File name of a space's cache: readable ASCII plus a hash of the whole name, so names that differ only
@@ -46,6 +48,9 @@ const requestId = (now, random = Math.random) => `${now.toString(36)}-${random()
 
 // Reads the cache file once (what was answered before shows at once), then asks for a read when it
 // is missing or old. `force`: right after a write from the detail, read again even when fresh.
+// The runner keeps its own longer freshness (issue 5 min, project 10 min) for a request without
+// force, so a good answer that is old here is asked for with force; the runner still reads one
+// target at most every 30 s.
 export async function ensure(kind, target, {force = false, now = Date.now(), read = readTextFile, write = writeTextFile,
   home = appHome(), random = Math.random} = {}) {
   if (!entries[kind] || !validTarget(kind, target)) return null;
@@ -54,7 +59,7 @@ export async function ensure(kind, target, {force = false, now = Date.now(), rea
   if (!force && (fresh(kind, item.value, now) || now - item.asked < ASKED_MS)) return item.value;
   if (force && now - item.forced < 30 * 1000) return item.value;
   const request = {v: 1, id: requestId(now, random), kind, requested_at: new Date(now).toISOString(),
-    ...(kind === 'issue' ? {key: target} : {space: target}), ...(force ? {force: true} : {})};
+    ...(kind === 'issue' ? {key: target} : {space: target}), ...(force || item.value?.state === 'ok' ? {force: true} : {})};
   await write(`${home}/data/sixfold/linear-reads/${request.id}.json`, JSON.stringify(request), null);
   item.asked = now; item.waiting = now; item.watch = now;
   if (force) item.forced = now;
