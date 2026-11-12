@@ -10,7 +10,7 @@ import {projectPanelFeed,panelEventStates,panelSpaces,panelSpacePartners,PANEL_T
 import {panelLayout,cardView,agentRow,panelFlowLayer,panelCounts,PANEL_GEOMETRY,toolIcon,panelReasonWake,agentRowHeight,panelMetaHeight,rowArrival} from './panel-view.js';
 import {groupColors,paletteMode} from './collab-flow.js';
 import {issuePopover,alertedGroup} from './task-issues-view.js';
-import {issueScopeData,issueCacheLabel,parseTimelineFeed,spaceWithTimeline} from './task-issue-state.js';
+import {issueScopeData,issueCacheLabel,parseTimelineFeed,spaceWithTimeline,rowStatus} from './task-issue-state.js';
 import {ensure,cached,waiting,checkCaches,anyWaiting,CACHE_POLL_MS} from './linear-cache.js';
 import {statusIndex,teamStatuses,statusFilters,filterRows,foldedCount,milestoneList,detailData} from './issue-model.js';
 import {nativeTaskSpace,hostedTaskLayout,panelWidthClass} from './panel-host.js';
@@ -199,7 +199,13 @@ export function createRetainedPanel(cx,{macTitlebar=false,onClassic=null,onDispo
     let memo=c.statusMemo.get(space.id);
     if(!memo||memo.project!==project){memo={project,index:statusIndex(project)};c.statusMemo.set(space.id,memo);}
     for(const id of c.statusMemo.keys())if(!c.spaceMap.has(id))c.statusMemo.delete(id);
-    const statusOf=project?key=>memo.index.get(key)||null:null;
+    // The timeline names each issue's Linear status; it wins over an older project cache.
+    let rowIndex=c.rowStatusMemo?.get(space.id);
+    if(!rowIndex||rowIndex.catalog!==space.issue_catalog){
+      rowIndex={catalog:space.issue_catalog,map:new Map((space.issue_catalog?.all||[]).filter(i=>i.status).map(i=>[i.key,rowStatus(i)]))};
+      (c.rowStatusMemo||(c.rowStatusMemo=new Map())).set(space.id,rowIndex);
+    }
+    const statusOf=project||rowIndex.map.size?key=>rowIndex.map.get(key)||memo.index.get(key)||null:null;
     const rows=data.rows||[];
     const lookup=statusOf||(()=>null);
     const unreadKeys=new Set(items.filter(i=>!i.read&&i.workspace===space.name&&i.issue).map(i=>i.issue));
