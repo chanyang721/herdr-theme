@@ -120,7 +120,7 @@ export default class MentionInbox extends View {
           .children(shown.filter(g=>g.project===project).map(group=>{
             const expanded=this.expanded.has(group.key),latest=group.latest;
             const workflow=workflows[group.key];
-            const body=readable(latest.text,namesFor(latest,this.feed,names)),preview=body.length>260?body.slice(0,260)+'…':body;
+            const body=readable(latest.text,namesFor(latest,this.feed,names),latest.mentions),preview=body.length>260?body.slice(0,260)+'…':body;
             const title=alertTitle(latest,this.feed,names),files=this.files(latest,`sf-thread-${group.key}`,t);
             return v_flex().id(`sf-thread-${group.key}`).p(14).gap(9).rounded(7).bg(t.surface).border(1).border_color(group.unread?color(project):t.border)
               .child(h_flex().gap(8).items_center()
@@ -140,7 +140,7 @@ export default class MentionInbox extends View {
                   const files=item===latest?null:this.files(item,`sf-detail-${item.id}`,t);
                   return v_flex().id(`sf-detail-${item.id}`).gap(4)
                     .child(div().text_size(11).text_color(t.muted).child(`${item.at || ''} · ${alertTitle(item,this.feed,names)}`))
-                    .child(div().text_size(14).child(readable(item.text,namesFor(item,this.feed,names))))
+                    .child(div().text_size(14).child(readable(item.text,namesFor(item,this.feed,names),item.mentions)))
                     .when(Boolean(files),e=>e.child(files));
                 }))))
               .child(h_flex().gap(7)

@@ -37,10 +37,31 @@ for (const [label, m] of [['inbox', inbox], ['desk', desk]]) {
     const names = m.feedNames(feed);
     assert.equal(m.alertTitle(feed[0], names), '김가나 → 이다라 외 1');
     assert.equal(m.alertTitle(feed[1], names), '이다라 → 김가나');
-    assert.equal(m.alertTitle(feed[2], names), 'U0DDD0004 → Alpha', 'no channel name anywhere: the project');
-    assert.equal(m.alertTitle({...feed[2], channel: 'C0TEST01'}, names), 'U0DDD0004 → #alpha', 'channel name from the feed');
+    // Nobody tagged: channel_name, then project, then the channel ID (a feed's channel name is not used).
+    assert.equal(m.alertTitle(feed[2], names), 'U0DDD0004 → Alpha', 'no channel_name: the project');
+    assert.equal(m.alertTitle({...feed[2], channel: 'C0TEST01'}, names), 'U0DDD0004 → Alpha', 'the project even when another item names the channel');
+    assert.equal(m.alertTitle({...feed[2], project: ''}, names), 'U0DDD0004 → C0TEST03', 'no project: the channel ID');
+    assert.equal(m.alertTitle({...feed[2], channel_name: 'delta'}, names), 'U0DDD0004 → #delta');
     assert.equal(m.alertTitle({author: 'U0AAA0001', author_name: '김가나', channel_name: '#gamma', text: '<@U0AAA0001> 메모'}, names), '김가나 → #gamma', 'tagging oneself is not a recipient');
     assert.equal(m.alertTitle({author: 'U0AAA0001', text: '<@U0ZZZ0009> 봐 주세요'}, names), '김가나 → U0ZZZ0009', 'unknown recipient: its ID');
+  });
+
+  // Review HOLD 01M777RTY99QA3GQJF98TETTHQ: the item's mentions map is the newest name and wins everywhere.
+  test(`${label}: the mentions map wins over author_name, a "Name <ID>" author and a spelled label`, () => {
+    const names = m.feedNames(feed);
+    assert.equal(m.senderName({author: '옛이름 <U0AAA0001>', mentions: {U0AAA0001: '현재이름'}}, names), '현재이름');
+    assert.equal(m.alertTitle({author: '옛이름 <U0AAA0001>', mentions: {U0AAA0001: '현재이름'}, text: '<@U0BBB0002> 확인'}, names), '현재이름 → 이다라');
+    assert.equal(m.senderName({author: 'U0AAA0001', author_name: '옛이름', mentions: {U0AAA0001: '현재이름'}}, names), '현재이름');
+    const item = {author: 'U0AAA0001', author_name: '김가나', text: '<@U0BBB0002|옛라벨> 확인', mentions: {U0BBB0002: '새이름'}};
+    assert.equal(m.alertTitle(item, names), '김가나 → 새이름');
+    assert.equal(m.readable(item.text, m.namesFor(item, names), item.mentions), '@새이름 확인', 'the body says the same name');
+    assert.equal(m.alertTitle({...item, mentions: {}}, names), '김가나 → 옛라벨', 'no mentions entry: the spelled label');
+  });
+
+  test(`${label}: the recipient is the first tag that is not the sender`, () => {
+    const names = m.feedNames(feed);
+    assert.equal(m.alertTitle({author: 'U0AAA0001', text: '<@U0AAA0001> <@U0BBB0002> 봐 주세요'}, names), '김가나 → 이다라');
+    assert.equal(m.alertTitle({author: '김가나 <U0AAA0001>', text: '<@U0AAA0001> <@U0BBB0002> <@U0CCC0003>'}, names), '김가나 → 이다라 외 1', 'the "Name <ID>" author is the sender too');
   });
 
   test(`${label}: tags, channels and links read as text`, () => {
@@ -132,6 +153,21 @@ test('the popover row says who wrote to whom, reads the tags and shows the attac
   byId(shown, 'sf-alert-pop-slack-0-file-view-1').handlers.on_click({}, cx);
   assert.equal(pop.store.get('sixfold.alertPopover').file, null, '본문 닫기');
   assert.deepEqual(opened, [item.files[0].permalink], 'viewing opens nothing');
+});
+
+test('the card popover reads the machine-local names, as the inbox window does', async () => {
+  const site = '/h/data/sixfold/site.local.json';
+  const pop = await popover(new Map([[site, JSON.stringify({slack: {user_names: {U0LOC0007: '로컬가', U0LOC0008: '로컬나'}}})]]));
+  await pop.files.refreshLocalNames({read: async p => p === site ? JSON.stringify({slack: {user_names: {U0LOC0007: '로컬가', U0LOC0008: '로컬나'}}}) : null, home: '/h'});
+  pop.store.set('sixfold.alertItems', [{id: 'slack:C0TEST09:200.1', project: 'Alpha', channel: 'C0TEST09', author: 'U0LOC0007', text: '<@U0LOC0008> 확인 부탁드려요'}]);
+  pop.showPopover('Alpha', 'slack');
+  const all = texts(pop.alertPopover({id: 's2', project: 'Alpha', trigger: element(), t: theme, hasSlack: true, hasLinear: false, onAll() {}}));
+  assert.ok(all.includes('로컬가 → 로컬나') && all.includes('@로컬나 확인 부탁드려요'), all.join(' | '));
+  // A partial write keeps the last names; a missing file has none.
+  await pop.files.refreshLocalNames({read: async () => '{"slack":', home: '/h'});
+  assert.equal(pop.files.localNames(Date.now() - 60_000).U0LOC0007, '로컬가');
+  await pop.files.refreshLocalNames({read: async () => null, home: '/h'});
+  assert.deepEqual(pop.files.localNames(Date.now() - 60_000), {});
 });
 
 test('the arrival peek shows the chips without buttons', async () => {

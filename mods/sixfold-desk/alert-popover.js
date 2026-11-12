@@ -3,7 +3,7 @@ import { h_flex, v_flex, Popover } from 'gpui-base';
 import { shared, setShared } from 'herdr';
 import { scopedAlerts, alertVersion, linearScoped, changeLines, linearCategory, popoverOpen, popoverRows, projectKey, alertKind, alertLine, kindTone } from './alert-model.js';
 import { feedNames, namesFor, alertTitle, readable } from './alert-slack.js';
-import { fileChips, loadFileText } from './alert-files.js';
+import { fileChips, loadFileText, localNames } from './alert-files.js';
 
 // A small surface beside a space card: the newest Slack and Linear alerts of that
 // space, opened by its alert badges or by a new alert. The full inboxes stay one
@@ -45,17 +45,17 @@ const line = (value, color, size = 12) => div().min_w(0).truncate().text_size(si
 function slackRows(project, t, fresh = new Set(), interactive = true) {
   const read = shared('sixfold.alertRead') ?? {};
   const unread = item => read[item.id] !== alertVersion(item);
-  const all = shared('sixfold.alertItems') ?? [], feed = feedNames(all), items = scopedAlerts(all, {project});
+  const all = shared('sixfold.alertItems') ?? [], feed = feedNames(all), site = localNames(), items = scopedAlerts(all, {project});
   const open = interactive ? popoverState()?.file ?? null : null;
   return {unread: items.filter(unread).length, rows: popoverRows(items, 5, unread).map((item, i) => {
-    const text = readable(item.text || item.title || '', namesFor(item, feed));
+    const text = readable(item.text || item.title || '', namesFor(item, feed, site), item.mentions);
     const files = fileChips(item, t, {id: `sf-alert-pop-slack-${i}`, open,
       onView: interactive ? viewFile : null, onDownload: interactive ? downloadFile : null});
     return v_flex().id(`sf-alert-pop-slack-${i}`).gap(2).p(8).rounded(6).bg(unread(item) ? t.selected : t.chrome)
       .when(fresh.has(item.id), e => e.border(1).border_color(t.ansi5 || t.accent))
       .child(h_flex().gap(6).items_center()
         .child(div().size(6).flex_none().rounded(3).bg(unread(item) ? t.accent : t.border))
-        .child(line(alertTitle(item, feed), t.foreground, 12).font_bold().flex_1())
+        .child(line(alertTitle(item, feed, site), t.foreground, 12).font_bold().flex_1())
         .child(line(short(item.at), t.dim, 10).flex_none()))
       .child(line(text, t.muted, 12).tooltip(text.slice(0, 400)))
       .when(Boolean(files), e => e.child(files));

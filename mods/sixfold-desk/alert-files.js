@@ -17,6 +17,22 @@ export async function loadFileText(id, {read = readTextFile, home = appHome()} =
   texts.set(id, typeof text === 'string' && text.trim() ? {state: 'ready', text: fileTextShown(text)} : {state: 'pending'});
   return texts.get(id);
 }
+// The machine-local Slack names (site.local.json `slack.user_names`), the same map the inbox window
+// reads, for names neither the item nor the feed spells. Read when this module loads and again at most
+// every 30 s while rows are drawn; a render uses the last map read (never blocks on the file).
+let local = {}, localAt = -Infinity;
+export function refreshLocalNames({read = readTextFile, home = appHome(), now = Date.now()} = {}) {
+  localAt = now;
+  return Promise.resolve().then(() => read(`${home}/data/sixfold/site.local.json`)).then(text => {
+    const names = JSON.parse(text || '{}')?.slack?.user_names;
+    local = names && typeof names === 'object' && !Array.isArray(names) ? names : {};
+  }).catch(() => { /* Keep the last names through a partial write. */ });
+}
+export function localNames(now = Date.now()) {
+  if (now - localAt > 30_000) refreshLocalNames({now});
+  return local;
+}
+try { refreshLocalNames(); } catch { /* No app home yet: the first draw reads it. */ }
 const tone = (kind, t) => ({PDF: t.blocked, 이미지: t.ansi5, 동영상: t.ansi5, 표: t.ansi2, 슬라이드: t.ansi3, 문서: t.ansi4, 압축: t.dim, 코드: t.ansi6, 텍스트: t.muted}[kind] || t.muted) || t.accent;
 
 // `open`: the key (`<alert id>|<file id>`) of the chip whose text is showing. `onView(key, file)` and

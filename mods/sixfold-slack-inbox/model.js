@@ -15,39 +15,44 @@ export function feedNames(items) {
   }
   return names;
 }
+// Name order (both people): the item's `mentions` map (the collector's newest names), then author_name
+// or the label the text spells, then the feed's marks, then the machine-local names, then the ID.
+const mentionsOf = item => item?.mentions && typeof item.mentions === 'object' && !Array.isArray(item.mentions) ? item.mentions : {};
 // The names one item reads with: its own mentions, then the feed, then the machine-local names.
-export const namesFor = (item, feed = {}, site = {}) => ({...(site ?? {}), ...(feed ?? {}), ...(item?.mentions && typeof item.mentions === 'object' ? item.mentions : {})});
-// Sender: author_name, then a "Name <ID>" author, then the names known for its ID, then the ID.
+export const namesFor = (item, feed = {}, site = {}) => ({...(site ?? {}), ...(feed ?? {}), ...mentionsOf(item)});
+const authorId = item => { const raw = plain(item?.author); return plain(item?.author_id) || (USER.test(raw) ? raw : /<([UWB][A-Z0-9]+)>$/.exec(raw)?.[1] || ''); };
+// Sender: mentions, then author_name (or a "Name <ID>" author), then the feed and local names, then the ID.
 export function senderName(item, feed = {}, site = {}) {
-  const raw = plain(item?.author), names = namesFor(item, feed, site);
-  const id = plain(item?.author_id) || (USER.test(raw) ? raw : /<([UWB][A-Z0-9]+)>$/.exec(raw)?.[1] || '');
+  const raw = plain(item?.author), id = authorId(item), names = namesFor(item, feed, site);
   const spelled = raw && !USER.test(raw) ? raw.replace(/\s*<[^>]*>$/, '').trim() : '';
-  return plain(item?.author_name) || spelled || (id && names[id]) || id || '보낸 사람 미확인';
+  return (id && plain(mentionsOf(item)[id])) || plain(item?.author_name) || spelled || (id && names[id]) || id || '보낸 사람 미확인';
 }
-// The people the message tags, in order, without the sender.
+// The people the message tags, in order, leaving out the sender.
 export function recipients(item, feed = {}, site = {}) {
-  const names = namesFor(item, feed, site), author = plain(item?.author_id) || plain(item?.author), seen = [];
+  const names = namesFor(item, feed, site), mentions = mentionsOf(item), author = authorId(item), seen = [];
   for (const [, id, label] of String(item?.text ?? '').matchAll(/<@([A-Z0-9]+)(?:\|([^>]*))?>/g)) {
     if (id === author || seen.some(s => s.id === id)) continue;
-    seen.push({id, name: plain(label) || names[id] || id});
+    seen.push({id, name: plain(mentions[id]) || plain(label) || names[id] || id});
   }
   return seen.map(s => s.name);
 }
-export function channelLabel(item, feed = {}) {
-  const name = plain(item?.channel_name).replace(/^#/, '') || feed?.[plain(item?.channel)] || '';
+// Nobody tagged: the channel name, then the project, then the channel ID.
+export function channelLabel(item) {
+  const name = plain(item?.channel_name).replace(/^#/, '');
   return name ? `#${name}` : plain(item?.project) || plain(item?.channel) || '채널 미확인';
 }
 // "보낸 사람 → 받는 사람": the first tagged person ("B 외 1" for more), or the channel when nobody is tagged.
 export function alertTitle(item, feed = {}, site = {}) {
   const to = recipients(item, feed, site);
-  return `${senderName(item, feed, site)} → ${to.length ? `${to[0]}${to.length > 1 ? ` 외 ${to.length - 1}` : ''}` : channelLabel(item, feed)}`;
+  return `${senderName(item, feed, site)} → ${to.length ? `${to[0]}${to.length > 1 ? ` 외 ${to.length - 1}` : ''}` : channelLabel(item)}`;
 }
 // Slack markup as people read it: `<@ID|이름>`/`<@ID>` -> @이름, `<#C…|채널>` -> #채널, `<url|글>` -> 글.
-// `names`: Slack ID -> display name (namesFor); an unknown ID stays as the ID.
-export function readable(text='',names={}) {
+// `names`: Slack ID -> display name (namesFor); `mentions` (the item's own map) wins over a spelled
+// label, as in the title; an unknown ID stays as the ID.
+export function readable(text='',names={},mentions={}) {
   const name = id => names?.[id] || id;
   return String(text ?? '')
-    .replace(/<@([A-Z0-9]+)\|([^>]*)>/g, (_, id, label) => `@${plain(label) || name(id)}`)
+    .replace(/<@([A-Z0-9]+)\|([^>]*)>/g, (_, id, label) => `@${plain(mentions?.[id]) || plain(label) || name(id)}`)
     .replace(/<@([A-Z0-9]+)>/g, (_, id) => `@${name(id)}`)
     .replace(/<#([A-Z0-9]+)(?:\|([^>]*))?>/g, (_, id, label) => `#${plain(label) || name(id)}`)
     .replace(/<!subteam\^[A-Z0-9]+\|([^>]+)>/g, '$1')
