@@ -396,6 +396,23 @@ test('one meta line carries both tools: Slack unread on its part, Linear unread 
   }finally{r.controller.dispose();}
 });
 
+test('the Slack mark and its unread count are one chip, before the channel name',async()=>{
+  const r=await runtime(false,{cardAlerts:()=>({slack:3,linear:0,hasSlack:true}),slackAlerts:(space,trigger)=>trigger});
+  try{
+    const raw=makePanelFixture({slack:true,tool:'linear'});
+    r.controller.apply(cleanPanelFeed(raw),'ready');r.flush();
+    const id=raw.spaces[0].id,card=r.controller.cards.get(id);
+    const walk=n=>[n,...(n.nodes||[]).filter(x=>x&&typeof x==='object').flatMap(walk),...(n.calls||[]).filter(c=>c[0]==='trigger'&&c[1]&&typeof c[1]==='object').flatMap(c=>walk(c[1]))];
+    const byId=(node,want)=>walk(node).find(n=>n.calls?.some(c=>c[0]==='id'&&c[1]===want));
+    const slack=byId(card.tree,`panel-slack-${id}`),mark=byId(slack,`panel-slack-mark-${id}`);
+    assert(mark&&byId(mark,`panel-slack-unread-${id}`),'the count sits in the mark chip');
+    const parts=(slack.nodes||[]).filter(x=>x&&typeof x==='object');
+    assert.equal(parts[0],mark,'the chip comes first, the channel name after it');
+    const flat=walk(mark).flatMap(n=>(n.nodes||[]).filter(x=>typeof x==='string'));
+    assert(flat.includes('3'));
+  }finally{r.controller.dispose();}
+});
+
 test('a peek is the alerted-issues top of a space issue search with the new alerts lit; its title opens the search; an open search makes alerts quiet',async()=>{
   const r=await runtime();
   try{
