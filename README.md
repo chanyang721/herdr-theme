@@ -50,6 +50,10 @@ Select a computer and follow shared projects, supplied Slack/Linear/Jira data an
 
 Working, idle, needs-human, unseen-result, cleanup-wait, closing and closed are separate states. An icon or a finished response does not independently prove successful work.
 
+Task acceptance can advance while the last pane stays open. The producer must
+record and archive the result before physical cleanup; a full task bar does not
+prove that happened. [Lifecycle contract and verification matrix](docs/workflow-lifecycle.md).
+
 ![Model, effort, usage and status in the pane header](docs/images/pane-header.png)
 
 ![Per-session usage details](docs/images/agent-usage.png)

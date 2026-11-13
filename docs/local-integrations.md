@@ -83,7 +83,8 @@ only when it identifies the same actual file (for example a hard link).
 ```
 
 Reports do not close, park, resume or otherwise change sessions. Clicking one
-with a terminal focuses that terminal. `task-feed.json` is reserved for an
-optional feed consumer; this release does not install a feed panel.
+with a terminal focuses that terminal. `task-feed.json` supplies the optional
+sidebar task panel described in the [feed contract](panel-feed.md). The theme
+installs the consumer; the producer and its automation are configured separately.
 External tools can also publish ordinary review documents beneath
 `local-views/reviews/` and expose them through their own view metadata.

@@ -60,8 +60,9 @@ branches show three and their own **+N**. Child rows use a compact status dot,
 without another stage bar. Agents without an issue follow the issue groups.
 The supplied `title` is the current task or subtask work name; role, session or
 workspace labels should be used only when that work name is unavailable.
-An explicitly completed child (`status: done` or `stage: 5`, without blocking
-state) is removed before tree projection and does not count toward **+N**.
+An explicitly completed child (`status: done`, without blocking state) is
+removed before tree projection and does not count toward **+N**. Stage 5 alone
+does not remove a child whose producer status remains idle or working.
 Active descendants remain visible. Different issue/space bindings remain
 independent roots, with their own completion and closing lifecycle. A newly
 allocated row first shows a dotted placeholder; its content appears at packet
@@ -77,12 +78,19 @@ its own shape (dot ring, empty ring, diamond with `!`, check, moon, open box,
 closed box), so colour is never the only difference; motion off shows still
 frames. A row without a known `state` keeps the four-status mark. Optional
 `keep_reason` is one producer sentence on why the session stays open or when it
-closes, shown verbatim on a second line under the title. Optional `cleanup`
+closes, retained verbatim in the row tooltip. Rows stay compact instead of
+adding a second line for every reason. Optional `cleanup`
 (`{idle_since, limit_s, due_at}`, absolute times) adds a countdown to
 `cleanup_wait` and `unseen_result` rows: the sidebar counts the remaining
 minutes on its own clock and redraws only that row once a minute. After
 `due_at` it reads "다음 정리 때 닫힘". All three fields are display data only;
 the sidebar never decides whether a session is kept or closed.
+
+Policy acceptance, role completion and physical removal are separate. A last
+pane can finish recording and learning while its row remains visible; space
+cleanup is a separate producer operation. See the
+[cross-repository lifecycle contract](workflow-lifecycle.md) for the field
+mapping and verification matrix.
 
 The Linear/Jira metadata opens a native right-side issue popover. Its three tabs
 read `issue_catalog.week`, `.milestone` and `.all`; search filters those local
