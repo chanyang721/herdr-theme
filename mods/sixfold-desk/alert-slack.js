@@ -85,4 +85,24 @@ export function attachments(item) {
 export const fileTextPath = (home, id) => FILE_ID.test(String(id ?? '')) ? `${home}/data/sixfold/slack-files/${id}.txt` : null;
 export const FILE_TEXT_LIMIT = 20000;
 export const fileTextShown = text => text.length > FILE_TEXT_LIMIT ? `${text.slice(0, FILE_TEXT_LIMIT)}\n… (앞 ${FILE_TEXT_LIMIT}자만 표시)` : text;
+// 본문 보기 asks the collector for a file's text (data/sixfold/slack-file-requests.json): one entry per
+// file id with the time of the ask, newest first, at most 50 kept for a day. The collector reads the
+// file from Slack within its daily limit and saves the text copy; asking again within 10 minutes is no-op.
+export const FILE_REQUESTS = 'slack-file-requests.json';
+// How long an open 본문 보기 waits for the copy: every 3 s for the first minute, then every 10 s, up to
+// 7 minutes (the collector retries a failed read after 2 minutes, and one read may take up to 3).
+// Past that it says so instead of '본문 준비 중'; closing and opening the text looks again.
+export const FILE_WAIT = Object.freeze({fastMs: 3000, fastForMs: 60000, slowMs: 10000, deadlineMs: 420000});
+export const FILE_LATE = '본문을 아직 받지 못했습니다. 본문 닫기 뒤 다시 열면 다시 확인합니다.';
+export const nextFileWait = elapsed => elapsed >= FILE_WAIT.deadlineMs ? null : elapsed < FILE_WAIT.fastForMs ? FILE_WAIT.fastMs : FILE_WAIT.slowMs;
+export function fileRequestText(old, id, now = Date.now()) {
+  if (!FILE_ID.test(String(id ?? ''))) return null;
+  let requests = {};
+  try { const value = JSON.parse(old || '{}')?.requests; if (value && typeof value === 'object' && !Array.isArray(value)) requests = value; } catch { /* a broken ledger is replaced */ }
+  const asked = Date.parse(requests[id] ?? '');
+  if (Number.isFinite(asked) && now - asked >= 0 && now - asked < 600000) return null;
+  const kept = Object.entries(requests).filter(([key, at]) => key !== id && FILE_ID.test(key) && now - Date.parse(at) < 86400000)
+    .sort((a, b) => Date.parse(b[1]) - Date.parse(a[1])).slice(0, 49);
+  return JSON.stringify({schema: 1, requests: Object.fromEntries([[String(id), new Date(now).toISOString()], ...kept])});
+}
 // --- end of the shared Slack alert code.

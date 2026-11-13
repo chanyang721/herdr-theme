@@ -1,7 +1,7 @@
 import { View, div, image } from 'gpui-kit';
 import { h_flex, v_flex, Popover } from 'gpui-base';
 import { theme, props, appHome, home, readTextFile, writeTextFile, shared, setShared, openOverlay, closeOverlay, exec } from 'herdr';
-import { readable, threadGroups, freshness, collectLine, feedNames, namesFor, alertTitle, attachments, fileTextPath, fileTextShown } from './model.js';
+import { readable, threadGroups, freshness, collectLine, feedNames, namesFor, alertTitle, attachments, fileTextPath, fileTextShown, fileRequestText, FILE_REQUESTS, FILE_LATE, nextFileWait } from './model.js';
 
 export default class MentionInbox extends View {
   init(_props,cx) {
@@ -41,14 +41,30 @@ export default class MentionInbox extends View {
     for(const item of group.items)read[item.id]=item.id;
     await writeTextFile(path,JSON.stringify(read),old);setShared('sixfold.alertRead',read);
   }
-  // 본문 보기: the collector's local text copy of the file, read when its popover opens.
+  // 본문 보기: the collector's local text copy of the file, read when its popover opens. With no copy
+  // yet the collector is asked for it (slack-file-requests.json) and the copy is looked for again on the
+  // FILE_WAIT schedule while the popover stays open; past the collector's retry window it says so.
   viewFile(key,file,cx){
     this.fileOpen=key;cx.notify();
     if(!key)return;
-    cx.spawn(async cx=>{
+    const load=async cx=>{
       const path=fileTextPath(appHome(),file.id),text=path?await readTextFile(path).catch(()=>null):null;
-      this.fileTexts.set(file.id,typeof text==='string' && text.trim()?fileTextShown(text):null);cx.notify();
-    });
+      const ready=typeof text==='string' && text.trim();
+      this.fileTexts.set(file.id,ready?fileTextShown(text):null);cx.notify();
+      return Boolean(ready);
+    };
+    const ask=async()=>{
+      const path=`${appHome()}/data/sixfold/${FILE_REQUESTS}`,old=await readTextFile(path).catch(()=>null);
+      const next=fileRequestText(old,file.id);
+      if(next!==null)await writeTextFile(path,next,old);
+    };
+    let elapsed=0;this.fileLate?.delete(file.id);
+    const later=c=>{const ms=nextFileWait(elapsed);
+      if(ms===null){(this.fileLate??=new Set()).add(file.id);c.notify?.();return;}
+      elapsed+=ms;c.timer.after(ms,look);};
+    const look=next=>{const c=next||cx;if(this.fileOpen!==key)return;
+      c.spawn(async c2=>{try{await ask();}catch{/* asked already */}if(this.fileOpen===key && !(await load(c2||c)))later(c);});};
+    cx.spawn(async c2=>{if(await load(c2||cx))return;try{await ask();}catch{/* the next look asks again */}if(cx.timer?.after)later(cx);});
   }
   // Attachment chips under a message: kind, name, size; 본문 보기 opens a popover with the text,
   // 다운로드 hands the Slack link to the default browser. Both only on a press.
@@ -69,7 +85,7 @@ export default class MentionInbox extends View {
         .child(open?view.content(v_flex().id(`${id}-file-text-${i}`).w(560).max_h(420).overflow_y_scroll().p(12).gap(6).rounded(8)
           .border(1).border_color(t.border).bg(t.popover || t.surface).text_color(t.foreground)
           .child(div().min_w(0).truncate().text_size(12).font_bold().child(`${file.name} · 본문`))
-          .child(div().text_size(13).text_color(text?t.foreground:t.muted).child(this.fileTexts.has(file.id)?(text || '본문 준비 중'):'본문 읽는 중'))):view)
+          .child(div().text_size(13).text_color(text?t.foreground:t.muted).child(this.fileTexts.has(file.id)?(text || (this.fileLate?.has(file.id)?FILE_LATE:'본문 준비 중')):'본문 읽는 중'))):view)
         .when(Boolean(file.link),e=>e.child(small(`${id}-file-download-${i}`,'다운로드').on_click((_e,cx)=>cx.open_url(file.link))));
     }));
   }
