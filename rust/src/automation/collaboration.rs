@@ -593,6 +593,7 @@ pub fn run(args: &[String]) -> Result<()> {
         action
     };
     let value = match action {
+        "capabilities" => json!({"harness_intake_protocol": 1}),
         "enable" => {
             let _lock = locked()?;
             let mut cfg = config()?;

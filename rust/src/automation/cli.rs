@@ -141,6 +141,11 @@ fn choices(value: Option<String>, key: &str, choices: &[&str]) -> Result<()> {
     Ok(())
 }
 pub fn prepare(command: &str, args: &[String]) -> Result<Option<Vec<String>>> {
+    // A narrow protocol probe must work before reading configuration or a
+    // ledger. Keep the historical argparse errors/help unchanged otherwise.
+    if command == "collaborate" && args == ["capabilities"] {
+        return Ok(Some(args.to_vec()));
+    }
     if ![
         "workspace",
         "route",

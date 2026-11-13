@@ -34,3 +34,13 @@ behavior, and remote publication are separate milestones. The current user
 request requires automatic parallel collaboration and full lifecycle validation
 before publishing the related changes. An adapter document is not proof that
 the implementation already satisfies those requirements.
+
+## Native collaboration compatibility
+
+`herdr-theme collaborate capabilities` is a read-only protocol handshake. It
+returns exactly `{"harness_intake_protocol":1}` without reading configuration,
+identity, or the collaboration ledger and without creating files or dispatching
+work. Engine-owned legacy entrypoint shims must require this protocol before
+forwarding a collaboration command; binary presence alone does not prove that
+an older helper uses canonical harness intake. Unsupported binaries fail closed
+without falling back to legacy direct delivery.
