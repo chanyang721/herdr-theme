@@ -224,13 +224,22 @@ export function createRetainedPanel(cx,{macTitlebar=false,onClassic=null,onDispo
     for(const id of c.statusMemo.keys())if(!c.spaceMap.has(id))c.statusMemo.delete(id);
     // The catalog (the feed's, or one made from the timeline) and the Linear project cache both name
     // each issue's status; whichever was read later wins, the other fills the keys it lacks. A
-    // catalog status takes its type from the cache's same-named team status when it has one.
+    // catalog status takes its type from the same-named status of the issue's own team in the cache;
+    // without a team match, only a name every team types alike is used, else the row keeps its own
+    // provider type or normalized state.
     let rowIndex=c.rowStatusMemo?.get(space.id);
     if(!rowIndex||rowIndex.catalog!==space.issue_catalog||rowIndex.project!==project){
-      const known=new Map();
-      for(const list of Object.values(project?.statuses&&typeof project.statuses==='object'?project.statuses:{}))
-        for(const s of Array.isArray(list)?list:[])if(s?.name&&!known.has(s.name))known.set(s.name,s);
-      rowIndex={catalog:space.issue_catalog,project,map:new Map((space.issue_catalog?.all||[]).filter(i=>i.status).map(i=>[i.key,rowStatus(i,known)]))};
+      const teams=project?.statuses&&typeof project.statuses==='object'?project.statuses:{};
+      const named=new Map(),clash=new Set();
+      for(const list of Object.values(teams))for(const s of Array.isArray(list)?list:[]){
+        if(!s?.name)continue;const seen=named.get(s.name);
+        if(!seen)named.set(s.name,s);else if(seen.type!==s.type)clash.add(s.name);
+      }
+      for(const name of clash)named.delete(name);
+      const teamOf=new Map((Array.isArray(project?.issues)?project.issues:[]).filter(i=>i?.key&&i.team).map(i=>[i.key,i.team]));
+      const knownFor=row=>{const list=teams[row.team||teamOf.get(row.key)];
+        const own=Array.isArray(list)?list.find(s=>s?.name===row.status):null;return own?new Map([[own.name,own]]):named;};
+      rowIndex={catalog:space.issue_catalog,project,map:new Map((space.issue_catalog?.all||[]).filter(i=>i.status).map(i=>[i.key,rowStatus(i,knownFor(i))]))};
       (c.rowStatusMemo||(c.rowStatusMemo=new Map())).set(space.id,rowIndex);
     }
     const projectAt=project&&(project.state===undefined||project.state==='ok')?Date.parse(project.at||''):NaN;
