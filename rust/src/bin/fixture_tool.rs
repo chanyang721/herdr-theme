@@ -4,7 +4,7 @@ use serde_json::{json, Value};
 use std::{
     env,
     fs::{self, OpenOptions},
-    io::{BufRead, Write},
+    io::{BufRead, Read, Write},
     path::Path,
 };
 fn read(path: impl AsRef<Path>) -> Option<Value> {
@@ -159,6 +159,27 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         program = argv.remove(0);
     }
     let invoked_program = program.clone();
+    if program == "capture-stdin-contract" && config["allowProcessContract"] == true {
+        match argv.first().map(String::as_str).unwrap_or("") {
+            "refuse" => return Err("stdin option unsupported".into()),
+            "ignore" => {
+                std::thread::sleep(std::time::Duration::from_secs(2));
+                return Ok(());
+            }
+            "early-success" => return Ok(()),
+            "bulk" => {}
+            _ => return Err("unknown stdin fixture mode".into()),
+        }
+        std::io::stdout().write_all(&vec![b'o'; 128 * 1024])?;
+        std::io::stdout().flush()?;
+        std::io::stderr().write_all(&vec![b'e'; 128 * 1024])?;
+        std::io::stderr().flush()?;
+        let mut input = Vec::new();
+        std::io::stdin().lock().read_to_end(&mut input)?;
+        return herdr_theme::common::print(&json!({
+            "stdin_bytes": input.len(), "stdin_text": String::from_utf8(input)?
+        }));
+    }
     if program == "workflow-gui-parent" && config["allowWorkflowConsole"] == true {
         if !argv.is_empty() {
             return Err("workflow GUI parent takes no fixture arguments".into());
@@ -222,15 +243,39 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     }
     if program == "collaboration-intake-contract" && config["allowCollaborationIntake"] == true {
         let action = argv.get(1).map(String::as_str).unwrap_or("");
-        let request: Value = serde_json::from_str(argv.get(3).ok_or("request missing")?)?;
         let mut file = OpenOptions::new()
             .create(true)
             .append(true)
             .open(env::var("HERDR_TEST_CALL_LOG")?)?;
+        if argv.get(2).map(String::as_str) == Some("--request-stdin")
+            && config["intakeRejectStdin"] == true
+        {
+            writeln!(
+                file,
+                "{}",
+                json!({"program":program,"action":action,"argv":argv,"rejected":true})
+            )?;
+            return Err("unrecognized arguments: --request-stdin".into());
+        }
+        let mut bytes = Vec::new();
+        if argv.get(2).map(String::as_str) == Some("--request-stdin") && argv.len() == 3 {
+            std::io::stdin()
+                .lock()
+                .take(2 * 1024 * 1024 + 1)
+                .read_to_end(&mut bytes)?;
+        } else if argv.get(2).map(String::as_str) == Some("--request-json") && argv.len() == 4 {
+            bytes.extend(argv[3].as_bytes());
+        } else {
+            return Err("request input mode missing".into());
+        }
+        if bytes.len() > 2 * 1024 * 1024 {
+            return Err("request exceeds 2 MiB".into());
+        }
+        let request: Value = serde_json::from_slice(&bytes)?;
         writeln!(
             file,
             "{}",
-            json!({"program":program,"action":action,"request":request,"actor":env::var("HC_TERMINAL_ID").ok()})
+            json!({"program":program,"action":action,"request":request,"actor":env::var("HC_TERMINAL_ID").ok(),"argv":argv,"request_bytes":bytes.len()})
         )?;
         if action == "drain" {
             if let Some(delay) = config["intakeDrainDelayMs"].as_u64() {
@@ -238,6 +283,20 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
         if action == "status" && request.is_array() {
+            if config["enforceIntakeRequests"] == true {
+                let saved = read(
+                    Path::new(&path)
+                        .parent()
+                        .unwrap()
+                        .join("intake-requests.json"),
+                )
+                .ok_or("saved requests missing")?;
+                for row in request.as_array().unwrap() {
+                    if saved.get(row["id"].as_str().ok_or("request ID missing")?) != Some(row) {
+                        return Err("request does not match saved payload".into());
+                    }
+                }
+            }
             if config["intakeStatusRefuse"] == true {
                 return Err("status service unavailable".into());
             }
@@ -260,6 +319,19 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         }
         if request["source"] != env::var("HC_TERMINAL_ID").unwrap_or_default() {
             return Err("origin mismatch".into());
+        }
+        if action == "enqueue" && config["enforceIntakeRequests"] == true {
+            let saved_path = Path::new(&path)
+                .parent()
+                .unwrap()
+                .join("intake-requests.json");
+            let mut saved = read(&saved_path).unwrap_or(json!({}));
+            let id = request["id"].as_str().ok_or("request ID missing")?;
+            if saved.get(id).is_some_and(|previous| previous != &request) {
+                return Err("request does not match saved payload".into());
+            }
+            saved[id] = request.clone();
+            fs::write(saved_path, saved.to_string())?;
         }
         let state = if action == "drain" {
             if config["intakeBlocked"] == true {

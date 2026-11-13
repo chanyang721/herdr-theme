@@ -158,6 +158,10 @@ fn intake(action: &str, task: &Value) -> Result<Value> {
     intake_payload(action, &intake_request(task))
 }
 fn intake_payload(action: &str, request: &Value) -> Result<Value> {
+    let payload = serde_json::to_vec(request)?;
+    if payload.len() > 2 * 1024 * 1024 {
+        return Err("collaboration request exceeds 2 MiB".into());
+    }
     let cfg = config()?;
     let prefix = cfg["harness_command"].as_array().ok_or(
         "collaboration.json harness_command must name the installed harness executable prefix",
@@ -173,14 +177,13 @@ fn intake_payload(action: &str, request: &Value) -> Result<Value> {
     argv.extend([
         "collaboration-intake".into(),
         action.into(),
-        "--request-json".into(),
-        serde_json::to_string(request)?,
+        "--request-stdin".into(),
     ]);
     // Never inject the stored source as HC_TERMINAL_ID. Engine verifies actual ancestry.
     // A drain may wait for a newly started receiver. Keep ordinary status and
     // registration reads bounded without cancelling a valid longer dispatch.
     let timeout = if action == "drain" { 180. } else { 30. };
-    let (code, result) = routing::call_args_timeout(&argv, None, timeout)?;
+    let (code, result) = routing::call_args_stdin(&argv, None, timeout, payload)?;
     if code != 0 || result.get("error").is_some() {
         return Err(format!("harness intake refused: {result}").into());
     }

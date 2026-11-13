@@ -4,7 +4,8 @@ use std::{
     io::{Read, Write},
     path::{Path, PathBuf},
     process::{Command, Stdio},
-    time::Duration,
+    sync::mpsc,
+    time::{Duration, Instant},
 };
 use wait_timeout::ChildExt;
 pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
@@ -127,27 +128,59 @@ pub fn capture(program: &str, args: &[String], timeout: f64) -> Result<(i32, Str
     cmd.args(args);
     capture_cmd(cmd, timeout)
 }
-pub fn capture_cmd(mut cmd: Command, timeout: f64) -> Result<(i32, String, String)> {
+pub fn capture_cmd(cmd: Command, timeout: f64) -> Result<(i32, String, String)> {
+    capture_cmd_io(cmd, timeout, None)
+}
+pub fn capture_cmd_input(
+    cmd: Command,
+    timeout: f64,
+    input: Vec<u8>,
+) -> Result<(i32, String, String)> {
+    capture_cmd_io(cmd, timeout, Some(input))
+}
+fn capture_cmd_io(
+    mut cmd: Command,
+    timeout: f64,
+    input: Option<Vec<u8>>,
+) -> Result<(i32, String, String)> {
     let program = cmd.get_program().to_string_lossy().into_owned();
+    let deadline = Instant::now() + Duration::from_secs_f64(timeout);
     let mut child = cmd
-        .stdin(Stdio::null())
+        .stdin(if input.is_some() {
+            Stdio::piped()
+        } else {
+            Stdio::null()
+        })
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()?;
     let mut out = child.stdout.take().unwrap();
     let mut err = child.stderr.take().unwrap();
-    // Drain both streams while waiting so a full pipe never deadlocks the process.
-    let stdout = std::thread::spawn(move || {
+    let (out_tx, stdout) = mpsc::sync_channel(1);
+    let (err_tx, stderr) = mpsc::sync_channel(1);
+    // All three pipes progress concurrently: a child may fill its output before
+    // reading a large request. Writing stdin on the waiting thread can deadlock.
+    std::thread::spawn(move || {
         let mut b = Vec::new();
         let _ = out.read_to_end(&mut b);
-        b
+        let _ = out_tx.send(b);
     });
-    let stderr = std::thread::spawn(move || {
+    std::thread::spawn(move || {
         let mut b = Vec::new();
         let _ = err.read_to_end(&mut b);
-        b
+        let _ = err_tx.send(b);
     });
-    let status = match child.wait_timeout(Duration::from_secs_f64(timeout))? {
+    let stdin = input.map(|bytes| {
+        let mut pipe = child.stdin.take().unwrap();
+        let (tx, rx) = mpsc::sync_channel(1);
+        std::thread::spawn(move || {
+            let result = pipe.write_all(&bytes);
+            drop(pipe); // The child reads EOF before producing its reply.
+            let _ = tx.send(result);
+        });
+        rx
+    });
+    let status = match child.wait_timeout(deadline.saturating_duration_since(Instant::now()))? {
         Some(status) => status,
         None => {
             let _ = child.kill();
@@ -155,10 +188,31 @@ pub fn capture_cmd(mut cmd: Command, timeout: f64) -> Result<(i32, String, Strin
             return Err(format!("{program} timed out after {timeout}s").into());
         }
     };
+    fn receive<T>(
+        rx: mpsc::Receiver<T>,
+        deadline: Instant,
+        program: &str,
+        timeout: f64,
+    ) -> Result<T> {
+        rx.recv_timeout(deadline.saturating_duration_since(Instant::now()))
+            .map_err(|_| {
+                format!("{program} timed out after {timeout}s while finishing pipes").into()
+            })
+    }
+    let stdout = receive(stdout, deadline, &program, timeout)?;
+    let stderr = receive(stderr, deadline, &program, timeout)?;
+    if let Some(stdin) = stdin {
+        let written = receive(stdin, deadline, &program, timeout)?;
+        // An early CLI refusal can close stdin. Preserve that nonzero receipt,
+        // while a success that did not accept the complete input is an error.
+        if status.success() {
+            written?;
+        }
+    }
     Ok((
         status.code().unwrap_or(1),
-        String::from_utf8_lossy(&stdout.join().unwrap_or_default()).into_owned(),
-        String::from_utf8_lossy(&stderr.join().unwrap_or_default()).into_owned(),
+        String::from_utf8_lossy(&stdout).into_owned(),
+        String::from_utf8_lossy(&stderr).into_owned(),
     ))
 }
 pub fn output(program: &str, args: &[String], timeout: f64) -> Result<String> {

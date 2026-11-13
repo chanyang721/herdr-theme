@@ -1339,3 +1339,127 @@ fn released_history_is_retired_before_status_and_survives_service_or_spawn_failu
     );
     assert!(f.sends().is_empty());
 }
+
+#[test]
+fn stdin_status_resolves_many_normal_saved_requests_beyond_the_windows_argv_limit() {
+    let f = Fixture::new(false);
+    f.edit(|c| c["enforceIntakeRequests"] = json!(true));
+    let text = "한글 \"인용\" \\folder\\file 검사 ".repeat(10);
+    assert!(text.chars().count() <= 300);
+    for i in 0..128 {
+        f.ok(
+            "origin",
+            &[
+                "collaborate",
+                "enqueue",
+                "--id",
+                &format!("legacy-{i}"),
+                "--text",
+                &text,
+                "--mode",
+                "worktree",
+                "--owns",
+                &format!("src/part-{i}"),
+                "--repo",
+                "fixture",
+            ],
+        );
+    }
+    let path = f.app.join("data/sixfold/collaboration-tasks.json");
+    let mut ledger = f.data("collaboration-tasks.json");
+    for task in ledger["tasks"].as_object_mut().unwrap().values_mut() {
+        task["state"] = json!("harness_managed");
+        task["harness_projection"] = json!({"ownership_released":false});
+    }
+    fs::write(&path, ledger.to_string()).unwrap();
+    let pending = f.ok("origin", &["collaborate", "status"]);
+    for task in pending["tasks"].as_object().unwrap().values() {
+        assert_eq!(task["state"], "harness_managed");
+        assert_eq!(task["harness_projection"]["ownership_released"], false);
+    }
+    let calls = f.calls();
+    let status = calls
+        .iter()
+        .rev()
+        .find(|c| c["action"] == "status")
+        .unwrap();
+    assert_eq!(
+        status["argv"],
+        json!(["collaboration-intake", "status", "--request-stdin"])
+    );
+    let request = &status["request"];
+    assert_eq!(request.as_array().unwrap().len(), 128);
+    assert!(request.to_string().encode_utf16().count() > 32767);
+    assert!(status["request_bytes"].as_u64().unwrap() > 32767);
+    for item in request.as_array().unwrap() {
+        assert_eq!(item["text"], text);
+        assert_eq!(item["source"], "origin");
+    }
+    f.edit(|c| c["intakeSettled"] = json!(true));
+    let released = f.ok("origin", &["collaborate", "status"]);
+    assert!(released["tasks"]
+        .as_object()
+        .unwrap()
+        .values()
+        .all(|task| task["state"] == "harness_released"
+            && task["harness_projection"]["ownership_released"] == true));
+    assert_eq!(
+        f.calls().iter().filter(|c| c["action"] == "drain").count(),
+        0
+    );
+    assert!(f.sends().is_empty());
+}
+
+#[test]
+fn stdin_refusal_never_falls_back_to_argv_or_direct_delivery() {
+    let f = Fixture::new(false);
+    f.enqueue("a");
+    f.enqueue("b");
+    f.edit(|c| c["intakeRejectStdin"] = json!(true));
+    f.ok("origin", &["collaborate", "drain"]);
+    assert_eq!(
+        f.data("collaboration-tasks.json")["tasks"]["a"]["state"],
+        "pending"
+    );
+    let rejected: Vec<_> = f
+        .calls()
+        .into_iter()
+        .filter(|c| c["rejected"] == true)
+        .collect();
+    assert_eq!(rejected.len(), 2);
+    for call in rejected {
+        assert_eq!(
+            call["argv"],
+            json!(["collaboration-intake", "drain", "--request-stdin"])
+        );
+    }
+    assert_eq!(
+        f.calls().iter().filter(|c| c["action"] == "drain").count(),
+        2
+    );
+    assert!(f.sends().is_empty());
+    assert!(f.calls().iter().all(|c| !c["argv"]
+        .as_array()
+        .is_some_and(|args| args.iter().any(|arg| arg == "--request-json"))));
+}
+
+#[test]
+fn oversized_status_payload_is_refused_before_starting_the_adapter() {
+    let f = Fixture::new(false);
+    f.enqueue("a");
+    f.enqueue("b");
+    f.ok("origin", &["collaborate", "drain"]);
+    let path = f.app.join("data/sixfold/collaboration-tasks.json");
+    let mut ledger = f.data("collaboration-tasks.json");
+    ledger["tasks"]["a"]["text"] = json!("x".repeat(2 * 1024 * 1024));
+    fs::write(path, ledger.to_string()).unwrap();
+    let before = f.calls().len();
+    let status = f.ok("origin", &["collaborate", "status"]);
+    assert_eq!(f.calls().len(), before);
+    assert_eq!(status["tasks"]["a"]["state"], "harness_managed");
+    assert_eq!(
+        status["tasks"]["a"]["harness_projection"]["ownership_released"],
+        false
+    );
+    assert!(f.sends().is_empty());
+}

@@ -221,6 +221,66 @@ fn common_capture_creates_a_real_child_without_a_console() {
     let v: Value = serde_json::from_str(&out).unwrap();
     assert_eq!(v["has_console"], false);
 }
+
+fn stdin_fixture(f: &Fixture, mode: &str) -> Command {
+    let mut c = herdr_theme::common::command(env!("CARGO_BIN_EXE_herdr-theme-test-fixture"));
+    c.args(["capture-stdin-contract", mode]);
+    f.configure(&mut c);
+    c
+}
+
+#[test]
+fn capture_stdin_drains_both_outputs_before_the_child_reads_a_large_utf8_request() {
+    let f = Fixture::new();
+    let input = "한글 \"quoted\" \\path\\file\n".repeat(8192);
+    assert!(input.encode_utf16().count() > 32767);
+    let (code, out, err) = herdr_theme::common::capture_cmd_input(
+        stdin_fixture(&f, "bulk"),
+        10.,
+        input.as_bytes().to_vec(),
+    )
+    .unwrap();
+    assert_eq!(code, 0);
+    assert_eq!(err, "e".repeat(128 * 1024));
+    assert!(out.starts_with(&"o".repeat(128 * 1024)));
+    let reply: Value = serde_json::from_str(&out[128 * 1024..]).unwrap();
+    assert_eq!(reply["stdin_bytes"], input.len());
+    assert_eq!(reply["stdin_text"], input);
+}
+
+#[test]
+fn capture_stdin_keeps_early_cli_refusal_and_rejects_incomplete_success() {
+    let f = Fixture::new();
+    let (code, out, err) = herdr_theme::common::capture_cmd_input(
+        stdin_fixture(&f, "refuse"),
+        5.,
+        vec![b'x'; 2 * 1024 * 1024],
+    )
+    .unwrap();
+    assert_eq!(code, 2);
+    assert!(out.is_empty());
+    assert!(err.contains("stdin option unsupported"));
+    assert!(herdr_theme::common::capture_cmd_input(
+        stdin_fixture(&f, "early-success"),
+        5.,
+        vec![b'x'; 2 * 1024 * 1024]
+    )
+    .is_err());
+}
+
+#[test]
+fn capture_stdin_deadline_also_bounds_a_blocked_input_writer() {
+    let f = Fixture::new();
+    let started = std::time::Instant::now();
+    let error = herdr_theme::common::capture_cmd_input(
+        stdin_fixture(&f, "ignore"),
+        0.2,
+        vec![b'x'; 2 * 1024 * 1024],
+    )
+    .unwrap_err();
+    assert!(error.to_string().contains("timed out"));
+    assert!(started.elapsed() < std::time::Duration::from_secs(3));
+}
 #[cfg(windows)]
 #[test]
 fn test_gui_collector_does_not_allocate_a_console_for_its_core_query() {

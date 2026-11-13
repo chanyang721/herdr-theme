@@ -10,12 +10,32 @@ pub fn call_args_timeout(
     source: Option<&str>,
     timeout: f64,
 ) -> Result<(i32, Value)> {
+    call_args_io(argv, source, timeout, None)
+}
+pub fn call_args_stdin(
+    argv: &[String],
+    source: Option<&str>,
+    timeout: f64,
+    input: Vec<u8>,
+) -> Result<(i32, Value)> {
+    call_args_io(argv, source, timeout, Some(input))
+}
+fn call_args_io(
+    argv: &[String],
+    source: Option<&str>,
+    timeout: f64,
+    input: Option<Vec<u8>>,
+) -> Result<(i32, Value)> {
     let mut cmd = command(&argv[0]);
     cmd.args(&argv[1..]);
     if let Some(source) = source {
         cmd.env("HC_TERMINAL_ID", source);
     }
-    let (code, out, err) = capture_cmd(cmd, timeout)?;
+    let (code, out, err) = if let Some(input) = input {
+        capture_cmd_input(cmd, timeout, input)?
+    } else {
+        capture_cmd(cmd, timeout)?
+    };
     let text = if out.is_empty() { &err } else { &out };
     let parsed = serde_json::from_str(text).unwrap_or_else(
         |_| json!({"error":{"message":if err.trim().is_empty(){out.trim()}else{err.trim()}}}),
