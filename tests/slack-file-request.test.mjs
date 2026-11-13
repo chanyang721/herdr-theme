@@ -124,3 +124,89 @@ test('inbox window: 본문 보기 asks for a missing copy and picks it up while 
   view.viewFile(null, file, cx); await tick();
   assert.equal(timers.length, 0);
 });
+
+// Review 01M79TKV1PNRZPKWW06DQ341XE: the wait ended at 120 s, before the collector's retry (its first read
+// fails, it may read again 120 s after that attempt). The wait now covers the retry window, and past it
+// the text says it has not arrived instead of '본문 준비 중' for good.
+test('the wait covers the collector retry window: 3 s for a minute, then 10 s, until 7 minutes', () => {
+  for (const m of [desk, inbox]) {
+    assert.equal(m.nextFileWait(0), 3000);
+    assert.equal(m.nextFileWait(59999), 3000);
+    assert.equal(m.nextFileWait(60000), 10000);
+    assert.equal(m.nextFileWait(419999), 10000);
+    assert.equal(m.nextFileWait(420000), null);
+  }
+});
+
+// A clocked cx: timers fire in time order; `at(ms, fn)` runs fn when the clock passes ms.
+function clockCx() {
+  let now = 0;
+  const tasks = [], timers = [], events = [];
+  const cx = {notify() {}, spawn(fn) { const task = Promise.resolve().then(() => fn(cx)); tasks.push(task); return task; },
+    timer: {after(ms, fn) { timers.push({at: now + ms, fn}); return {cancel() {}}; }}};
+  const settle = async () => { for (let n = 0; n < 10; n++) await Promise.all(tasks.splice(0)); };
+  const run = async (until = Infinity) => {
+    while (timers.length) {
+      timers.sort((a, b) => a.at - b.at);
+      if (timers[0].at > until) break;
+      const t = timers.shift(); now = t.at;
+      for (const e of events.filter(e => !e.done && e.at <= now)) { e.done = true; e.fn(); }
+      t.fn(cx); await settle();
+    }
+  };
+  return {cx, settle, run, timers, at: (ms, fn) => events.push({at: ms, fn}), now: () => now};
+}
+
+async function deskFiles(io) {
+  globalThis.__fileReq2 = {div: element, h_flex: element, v_flex: element, appHome: () => '/h', ...io};
+  const base = new URL('../mods/sixfold-desk/', import.meta.url);
+  const src = (await readFile(new URL('alert-files.js', base), 'utf8'))
+    .replace(/import \{([^}]+)\} from '(?:gpui-kit|gpui-base|herdr)';/g, 'const {$1}=globalThis.__fileReq2;')
+    .replace("'./alert-slack.js'", JSON.stringify(new URL('alert-slack.js', base).href));
+  return import(asUrl(src + `//${Math.random()}`));
+}
+
+test('card popover: a first read that fails and a retry at 125 s still shows the text', async () => {
+  const io = disk(), files = await deskFiles(io), {cx, settle, run, at} = clockCx();
+  let shown = 0;
+  at(125000, () => io.files.set(COPY('F0TEST0021'), '재시도 본문'));
+  files.followFileText('F0TEST0021', cx, () => true, () => { shown++; });
+  await settle(); await run();
+  assert.equal(shown, 1);
+  assert.deepEqual(files.fileText('F0TEST0021'), {state: 'ready', text: '재시도 본문'});
+});
+
+test('card popover: with no copy by 7 minutes the text says so and the looks stop', async () => {
+  const io = disk(), files = await deskFiles(io), {cx, settle, run, timers, now} = clockCx();
+  let shown = 0;
+  files.followFileText('F0TEST0022', cx, () => true, () => { shown++; });
+  await settle(); await run();
+  assert.equal(files.fileText('F0TEST0022').state, 'late');
+  assert.equal(shown, 1, 'redrawn once to say so');
+  assert.equal(timers.length, 0);
+  assert.ok(now() >= 420000 && now() < 440000, String(now()));
+});
+
+test('inbox window: a retry at 125 s is shown, and past 7 minutes it says the text has not arrived', async () => {
+  const io = disk();
+  class View {}
+  globalThis.__fileInbox2 = {View, div: element, image: element, h_flex: element, v_flex: element, Popover: {new: element},
+    theme: () => theme, props: () => ({window: true}), appHome: () => '/h', home: () => '/h', shared: () => null, setShared() {},
+    openOverlay() {}, closeOverlay() {}, exec() {}, ...io};
+  const base = new URL('../mods/sixfold-slack-inbox/', import.meta.url);
+  const src = (await readFile(new URL('main.js', base), 'utf8'))
+    .replace(/import \{([^}]+)\} from '(?:gpui-kit|gpui-base|herdr)';/g, 'const {$1}=globalThis.__fileInbox2;')
+    .replace("'./model.js'", JSON.stringify(new URL('model.js', base).href));
+  const {default: MentionInbox} = await import(asUrl(src + `//${Math.random()}`));
+  const view = new MentionInbox();
+  view.fileTexts = new Map();
+  let c = clockCx();
+  c.at(125000, () => io.files.set(COPY('F0TEST0023'), '재시도 본문'));
+  view.viewFile('k|F0TEST0023', {id: 'F0TEST0023'}, c.cx); await c.settle(); await c.run();
+  assert.equal(view.fileTexts.get('F0TEST0023'), '재시도 본문');
+  c = clockCx();
+  view.viewFile('k|F0TEST0024', {id: 'F0TEST0024'}, c.cx); await c.settle(); await c.run();
+  assert.equal(view.fileTexts.get('F0TEST0024'), null);
+  assert.ok(view.fileLate.has('F0TEST0024'), 'past the wait it says so');
+  assert.equal(c.timers.length, 0);
+});
