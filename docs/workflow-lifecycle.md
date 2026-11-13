@@ -4,7 +4,9 @@ This contract joins the optional
 [ai-workflows producer](https://github.com/chanyang721/ai-workflows) and this
 theme's existing compact sidebar. It adds no task authority, sidebar section,
 tab, or timer that can close a session. Installing the theme does not install
-the producer.
+the producer. This is a display mapping for the shared
+`HERDR-WORKFLOW-1` contract; [the repository adapter](harness-workflow.md)
+links its canonical policy and release evidence requirements.
 
 ## Separate the result from the terminal
 
@@ -37,10 +39,10 @@ state from an issue number, role name, progress percentage or elapsed time.
 | Task allocation, work, review, acceptance | `stage` 0–5 | Task bar or transient label in the existing status slot |
 | Current observed pane state | `status`, optional `state` | Status mark or seven-state glyph; independent of task stage |
 | Accepted task whose pane still remains | `stage: 5`, `status: idle` or `working`, optional `keep_reason` | Row stays visible, including child rows; stage 5 does not imply closure |
-| Cleanup held or waiting | `keep_reason`, optional `closing.blocked_reason` | Reason remains in the row tooltip; a blocked close stays visible |
-| Only an idle deadline remains | `state: cleanup_wait` or `unseen_result`, valid `cleanup` | Countdown uses the supplied absolute deadline and limit, whether five or thirty minutes |
-| Reporting, retaining context, memory proposals | `closing.step` 1–3, optional `closing.memory` | Closing stages use the existing task slot |
-| Confirmed physical close | `closing.step: 4`, no blocking reason | Final label is retained briefly, then the row disappears |
+| Cleanup held or waiting | `keep_reason`, optional `closing.blocked_reason` | Reason remains in the row tooltip; cleanup states also use the existing stage-slot label; a blocked close stays visible |
+| Only an idle deadline remains | `state: cleanup_wait` or `unseen_result`, valid `cleanup` | The stage slot shows `정리 대기` and remaining time; the tooltip countdown uses the supplied absolute deadline and limit |
+| Reporting, retaining context, memory proposals | `closing.step` 1–3, optional `closing.memory` | The existing task slot shows `보관 중` for step 1 and `닫는 중` for steps 2–3 |
+| Confirmed physical close | `closing.step: 4`, no blocking reason | The `닫힘` label is retained briefly, then the row disappears |
 | Archived workspace | Producer confirms removal from the live layout and preserves its archive; historical feed rows may remain | No new live space or pane is invented by the theme |
 
 `state: closed` by itself is not a row-removal instruction. Closing phase 4

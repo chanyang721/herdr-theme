@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {linearReadsUrl} from './linear-reads-url.mjs';
-import {categoryLabel, linearLink, visibleItems, spacesOf, issueLine, buildRequest, requestId, resultLabel} from '../mods/sixfold-linear-inbox/model.js';
+import {categoryLabel, linearLink, visibleItems, spacesOf, issueLine, buildRequest, requestId, resultLabel, collectLine} from '../mods/sixfold-linear-inbox/model.js';
 import {linearUnread, linearScoped} from '../mods/sixfold-desk/alert-model.js';
 
 const N = '11111111-1111-4111-8111-111111111111';
@@ -69,7 +69,8 @@ test('new Linear alerts become arrivals into their space (Share otherwise); no s
   const files = new Map([['linear-alerts.json', JSON.stringify({items: [{id: 'old', read: false, category: 'assignments', workspace: 'Alpha'}, {id: 'past', read: true, category: 'mentions'}], spaces: ['Alpha']})]]);
   const shared = {}, opens = [], tasks = [], timers = new Set(), callbacks = new Map(), changes = new Set();
   const cx = {notify() {}, spawn(fn) { const task = fn(cx); tasks.push(task); return task; },
-    timer: {after(ms, callback) { assert.equal(ms, 20); const timer = {callback, cancel() { timers.delete(timer); }}; timers.add(timer); return timer; }, every() { assert.fail('no polling'); }}};
+    timer: {after(ms, callback) { if (ms !== 20) return {cancel() {}};   // a delayed retry stays pending here
+      const timer = {callback, cancel() { timers.delete(timer); }}; timers.add(timer); return timer; }, every() { assert.fail('no polling'); }}};
   const snapshot = path => { const raw = files.get(path.split('/').at(-1)); if (raw === undefined) return {status: 'missing', hash: null};
     return {status: 'ready', hash: createHash('sha256').update(raw).digest('hex'), value: JSON.parse(raw)}; };
   globalThis.__linearRuntime = {
@@ -93,7 +94,8 @@ test('new Linear alerts become arrivals into their space (Share otherwise); no s
   source = source.replace(/\r\n/g, '\n').replace(/^import .* from '(herdr|crypto|\.\/panel-io\.js)';\n/gm, '')
     .replace("'./arrival-store.js'", `'${storeUrl}'`).replace("'./arrival-model.js'", `'${modelUrl}'`)
     .replace("'./alert-model.js'", `'${new URL('../mods/sixfold-desk/alert-model.js', import.meta.url).href}'`)
-    .replace("'./linear-reads.js'", `'${await linearReadsUrl()}'`);
+    .replace("'./linear-reads.js'", `'${await linearReadsUrl()}'`)
+    .replace("'./watch-guard.js'", `'${new URL('../mods/sixfold-desk/watch-guard.js', import.meta.url).href}'`);
   source = `const {${Object.keys(globalThis.__linearRuntime).join(',')}} = globalThis.__linearRuntime;\n` + source;
   const store = await import(storeUrl);
   const flush = async () => { for (let n = 0; n < 20; n++) { const due = [...timers]; timers.clear(); due.forEach(t => t.callback(cx)); await Promise.all(tasks.splice(0)); await Promise.resolve(); if (!timers.size && !tasks.length) return; } assert.fail('did not settle'); };
@@ -479,4 +481,20 @@ test('a read mark with no answer in 5 minutes goes back to unread with a line sa
   await reads.checkReads({read: async () => null, now: now.getTime() + 5 * 60_000 + 1});
   assert.equal(reads.readState(a.id), '');
   assert.match(reads.lastReadError(now.getTime() + 5 * 60_000 + 2), /응답이 없어 되돌렸습니다/);
+});
+
+test('collection line names the API source and a fixed error label, never raw text', () => {
+  assert.match(collectLine({state: 'ok', source: 'linear-api', last_success: '10:00'}), /^수집: Linear API 직접 · 확인됨 · 마지막 성공 10:00/);
+  assert.match(collectLine({state: 'ok', source: 'linear-mcp'}), /^수집: 확인됨 · 마지막 성공 아직 없음/);
+  assert.match(collectLine({state: 'error', source: 'linear-api', error_kind: 'key_missing'}), /^수집: Linear API 직접 · 조회 실패 · API 키 없음 · /);
+  assert.match(collectLine({state: 'error', source: 'linear-api', error_kind: 'unauthorized'}), /조회 실패 · API 키 확인 필요/);
+  assert.match(collectLine({state: 'error', source: 'linear-api', error_kind: 'rate_limited'}), /호출 한도/);
+  assert.match(collectLine({state: 'error', source: 'linear-api', error_kind: 'network'}), /네트워크 오류/);
+  assert.doesNotMatch(collectLine({state: 'error', source: 'linear-api', error_kind: 'lin_api_SECRET', error: 'lin_api_SECRET failed'}), /lin_api|SECRET/);
+  assert.match(collectLine({}), /상태 확인 전/);
+  assert.match(collectLine(null), /상태 확인 전/);
+});
+
+test('collection line shows a missing key as an error, not a fallback', () => {
+  assert.match(collectLine({state: 'error', source: 'linear-api', error_kind: 'key_missing'}), /조회 실패 · API 키 없음/);
 });

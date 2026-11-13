@@ -150,17 +150,18 @@ test('bridge and colour helpers', () => {
   assert.equal(mix('#000000', '#ffffff', 0.5), '#808080');
 });
 
-test('layout: header chip only, no permanent timeline band or footer', () => {
+test('layout: an 80px week band under the header, no header chip or footer', () => {
   const layout = JSON.parse(readFileSync(new URL('../layouts/sixfold.json', import.meta.url), 'utf8'));
   const find = (n, id) => n?.id === id ? n : (n?.children || []).map(c => find(c, id)).find(Boolean);
-  assert.deepEqual(find(layout, 'work').children.map(c => c.id), ['monitor-strip', 'tabs', 'body']);
-  assert.equal(find(layout, 'week-timeline'), undefined);
+  assert.deepEqual(find(layout, 'work').children.map(c => c.id), ['monitor-strip', 'week-timeline', 'tabs', 'body']);
+  assert.deepEqual([find(layout, 'week-timeline').size.px, find(layout, 'week-timeline').min, find(layout, 'week-timeline').max], [80, 80, 80]);
+  assert.equal(find(layout, 'week-timeline').content.mod, 'week-timeline');
   assert.equal(find(layout, 'status'), undefined);
   assert.equal(find(layout, 'toolbar'), undefined);
   assert.equal(find(layout, 'monitor-strip').window_drag, true);
   assert.equal(find(layout, 'mcp-cli').type,'column');
-  assert.deepEqual(find(layout, 'mcp-header').children.map(c => c.content.mod), ['mcp-status','week-timeline']);
+  assert.deepEqual(find(layout, 'mcp-cli').children.map(c => c.content.mod), ['mcp-status','cli-status']);
+  assert.equal(find(layout, 'week-timeline-chip'), undefined);
   assert.equal(find(layout, 'cli-status').content.mod,'cli-status');
-  assert.equal(find(layout, 'week-timeline-chip').size.px,180);
   assert.match(readFileSync(new URL('../mods/sixfold-desk/main.js', import.meta.url), 'utf8'), /role === 'footer'/);
 });

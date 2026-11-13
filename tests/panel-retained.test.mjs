@@ -16,11 +16,13 @@ let loads=0;
 async function runtime(motion=false,options={}){
   const objects=[],timers=[],store=new Map([['sixfold.motion',motion]]);let rendering=false;globalThis.__retainedThemePatch={};globalThis.__retainedHostVisible=true;globalThis.__retainedNativeSpaces=[];
   const cx={notify(entity){assert(!rendering,'notify during render');entity.dirty=true;},timer:{after(ms,fn){assert(!rendering);const timer={ms,fn,cancelled:false,cancel(){this.cancelled=true;}};timers.push(timer);return timer;}},
-    new(Class,props){assert(!rendering,'new view during render');const view=new Class();view.init?.(props,cx);const entity={view,dirty:true,released:false,release(){this.released=true;return true;}};objects.push(entity);return entity;}};
+    new(Class,props){assert(!rendering,'new view during render');const view=new Class();view.init?.(props,cx);const entity={view,dirty:true,released:false,release(){this.released=true;return true;},set_props(next){assert(!rendering,'set_props during render');view.update?.(next,cx);this.dirty=true;}};objects.push(entity);return entity;}};
   const path=()=>new Proxy({},{get:(_t,key)=>key==='build'?()=>[]:()=>path()});
-  globalThis.__retainedRuntime={View:class{},div:element,svg:element,image:element,h_flex:element,v_flex:element,Popover:{new:element},Input:{new:element},InputState:{new:()=>({events:new Map(),text:'',on(name,callback){this.events.set(name,callback);},value(){return this.text;}})},PathBuilder:{stroke:path},
+  globalThis.__retainedRuntime={View:class{},div:element,svg:element,image:element,h_flex:element,v_flex:element,Popover:{new:element},Input:{new:state=>{if(state?.released)throw TypeError('this input state has been released and can no longer be rendered');const value=element();value.calls.push(['input',state]);return value;}},InputState:{new:(options={})=>{assert(!rendering,'InputState.new during render');const state={options,events:new Map(),text:options.value||'',released:false,on(name,callback){this.events.set(name,callback);},value(){if(this.released)throw TypeError('this input state has been released');return this.text;},set_value(next){if(this.released)throw TypeError('this input state has been released');this.text=next;},release(){const was=!this.released;this.released=true;return was;}};(globalThis.__retainedInputs??=[]).push(state);return state;}},PathBuilder:{stroke:path},
     theme:()=>({background:'#101318',chrome:'#14191f',surface:'#1b232d',border:'#39434f',selected:'#253249',foreground:'#e5edf5',muted:'#a6b0bf',dim:'#788594',accent:'#a9b8ff',ansi6:'#68c9bc',blocked:'#edac67',hover:'#253249',...globalThis.__retainedThemePatch}),
-    window:()=>({active:false,visible:globalThis.__retainedHostVisible}),spaces:()=>globalThis.__retainedNativeSpaces,panes:()=>[],shared:key=>store.get(key),setShared:(key,value)=>store.set(key,value),run(){},settings:()=>({zoom:1})};
+    window:()=>({active:false,visible:globalThis.__retainedHostVisible}),appHome:()=>'/home',
+    readTextFile:async path=>{const files=globalThis.__retainedFiles;const text=files?files[path]:globalThis.__retainedRead?.(path);if(text==null)throw new Error('missing');return text;},
+    writeTextFile:async(path,text)=>{if(!globalThis.__retainedWrites)throw new Error('no writes here');globalThis.__retainedWrites.push([path,JSON.parse(text)]);},spaces:()=>globalThis.__retainedNativeSpaces,panes:()=>[],shared:key=>store.get(key),setShared:(key,value)=>store.set(key,value),run(){},settings:()=>({zoom:1})};
   globalThis.window={paint_path:element};
   const transform=source=>source.replace(/import \{([^}]+)\} from '(?:gpui-kit|gpui-base|herdr)';/g,'const {$1}=globalThis.__retainedRuntime;');
   const localModule=async name=>`data:text/javascript;base64,${Buffer.from(transform(await readFile(new URL(`../mods/sixfold-desk/${name}.js`,import.meta.url),'utf8')).replace("'./alert-model.js'",JSON.stringify(new URL('../mods/sixfold-desk/alert-model.js',import.meta.url).href)).replace("'./issue-model.js'",JSON.stringify(new URL('../mods/sixfold-desk/issue-model.js',import.meta.url).href)).replace("'./issue-detail-view.js'",JSON.stringify(globalThis.__detailViewUrl||''))).toString('base64')}#${loads++}`;
@@ -135,7 +137,7 @@ test('native issue popover opens with retained input; completion returns via own
   popup.calls.find(call=>call[0]==='on_open_change')[1](true);
   assert.equal(r.controller.issueStates.get(space.id).open,true);r.flush();
   const state=r.controller.issueStates.get(space.id);state.scope='all';
-  state.input.text='manual';state.input.events.get('change')();
+  const search=r.controller.issueInputs.get(space.id).search;search.text='manual';search.events.get('change')();
   state.hoverKey='DEMO-99';   // the pull button shows under the mouse
   popup=r.controller.issuePopover(card,element(),t);
   const body=popup.calls.find(call=>call[0]==='content')[1];
@@ -274,6 +276,32 @@ test('an explicit local partner rename updates its chips without invalidating ag
   r.controller.dispose();
 });
 
+test('an open issue search asks again as its answer gets old (within a minute); closing it stops the look',async()=>{
+  const original=Date.now;let now=Date.parse('2026-11-12T08:00:00Z');Date.now=()=>now;
+  const writes=[];let answer=null;globalThis.__retainedWrites=writes;
+  globalThis.__retainedRead=path=>path.includes('/linear-cache/project-')?answer:null;
+  const r=await runtime(),tasks=[];
+  try{
+    r.controller.cx.spawn=fn=>{tasks.push(fn());};const settle=async()=>{while(tasks.length)await tasks.shift();};
+    r.controller.apply(cleanPanelFeed(makePanelLoadFixture({spaces:1,agentsPerSpace:1,now})),'ready');r.flush();
+    const [space]=r.controller.feed.spaces;
+    const popup=()=>r.controller.issuePopover(space,element(),r.native.theme()).calls.find(c=>c[0]==='on_open_change')[1];
+    popup()(true,{});await settle();
+    assert.equal(writes.length,1);assert.equal(writes[0][1].space,space.name);assert.equal(writes[0][1].force,undefined,'nothing read yet');
+    assert(r.controller.lookTimer,'the open search keeps looking');assert.equal(r.controller.lookTimer.ms,5000);
+    answer=JSON.stringify({schema:1,space:space.name,at:new Date(now+1000).toISOString(),state:'ok',milestones:[],issues:[]});
+    now+=1500;r.controller.cacheTimer.fn();await settle();
+    const look=async seconds=>{now=Date.parse('2026-11-12T08:00:00Z')+seconds*1000;const timer=r.controller.lookTimer;assert(timer,'look timer');timer.fn();await settle();};
+    await look(6);assert.equal(writes.length,1,'fresh: nothing asked, no repaint work');
+    await look(40);assert.equal(writes.length,1,'39 s after the read (at 1 s): still fresh');
+    await look(46);assert.equal(writes.length,2,'old: asked again within a minute of the read');assert.equal(writes[1][1].force,true);
+    answer=JSON.stringify({schema:1,space:space.name,at:new Date(now+1500).toISOString(),state:'ok',milestones:[],issues:[]});
+    await look(61);assert.equal(writes.length,2,'answered meanwhile or asked a moment ago');
+    popup()(false,{});await look(66);
+    assert.equal(writes.length,2);assert.equal(r.controller.lookTimer,null,'closed: no more looks');
+  }finally{r.controller.dispose();Date.now=original;delete globalThis.__retainedWrites;delete globalThis.__retainedRead;}
+});
+
 test('opening another space closes the previous issue popup and only its retained card changes',async()=>{
  const r=await runtime(),raw=makePanelLoadFixture({spaces:2,agentsPerSpace:1,now:Date.now()});
  try{
@@ -368,6 +396,23 @@ test('one meta line carries both tools: Slack unread on its part, Linear unread 
   }finally{r.controller.dispose();}
 });
 
+test('the Slack mark and its unread count are one chip, before the channel name',async()=>{
+  const r=await runtime(false,{cardAlerts:()=>({slack:3,linear:0,hasSlack:true}),slackAlerts:(space,trigger)=>trigger});
+  try{
+    const raw=makePanelFixture({slack:true,tool:'linear'});
+    r.controller.apply(cleanPanelFeed(raw),'ready');r.flush();
+    const id=raw.spaces[0].id,card=r.controller.cards.get(id);
+    const walk=n=>[n,...(n.nodes||[]).filter(x=>x&&typeof x==='object').flatMap(walk),...(n.calls||[]).filter(c=>c[0]==='trigger'&&c[1]&&typeof c[1]==='object').flatMap(c=>walk(c[1]))];
+    const byId=(node,want)=>walk(node).find(n=>n.calls?.some(c=>c[0]==='id'&&c[1]===want));
+    const slack=byId(card.tree,`panel-slack-${id}`),mark=byId(slack,`panel-slack-mark-${id}`);
+    assert(mark&&byId(mark,`panel-slack-unread-${id}`),'the count sits in the mark chip');
+    const parts=(slack.nodes||[]).filter(x=>x&&typeof x==='object');
+    assert.equal(parts[0],mark,'the chip comes first, the channel name after it');
+    const flat=walk(mark).flatMap(n=>(n.nodes||[]).filter(x=>typeof x==='string'));
+    assert(flat.includes('3'));
+  }finally{r.controller.dispose();}
+});
+
 test('a peek is the alerted-issues top of a space issue search with the new alerts lit; its title opens the search; an open search makes alerts quiet',async()=>{
   const r=await runtime();
   try{
@@ -396,4 +441,223 @@ test('a peek is the alerted-issues top of a space issue search with the new aler
     assert.equal(r.controller.issueStates.get(space.id).open,true);
     assert.equal(r.controller.anyIssuesOpen(),true,'an open issue search: new alerts only count on the chip');
   }finally{r.controller.dispose();}
+});
+
+test('a timeline that breaks after a good read gives the catalog back instead of the old timeline',async()=>{
+  const r=await runtime(false);
+  const raw=makePanelFixture({tool:'linear'}),space=raw.spaces[0];
+  space.name='Demo';space.issue_catalog={week:[space.issues[0]],milestone:[],all:[space.issues[0]],import_request:null,updated_at:'2026-11-10T01:00:00Z'};
+  r.controller.apply(cleanPanelFeed(raw),'ready');r.flush();
+  const card=r.controller.spaceMap.get(space.id),file='/home/data/sixfold/week-timeline.json';
+  r.controller.cx.spawn=fn=>fn();
+  const good=JSON.stringify({v:2,updated:'2026-11-12T06:30:00Z',week:{start:'2026-11-09',end:'2026-11-15'},projects:[{key:'D',workspace:'Demo',milestones:[],
+    issues:[{key:'NEW-1',title:'From timeline',state:'started',due:'2026-11-12'}]}]});
+  const settle=async()=>{r.controller.loadTimeline();for(let i=0;i<5;i++)await Promise.resolve();};
+  globalThis.__retainedFiles={[file]:good};await settle();
+  assert.deepEqual(r.controller.withTimeline(card).issue_catalog.all.map(i=>i.key),['NEW-1']);
+  globalThis.__retainedFiles={[file]:'{broken'};await settle();
+  assert.equal(r.controller.timeline,null,'the old timeline is not kept');
+  assert.equal(r.controller.withTimeline(card).issue_catalog,card.issue_catalog,'the catalog is back');
+  globalThis.__retainedFiles={[file]:good};await settle();
+  assert.equal(r.controller.withTimeline(card).issue_catalog.all[0].key,'NEW-1','a repaired file is used again');
+  globalThis.__retainedFiles={};await settle();
+  assert.equal(r.controller.timeline,null,'a missing file is none');
+  delete globalThis.__retainedFiles;
+});
+
+// Native retained state belongs to the view whose call created it. An input made in an event
+// handler (a peek title, a popup) dies with that view while the card still draws it, and drawing
+// a released input throws, which failed the whole card. The card now owns its inputs (init/update)
+// and a released one is left out of render and replaced by the card's update.
+const walkTree=(node,seen=new Set())=>{
+  if(!node||typeof node!=='object'||!Array.isArray(node.nodes)||seen.has(node))return [];seen.add(node);
+  const children=[...node.nodes,...(node.calls||[]).flatMap(call=>call.slice(1))];
+  return [node,...children.flatMap(child=>walkTree(child,seen))];
+};
+const drawnInputs=tree=>walkTree(tree).flatMap(node=>(node.calls||[]).filter(call=>call[0]==='input').map(call=>call[1]));
+test('a card owns its issue inputs: created in init, never by the opening event or render',async()=>{
+  const r=await runtime();
+  try{
+    const raw=makePanelFixture({tool:'linear'}),space=raw.spaces[0];
+    globalThis.__retainedInputs=[];
+    r.controller.apply(cleanPanelFeed(raw),'ready');
+    const inputs=r.controller.issueInputs.get(space.id);
+    assert(inputs?.search&&inputs?.comment,'the card init made both inputs');
+    const made=globalThis.__retainedInputs.length;
+    r.flush();
+    const t=r.native.theme(),card=r.controller.spaceMap.get(space.id);
+    r.controller.issuePopover(card,element(),t).calls.find(call=>call[0]==='on_open_change')[1](true,{});
+    assert.equal(globalThis.__retainedInputs.length,made,'opening creates no input in the event owner');
+    r.flush();
+    assert.deepEqual(drawnInputs(r.controller.issuePopover(card,element(),t)),[inputs.search],'the open search draws the card input');
+    // The peek title opens the same search without making an input of its own.
+    r.controller.issuePopover(card,element(),t).calls.find(call=>call[0]==='on_open_change')[1](false,{});
+    r.store.set('sixfold.linearItems',[{id:'n-1',issue:space.issues[0].key,workspace:space.name,read:false,category:'mentions',at:'1',url:''}]);
+    const peek=r.controller.peekIssues(space.name,['n-1'],t);
+    const head=walkTree(peek).find(node=>node.calls?.some(call=>call[0]==='id'&&call[1]===`task-issues-peek-head-${space.id}`));
+    head.calls.find(call=>call[0]==='on_click')[1]({},{stop_propagation(){}});
+    assert.equal(r.controller.issueStates.get(space.id).open,true);
+    assert.equal(globalThis.__retainedInputs.length,made,'the peek path creates no input either');
+    assert.equal(r.controller.issueInputs.get(space.id).search,inputs.search);
+  }finally{r.controller.dispose();}
+});
+
+test('a released issue input leaves the card drawable and the card update replaces it',async()=>{
+  const r=await runtime();
+  try{
+    const raw=makePanelFixture({tool:'linear'}),space=raw.spaces[0];
+    r.controller.apply(cleanPanelFeed(raw),'ready');r.flush();
+    const t=r.native.theme(),card=r.controller.spaceMap.get(space.id),entity=r.controller.cards.get(space.id);
+    const open=value=>r.controller.issuePopover(r.controller.spaceMap.get(space.id),element(),t).calls.find(call=>call[0]==='on_open_change')[1](value,{});
+    open(true);r.flush();
+    const first=r.controller.issueInputs.get(space.id).search;
+    first.text='DEMO';first.events.get('change')();
+    assert.equal(r.controller.issueStates.get(space.id).query,'DEMO');
+    // The owner of the input went away (a closed peek, a retired popup): the handle is released.
+    first.release();
+    r.controller.notify(entity);
+    assert.doesNotThrow(()=>r.flush(),'the card still renders with a released input');
+    assert.deepEqual(drawnInputs(r.controller.issuePopover(card,element(),t)),[],'a released input is left out, not drawn');
+    assert(r.controller.staleInputs.has(space.id),'render only marks the card');
+    assert.equal(r.controller.issueInputs.get(space.id).search,first,'render does not replace it');
+    // A closed search never draws its input, so a released one cannot fail the card either.
+    open(false);r.controller.issueInputs.get(space.id).search.release();r.controller.notify(entity);
+    assert.doesNotThrow(()=>r.flush());
+    assert.deepEqual(drawnInputs(r.controller.issuePopover(card,element(),t)),[]);
+    // The next apply (outside render) gives the card new props; its update makes the new inputs.
+    r.controller.apply(cleanPanelFeed(makePanelFixture({tool:'linear'})),'ready');
+    const second=r.controller.issueInputs.get(space.id).search;
+    assert.notEqual(second,first,'update replaced the released input');
+    assert.equal(second.released,false);assert.equal(second.text,'DEMO','the query survives the replacement');
+    assert.equal(r.controller.staleInputs.size,0);
+    open(true);r.flush();
+    assert.deepEqual(drawnInputs(r.controller.issuePopover(r.controller.spaceMap.get(space.id),element(),t)),[second]);
+    second.text='DEMO-2';second.events.get('change')();
+    assert.equal(r.controller.issueStates.get(space.id).query,'DEMO-2','the new input is wired to the search');
+    // The open event repairs a released input too (no apply needed).
+    second.release();open(false);open(true);
+    const third=r.controller.issueInputs.get(space.id).search;
+    assert.notEqual(third,second);assert.equal(third.released,false);
+    // The comment box: a released comment input is left out; the menu event replaces it.
+    const comment=r.controller.issueInputs.get(space.id).comment;comment.release();
+    const state=r.controller.issueStates.get(space.id);state.menu='comment';
+    const extra=r.controller.issueExtra(r.controller.spaceMap.get(space.id),state,{});
+    assert.equal(extra.commentBox,null,'a released comment input is not drawn');
+    extra.onMenu('comment');
+    const fresh=r.controller.issueInputs.get(space.id).comment;
+    assert.notEqual(fresh,comment);assert.equal(fresh.released,false);
+    assert(drawnInputs(r.controller.issueExtra(r.controller.spaceMap.get(space.id),state,{}).commentBox).includes(fresh));
+  }finally{r.controller.dispose();}
+});
+
+test('issue inputs keep the query across close/reopen, follow a card that leaves and returns, and go with dispose',async()=>{
+  const r=await runtime();
+  const raw=makePanelFixture({tool:'linear'}),space=raw.spaces[0];
+  r.controller.apply(cleanPanelFeed(raw),'ready');r.flush();
+  const t=r.native.theme();
+  const open=value=>r.controller.issuePopover(r.controller.spaceMap.get(space.id),element(),t).calls.find(call=>call[0]==='on_open_change')[1](value,{});
+  const first=r.controller.issueInputs.get(space.id).search;
+  assert.equal(first.options.value,'','the card init had no query yet');
+  open(true);first.text='DEMO-1';first.events.get('change')();open(false);open(true);
+  assert.equal(r.controller.issueInputs.get(space.id).search,first,'a live input survives close/reopen');
+  assert.equal(r.controller.issueStates.get(space.id).query,'DEMO-1');
+  assert.equal(first.text,'DEMO-1');
+  // The card leaves: its entity, state and inputs go; a returning card starts with its own.
+  const firstCard=r.controller.cards.get(space.id),{search,comment}=r.controller.issueInputs.get(space.id);
+  r.controller.apply(cleanPanelFeed({...raw,spaces:raw.spaces.slice(1)}),'ready');
+  assert.equal(firstCard.released,true);
+  assert(!r.controller.issueInputs.has(space.id)&&!r.controller.issueStates.has(space.id));
+  assert(search.released&&comment.released,'the removed card releases its inputs');
+  r.controller.apply(cleanPanelFeed(raw),'ready');r.flush();
+  const back=r.controller.issueInputs.get(space.id);
+  assert(back&&back.search!==search&&!back.search.released&&!back.comment.released,'the returning card made new inputs in its init');
+  assert.notEqual(r.controller.cards.get(space.id),firstCard);
+  open(true);r.flush();
+  assert.deepEqual(drawnInputs(r.controller.issuePopover(r.controller.spaceMap.get(space.id),element(),t)),[back.search]);
+  // Dispose releases every card (the native store releases what each card owns with it).
+  const cards=[...r.controller.cards.values()];
+  r.controller.dispose();
+  assert(cards.every(card=>card.released),'dispose releases the cards that own the inputs');
+  assert.equal(r.controller.issueInputs.size,0,'dispose clears the input map');
+});
+
+// The catalog and the Linear project cache both name issue statuses; the one read later wins, and an
+// open window reads the timeline again on its look, so a change shows without reopening it.
+test('a newer project cache beats an older timeline status, an older one does not, and the cache fills missing keys',async()=>{
+  const now=Date.now(),file='/home/data/sixfold/week-timeline.json';let answer=null,timeline=null;globalThis.__retainedWrites=[];
+  globalThis.__retainedRead=path=>path===file?timeline:path.includes('/linear-cache/project-')?answer:null;
+  const r=await runtime(),tasks=[];
+  try{
+    r.controller.cx.spawn=fn=>{tasks.push(fn());};const settle=async()=>{while(tasks.length)await tasks.shift();};
+    const raw=makePanelFixture({tool:'linear'}),sp=raw.spaces[0];sp.name='Demo';
+    sp.issue_catalog={all:[],week:[],milestone:[],updated_at:new Date(now-600000).toISOString()};
+    r.controller.apply(cleanPanelFeed(raw),'ready');r.flush();
+    const feed=at=>JSON.stringify({v:2,updated:new Date(at).toISOString(),week:{start:'2026-11-09',end:'2026-11-15'},
+      projects:[{workspace:'Demo',milestones:[],issues:[{key:'DEMO-1',title:'One',state:'todo',status:'Todo'},{key:'DEMO-2',title:'Two',state:'todo'}]}]});
+    timeline=feed(now-120000);
+    answer=JSON.stringify({schema:1,state:'ok',space:'Demo',at:new Date(now-60000).toISOString(),milestones:[],
+      statuses:{Team:[{name:'Done',type:'completed'},{name:'Todo',type:'unstarted'}]},issues:[{key:'DEMO-1',status:'Done',team:'Team'},{key:'DEMO-2',status:'Todo',team:'Team'}]});
+    r.controller.issuePopover(r.controller.spaceMap.get(sp.id),element(),r.native.theme()).calls.find(c=>c[0]==='on_open_change')[1](true,{});await settle();
+    const statusOf=key=>{const card=r.controller.withTimeline(r.controller.spaceMap.get(sp.id));
+      return r.controller.issueExtra(card,{pending:new Map(),scope:'all'},{rows:card.issue_catalog.all}).statusOf(key);};
+    assert.deepEqual(statusOf('DEMO-1'),{name:'Done',type:'completed',color:''},'the cache read 60 s after the timeline wins');
+    assert.equal(statusOf('DEMO-2').name,'Todo','a key the timeline names no status for comes from the cache');
+    timeline=feed(now);r.controller.lookTimer.fn();await settle();
+    assert.equal(statusOf('DEMO-1').name,'Todo','a timeline newer than the cache wins');
+    assert.equal(statusOf('DEMO-1').type,'unstarted','its type is the cache team status of the same name');
+    assert.equal(statusOf('DEMO-2').name,'Todo');
+  }finally{r.controller.dispose();delete globalThis.__retainedWrites;delete globalThis.__retainedRead;}
+});
+
+test('an open issue window reads the timeline again on its look and shows a status changed meanwhile',async()=>{
+  const now=Date.now(),file='/home/data/sixfold/week-timeline.json';let timeline=null;
+  globalThis.__retainedWrites=[];globalThis.__retainedRead=path=>path===file?timeline:null;
+  const r=await runtime(),tasks=[];
+  try{
+    r.controller.cx.spawn=fn=>{tasks.push(fn());};const settle=async()=>{while(tasks.length)await tasks.shift();};
+    const raw=makePanelFixture({tool:'linear'}),sp=raw.spaces[0];sp.name='Demo';
+    sp.issue_catalog={all:[{key:'DEMO-1',title:'One',state:'waiting',status:'Todo'}],week:[],milestone:[],updated_at:new Date(now-600000).toISOString()};
+    r.controller.apply(cleanPanelFeed(raw),'ready');r.flush();
+    const feed=(at,state,status)=>JSON.stringify({v:2,updated:new Date(at).toISOString(),week:{start:'2026-11-09',end:'2026-11-15'},
+      projects:[{workspace:'Demo',milestones:[],issues:[{key:'DEMO-1',title:'One',state,status}]}]});
+    timeline=feed(now-60000,'todo','Todo');
+    r.controller.issuePopover(r.controller.spaceMap.get(sp.id),element(),r.native.theme()).calls.find(c=>c[0]==='on_open_change')[1](true,{});await settle();
+    const statusOf=()=>{const card=r.controller.withTimeline(r.controller.spaceMap.get(sp.id));
+      return r.controller.issueExtra(card,{pending:new Map(),scope:'all'},{rows:card.issue_catalog.all}).statusOf('DEMO-1');};
+    assert.equal(statusOf().name,'Todo');
+    timeline=feed(now,'done','완료');
+    const look=r.controller.lookTimer;assert(look,'the open window keeps looking');look.fn();await settle();
+    assert.deepEqual(statusOf(),{name:'완료',type:'completed',color:''},'the look read the newer timeline');
+  }finally{r.controller.dispose();delete globalThis.__retainedWrites;delete globalThis.__retainedRead;}
+});
+
+// Teams can type the same status name differently; a catalog status takes its type from the issue's own
+// team, and a name the teams disagree on is not guessed from another team.
+test('a status name typed differently by two teams classifies each issue by its own team, whichever source is newer',async()=>{
+  const now=Date.now(),file='/home/data/sixfold/week-timeline.json';let answer=null,timeline=null;globalThis.__retainedWrites=[];
+  globalThis.__retainedRead=path=>path===file?timeline:path.includes('/linear-cache/project-')?answer:null;
+  const r=await runtime(),tasks=[];
+  try{
+    r.controller.cx.spawn=fn=>{tasks.push(fn());};const settle=async()=>{while(tasks.length)await tasks.shift();};
+    const raw=makePanelFixture({tool:'linear'}),sp=raw.spaces[0];sp.name='Demo';
+    sp.issue_catalog={all:[],week:[],milestone:[],updated_at:new Date(now-600000).toISOString()};
+    r.controller.apply(cleanPanelFeed(raw),'ready');r.flush();
+    const feed=at=>JSON.stringify({v:2,updated:new Date(at).toISOString(),week:{start:'2026-11-09',end:'2026-11-15'},
+      projects:[{workspace:'Demo',milestones:[],issues:['DEMO-1','DEMO-2','DEMO-3'].map(key=>({key,title:key,state:'todo',status:'Ready'}))}]});
+    timeline=feed(now-120000);
+    answer=JSON.stringify({schema:1,state:'ok',space:'Demo',at:new Date(now-60000).toISOString(),milestones:[],
+      statuses:{TeamA:[{name:'Ready',type:'completed'}],TeamB:[{name:'Ready',type:'unstarted'}]},
+      issues:[{key:'DEMO-1',status:'Ready',team:'TeamB'},{key:'DEMO-2',status:'Ready',team:'TeamA'}]});
+    r.controller.issuePopover(r.controller.spaceMap.get(sp.id),element(),r.native.theme()).calls.find(c=>c[0]==='on_open_change')[1](true,{});await settle();
+    const extra=()=>{const card=r.controller.withTimeline(r.controller.spaceMap.get(sp.id));
+      return r.controller.issueExtra(card,{pending:new Map(),scope:'all'},{rows:card.issue_catalog.all});};
+    const check=label=>{const out=extra();
+      assert.equal(out.statusOf('DEMO-1').type,'unstarted',`${label}: the TeamB issue takes TeamB's Ready`);
+      assert.equal(out.statusOf('DEMO-2').type,'completed',`${label}: the TeamA issue takes TeamA's Ready`);
+      assert.equal(out.statusOf('DEMO-3').type,'unstarted',`${label}: an issue of no known team keeps its own state, not another team's type`);
+      assert.deepEqual(out.shownRows.map(row=>row.key).sort(),['DEMO-1','DEMO-3'],`${label}: only the completed issue is folded`);};
+    check('cache newer');
+    timeline=feed(now);r.controller.lookTimer.fn();await settle();
+    check('timeline newer');
+  }finally{r.controller.dispose();delete globalThis.__retainedWrites;delete globalThis.__retainedRead;}
 });

@@ -527,3 +527,46 @@ test('a reason never grows the compact card, routes stay centred on the row, and
  r.renderPanelTracking(view,t,r.cx);
  const wake=r.timers.at(-1).ms;assert(wake>25000&&wake<=30600,`wakes at the next minute boundary, got ${wake}`);
 });
+
+test('a cleanup row shows its short label in the stage slot, one line high, beside the glyph',async()=>{
+ const cleanup={idle_since:'2026-11-09T04:42:00Z',limit_s:1800,due_at:'2026-11-09T05:12:00Z'};
+ const cases=[
+  [{status:'done',stage:5,state:'cleanup_wait',cleanup,keep_reason:'30분 쉬면 정리'},'정리 대기 12분',t.muted],
+  [{status:'idle',stage:2,state:'cleanup_wait',cleanup},'정리 대기 12분',t.muted],
+  [{status:'idle',stage:5,state:'closing',closing:{step:1,blocked_reason:''}},'보관 중',t.ansi6],
+  [{status:'idle',stage:5,state:'closing',closing:{step:2,blocked_reason:''}},'닫는 중',t.ansi6],
+  [{status:'done',stage:5,state:'closed',closing:{step:4,blocked_reason:''}},'닫힘',t.dim],
+ ];
+ for(const [fields,label,tone] of cases){
+  const {agent,row}=await stateRow(fields);
+  const chip=byId(row,`panel-cleanup-${agent.id}`);
+  assert(chip,label);assert.deepEqual(words(chip),[label]);
+  assert.equal(call(chip,'text_color')[1],tone);assert(call(chip,'truncate'),'a long label truncates inside the slot');
+  assert.equal(all(row).filter(n=>call(n,'id')?.[1]?.startsWith(`panel-stage-${agent.id}-`)).length,0,'the label replaces the segments');
+  const slot=all(row).find(n=>n.nodes?.includes(chip));
+  assert.equal(call(slot,'w')[1],64);assert.equal(call(slot,'h')[1],18);
+  assert.equal(call(row,'h')[1],24,'one line');
+  assert(byId(row,`panel-status-${agent.id}`),'the glyph stays');
+ }
+});
+
+test('an event tag still wins the slot; working, idle and blocked closing rows get no cleanup label',async()=>{
+ const cleanup={idle_since:'2026-11-09T04:42:00Z',limit_s:1800,due_at:'2026-11-09T05:12:00Z'};
+ let {agent,row}=await stateRow({state:'cleanup_wait',cleanup},{tag:{id:'x',label:'검수 요청'}});
+ assert.equal(byId(row,`panel-cleanup-${agent.id}`),undefined);assert(words(row).includes('검수 요청'));
+ for(const fields of [{status:'working',state:'working'},{status:'idle',state:'idle',keep_reason:'30분 쉬면 정리'},
+  {status:'blocked',state:'needs_human',closing:{step:1,blocked_reason:'정리를 완료하지 못했습니다'}},{status:'done',stage:5,closing:{step:1,blocked_reason:''}}]){
+  ({agent,row}=await stateRow(fields));
+  assert.equal(byId(row,`panel-cleanup-${agent.id}`),undefined,JSON.stringify(fields));
+ }
+});
+
+test('the cleanup label counts down on the row wake: a new minute gives new text',async()=>{
+ const cleanup={idle_since:'2026-11-09T04:42:00Z',limit_s:1800,due_at:'2026-11-09T05:12:00Z'};
+ const first=await stateRow({state:'cleanup_wait',cleanup},{now:Date.parse('2026-11-09T05:00:00Z')});
+ const later=await stateRow({state:'cleanup_wait',cleanup},{now:Date.parse('2026-11-09T05:01:00Z')});
+ const done=await stateRow({state:'cleanup_wait',cleanup},{now:Date.parse('2026-11-09T05:12:00Z')});
+ assert.deepEqual(words(byId(first.row,`panel-cleanup-${first.agent.id}`)),['정리 대기 12분']);
+ assert.deepEqual(words(byId(later.row,`panel-cleanup-${later.agent.id}`)),['정리 대기 11분']);
+ assert.deepEqual(words(byId(done.row,`panel-cleanup-${done.agent.id}`)),['정리 대기']);
+});

@@ -5,6 +5,7 @@ import { addArrival, hasArrivalHost } from './arrival-store.js';
 import { arrivalTarget, ARRIVAL } from './arrival-model.js';
 import { placeItems, alertKind, alertLine } from './alert-model.js';
 import { withLocalReads, onReadConfirmed } from './linear-reads.js';
+import { createRetry, watchRecorder } from './watch-guard.js';
 
 // Linear inbox feed for the sidebar: data/sixfold/linear-alerts.json and
 // linear-live-health.json, written by a machine-local collector. Kept apart from
@@ -20,6 +21,7 @@ const QUIET = new Set(['reactions', 'system']);
 const POPUP = {has: category => !QUIET.has(category)};
 const LEDGER = 'linear-popup-events.json';
 const LEDGER_LIMIT = 500;   // ids of notifications already announced; bounded
+export const LOAD_STUCK_MS = 120000;   // a refresh still loading after this no longer blocks the next one
 
 export function linearPopupEvents(items) {
   return (items ?? []).filter(item => typeof item?.id === 'string' && item.id)
@@ -94,21 +96,42 @@ export function watchLinear(view, cx) {
   const inputs = [['feed', 'linear-alerts.json', () => ({items: []})], ['health', 'linear-live-health.json', () => ({})],
                   ['auto', 'linear-auto.json', () => ({entries: []})]];   // Linear auto work: the issue search's '자동 작업'
   const cached = new Map(), subscriptions = [];
-  let loading = false, previous, disposed = false, scheduled = null, dirty = false, version = 0;
+  let loading = false, loadingAt = 0, run = 0, previous, disposed = false, scheduled = null, dirty = false, version = 0;
   const allowed = () => !disposed && view.sidebarVisible !== false;
+  // A refresh whose native read or write never settles stops holding the next one after LOAD_STUCK_MS.
+  const busy = () => loading && Date.now() - loadingAt < LOAD_STUCK_MS;
+  // A failed or refused refresh is retried after a delay even when no input changes (watch-guard.js);
+  // the kind and time of a problem go to data/sixfold/linear-alert-watch.json.
+  const statePath = `${base}/linear-alert-watch.json`;
+  const retry = createRetry({timer: (ms, fn) => cx.timer.after(ms, fn), retry: () => schedule(),
+    record: watchRecorder(text => cx.spawn(async () => { try { await writeTextFile(statePath, text, await readTextFile(statePath).catch(() => null)); } catch { /* best effort */ } }))});
+  // Alerts whose ledger write committed but that are not announced yet (a hidden view announces them when shown).
+  const held = [];
+  const deliver = () => {
+    if (!held.length || !allowed()) return;
+    announceLinear(held.splice(0));
+    cx.notify(); view.panelRetained?.alertsChanged?.();   // arrivals drawn; chips count them once landed
+  };
   const schedule = () => {
     dirty = true;
-    if (!allowed() || loading || scheduled || cached.size !== inputs.length) return;
+    if (!allowed() || busy() || scheduled || cached.size !== inputs.length) return;
     scheduled = cx.timer.after(20, () => { scheduled = null; refresh(cx); });
   };
   const refresh = context => {
     if (!allowed() || cached.size !== inputs.length) return;
-    if (loading) { dirty = true; return; }
+    if (busy()) { dirty = true; return; }
     dirty = false;
     const signature = JSON.stringify(inputs.map(([key]) => cached.get(key).token));
-    if (signature === previous) return;
-    loading = true;
-    (context ?? cx).spawn(async cx => {
+    deliver();
+    // Inputs back at the last published value while a run is still out (timed out) still refresh: that run
+    // already published what it read, and the new run replaces it so it cannot publish more when it returns.
+    if (signature === previous && !loading) return;
+    if (loading) retry.note('stalled');   // the previous run never settled; it is replaced
+    const mine = ++run;
+    const live = () => allowed() && mine === run;   // a replaced run never writes the ledger or publishes late
+    loading = true; loadingAt = Date.now();
+    const release = () => { if (mine !== run) return; loading = false; if (dirty) schedule(); };
+    try { (context ?? cx).spawn(async cx => {
       try {
         const feed = cached.get('feed').value, health = cached.get('health').value;
         const names = (spaces() ?? []).map(s => s.name);
@@ -116,14 +139,24 @@ export function watchLinear(view, cx) {
         setShared('sixfold.linearAuto', cached.get('auto').value);
         cx.notify();
         view.panelRetained?.alertsChanged?.();   // an open issue search shows its issues' new alerts
-        const events = await announce(linearPopupEvents(placeItems(feed.items ?? [], names)), allowed);
-        if (!allowed()) return;
+        // Once the ledger write returns these alerts are seen for every run, so they are delivered even
+        // when this run was replaced meanwhile (the replacement already saw them as seen).
+        held.push(...await announce(linearPopupEvents(placeItems(feed.items ?? [], names)), live));
+        deliver();
+        if (!live()) return;
         previous = signature;   // after the ledger write, so a failed write is retried
-        announceLinear(events);
-        if (events.length) { cx.notify(); view.panelRetained?.alertsChanged?.(); }   // arrivals drawn; chips count them once landed
-      } catch { /* A partial collector write keeps the last valid list; retried on the next change. */ }
-      finally { loading = false; if (dirty) schedule(); }
-    });
+        retry.ok();
+      } catch (error) { if (mine === run) retry.fail(error); /* a partial collector write keeps the last valid list */ }
+      finally { release(); }
+    }); } catch (error) {
+      // cx.spawn can refuse before the task runs (the host's outstanding-task limit under load). The
+      // task's finally then never runs and `loading` stayed true forever: every later collection was
+      // skipped and no Linear alert arrived again. Release here; the next input change retries
+      // (no immediate retry: a refusing host would get one every 20 ms).
+      if (mine === run) loading = false;
+      dirty = true;
+      retry.fail(error);   // retried after a delay (5 s, 30 s, 2 min), not every 20 ms
+    }
   };
   for (const [key, name, fallback] of inputs) {
     subscriptions.push(subscribeJsonFile(cx, `${base}/${name}`, snapshot => {
@@ -140,7 +173,7 @@ export function watchLinear(view, cx) {
     }));
   }
   subscriptions.push(subscribeFileChanges(cx, `${base}/${LEDGER}`, () => { if (!disposed) schedule(); }));
-  const stop = () => { if (disposed) return; disposed = true; scheduled?.cancel?.(); scheduled = null; subscriptions.forEach(unsubscribe => unsubscribe()); };
+  const stop = () => { if (disposed) return; disposed = true; retry.dispose(); scheduled?.cancel?.(); scheduled = null; subscriptions.forEach(unsubscribe => unsubscribe()); };
   view.refreshLinear = refresh; view.stopLinear = stop; (view.fileSubscriptions ??= []).push(stop);
   return stop;
 }

@@ -38,7 +38,17 @@ seconds and open a square 1px ring at departure and arrival. All lines occupy th
 message lanes run 20px and 24px beyond the card, stationary purple links
 use 30px, and remote-computer pipes start at 40px with 8px spacing. Explicit
 row endpoints stay on their rows; space-wide endpoints use their headers.
-Two message lanes stagger bursts, with at most eight scheduled routes. Native
+Two message lanes stagger bursts, with at most eight scheduled routes. A send
+past those eight is not dropped silently: it joins one **메시지 +N** bundle for
+its sender and receiver, which travels after the queued sends (a later send never
+overtakes it) and tags the sender row with the count. At most eight bundles wait
+at once, counting bundles that have already arrived and are still pinging or
+fading, each keeping the IDs of at most 32 sends; sends past that are only
+counted, so memory stays bounded. A correction (`animate: false`, or a lost
+endpoint) takes its send back out of the bundle, before or after it starts: the
+count drops, and a bundle with nothing left is not drawn. A message
+whose `from` is not an agent row (no caller, or only its space or computer) is
+never drawn as an agent's send: its receiving row reads **← 발신 미확인**. Native
 interpolation uses finite targets rather than a JavaScript frame loop. A remote
 packet follows its computer-coloured dashed pipe, and its receiving row briefly
 shows that computer's name. Motion off omits message lines and packets while
@@ -53,8 +63,10 @@ each other's names and a stationary purple solid bracket with hollow square
 endpoints. Names, bundle IDs and messages alone never create a partnership.
 
 Issue groups and flat rows sort blocked, working, review, waiting and done.
-Within a state, producer ordering is preserved. More than four issue groups show
-three and an expandable **+N**; agents inside an issue are not truncated. Explicit
+Within a state, producer ordering is preserved. Issue groups never fold: every
+issue the producer lists (all issues to work on) is drawn, each with its panes
+right under it, and there is no issue **+N** row. A space takes up to 512 issues.
+Agents inside an issue are not truncated. Explicit
 `parent_id` relationships form trees within the same issue. More than three child
 branches show three and their own **+N**. Child rows use a compact status dot,
 without another stage bar. Agents without an issue follow the issue groups.
@@ -91,6 +103,17 @@ pane can finish recording and learning while its row remains visible; space
 cleanup is a separate producer operation. See the
 [cross-repository lifecycle contract](workflow-lifecycle.md) for the field
 mapping and verification matrix.
+
+A row whose `state` is one of the cleanup states also carries a short label in
+its stage slot, so the cleanup progress reads without hovering and the row
+stays one line: `cleanup_wait`, and `unseen_result` with a `cleanup` timer,
+→ **정리 대기** with the minutes (or hours) left
+until `due_at` on the sidebar clock, and no time once it has passed; `closing`
+step 1 (close requested, the session is saving its report) → **보관 중**;
+`closing` steps 2 and 3 (report saved, or a memory proposal pending; the pane
+closes next) → **닫는 중**; `closed` → **닫힘**. The label takes the slot the
+stage segments use, at the same width, and an event tag still takes precedence.
+A closing with a `blocked_reason` and a feed without `state` get no label.
 
 The Linear/Jira metadata opens a native right-side issue popover. Its three tabs
 read `issue_catalog.week`, `.milestone` and `.all`; search filters those local

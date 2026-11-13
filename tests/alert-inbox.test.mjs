@@ -14,7 +14,11 @@ async function inbox(){
   const base=new URL('../mods/sixfold-desk/',import.meta.url);
   const transform=s=>s.replace(/import \{([^}]+)\} from '(?:gpui-kit|gpui-base|herdr)';/g,'const {$1}=globalThis.__alertInbox;');
   const asUrl=s=>'data:text/javascript;base64,'+Buffer.from(s).toString('base64');
-  const popUrl=asUrl(transform(await readFile(new URL('alert-popover.js',base),'utf8')).replace("'./alert-model.js'",JSON.stringify(new URL('alert-model.js',base).href)));
+  globalThis.__alertInbox.readTextFile=async()=>null;globalThis.__alertInbox.appHome=()=>'/test';
+  const slackUrl=JSON.stringify(new URL('alert-slack.js',base).href);
+  const filesUrl=asUrl(transform(await readFile(new URL('alert-files.js',base),'utf8')).replace("'./alert-slack.js'",slackUrl));
+  const popUrl=asUrl(transform(await readFile(new URL('alert-popover.js',base),'utf8')).replace("'./alert-model.js'",JSON.stringify(new URL('alert-model.js',base).href))
+    .replace("'./alert-slack.js'",slackUrl).replace("'./alert-files.js'",JSON.stringify(filesUrl)));
   const src=transform(await readFile(new URL('alert-inbox.js',base),'utf8')).replace("'./alert-model.js'",JSON.stringify(new URL('alert-model.js',base).href))
     .replace("'./alert-popover.js'",JSON.stringify(popUrl)).replace("import { arrivals } from './arrival-store.js';",'const {arrivals}=globalThis.__alertInbox;')
     .replace("'./arrival-model.js'",JSON.stringify(new URL('arrival-model.js',base).href));

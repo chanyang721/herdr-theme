@@ -8,3 +8,7 @@ rust/target/
 .migration-oracle/
 /artifacts-*
 original-python-utf8.txt
+
+# gpui-shell writes these editor type files into every mod folder on each run.
+mods/*/gpui-kit.d.ts
+mods/*/jsconfig.json

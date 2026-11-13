@@ -136,3 +136,25 @@ export function foldersOf(path, dir = false) {
   const count = dir ? parts.length : parts.length - 1;
   return parts.slice(0, Math.max(0, count)).map((_, i) => parts.slice(0, i + 1).join('/'));
 }
+
+// Resolver warnings in words. Detailed `code:/path` entries name the folder; the
+// bare `source_unavailable` only repeats them, so it shows alone only without one.
+const SOURCE_WORDS = {
+  source_missing: '경로 없음',
+  source_denied: '접근 불가(접근 권한 확인)',
+  source_not_dir: '폴더가 아님',
+  source_unreadable: '읽기 실패',
+  source_empty: '맞는 문서 없음',
+  source_excluded: '제외된 경로',
+};
+export function describeWarnings(warnings = []) {
+  const detailed = warnings.filter(w => /^source_[a-z_]+:/.test(w));
+  return warnings
+    .filter(w => !(w === 'source_unavailable' && detailed.some(d => !d.startsWith('source_empty:'))))
+    .map(w => {
+      const at = w.indexOf(':');
+      const code = at < 0 ? w : w.slice(0, at);
+      if (code === 'source_unavailable' && at < 0) return '문서 폴더를 읽지 못함';
+      return SOURCE_WORDS[code] && at > 0 ? `${SOURCE_WORDS[code]}: ${w.slice(at + 1)}` : w;
+    });
+}

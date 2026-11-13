@@ -5,12 +5,31 @@ import {h_flex} from 'gpui-base';
 // (agent-usage.shares → terminals[t].work, read by Agent Usage's work.py from Claude's own files):
 // task-list progress and running sub-agents. A pane without a confirmed session shows nothing.
 export const SHARES_KEY='agent-usage.shares';
+export const COMPUTERS_KEY='agent-usage.shares.computers';
+// Plan Usage refreshes the shares every 2 minutes (a run may take up to 90 s more). A computer whose
+// last successful refresh is older than this, or that its collector marked unavailable, shows no work:
+// a failed or stopped collector must not keep an old "running" count on screen.
+export const WORK_STALE_MS=6*60*1000;
 
-export function paneWork(terminal,shared){
-  const work=shared(SHARES_KEY)?.terminals?.[terminal]?.work;
+// The snapshot that carries this terminal: its own computer's when Plan Usage keeps them apart.
+function source(terminal,shared){
+  const computers=shared(COMPUTERS_KEY);
+  if(computers&&typeof computers==='object'){
+    for(const value of Object.values(computers))if(value?.terminals?.[terminal])return value;
+  }
+  return shared(SHARES_KEY);
+}
+
+export function paneWork(terminal,shared,now=Date.now()){
+  const from=source(terminal,shared);
+  if(!from||from.available===false)return null;
+  const updated=Number(from.updated);
+  if(!Number.isFinite(updated)||now-updated>WORK_STALE_MS)return null;
+  const work=from.terminals?.[terminal]?.work;
   if(!work||typeof work!=='object')return null;
   const tasks=work.tasks?.total>0?work.tasks:null;
-  const agents=work.subagents?.running>0?work.subagents:null;
+  // partial: the collector read only part of the records, so running is a lower bound (maybe 0).
+  const agents=work.subagents?.running>0||work.subagents?.partial===true?work.subagents:null;
   return tasks||agents?{tasks,agents}:null;
 }
 
@@ -20,7 +39,12 @@ export function workParts(work,width){
   const parts=[];
   if(work.tasks)parts.push({kind:'tasks',text:`${wide?'할 일 ':''}${work.tasks.completed}/${work.tasks.total}`,
     done:work.tasks.completed===work.tasks.total});
-  if(work.agents)parts.push({kind:'agents',text:wide?`서브에이전트 ${work.agents.running} 실행 중`:`서브 ${work.agents.running}`});
+  if(work.agents){
+    const {running,partial}=work.agents;
+    const text=!partial?(wide?`서브에이전트 ${running} 실행 중`:`서브 ${running}`)
+      :running>0?(wide?`서브에이전트 ${running}+ 실행 중`:`서브 ${running}+`):(wide?'서브에이전트 확인 불가':'서브 ?');
+    parts.push({kind:'agents',text});
+  }
   return parts;
 }
 
@@ -32,10 +56,12 @@ export function workTip(work){
     if(current)lines.push(`지금: ${current}`);
   }
   if(work.agents){
-    lines.push(`서브에이전트 ${work.agents.running}개 실행 중`);
+    const {running,partial}=work.agents;
+    lines.push(!partial?`서브에이전트 ${running}개 실행 중`
+      :running>0?`서브에이전트 ${running}개 이상 실행 중 (기록이 많아 일부만 확인)`:'서브에이전트 실행 수 확인 불가 (기록이 많아 일부만 확인)');
     for(const name of work.agents.names||[])lines.push(`· ${name}`);
   }
-  lines.push('Claude 할 일 목록·서브에이전트 기록 기준 (최대 2분 늦음)');
+  lines.push('Claude 할 일 목록·서브에이전트 기록 기준 (2분마다 갱신, 6분 넘게 갱신이 없으면 숨김)');
   return lines.join('\n');
 }
 

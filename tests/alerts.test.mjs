@@ -4,12 +4,13 @@ import {readFile} from 'node:fs/promises';
 import {createHash} from 'node:crypto';
 
 const nativeParse=JSON.parse;
+const guardModule=await import(new URL('../mods/sixfold-desk/watch-guard.js',import.meta.url).href);
 const changeServices=new WeakMap();let watcherId=0;
 async function alertHarness(files,{lineEnding='\n',opens=[],home='/test',arrived=[],host={value:false}}={}){
-  const tasks=[],timers=new Set(),callbacks=new Map(),shared=new Map(),writes=[];
-  let notifications=0,typedHook=null;
+  const tasks=[],timers=new Set(),slowTimers=new Set(),callbacks=new Map(),shared=new Map(),writes=[];
+  let notifications=0,typedHook=null,writeHook=null;
   const service=changeServices.get(files)??new Set();changeServices.set(files,service);
-  const cx={notify(){notifications++;},spawn(fn){const task=fn(cx);tasks.push(task);return task;},timer:{after(ms,callback){assert.equal(ms,20,'only finite batch coalescing is scheduled');const timer={callback,cancel(){timers.delete(timer);}};timers.add(timer);return timer;},every(){assert.fail('No periodic alert I/O');}}};
+  const cx={notify(){notifications++;},spawn(fn){const task=fn(cx);tasks.push(task);return task;},timer:{after(ms,callback){if(ms!==20){const slow={ms,callback,cancel(){slowTimers.delete(slow);}};slowTimers.add(slow);return slow;}const timer={callback,cancel(){timers.delete(timer);}};timers.add(timer);return timer;},every(){assert.fail('No periodic alert I/O');}}};
   const path=name=>`${home}/data/sixfold/${name}`;
   const snapshot=path=>{const raw=files.get(path.split('/').at(-1));if(raw===undefined)return {status:'missing',hash:null};const hash=createHash('sha256').update(raw).digest('hex');try{return {status:'ready',hash,value:nativeParse(raw)};}catch{return {status:'invalid',hash};}};
   const change=changed=>{for(const listener of service)if(listener.path===changed)listener.callback([changed]);};
@@ -17,9 +18,10 @@ async function alertHarness(files,{lineEnding='\n',opens=[],home='/test',arrived
     spaces:()=>[],addArrival:value=>arrived.push(value),hasArrivalHost:()=>host.value,arrivalTarget:(name,names)=>names.includes(name)?name:'Share',ARRIVAL:{visible:3},
     subscribeJsonFile:(_cx,name,callback)=>{callbacks.set(name,callback);return()=>callbacks.delete(name);},
     subscribeFileChanges:(_cx,name,callback)=>{const listener={path:name,callback};service.add(listener);return()=>service.delete(listener);},
-    readJsonSnapshot:async name=>{const value=snapshot(name);typedHook?.(name,value);return value;},
+    readJsonSnapshot:async name=>{const value=snapshot(name);await typedHook?.(name,value);return value;},
     readTextFile:async name=>files.get(name.split('/').at(-1))??null,
-    writeTextFile:async(name,value,expected)=>{const key=name.split('/').at(-1),old=files.get(key)??null;if(old!==expected)throw Error('compare-and-swap conflict');writes.push({name,value,expected});files.set(key,value);change(name);},
+    createRetry:guardModule.createRetry,watchRecorder:guardModule.watchRecorder,
+    writeTextFile:async(name,value,expected)=>{const key=name.split('/').at(-1),old=files.get(key)??null;if(old!==expected)throw Error('compare-and-swap conflict');writes.push({name,value,expected});files.set(key,value);change(name);await writeHook?.(name,value);},
   };
   const key=`__alertWatch${watcherId++}`;globalThis[key]=runtime;
   let source=(await readFile(new URL('../mods/sixfold-desk/alerts.js',import.meta.url),'utf8')).replace(/\r?\n/g,lineEnding).replace(/^import .*;\r?\n/gm,'');
@@ -27,9 +29,9 @@ async function alertHarness(files,{lineEnding='\n',opens=[],home='/test',arrived
   source+='\nexport {dismiss as testDismiss};';
   const module=await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
   delete globalThis[key];const view={alerts:[]},stop=module.watchAlerts(view,cx);
-  const flush=async()=>{for(let count=0;count<30;count++){const pending=[...timers];timers.clear();for(const timer of pending)timer.callback(cx);await Promise.all(tasks.splice(0));await Promise.resolve();if(!timers.size&&!tasks.length)return;}assert.fail('Alert batching did not settle');};
+  const flush=async()=>{for(let count=0;count<30;count++){const pending=[...timers];timers.clear();for(const timer of pending)timer.callback(cx);await Promise.race([Promise.all(tasks.splice(0)),new Promise(r=>setTimeout(r,5))]);await Promise.resolve();if(!timers.size&&!tasks.length)return;}assert.fail('Alert batching did not settle');};
   const publish=(name=null)=>{for(const [file,callback] of callbacks)if(name===null||file===path(name))callback(snapshot(file));};
-  return {view,cx,opens,arrived,host,writes,shared,stop,flush,publish,path,change,dismiss:module.testDismiss,setTypedHook:hook=>{typedHook=hook;},notifications:()=>notifications,refresh:async()=>{publish();await flush();}};
+  return {setWriteHook:hook=>{writeHook=hook;},slowTimers,view,cx,opens,arrived,host,writes,shared,stop,flush,publish,path,change,dismiss:module.testDismiss,setTypedHook:hook=>{typedHook=hook;},notifications:()=>notifications,refresh:async()=>{publish();await flush();}};
 }
 
 test('initial snapshot barrier seeds existing mentions silently and changed callbacks never parse files on UI',async()=>{
@@ -64,7 +66,8 @@ test('hidden sidebar caches alert inputs without popup/ledger I/O and resuming a
 test('popup CAS refuses a typed/raw hash race and honors the competing ledger on change retry',async()=>{
   const files=new Map([['slack-mentions.json','{"items":[{"id":"old"}]}']]),h=await alertHarness(files);
   try{
-    await h.refresh();const writes=h.writes.length;
+    const ledgerWrites=()=>h.writes.filter(write=>write.name.endsWith('/slack-popup-events.json')).length;   // not the watch state file
+    await h.refresh();const writes=ledgerWrites();
     files.set('slack-mentions.json','{"items":[{"id":"old"},{"id":"new"}]}');
     h.setTypedHook((name,snapshot)=>{
       if(!name.endsWith('/slack-popup-events.json')||snapshot.status!=='ready')return;
@@ -72,7 +75,7 @@ test('popup CAS refuses a typed/raw hash race and honors the competing ledger on
     });
     await h.refresh();
     assert.equal(h.opens.length,0,'the other view already owns this new mention');
-    assert.equal(h.writes.length,writes,'a mismatched decoded snapshot never authorizes a CAS write');
+    assert.equal(ledgerWrites(),writes,'a mismatched decoded snapshot never authorizes a CAS write');
     assert.deepEqual(nativeParse(files.get('slack-popup-events.json')).seen,['mention:old','mention:new']);
   }finally{h.stop();}
 });
@@ -185,5 +188,82 @@ test('with a sidebar drawing arrivals a new mention folds into its space card in
     h.publish('slack-mentions.json');await h.flush();
     assert.equal(h.opens.length,1,'no sidebar host: the Slack window opens as before');
     assert.equal(arrived.length,1);
+  }finally{h.stop();}
+});
+
+// A failed refresh used to wait for the next input change; with the same inputs it waited for good.
+// A native ledger write can commit and then answer late. The run is replaced meanwhile (stuck limit) and
+// the replacement sees the mention as seen, so the late run must still announce it.
+test('a mention whose ledger write commits but answers after the run is replaced is still announced once',async()=>{
+  const realNow=Date.now;let now=realNow();Date.now=()=>now;
+  const files=new Map(),h=await alertHarness(files);let release;
+  try{
+    await h.refresh();let once=true;
+    h.setWriteHook(async name=>{if(once&&name.endsWith('/slack-popup-events.json')){once=false;await new Promise(r=>release=r);}});
+    files.set('slack-mentions.json',JSON.stringify({items:[{id:'new'}]}));await h.refresh();
+    assert.deepEqual(nativeParse(files.get('slack-popup-events.json')).seen,['mention:new'],'the write committed');
+    assert.equal(h.opens.length,0,'its answer has not come back');
+    now+=120001;
+    files.set('slack-live-health.json',JSON.stringify({last_success:'next'}));await h.refresh();
+    assert.equal(h.shared.get('sixfold.slackHealth').last_success,'next','the replacement published');
+    release();await new Promise(r=>setTimeout(r,10));await h.flush();
+    assert.equal(h.opens.length,1,'announced once, by the run whose write committed');
+    files.set('slack-live-health.json',JSON.stringify({last_success:'later'}));await h.refresh();
+    assert.equal(h.opens.length,1,'never again');
+  }finally{Date.now=realNow;h.stop();}
+});
+
+// With a sidebar drawing arrivals, that late announcement must also redraw it: the replaced run returns
+// before its own notify, and adding an arrival alone invalidates nothing.
+test('a late-committed mention arriving into a card redraws the sidebar when the replaced run returns',async()=>{
+  const realNow=Date.now;let now=realNow();Date.now=()=>now;
+  const files=new Map(),arrived=[],h=await alertHarness(files,{arrived,host:{value:true}});let release;
+  try{
+    await h.refresh();let once=true;
+    h.setWriteHook(async name=>{if(once&&name.endsWith('/slack-popup-events.json')){once=false;await new Promise(r=>release=r);}});
+    files.set('slack-mentions.json',JSON.stringify({items:[{id:'new'}]}));await h.refresh();
+    now+=120001;
+    files.set('slack-live-health.json',JSON.stringify({last_success:'next'}));await h.refresh();
+    const before=h.notifications();
+    release();await new Promise(r=>setTimeout(r,10));await h.flush();
+    assert.equal(arrived.length,1,'arrives once');
+    assert.ok(h.notifications()>before,'the sidebar is redrawn for it');
+    assert.equal(h.opens.length,0,'into the card, not the window');
+  }finally{Date.now=realNow;h.stop();}
+});
+
+// Inputs restored to the last published value while a run is stuck: the stuck run is retired, so when it
+// returns it cannot publish the older inputs it read.
+test('restoring the last published inputs while a run is stuck keeps them published when the stuck run returns',async()=>{
+  const realNow=Date.now;let now=realNow();Date.now=()=>now;
+  const files=new Map([['slack-live-health.json',JSON.stringify({last_success:'A'})]]),h=await alertHarness(files);let release;
+  try{
+    await h.refresh();let once=true;
+    h.setTypedHook(async name=>{if(once&&name.endsWith('/slack-popup-events.json')){once=false;await new Promise(r=>release=r);}});
+    files.set('slack-live-health.json',JSON.stringify({last_success:'B'}));await h.refresh();
+    now+=120001;
+    files.set('slack-live-health.json',JSON.stringify({last_success:'A'}));await h.refresh();
+    release();await new Promise(r=>setTimeout(r,10));await h.flush();
+    assert.equal(h.shared.get('sixfold.slackHealth').last_success,'A');
+    files.set('slack-live-health.json',JSON.stringify({last_success:'C'}));await h.refresh();
+    assert.equal(h.shared.get('sixfold.slackHealth').last_success,'C','later changes still publish');
+  }finally{Date.now=realNow;h.stop();}
+});
+
+test('a failing refresh is retried after a delay without another input change, and only its kind and time are kept',async()=>{
+  const files=new Map([['slack-mentions.json','{"items":[{"id":"history"}]}']]),h=await alertHarness(files);
+  try{
+    await h.refresh();let fail=1;
+    h.setTypedHook(name=>{if(fail>0&&name.endsWith('/slack-popup-events.json')){fail--;throw new Error('File changed while reading its typed snapshot');}});
+    files.set('slack-mentions.json','{"items":[{"id":"new"},{"id":"history"}]}');h.publish('slack-mentions.json');await h.flush();
+    assert.equal(h.opens.length,0);
+    const failing=nativeParse(files.get('slack-alert-watch.json'));
+    assert.deepEqual({state:failing.state,kind:failing.last_error.kind},{state:'failing',kind:'ledger-changed'});
+    assert.deepEqual(Object.keys(failing).sort(),['failures','last_error','schema','since','state'],'no contents or messages');
+    assert.deepEqual([...h.slowTimers].map(timer=>timer.ms),[5000],'one delayed retry, no busy loop');
+    const [retry]=h.slowTimers;h.slowTimers.delete(retry);retry.callback(h.cx);await h.flush();
+    assert.equal(h.opens.length,1,'the retry announced the mention');
+    assert.deepEqual(nativeParse(files.get('slack-popup-events.json')).seen,['mention:history','mention:new']);
+    assert.equal(nativeParse(files.get('slack-alert-watch.json')).state,'ok','recovery is recorded');
   }finally{h.stop();}
 });

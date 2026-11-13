@@ -2,10 +2,10 @@ import { div } from 'gpui-kit';
 import { Popup } from 'gpui-base';
 import { settings, appHome, readTextFile, writeTextFile } from 'herdr';
 import { alertPopoverOpen, slackPeek } from './alert-popover.js';
-import { hasWorkspaceAlerts, hasSlackAlerts, openInbox, openLinearInbox, alertSignature } from './alert-inbox.js';
+import { hasWorkspaceAlerts, hasSlackAlerts, hasLinearAlerts, openInbox, openLinearInbox, alertSignature } from './alert-inbox.js';
 import { watchLinear } from './linear-feed.js';
 import { arrivals, setArrivalHost, clearArrivalHost, setPeekCheck, holdArrivals } from './arrival-store.js';
-import { nextPhaseAt, arrivalOpen } from './arrival-model.js';
+import { nextPhaseAt, arrivalOpen, peekMode } from './arrival-model.js';
 import { arrivalLayer } from './arrival-view.js';
 import { projectKey } from './alert-model.js';
 
@@ -17,17 +17,11 @@ export function startAlertArrivals(view, cx) {
   const stopLinear = watchLinear(view, cx);
   const host = () => view.sidebarVisible !== false;
   setArrivalHost(host);
-  // A new alert opens its space's popover (a peek) only on a merged card that is on screen, with
-  // motion on, and while no issue search or alert popover is open; then the chip only counts it.
-  const decide = (space, source) => {
-    if (!host()) return ['', 'no sidebar'];
-    if (view.arrivalMotion === false) return ['', 'motion off'];
-    const card = view.arrivalMerged?.get(projectKey(space));
-    if (!card) return ['', 'card not merged or not on screen'];
-    if (view.panelRetained?.anyIssuesOpen?.()) return ['quiet', 'an issue search is open'];
-    if (alertPopoverOpen()) return ['quiet', 'an alert popover is open'];
-    return source === 'linear' && !card.linear ? ['', 'no Linear chip'] : ['peek', ''];
-  };
+  // A new alert opens its space's popover (a peek) on any card that is on screen (merged meta line or
+  // a separate alerts row), with motion on, and while no issue search or alert popover is open; then
+  // the chip only counts it (arrival-model.js peekMode).
+  const decide = (space, source) => peekMode({host: host(), motion: view.arrivalMotion, card: view.arrivalCards?.get(projectKey(space)),
+    issuesOpen: Boolean(view.panelRetained?.anyIssuesOpen?.()), popoverOpen: alertPopoverOpen(), source});
   // The last few decisions, kept in a small local file so "why did it not open" can be answered.
   let last = undefined;
   const note = entry => {
@@ -61,16 +55,20 @@ export function alertArrivalLayer(view, cx, {cards, motion, t, right}) {
   const at = new Map(cards.map(card => [projectKey(card.s.name), card]));
   // What the peek check reads when the next alert arrives (bounded by the cards on screen).
   view.arrivalMotion = motion;
-  view.arrivalMerged = new Map(cards.filter(card => card.merged).map(card => [projectKey(card.s.name), {linear: card.width > 80}]));
+  // Every card on screen; Linear needs its chip (the merged line's tool chip, or a Linear badge in the alerts row).
+  view.arrivalCards = new Map(cards.map(card => [projectKey(card.s.name),
+    {merged: Boolean(card.merged), linear: card.merged ? card.width > 80 : hasLinearAlerts(card.s.name)}]));
   const anchors = (space, source) => {
     const hit = at.get(projectKey(space));
     if (!hit) return null;
     // Merged card: Slack lands on the left of the meta line, Linear on its tool chip at the right end.
     if (hit.merged) return {top: hit.top, left: 11, right, badgeY: hit.top + 38 + hit.extra + 10, edge: 11 + Math.max(0, hit.width - 6),
       badgeX: source === 'linear' && hit.width > 80 ? 11 + hit.width - 40 : 26};
+    // Alerts row card: the badge in its alerts row; the peek opens at the card's right edge, as on a merged card.
     const alerts = hasWorkspaceAlerts(hit.s.name);
     return {top: hit.top, left: 11, right, badgeY: alerts ? hit.top + 38 + hit.extra + 13 : hit.top + 18,
-      badgeX: alerts && source === 'linear' && hasSlackAlerts(hit.s.name) ? 72 : 33};
+      badgeX: alerts && source === 'linear' && hasSlackAlerts(hit.s.name) ? 72 : 33,
+      ...(hit.width > 0 ? {edge: 11 + Math.max(0, hit.width - 6)} : {})};
   };
   const next = nextPhaseAt(list, now, motion);
   if (next !== null && !(view.arrivalWake && view.arrivalWakeAt <= next)) {

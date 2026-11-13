@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { cleanPanelFeed, reconcilePanelFeed, panelSpaces, panelSpacePartners, agentGroups, agentState, panelEventStates, projectPanelFeed, createPanelProjection, PANEL_TIMING, MESSAGE_TIMING } from '../mods/sixfold-desk/panel-model.js';
+import { cleanPanelFeed, reconcilePanelFeed, panelSpaces, panelSpacePartners, agentGroups, agentState, panelEventStates, projectPanelFeed, createPanelProjection, PANEL_TIMING, MESSAGE_TIMING, MESSAGE_ROUTE } from '../mods/sixfold-desk/panel-model.js';
 const T = PANEL_TIMING, M = MESSAGE_TIMING, AFTER = T.packetMs + T.pingMs + T.coolMs + 100;
 import { makePanelFixture, makePanelMatrix, makePanelLoadFixture, PANEL_IDS, eventSequence, makePanelScenario, localCollaborationMessage } from './panel-fixtures.mjs';
 
@@ -118,35 +118,56 @@ test('tool issue groups use the same priority order and keep unassigned agents l
   const item = normalize({ spaces: [space('one', {
     work: { tool: 'jira', key: 'OPS', open: 5 },
     issues: states.map((state, index) => ({ key: `OPS-${index}`, title: state, state, at: NOW + index })),
-    // Folded issues hold only idle agents; a live task never folds away (see below).
-    agents: [...states.map((state, index) => agent(`agent-${index}`, { issue: `OPS-${index}`, status: index < 2 ? 'idle' : 'working' })), agent('unassigned', { issue: 'gone' })],
+    agents: [...states.slice(2).map((state, index) => agent(`agent-${index + 2}`, { issue: `OPS-${index + 2}`, status: 'working' })), agent('unassigned', { issue: 'gone' })],
   })] }).spaces[0];
   const result = agentGroups(item);
   assert.equal(result.grouped, true);
-  assert.deepEqual(result.groups.map(group => group.issue?.state ?? null), ['blocked', 'working', 'review', null]);
-  assert.equal(result.groupsHidden,2);
+  // Every issue shows, folded or not (no issue fold since 2026-11-12).
+  assert.deepEqual(result.groups.map(group => group.issue?.state ?? null), ['blocked', 'working', 'review', 'waiting', 'done', null]);
+  assert.equal(result.groupsHidden,0);assert.equal(result.groupsExpandable,false);
   const expanded=agentGroups(item,{expandedIssueSpaces:new Set(['one'])});
-  assert.deepEqual(expanded.groups.map(group=>group.issue?.state??null),['blocked','working','review','waiting','done',null]);
-  assert.equal(expanded.issuesExpanded,true);assert.equal(expanded.groupsHidden,0);
+  assert.deepEqual(expanded.groups.map(group=>group.issue?.key),result.groups.map(group=>group.issue?.key),'the old expansion switch changes nothing');
   assert.deepEqual(result.groups.at(-1).agents.map(a => a.id), ['unassigned']);
 });
 
-test('an issue with a working or blocked agent stays visible past the issue fold', () => {
+test('no issue ever folds: every issue to work on is drawn, with or without panes', () => {
   const states = ['done', 'waiting', 'review', 'working', 'blocked', 'done'];
   const build = statuses => normalize({ spaces: [space('one', {
     work: { tool: 'jira', key: 'OPS', open: 6 },
     issues: states.map((state, index) => ({ key: `OPS-${index}`, title: state, state, at: NOW + index })),
-    agents: statuses.map((status, index) => agent(`agent-${index}`, { issue: `OPS-${index}`, status })),
+    agents: statuses.flatMap((status, index) => status ? [agent(`agent-${index}`, { issue: `OPS-${index}`, status })] : []),
   })] }).spaces[0];
-  const quiet = agentGroups(build(['idle', 'idle', 'idle', 'idle', 'idle', 'idle']));
-  assert.equal(quiet.groups.length, 3);assert.equal(quiet.groupsHidden, 3);
-  for (const status of ['working', 'blocked']) {
-    const live = agentGroups(build(['idle', 'idle', 'idle', 'idle', 'idle', status]));
-    assert(live.groups.some(group => group.issue?.key === 'OPS-5'), `a ${status} agent keeps its issue out of the fold`);
-    assert(live.agents.some(a => a.id === 'agent-5'));assert.equal(live.groupsHidden, 2);
+  const none = agentGroups(build([]));
+  assert.equal(none.groups.length, 6);assert.equal(none.groupsHidden, 0);assert.equal(none.groupsExpandable, false);
+  for (const status of ['working', 'blocked', 'idle', 'done']) {
+    const live = agentGroups(build([null, null, null, null, null, status]));
+    assert(live.groups.some(group => group.issue?.key === 'OPS-5' && group.agents.some(a => a.id === 'agent-5')), `a ${status} pane is drawn under its issue`);
   }
-  const idle = agentGroups(build(['idle', 'idle', 'idle', 'idle', 'idle', 'done']));
-  assert(!idle.groups.some(group => group.issue?.key === 'OPS-5'), 'a finished agent still folds');
+  const all = agentGroups(build(['idle', 'idle', 'idle', 'idle', 'idle', 'done']));
+  assert.equal(all.agents.length, 6, 'every pane is drawn under its issue');
+  for (const group of all.groups) assert(group.agents.every(a => a.issue === group.issue.key));
+  const many = normalize({ spaces: [space('many', { work: { tool: 'linear', key: 'P-ZED-21' },
+    issues: Array.from({ length: 174 }, (_, i) => ({ key: `ZED-${i + 1}`, title: `이슈 ${i + 1}`, state: 'waiting' })) })] }).spaces[0];
+  assert.equal(many.issues.length, 174, 'a real project list (174 open issues) is not cut at the old 128 cap');
+  assert.equal(agentGroups(many).groups.filter(group => group.issue).length, 174);
+});
+
+test('each pane sits right under its issue row; only key-less panes go to 이슈 없음', () => {
+  const issues = [...Array.from({ length: 6 }, (_, i) => ({ key: `ZED-${i + 1}`, title: `이슈 ${i + 1}`, state: 'waiting', week: true, pinned: false })),
+    { key: 'ZED-844', title: '', state: 'waiting', week: false, pinned: false }];
+  const item = normalize({ spaces: [space('zed', { work: { tool: 'linear', key: 'P-ZED-21', open: 6 }, issues, agents: [
+    agent('uncached', { issue: 'ZED-844', status: 'done' }), agent('review', { issue: 'ZED-844', status: 'idle' }),
+    agent('idle', { issue: 'ZED-6', status: 'idle' }), agent('sub', { issue: 'ZED-6', status: 'working', parent_id: 'idle' }),
+    agent('plain', { issue: null, status: 'idle' }),
+  ] })] }).spaces[0];
+  const result = agentGroups(item);
+  const under = key => result.groups.find(group => (group.issue?.key ?? null) === key)?.agents.map(a => a.id);
+  assert.deepEqual(under('ZED-844').sort(), ['review', 'uncached']);
+  assert.deepEqual(under('ZED-6'), ['idle', 'sub']);
+  assert.deepEqual(under(null), ['plain']);
+  assert.equal(result.groups.find(group => group.issue?.key === 'ZED-844').issue.title, '', 'an uncached issue keeps its key-only row');
+  assert.equal(result.groupsHidden, 0, 'issues without panes are drawn too');
+  assert.equal(result.groups.filter(group => group.issue).length, 7);
 });
 
 test('root agent rows are never truncated inside an issue', () => {
@@ -505,7 +526,7 @@ test('issue catalog scopes have independent bounds and only an exact neutral imp
   const issues=Array.from({length:2050},(_,index)=>({key:`DEMO-${index}`,title:`Demo ${index}`,state:'working',private:'omit'}));
   const value=normalize({spaces:[space('one',{issues,issue_catalog:{week:issues,milestone:[{key:'DEMO-X',title:'Milestone',state:'unknown'}],all:issues,import_request:{path:'panel-issue-requests',space:'one',command:'omit'}}}),space('two',{issue_catalog:{week:[],milestone:null,all:[],import_request:{path:'../escape',space:'two'}}}),space('three',{issue_catalog:{import_request:{path:'panel-issue-requests',space:'one'}}})]});
   const catalog=value.spaces[0].issue_catalog;
-  assert.equal(value.spaces[0].issues.length,128);assert.equal(catalog.week.length,2048);assert.equal(catalog.all.length,2048);
+  assert.equal(value.spaces[0].issues.length,512);assert.equal(catalog.week.length,2048);assert.equal(catalog.all.length,2048);
   assert.deepEqual(catalog.milestone,[{id:'DEMO-X',key:'DEMO-X',title:'Milestone',state:'waiting'}]);
   assert.deepEqual(catalog.import_request,{path:'panel-issue-requests',space:'one'});
   assert.equal(value.spaces[1].issue_catalog.import_request,null);assert.deepEqual(value.spaces[1].issue_catalog.milestone,[]);
@@ -533,12 +554,12 @@ test('extended projection copies typed data and reuses every unaffected entity a
   }finally{JSON.parse=parse;}
 });
 
-test('only issue groups overflow, with unassigned rows outside the issue count',()=>{
+test('issue groups never overflow, with unassigned rows last',()=>{
   for(const size of [4,5,9]){
     const item=normalize({spaces:[space('one',{work:{tool:'linear',key:'DEMO'},issues:Array.from({length:size},(_,i)=>({key:`DEMO-${i}`,title:'Demo',state:'working'})),agents:[agent('unassigned')]})]}).spaces[0];
-    const result=agentGroups(item),expanded=agentGroups(item,{expandedIssueSpaces:new Set(['one'])});
-    assert.equal(result.groups.length,(size>4?3:size)+1);assert.equal(result.issueHidden,size>4?size-3:0);
-    assert.equal(result.groups.at(-1).issue,null);assert.equal(expanded.groups.length,size+1);assert.equal(expanded.groupsExpandable,size>4);
+    const result=agentGroups(item);
+    assert.equal(result.groups.length,size+1);assert.equal(result.issueHidden,0);
+    assert.equal(result.groups.at(-1).issue,null);assert.equal(result.groupsExpandable,false);
   }
 });
 
@@ -619,11 +640,11 @@ test('issue and parent expansion recompute only the owning space with stable fee
   assert.equal(expanded.stats.groupsComputed,1);assert.equal(expanded.stats.spacesChanged,0);assert.equal(expanded.feed,first.feed);
   assert.notEqual(expanded.groups.get(target.id),first.groups.get(target.id));assert.equal(expanded.groups.get(raw.spaces[1].id),first.groups.get(raw.spaces[1].id));
   const issues=new Set([target.id]),both=projectPanelFeed(input,expanded,{expandedParents:parents,expandedIssueSpaces:issues});
-  assert.equal(both.stats.groupsComputed,1);assert.equal(both.groups.get(target.id).issuesExpanded,true);
+  assert.equal(both.stats.groupsComputed,1);assert.equal(both.groups.get(target.id).issuesExpanded,false,'no issue fold to expand');
   const same=projectPanelFeed(input,both,{expandedParents:new Set([parent,'not-present']),expandedIssueSpaces:issues});
   assert.equal(same.stats.groupsComputed,0);assert.equal(same.stats.signaturesComputed,0);
   const collapsed=projectPanelFeed(input,both);
-  assert.equal(collapsed.stats.groupsComputed,1);assert.equal(collapsed.groups.get(target.id).issueHidden,2);
+  assert.equal(collapsed.stats.groupsComputed,1);assert.equal(collapsed.groups.get(target.id).issueHidden,0);
 });
 
 test('candidate issue catalog metadata is bounded display data and omitted fields stay absent',()=>{
@@ -798,7 +819,8 @@ test('unresolved messages are quiet; new messages stagger in two bounded native 
  const quiet=advance(missing,prior,1);assert.equal(quiet.nextAt,null);assert.equal(quiet.pending.length,0);
  const value=normalize({events:Array.from({length:12},(_,i)=>({id:'burst-'+i,at:stamp(NOW),kind:'message',from,to:'worker'}))});
  const queued=advance(value,prior,10),pending=queued.pending.map(([,event])=>event);
- assert.equal(pending.filter(event=>event.drawRoute).length,8);assert.equal(queued.packets.length,1);
+ assert.equal(pending.filter(event=>event.drawRoute&&!event.bundle).length,8);assert.equal(queued.packets.length,1);
+ assert.deepEqual(pending.filter(event=>event.bundle).map(event=>[event.count,event.label]),[[4,'메시지 +4']],'the four past the cap are one visible bundle');
  const moving=pending.filter(event=>event.drawRoute);
  for(let i=1;i<moving.length;i++)assert(moving[i].routeAt-moving[i-1].routeAt>=260);
  for(const lane of [0,1]){const own=moving.filter(event=>event.routeLane===lane);for(let i=1;i<own.length;i++)assert(own[i].routeAt-own[i-1].routeAt>=1000);}
@@ -852,4 +874,118 @@ test('optional tool links are preserved only as explicit web URLs, never guessed
  const value=normalize({spaces:[space('one',{work:{tool:'linear',key:'DEMO',url:'https://issues.example.invalid/project'}})]});
  assert.equal(projectPanelFeed(value).feed.spaces[0].work.url,'https://issues.example.invalid/project');
  assert(!('url' in normalize({spaces:[space('one',{work:{tool:'linear',key:'DEMO'}})]}).spaces[0].work));
+});
+
+test('a burst past the bounded queue draws 8 sends then one «메시지 +N» bundle per pair, in order, with bounded memory',()=>{
+ const two_spaces={spaces:[space('one'),space('two')]},with2=extra=>normalize({...two_spaces,...extra});
+ const initial=with2(),prior=boot(initial),agents=initial.spaces.flatMap(space=>space.agents).map(agent=>agent.id);
+ const [from,other]=agents;
+ // 12 sends to one receiver: 8 single packets, then +4, routed after the eighth.
+ const twelve=with2({events:Array.from({length:12},(_,i)=>({id:'b12-'+i,at:stamp(NOW+i),kind:'message',from,to:'worker',label:'메시지'}))});
+ let state=advance(twelve,prior,10),pending=state.pending.map(([,event])=>event);
+ const singles=pending.filter(event=>event.kind==='message'&&event.drawRoute&&!event.bundle),bundles=pending.filter(event=>event.bundle);
+ assert.deepEqual(singles.map(event=>event.id),Array.from({length:8},(_,i)=>'b12-'+i),'the first eight, in arrival order');
+ assert.equal(bundles.length,1);assert.equal(bundles[0].count,4);assert.equal(bundles[0].label,'메시지 +4');
+ assert.equal(bundles[0].from,from);assert.equal(bundles[0].to,'worker');
+ assert(bundles[0].routeAt>Math.max(...singles.map(event=>event.routeAt)),'the bundle travels after the queue');
+ assert(!pending.some(event=>['b12-8','b12-9','b12-10','b12-11'].includes(event.id)),'folded sends are not stored one by one');
+ // When it starts, the sender row carries the +N tag and the bundle is a drawn packet.
+ const startAt=bundles[0].routeAt-NOW;state=advance(twelve,state,startAt+1);
+ assert.equal(state.tags.get(from).label,'메시지 +4');
+ assert(state.packets.some(packet=>packet.bundle&&packet.to==='worker'));
+ // A later send arriving while the queue is full and the bundle has not started joins it; it never overtakes it.
+ const more=with2({events:[...twelve.events,{id:'b12-late',at:stamp(NOW+20),kind:'message',from,to:'worker'}]});
+ const joined=advance(more,advance(twelve,prior,10),20).pending.map(([,event])=>event).filter(event=>event.bundle);
+ assert.equal(joined.length,1);assert.equal(joined[0].count,5);assert.equal(joined[0].label,'메시지 +5');
+ // Another pair gets its own bundle; bundles are capped and the rest only counted.
+ const mixed=with2({events:[...Array.from({length:8},(_,i)=>({id:'m-'+i,at:stamp(NOW),kind:'message',from,to:'worker'})),
+  {id:'m-x',at:stamp(NOW),kind:'message',from:other,to:'worker'},{id:'m-y',at:stamp(NOW),kind:'message',from,to:'worker'}]});
+ const two=advance(mixed,prior,10).pending.map(([,event])=>event).filter(event=>event.bundle);
+ assert.deepEqual(two.map(event=>[event.from,event.count]),[[other,1],[from,1]]);
+ assert(two[1].routeAt>two[0].routeAt,'bundles keep the arrival order of their first send');
+ const nodes=['one-agent','two-agent','one','two','studio','worker'],pairs=nodes.flatMap(a=>nodes.filter(b=>b!==a).map(b=>[a,b]));
+ const flood=with2({events:[...Array.from({length:8},(_,i)=>({id:'f-'+i,at:stamp(NOW),kind:'message',from,to:'worker'})),
+  ...pairs.map(([a,b],i)=>({id:'p-'+i,at:stamp(NOW),kind:'message',from:a,to:b}))]});
+ const flooded=advance(flood,prior,10),held=flooded.pending.map(([,event])=>event).filter(event=>event.bundle);
+ assert.equal(held.length,8,'at most eight bundles at once');
+ assert.equal(held.reduce((sum,event)=>sum+event.count,0)+flooded.overflow,pairs.length,'every overflowing send is in a bundle or counted');
+ assert(flooded.overflow>0);
+ assert(flooded.pending.length<=8+8,'memory stays bounded');
+ // The queue drains completely.
+ const drained=advance(twelve,advance(twelve,prior,10),60000);assert.equal(drained.pending.length,0);assert.equal(drained.nextAt,null);
+});
+
+test('a message without an agent sender is never drawn as an agent send; its receiver says the sender is unconfirmed',()=>{
+ const initial=normalize({spaces:[space('one'),space('two')]}),prior=boot(initial),space0=initial.spaces[0],to=space0.agents[0].id;
+ const value=normalize({spaces:[space('one'),space('two')],events:[{id:'nobody',at:stamp(NOW),kind:'message',from:null,to,label:'메시지'},
+  {id:'spaceonly',at:stamp(NOW+1),kind:'message',from:space0.id,to,label:'메시지'}]});
+ const state=advance(value,prior,10);
+ assert.equal(state.tags.get(to).label,'← 발신 미확인');
+ assert(!state.packets.some(packet=>packet.id==='nobody'),'no route without a sender');
+ assert(![...state.tags.keys()].some(key=>key!==to&&initial.spaces.flatMap(s=>s.agents).some(agent=>agent.id===key)),'no other agent row is tagged as the sender');
+ const known=advance(normalize({spaces:[space('one'),space('two')],events:[{id:'known',at:stamp(NOW),kind:'message',from:'two-agent',to,label:'메시지'}]}),prior,10);
+ assert.notEqual(known.tags.get(to)?.label,'← 발신 미확인','a known agent sender is not marked unconfirmed');
+});
+
+test('revoking folded sends takes them out of their «메시지 +N» bundle: all before launch, after launch, or some',()=>{
+ const two_spaces={spaces:[space('one'),space('two')]},with2=extra=>normalize({...two_spaces,...extra});
+ const prior=boot(with2()),from='one-agent';
+ const sends=Array.from({length:12},(_,i)=>({id:'r-'+i,at:stamp(NOW+i),kind:'message',from,to:'worker',label:'메시지'}));
+ const feed=revoked=>with2({events:sends.map(event=>revoked.includes(event.id)?{...event,animate:false}:event)});
+ const folded=['r-8','r-9','r-10','r-11'],queued=advance(feed([]),prior,10);
+ const bundle=queued.pending.map(([,event])=>event).find(event=>event.bundle);
+ assert.deepEqual(bundle.ids,folded,'the bundle remembers which sends it folded');
+ const bundles=state=>state.pending.map(([,event])=>event).filter(event=>event.bundle);
+ const startAt=bundle.routeAt-NOW+MESSAGE_TIMING.startMs+1;
+ // 1) Everything revoked before the bundle starts: it never launches.
+ const all=feed(sends.map(event=>event.id)),before=advance(all,queued,20);
+ assert.equal(bundles(before).length,0);
+ const later=advance(all,before,startAt);
+ assert.equal(later.packets.length,0,'no packet launches for revoked sends');
+ assert(!later.tags.has(from)||later.tags.get(from).label!=='메시지 +4');
+ // 2) Revoked after the bundle has started travelling: the packet goes away.
+ const travelling=advance(feed([]),queued,startAt);
+ assert(travelling.packets.some(packet=>packet.bundle));
+ const gone=advance(feed(folded),travelling,startAt+5);
+ assert(!gone.packets.some(packet=>packet.bundle));assert.equal(bundles(gone).length,0);
+ // 3) Only some revoked: the bundle shows the rest, and still launches on time.
+ const some=advance(feed(['r-9','r-11']),queued,20),left=bundles(some);
+ assert.equal(left.length,1);assert.deepEqual(left[0].ids,['r-8','r-10']);assert.equal(left[0].label,'메시지 +2');
+ assert.equal(left[0].routeAt,bundle.routeAt,'its place in the order is kept');
+ const launched=advance(feed(['r-9','r-11']),some,startAt);
+ assert.equal(launched.tags.get(from).label,'메시지 +2');
+ assert(launched.packets.some(packet=>packet.bundle&&packet.count===2));
+});
+
+test('a bundle keeps at most MESSAGE_ROUTE.bundleIds sends; the rest are counted, so memory stays bounded',()=>{
+ const two_spaces={spaces:[space('one'),space('two')]},with2=extra=>normalize({...two_spaces,...extra});
+ const prior=boot(with2()),from='one-agent';
+ const sends=Array.from({length:8+40},(_,i)=>({id:'c-'+i,at:stamp(NOW+i),kind:'message',from,to:'worker'}));
+ const state=advance(with2({events:sends}),prior,10),held=state.pending.map(([,event])=>event).filter(event=>event.bundle);
+ assert.equal(held.length,1);assert.equal(held[0].ids.length,32);assert.equal(held[0].label,'메시지 +32');
+ assert.equal(state.overflow,40-32);
+});
+
+test('bundles that have arrived (ping, fade) still count toward the cap: never more than 8 bundles or 8x32 IDs held',()=>{
+ const two_spaces={spaces:[space('one'),space('two')]},with2=extra=>normalize({...two_spaces,...extra});
+ const nodes=['one-agent','two-agent','one','two','studio','worker'],pairs=nodes.flatMap(a=>nodes.filter(b=>b!==a).map(b=>[a,b]));
+ const held=state=>{const bundles=state.pending.map(([,event])=>event).filter(event=>event.bundle);return {bundles:bundles.length,ids:bundles.reduce((sum,event)=>sum+event.ids.length,0)};};
+ const cap={bundles:MESSAGE_ROUTE.bundles,ids:MESSAGE_ROUTE.bundles*MESSAGE_ROUTE.bundleIds};
+ const burst=(tag,pairList)=>[...Array.from({length:8},(_,i)=>({id:`${tag}-s${i}`,at:stamp(NOW),kind:'message',from:'one-agent',to:'worker'})),
+  ...pairList.flatMap(([a,b],p)=>Array.from({length:32},(_,i)=>({id:`${tag}-p${p}-${i}`,at:stamp(NOW),kind:'message',from:a,to:b})))];
+ // A feed carries at most 256 events, so the first burst arrives in two snapshots.
+ const first=burst('a',pairs.slice(0,8));
+ let state=advance(with2({events:first.slice(0,8+7*32)}),boot(with2()),10);
+ state=advance(with2({events:first.slice(8+7*32)}),state,11);
+ assert.deepEqual(held(state),cap,'the first burst fills the cap exactly');
+ const firstBundle=state.pending.map(([,event])=>event).filter(event=>event.bundle).sort((a,b)=>a.routeAt-b.routeAt)[0];
+ // Walk through travel, ping and fade of the first bundle while new bursts keep arriving.
+ const steps=[MESSAGE_TIMING.packetMs+1,MESSAGE_TIMING.packetMs+MESSAGE_TIMING.pingMs+1,MESSAGE_TIMING.packetMs+MESSAGE_TIMING.pingMs+MESSAGE_TIMING.coolMs-1];
+ steps.forEach((offset,n)=>{
+  state=advance(with2({events:burst('n'+n,pairs.slice(8+n*2,10+n*2))}),state,firstBundle.routeAt-NOW+offset);
+  const now=held(state);
+  assert(now.bundles<=cap.bundles,`step ${n}: ${now.bundles} bundles`);
+  assert(now.ids<=cap.ids,`step ${n}: ${now.ids} IDs`);
+ });
+ assert(state.overflow>0,'sends past the cap are counted');
 });

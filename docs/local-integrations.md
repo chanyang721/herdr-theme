@@ -88,3 +88,36 @@ sidebar task panel described in the [feed contract](panel-feed.md). The theme
 installs the consumer; the producer and its automation are configured separately.
 External tools can also publish ordinary review documents beneath
 `local-views/reviews/` and expose them through their own view metadata.
+
+## Slack alerts: names and attachments
+
+Alert items in `project-alerts.json` and `slack-mentions.json` may carry
+`author_id`, `author_name`, `mentions: {"<user id>": "<display name>"}` and
+`files: [{id, name, mimetype, size?, permalink}]`. The card popover beside a
+space and the Slack inbox window show the same thing:
+
+- Title `sender → recipient`. Each name is looked up in the item's `mentions`
+  map first (the collector's newest name), then `author_name` or the label the
+  text spells (`<@ID|name>`), then the `<@ID|name>` marks elsewhere in the
+  feed, then `site.local.json` `slack.user_names`, and finally the ID itself.
+- The recipient is the first tag in the text that is not the sender; more tags
+  read `B 외 n`. With no tag the title ends in `channel_name`, then the
+  project, then the channel ID.
+- The body spells tags, channels and links as text (`@name`, `#channel`, the
+  link's label).
+- Each file is a chip: kind, name, size, **본문 보기** and **다운로드**. 본문 보기
+  shows the collector's local copy `data/sixfold/slack-files/<id>.txt`, or
+  `본문 준비 중` while there is none. 다운로드 hands the Slack https link to the
+  default browser, and only on a press. A file id that is not plain
+  letters and digits is never read; a link that is not a Slack https address
+  shows no download button. The arrival peek shows the chips without buttons.
+
+In the inbox window 본문 보기 opens a popover. In the card popover it opens a
+panel under the chip instead: the card popover is itself a popover, and a
+press inside a second popover counts as a press outside the first, which
+would close it and the text together. The panel keeps the text inside the
+surface the person is already in.
+
+The two mods cannot import each other, so the shared code lives in
+`sixfold-slack-inbox/model.js` and `sixfold-desk/alert-slack.js`;
+`tests/slack-alert-names.test.mjs` fails when the two copies differ.

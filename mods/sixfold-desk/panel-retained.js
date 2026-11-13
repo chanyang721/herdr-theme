@@ -10,8 +10,8 @@ import {projectPanelFeed,panelEventStates,panelSpaces,panelSpacePartners,PANEL_T
 import {panelLayout,cardView,agentRow,panelFlowLayer,panelCounts,PANEL_GEOMETRY,toolIcon,panelReasonWake,agentRowHeight,panelMetaHeight,rowArrival} from './panel-view.js';
 import {groupColors,paletteMode} from './collab-flow.js';
 import {issuePopover,alertedGroup} from './task-issues-view.js';
-import {issueScopeData,issueCacheLabel} from './task-issue-state.js';
-import {ensure,cached,waiting,checkCaches,anyWaiting,CACHE_POLL_MS} from './linear-cache.js';
+import {issueScopeData,issueCacheLabel,parseTimelineFeed,spaceWithTimeline,rowStatus,milestoneSource} from './task-issue-state.js';
+import {ensure,cached,waiting,checkCaches,anyWaiting,CACHE_POLL_MS,LOOK_POLL_MS} from './linear-cache.js';
 import {statusIndex,teamStatuses,statusFilters,filterRows,foldedCount,milestoneList,detailData} from './issue-model.js';
 import {nativeTaskSpace,hostedTaskLayout,panelWidthClass} from './panel-host.js';
 
@@ -21,6 +21,8 @@ import {nativeTaskSpace,hostedTaskLayout,panelWidthClass} from './panel-host.js'
 const registry=globalThis.__sixfoldPanelControllers??=new Map();
 const read=props=>registry.get(props.key);
 const signature=value=>JSON.stringify(value);
+// A native input handle answers value() until it is released; afterwards every use throws.
+const inputAlive=input=>{if(!input)return false;try{input.value();return true;}catch{return false;}};
 const label=(value,color,size=10)=>div().min_w(0).truncate().text_size(size).text_color(color).child(value);
 const countRenders=(c,kind,id='all')=>{const key=`${kind}:${id}`;c.stats.renders[key]=(c.stats.renders[key]||0)+1;};
 
@@ -33,8 +35,14 @@ class PanelRow extends View{
     return agentRow(c,agent,space,c.events.tags.get(agent.id),c.events,c.color(space.bundle||space.id),theme(),c.motion);
   }
 }
+// A card's issue search and comment inputs are created by the card itself, in init() and
+// update(): the native store gives retained state to the view whose call created it, so an
+// input made in an event handler belongs to whichever view ran that event (a peek, a popup)
+// and dies with it while this card still draws it. Released inputs are replaced here, never
+// in render; render only leaves them out.
 class PanelSpace extends View{
-  init(props){this.key=props.key;this.id=props.id;}
+  init(props){this.key=props.key;this.id=props.id;read(this)?.adoptInputs?.(this.id);}
+  update(props){this.key=props.key;this.id=props.id;read(this)?.adoptInputs?.(this.id);}
   render(){
     const c=read(this);if(!c)return div();countRenders(c,'space',this.id);
     const geometry=c.layout?.cards.find(card=>card.space.id===this.id),space=c.spaceMap.get(this.id);
@@ -156,7 +164,22 @@ export function createRetainedPanel(cx,{macTitlebar=false,onClassic=null,onDispo
   // the space's milestones, issues and statuses when its issue search opens, an issue when its
   // detail opens. While anything is read, or a pressed write runs, its file is checked.
   c.cacheTimer=null;c.statusMemo=new Map();
-  c.askLinear=(kind,target,force=false)=>{if(typeof c.cx.spawn!=='function')return;c.cx.spawn(async()=>{try{await ensure(kind,target,{force});}catch{}c.pollCaches();c.repaintIssues();});};
+  c.askLinear=(kind,target,force=false)=>{if(typeof c.cx.spawn!=='function')return;c.cx.spawn(async()=>{try{await ensure(kind,target,{force});}catch{}c.pollCaches();c.repaintIssues();});c.pollLook();};
+  // While an issue search stays open, its reads (and the open detail's) are asked again every
+  // LOOK_POLL_MS: ensure asks nothing while they are fresh, so this stays quiet; it repaints only
+  // through the cache check when an answer comes. The timeline file is read again too (it repaints
+  // only when its `updated` changes). Stops once every search is closed.
+  c.lookTimer=null;
+  c.pollLook=()=>{
+    if(c.disposed||c.lookTimer||typeof c.cx.spawn!=='function'||![...c.issueStates.values()].some(state=>state.open))return;
+    c.lookTimer=c.cx.timer.after(LOOK_POLL_MS,()=>{c.lookTimer=null;if(c.disposed)return;
+      c.cx.spawn(async()=>{
+        for(const [id,state] of c.issueStates){
+          const space=c.spaceMap.get(id);if(!state.open||!space)continue;
+          try{await ensure('project',space.name);if(state.detail)await ensure('issue',state.detail);}catch{}
+        }
+        c.loadTimeline();c.pollCaches();c.pollLook();});});
+  };
   c.repaintIssues=()=>{for(const [id,state] of c.issueStates)if(state.open)c.notify(c.cards.get(id));};
   c.pollCaches=()=>{
     const writing=[...c.issueStates.values()].some(state=>state.write&&!state.write.done);
@@ -187,7 +210,7 @@ export function createRetainedPanel(cx,{macTitlebar=false,onClassic=null,onDispo
     w.done=true;
     state.writeNote=result?.ok?(w.action==='comment'?'댓글을 남겼습니다':'상태를 바꿨습니다'):`실패: ${String(result?.error||'이유 미확인').slice(0,120)}`;
     if(result?.ok){
-      if(w.action==='comment')state.commentInput?.set_value?.('');
+      if(w.action==='comment'){const comment=c.issueInputs.get(id)?.comment;if(inputAlive(comment))comment.set_value('');}
       state.menu=null;
       const space=c.spaceMap.get(id);
       c.askLinear('issue',w.key,true);if(space&&w.action==='set_state')c.askLinear('project',space.name,true);
@@ -199,11 +222,34 @@ export function createRetainedPanel(cx,{macTitlebar=false,onClassic=null,onDispo
     let memo=c.statusMemo.get(space.id);
     if(!memo||memo.project!==project){memo={project,index:statusIndex(project)};c.statusMemo.set(space.id,memo);}
     for(const id of c.statusMemo.keys())if(!c.spaceMap.has(id))c.statusMemo.delete(id);
-    const statusOf=project?key=>memo.index.get(key)||null:null;
+    // The catalog (the feed's, or one made from the timeline) and the Linear project cache both name
+    // each issue's status; whichever was read later wins, the other fills the keys it lacks. A
+    // catalog status takes its type from the same-named status of the issue's own team in the cache;
+    // without a team match, only a name every team types alike is used, else the row keeps its own
+    // provider type or normalized state.
+    let rowIndex=c.rowStatusMemo?.get(space.id);
+    if(!rowIndex||rowIndex.catalog!==space.issue_catalog||rowIndex.project!==project){
+      const teams=project?.statuses&&typeof project.statuses==='object'?project.statuses:{};
+      const named=new Map(),clash=new Set();
+      for(const list of Object.values(teams))for(const s of Array.isArray(list)?list:[]){
+        if(!s?.name)continue;const seen=named.get(s.name);
+        if(!seen)named.set(s.name,s);else if(seen.type!==s.type)clash.add(s.name);
+      }
+      for(const name of clash)named.delete(name);
+      const teamOf=new Map((Array.isArray(project?.issues)?project.issues:[]).filter(i=>i?.key&&i.team).map(i=>[i.key,i.team]));
+      const knownFor=row=>{const list=teams[row.team||teamOf.get(row.key)];
+        const own=Array.isArray(list)?list.find(s=>s?.name===row.status):null;return own?new Map([[own.name,own]]):named;};
+      rowIndex={catalog:space.issue_catalog,project,map:new Map((space.issue_catalog?.all||[]).filter(i=>i.status).map(i=>[i.key,rowStatus(i,knownFor(i))]))};
+      (c.rowStatusMemo||(c.rowStatusMemo=new Map())).set(space.id,rowIndex);
+    }
+    const projectAt=project&&(project.state===undefined||project.state==='ok')?Date.parse(project.at||''):NaN;
+    const catalogAt=Date.parse(space.issue_catalog?.updated_at||space.issue_catalog?.cache?.at||'');
+    const cacheFirst=Number.isFinite(projectAt)&&(!Number.isFinite(catalogAt)||projectAt>catalogAt);
+    const statusOf=project||rowIndex.map.size?key=>(cacheFirst?memo.index.get(key)||rowIndex.map.get(key):rowIndex.map.get(key)||memo.index.get(key))||null:null;
     const rows=data.rows||[];
     const lookup=statusOf||(()=>null);
     const unreadKeys=new Set(items.filter(i=>!i.read&&i.workspace===space.name&&i.issue).map(i=>i.issue));
-    const milestones=milestoneList(project,space.issue_catalog,unreadKeys);
+    const milestones=milestoneList(milestoneSource(space,project),space.issue_catalog,unreadKeys);
     const writes=shared('sixfold.linearWrites')??[];
     const onDetail=key=>{
       state.detail=key||null;state.menu=null;state.writeNote='';state.hoverKey=null;
@@ -230,11 +276,12 @@ export function createRetainedPanel(cx,{macTitlebar=false,onClassic=null,onDispo
       onDetail,detail,detailWaiting:detail?waiting('issue',detail.key):false,
       writes,menu:state.menu||null,writeNote:state.writeNote||'',
       statuses:detail?teamStatuses(project,detail.team):[],
-      onMenu:menu=>{state.menu=menu;if(menu==='comment'&&!state.commentInput)state.commentInput=InputState.new({placeholder:'Linear에 남길 댓글'});c.notify(c.cards.get(space.id));},
-      commentBox:state.menu==='comment'&&state.commentInput?Input.new(state.commentInput).flex_1().h(30):null,
+      onMenu:menu=>{state.menu=menu;if(menu==='comment')c.ensureInputs(space.id);c.notify(c.cards.get(space.id));},
+      commentBox:state.menu==='comment'?c.inputElement(space.id,'comment')?.flex_1().h(30)??null:null,
       onSetState:name=>{if(writes.includes('set_state'))c.writeIssue(space,state,'set_state',{state:name});},
       onComment:()=>{
-        const body=String(state.commentInput?.value?.()||'');
+        const comment=c.issueInputs.get(space.id)?.comment;
+        const body=inputAlive(comment)?String(comment.value()||''):'';
         if(!writes.includes('comment'))return;
         if(!body.trim()||body.length>4000){state.writeNote='실패: 댓글 내용을 입력하세요 (4000자 이하)';c.notify(c.cards.get(space.id));return;}
         c.writeIssue(space,state,'comment',{body});
@@ -290,6 +337,46 @@ export function createRetainedPanel(cx,{macTitlebar=false,onClassic=null,onDispo
   c.issueOpeners=new Map();
   c.opener=(id,fn)=>{c.issueOpeners.set(id,fn);return fn;};
   c.openIssues=space=>{c.issueOpeners.get(space.id)?.(true);};
+  // Each card's {search, comment} inputs, made by adoptInputs from that card's init()/update().
+  c.issueInputs=new Map();c.inputRevision=0;
+  c.adoptInputs=id=>{
+    if(c.disposed)return;
+    const old=c.issueInputs.get(id);
+    if(old&&inputAlive(old.search)&&inputAlive(old.comment))return;
+    const keep=input=>inputAlive(input)?input.value():'';
+    let search=null,comment=null;
+    try{
+      search=InputState.new({placeholder:'이슈 검색',value:c.issueStates.get(id)?.query||''});
+      comment=InputState.new({placeholder:'Linear에 남길 댓글',value:keep(old?.comment)});
+      search.on('change',()=>{const state=c.issueStates.get(id);if(!state||!inputAlive(search))return;state.query=search.value();c.notify(c.cards.get(id));});
+    }catch{
+      // No input this time (entity limit, a retired source): the card draws without one and the
+      // next open or update asks again.
+      for(const input of [search,comment])try{input?.release?.();}catch{}
+      return;
+    }
+    for(const input of [old?.search,old?.comment])try{input?.release?.();}catch{}
+    c.issueInputs.set(id,{search,comment});
+  };
+  // From an event or apply (never render): a card whose inputs were released gets new props, and
+  // its update() replaces them inside the card's own call.
+  c.ensureInputs=id=>{
+    const inputs=c.issueInputs.get(id);
+    if(c.disposed||inputs&&inputAlive(inputs.search)&&inputAlive(inputs.comment))return;
+    const card=c.cards.get(id);
+    if(typeof card?.set_props!=='function')return;
+    try{card.set_props({key:c.key,id,inputs:++c.inputRevision});}catch{}
+  };
+  // A released input cannot be drawn (Input.new throws and the whole card fails to render). Leave
+  // it out and mark the card; apply() or the next open/menu event repairs it.
+  c.staleInputs=new Set();
+  c.inputElement=(id,name)=>{
+    const input=c.issueInputs.get(id)?.[name];
+    if(!input)return null;
+    if(inputAlive(input))try{return Input.new(input);}catch{}
+    c.staleInputs.add(id);
+    return null;
+  };
   c.markRead=(alerts,origin,space)=>{
     c.cx.spawn(async()=>{
       try{await requestReads(alerts,origin,shared('sixfold.linearWrites')??[]);}catch{}
@@ -324,7 +411,24 @@ export function createRetainedPanel(cx,{macTitlebar=false,onClassic=null,onDispo
     }
     if(changed)c.notify(c.cards.get(id));
   };
+  // The timeline feed (data/sixfold/week-timeline.json), read when an issue search opens; the window
+  // shows it instead of the catalog when it is newer. Memoized so the catalog identity stays stable.
+  c.timeline=null;c.timelineMemo=new Map();
+  c.loadTimeline=()=>{if(typeof c.cx.spawn!=='function')return;c.cx.spawn(async()=>{
+    let next=null;try{next=parseTimelineFeed(await readTextFile(`${appHome()}/data/sixfold/week-timeline.json`));}catch{}
+    // A file that cannot be read or is not whole is 'none': the catalog comes back, no older timeline is kept.
+    if(c.disposed||(next?.updated??null)===(c.timeline?.updated??null))return;
+    c.timeline=next;c.repaintIssues();});};
+  c.withTimeline=space=>{
+    const memo=c.timelineMemo.get(space.id);
+    if(memo&&memo.space===space&&memo.timeline===c.timeline)return memo.result;
+    const result=spaceWithTimeline(space,c.timeline);
+    c.timelineMemo.set(space.id,{space,timeline:c.timeline,result});
+    for(const id of c.timelineMemo.keys())if(!c.spaceMap.has(id))c.timelineMemo.delete(id);
+    return result;
+  };
   c.issuePopover=(space,trigger,t)=>{
+    space=c.withTimeline(space);
     const state=c.issueStates.get(space.id);
     let data={};
     if(state?.open){
@@ -343,7 +447,7 @@ export function createRetainedPanel(cx,{macTitlebar=false,onClassic=null,onDispo
       updatedLabel:cache?.label,emptyLabel:cache?.emptyLabel,
       onExternal:space.work?.url?context=>context?.open_url?.(space.work.url):null,
       canImport:Boolean(onIssueRequest&&space.issue_catalog?.import_request),busyKeys:new Set(state?.pending.keys()||[]),error:state?.error,
-      search:state?.input?Input.new(state.input).w_full().h(30):null,
+      search:state?.open?c.inputElement(space.id,'search')?.w_full().h(30)??null:null,
       alertsFor:state?.open?key=>issueAlerts(shared('sixfold.linearItems')??[],space.name,key):null,
       alerted:state?.open?alertedIssues(shared('sixfold.linearItems')??[],space.name,state.query):[],
       auto:state?.open?c.autoFor(space,t):null,
@@ -359,15 +463,16 @@ export function createRetainedPanel(cx,{macTitlebar=false,onClassic=null,onDispo
       onOpen:c.opener(space.id,open=>{
         let current=c.issueStates.get(space.id);
         if(!current){
-          const input=InputState.new({placeholder:'이슈 검색'});
-          current={open:false,scope:'week',query:'',input,pending:new Map(),error:null};
+          current={open:false,scope:'week',query:'',pending:new Map(),error:null};
           c.issueStates.set(space.id,current);
-          input.on('change',()=>{current.query=input.value();c.notify(c.cards.get(space.id));});
         }
+        // The card owns the inputs; this event (a card click or a peek's title) only asks it to
+        // replace released ones.
+        if(open)c.ensureInputs(space.id);
         if(open)for(const [id,other] of c.issueStates)if(id!==space.id&&other.open){other.open=false;c.notify(c.cards.get(id));}
         current.open=open;
         if(!open){current.detail=null;current.menu=null;current.hoverKey=null;}
-        else c.askLinear('project',space.name);
+        else{c.askLinear('project',space.name);c.loadTimeline();}
         c.notify(c.cards.get(space.id));
       }),
       onScope:scope=>{if(state&&state.scope!==scope){state.scope=scope;c.notify(c.cards.get(space.id));}},
@@ -452,6 +557,8 @@ export function createRetainedPanel(cx,{macTitlebar=false,onClassic=null,onDispo
     for(const [id,entity] of c.rows)if(!c.projection.agents.has(id)){entity.release();c.rows.delete(id);c.rowKeys.delete(id);}
     for(const [id,entity] of c.cards)if(!c.spaceMap.has(id)){entity.release();c.cards.delete(id);c.cardKeys.delete(id);structure=true;}
     for(const id of c.issueStates.keys())if(!c.spaceMap.has(id)){c.issueStates.delete(id);c.expandedIssueSpaces.delete(id);}
+    for(const [id,inputs] of c.issueInputs)if(!c.spaceMap.has(id)){c.issueInputs.delete(id);for(const input of [inputs.search,inputs.comment])try{input?.release?.();}catch{}}
+    for(const id of [...c.staleInputs]){c.staleInputs.delete(id);if(c.spaceMap.has(id))c.ensureInputs(id);}
     for(const id of c.expandedParents)if(!c.projection.agents.has(id))c.expandedParents.delete(id);
     const order=signature(c.feed.spaces.map(space=>space.id));
     if(structure||order!==c.orderKey||themeChanged){c.orderKey=order;c.notify(c.list);}
@@ -499,10 +606,13 @@ export function createRetainedPanel(cx,{macTitlebar=false,onClassic=null,onDispo
   };
   c.setEnabled=enabled=>{if(c.enabled!==enabled){c.enabled=enabled;c.preferences();}};
   c.dispose=()=>{
-    if(c.disposed)return;c.disposed=true;c.readTimer?.cancel?.();c.readTimer=null;c.cacheTimer?.cancel?.();c.cacheTimer=null;c.autoTimer?.cancel?.();c.autoTimer=null;c.statusMemo?.clear();
+    if(c.disposed)return;c.disposed=true;c.readTimer?.cancel?.();c.readTimer=null;c.cacheTimer?.cancel?.();c.cacheTimer=null;c.lookTimer?.cancel?.();c.lookTimer=null;c.autoTimer?.cancel?.();c.autoTimer=null;c.statusMemo?.clear();
     try{c.wake?.cancel();}catch{/* The old source generation may already be released. */}
     try{c.life?.cancel();}catch{}
     for(const entity of [...c.rows.values(),...c.cards.values(),c.computers,c.summary,c.flows,c.list,c.entity])try{entity?.release();}catch{}
+    // Releasing a card releases what it owns; explicit release covers a host without that cascade.
+    for(const inputs of c.issueInputs.values())for(const input of [inputs.search,inputs.comment])try{input?.release?.();}catch{}
+    c.issueInputs.clear();c.staleInputs.clear();
     try{c.onDispose?.();}catch{}
     registry.delete(key);
   };

@@ -5,9 +5,11 @@ import {createHash} from 'crypto';
 import {readJsonSnapshot,subscribeJsonFile,subscribeFileChanges} from './panel-io.js';
 import {addArrival,hasArrivalHost} from './arrival-store.js';
 import {arrivalTarget,ARRIVAL} from './arrival-model.js';
+import {createRetry,watchRecorder} from './watch-guard.js';
 
 const SHOWN = new Set(['needs-you']);  // Only what a person must decide; the rest stays in the project.
 const MARKS = { 'needs-you': '!', info: '✓', processing: '●' };
+const ALERT_LOAD_STUCK_MS = 120000;   // a refresh still loading after this no longer blocks the next one
 
 function popupEvents(mentions, read) {
   const events = [];
@@ -65,32 +67,55 @@ export function watchAlerts(view, cx) {
   const base=`${appHome()}/data/sixfold`;
   const inputs=[['legacy','alerts.json',()=>({items:[]})],['tracked','project-alerts.json',()=>({items:[]})],['read','slack-alerts-read.json',()=>({})],['mentions','slack-mentions.json',()=>({items:[]})],['health','slack-live-health.json',()=>({})],['workflows','slack-workflows.json',()=>({jobs:{}})]];
   const cached=new Map(),subscriptions=[];
-  let loading=false,previous,disposed=false,scheduled=null,dirty=false,version=0;
+  let loading=false,loadingAt=0,run=0,previous,disposed=false,scheduled=null,dirty=false,version=0;
   const allowed=()=>!disposed&&view.sidebarVisible!==false;
+  // A refresh whose native read or write never settles stops holding the next one after ALERT_LOAD_STUCK_MS.
+  const busy=()=>loading&&Date.now()-loadingAt<ALERT_LOAD_STUCK_MS;
+  // A failed or refused refresh is retried after a delay even when no input changes (watch-guard.js);
+  // the kind and time of a problem go to data/sixfold/slack-alert-watch.json.
+  const statePath=`${base}/slack-alert-watch.json`;
+  const retry=createRetry({timer:(ms,fn)=>cx.timer.after(ms,fn),retry:()=>schedule(),
+    record:watchRecorder(text=>cx.spawn(async()=>{try{await writeTextFile(statePath,text,await readTextFile(statePath).catch(()=>null));}catch{/* best effort */}}))});
+  // Mentions whose ledger write committed but that are not announced yet (a hidden view announces them when shown).
+  const held=[];
+  // `redraw`: announced outside a live run's own notify (a replaced run returns before it; a refresh
+  // with unchanged inputs draws nothing), so redraw the sidebar here.
+  const deliver=(redraw=true)=>{if(!held.length||!allowed())return;announceSlack(held.splice(0));if(redraw){cx.notify();view.panelRetained?.alertsChanged?.();}};
   const schedule=()=>{
     dirty=true;
-    if(!allowed()||loading||scheduled||cached.size!==inputs.length)return;
+    if(!allowed()||busy()||scheduled||cached.size!==inputs.length)return;
     scheduled=cx.timer.after(20,()=>{scheduled=null;refresh(cx);});
   };
   const refresh = context => {
     if(!allowed()||cached.size!==inputs.length)return;
-    if(loading){dirty=true;return;}
+    if(busy()){dirty=true;return;}
     dirty=false;
     const signature=JSON.stringify(inputs.map(([key])=>cached.get(key).token));
-    if(signature===previous)return;
-    loading = true;
-    (context??cx).spawn(async cx => {
+    deliver();
+    // Inputs back at the last published value while a run is still out (timed out) still refresh: the new
+    // run replaces the stale one, so it cannot publish the older inputs it read when it finally returns.
+    if(signature===previous&&!loading)return;
+    if(loading)retry.note('stalled');   // the previous run never settled; it is replaced
+    const mine=++run;
+    const live=()=>allowed()&&mine===run;   // a replaced run never writes the ledger or publishes late
+    loading = true;loadingAt=Date.now();
+    // cx.spawn can refuse before the task runs (the host's outstanding-task limit under load); its
+    // finally then never runs, so `loading` would stay true and every later change be skipped.
+    // Release here; the next input change retries (no immediate retry against a refusing host).
+    try{(context??cx).spawn(async cx => {
       try {
         const get=key=>cached.get(key).value;
         const legacy=get('legacy'),feed=get('tracked'),read=get('read'),mentions=get('mentions'),health=get('health'),workflows=get('workflows');
         const items = feed.items ?? [];
         const tagged=mentions.items ?? [];
         const states=workflows.jobs ?? {};
-        const events=await notifyNewPopupEvents(popupEvents(tagged,read),allowed);
-        if(!allowed())return;
+        // Once the ledger write returns these mentions are seen for every run, so they are delivered
+        // even when this run was replaced meanwhile (the replacement already saw them as seen).
+        held.push(...await notifyNewPopupEvents(popupEvents(tagged,read),live));
+        deliver(!live());
+        if(!live())return;
         setShared('sixfold.slackHealth',health);
         setShared('sixfold.slackWorkflows',states);
-        announceSlack(events);
         setShared('sixfold.alertItems',items);
         setShared('sixfold.alertRead',read);
         setShared('sixfold.alertProjects',feed.projects ?? []);
@@ -98,9 +123,10 @@ export function watchAlerts(view, cx) {
         previous = signature;
         cx.notify();
         view.panelRetained?.alertsChanged?.();   // the cards' meta lines show the new counts
-      } catch { /* Retry after the next input/ledger change or classic-view activation. */ }
-      finally { loading = false;if(dirty)schedule(); }
-    });
+        retry.ok();
+      } catch(error) { if(mine===run)retry.fail(error); /* also retried on the next input/ledger change or activation */ }
+      finally { if(mine===run){loading = false;if(dirty)schedule();} }
+    });}catch(error){if(mine===run)loading=false;dirty=true;retry.fail(error);}
   };
   for(const [key,name,fallback] of inputs){
     subscriptions.push(subscribeJsonFile(cx,`${base}/${name}`,snapshot=>{
@@ -117,7 +143,7 @@ export function watchAlerts(view, cx) {
     }));
   }
   subscriptions.push(subscribeFileChanges(cx,`${base}/slack-popup-events.json`,()=>{if(!disposed)schedule();}));
-  const stop=()=>{if(disposed)return;disposed=true;scheduled?.cancel?.();scheduled=null;subscriptions.forEach(unsubscribe=>unsubscribe());};
+  const stop=()=>{if(disposed)return;disposed=true;retry.dispose();scheduled?.cancel?.();scheduled=null;subscriptions.forEach(unsubscribe=>unsubscribe());};
   view.refreshAlerts=refresh;view.stopAlerts=stop;(view.fileSubscriptions??=[]).push(stop);
   return stop;
 }
