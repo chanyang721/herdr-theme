@@ -220,6 +220,48 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         );
         return Ok(());
     }
+    if program == "collaboration-intake-contract" && config["allowCollaborationIntake"] == true {
+        let action = argv.get(1).map(String::as_str).unwrap_or("");
+        let request: Value = serde_json::from_str(argv.get(3).ok_or("request missing")?)?;
+        let mut file = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(env::var("HERDR_TEST_CALL_LOG")?)?;
+        writeln!(
+            file,
+            "{}",
+            json!({"program":program,"action":action,"request":request,"actor":env::var("HC_TERMINAL_ID").ok()})
+        )?;
+        if action == "status" && request.is_array() {
+            let rows: Vec<Value> = request
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|r| json!({"id":r["id"],"ownership_released":config["intakeSettled"] == true}))
+                .collect();
+            return herdr_theme::common::print(&json!(rows));
+        }
+        if config["intakeRefuse"] == true {
+            return Err("verified originating agent required".into());
+        }
+        if request["source"] != env::var("HC_TERMINAL_ID").unwrap_or_default() {
+            return Err("origin mismatch".into());
+        }
+        let state = if action == "drain" {
+            if config["intakeBlocked"] == true {
+                "blocked"
+            } else {
+                "handed_off"
+            }
+        } else if action == "local" {
+            "local_active"
+        } else {
+            "pending"
+        };
+        return herdr_theme::common::print(
+            &json!({"state":state,"result":{"parts":[{"task_id":"fixture-task","address":"helper1","outcome":"sent"}]}}),
+        );
+    }
     if ["route-dispatch-contract", "route-candidates-contract"].contains(&program.as_str())
         && config["allowOriginalRoute"] == true
     {

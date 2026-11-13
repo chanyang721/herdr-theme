@@ -164,7 +164,7 @@ pub fn prepare(command: &str, args: &[String]) -> Result<Option<Vec<String>>> {
         "collaborate" => (
             &[
                 "--id", "--text", "--mode", "--owns", "--batch", "--from", "--tier", "--lease",
-                "--result",
+                "--result", "--repo",
             ],
             &["--drain"],
         ),
@@ -181,7 +181,7 @@ pub fn prepare(command: &str, args: &[String]) -> Result<Option<Vec<String>>> {
         let action = pos.first().map(String::as_str).unwrap_or("");
         let allowed: &[&str] = match action {
             "enqueue" => &[
-                "--id", "--text", "--mode", "--owns", "--batch", "--from", "--tier",
+                "--id", "--text", "--mode", "--owns", "--batch", "--from", "--tier", "--repo",
             ],
             "start" | "accept" => &["--from", "--lease"],
             "complete" => &["--from", "--lease", "--result"],

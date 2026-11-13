@@ -2,7 +2,7 @@ use super::{routing, tiers};
 use crate::common::*;
 use crate::locking::FileLock;
 use serde_json::{json, Value};
-use std::{collections::BTreeSet, fs::OpenOptions, io::Write, path::PathBuf};
+use std::{collections::BTreeSet, fs::OpenOptions, path::PathBuf};
 fn valid_id(id: &str) -> bool {
     regex::Regex::new(r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$")
         .unwrap()
@@ -142,6 +142,47 @@ fn space_for(spaces: &[Value], who: &str) -> Result<Value> {
 fn required(args: &[String], name: &str) -> Result<String> {
     option(args, name).ok_or_else(|| format!("{name} is required").into())
 }
+// The executable prefix is installed/configured explicitly, never a guessed home path.
+fn intake_request(task: &Value) -> Value {
+    let mut value = json!({});
+    for key in [
+        "id", "source", "space", "text", "mode", "owns", "batch", "tier", "repo",
+    ] {
+        if let Some(v) = task.get(key) {
+            value[key] = v.clone();
+        }
+    }
+    value
+}
+fn intake(action: &str, task: &Value) -> Result<Value> {
+    intake_payload(action, &intake_request(task))
+}
+fn intake_payload(action: &str, request: &Value) -> Result<Value> {
+    let cfg = config()?;
+    let prefix = cfg["harness_command"].as_array().ok_or(
+        "collaboration.json harness_command must name the installed harness executable prefix",
+    )?;
+    if prefix.is_empty()
+        || prefix
+            .iter()
+            .any(|v| v.as_str().is_none_or(|s| s.is_empty()))
+    {
+        return Err("invalid harness_command".into());
+    }
+    let mut argv: Vec<String> = prefix.iter().map(|v| s(v).to_string()).collect();
+    argv.extend([
+        "collaboration-intake".into(),
+        action.into(),
+        "--request-json".into(),
+        serde_json::to_string(request)?,
+    ]);
+    // Never inject the stored source as HC_TERMINAL_ID. Engine verifies actual ancestry.
+    let (code, result) = routing::call_args(&argv, None)?;
+    if code != 0 || result.get("error").is_some() {
+        return Err(format!("harness intake refused: {result}").into());
+    }
+    Ok(result)
+}
 fn enqueue(args: &[String]) -> Result<Value> {
     let who = actor(args)?;
     let (spaces, live) = snapshot()?;
@@ -169,6 +210,7 @@ fn enqueue(args: &[String]) -> Result<Value> {
         return Err("--owns는 .. 없는 저장소 상대 경로를 쉼표로 구분해 쓰세요.".into());
     }
     let batch = option(args, "--batch").unwrap_or(id.clone());
+    let repo = option(args, "--repo");
     let tier = tiers::tier_name(option(args, "--tier").as_deref())?;
     let _lock = locked()?;
     let mut ledger = load()?;
@@ -178,16 +220,26 @@ fn enqueue(args: &[String]) -> Result<Value> {
             || existing["mode"] != mode
             || existing["owns"] != owns
             || existing["batch"] != batch
+            || existing.get("repo").and_then(Value::as_str) != repo.as_deref()
             || existing["tier"].as_str().unwrap_or("high") != tier
         {
             return Err("기존 ID를 다른 작업에 재사용할 수 없습니다.".into());
         }
+        if existing.get("harness_intake").is_none() {
+            return Err("legacy request has no verified intake; reconcile its delivery before registering new work".into());
+        }
+        intake("enqueue", existing)?;
         return Ok(existing.clone());
     }
     if ledger["reports"].get(format!("{who}:{batch}")).is_some() {
         return Err("이미 보고한 batch에는 작업을 추가할 수 없습니다.".into());
     }
     let mut task = json!({"id":id,"source":who,"space":space["id"],"project":space["name"],"text":text,"mode":mode,"owns":owns,"created":now(),"batch":batch,"tier":tier,"state":"pending","events":[]});
+    if let Some(repo) = repo {
+        task["repo"] = repo.into();
+    }
+    let receipt = intake("enqueue", &task)?;
+    task["harness_intake"] = receipt;
     event(
         &mut task,
         "pending",
@@ -259,37 +311,54 @@ pub fn ownership_conflict(task: &Value, others: &[Value]) -> bool {
     }
     false
 }
-fn instruction(task: &Value, token: &str) -> Result<String> {
-    let exe = std::env::current_exe()?.to_string_lossy().into_owned();
-    let command = format!("{} collaborate", shell_words::quote(&exe));
-    let safety = if task["mode"] == "read-only" {
-        "읽기 전용: 파일/설정/저장소 변경 금지.".into()
-    } else {
-        format!(
-            "별도 worktree 사용 필수. 소유 파일 영역: {}. 다른 세션의 작업 폴더 수정 금지.",
-            s(&task["owns"])
-        )
-    };
-    let id = s(&task["id"]);
-    Ok(format!("[과부하 협업 {id}] 원 세션 {}, 프로젝트 {}\n{safety}\n{}\n\n실행 전에 수락 기록: {command} accept {} --lease {token}\n수락 명령이 실패하면 실행하지 마세요. 같은 작업 재분배 금지.\n완료 기록: {command} complete {} --lease {token} --result \"직접 확인한 결과\"\nhc로 개별 완료 회신하지 마세요. 결과는 원 세션이 모아 한 번만 보고합니다. Share 보고 금지.",s(&task["source"]),s(&task["project"]),s(&task["text"]),shell_words::quote(id),shell_words::quote(id)))
+const OWNED: &[&str] = &[
+    "local_active",
+    "sending",
+    "sent",
+    "accepted",
+    "uncertain",
+    "harness_managed",
+];
+fn is_owned(task: &Value) -> bool {
+    OWNED.contains(&s(&task["state"]))
+        && !(task["state"] == "harness_managed"
+            && task["harness_projection"]["ownership_released"] == true)
 }
-fn receiver(target: &str, facts: &Value, reserved: &BTreeSet<String>) -> Result<bool> {
-    let fact = &facts[target];
-    if reserved.contains(target)
-        || fact["state"] != "live"
-        || !["idle", "done"].contains(&routing::state(fact))
-        || s(&fact["agent"]).is_empty()
+fn refresh_harness(ledger: &mut Value, force: bool) -> Result<()> {
+    let requests: Vec<Value> = ledger["tasks"]
+        .as_object()
+        .unwrap()
+        .values()
+        .filter(|t| t["state"] == "harness_managed")
+        .map(intake_request)
+        .collect();
+    if requests.is_empty()
+        || (!force && now() - ledger["harness_checked_at"].as_f64().unwrap_or(0.) < 60.)
     {
-        return Ok(false);
+        return Ok(());
     }
-    let (code, current) = routing::call_args(&strings(&["hc", "get", target, "--json"]), None)?;
-    if code != 0 || current["state"] != "live" || routing::state(&current) != "idle" {
-        return Ok(false);
+    // One batch / one engine records read, not one scan per task on the UI's 2s timer.
+    let projections = intake_payload("status", &json!(requests));
+    for task in ledger["tasks"].as_object_mut().unwrap().values_mut() {
+        if task["state"] == "harness_managed" {
+            task["harness_projection"] = json!({"ownership_released":false,"reason":"status unavailable; ownership retained"});
+        }
     }
-    let (code, screen) = routing::call_args(&strings(&["hc", "read", target, "--json"]), None)?;
-    Ok(code == 0 && routing::receiver_available(s(&screen["text"])))
+    match projections {
+        Ok(rows) if rows.is_array() => {
+            for row in rows.as_array().unwrap() {
+                if let Some(task) = ledger["tasks"].get_mut(s(&row["id"])) {
+                    if task["state"] == "harness_managed" {
+                        task["harness_projection"] = row.clone();
+                    }
+                }
+            }
+        }
+        _ => {}
+    }
+    ledger["harness_checked_at"] = json!(now());
+    save(ledger)
 }
-const OWNED: &[&str] = &["local_active", "sending", "sent", "accepted", "uncertain"];
 /// Stable model-tier order used by both the original helper and the live drain.
 pub fn tier_order(
     addresses: &[String],
@@ -317,138 +386,75 @@ fn drain() -> Result<Value> {
     }
     let _lock = locked()?;
     let mut ledger = load()?;
-    let mut tasks: Vec<_> = ledger["tasks"]
+    refresh_harness(&mut ledger, false)?;
+    let tasks: Vec<Value> = ledger["tasks"]
         .as_object()
         .unwrap()
         .values()
         .cloned()
         .collect();
-    if !tasks.iter().any(|t| t["state"] == "pending") {
-        return Ok(json!([]));
-    }
-    let (spaces, facts) = snapshot()?;
-    let mut reserved: BTreeSet<String> = tasks
-        .iter()
-        .filter(|t| {
-            ["sending", "sent", "accepted", "uncertain"].contains(&s(&t["state"]))
-                && !s(&t["target"]).is_empty()
-        })
-        .map(|t| s(&t["target"]).into())
-        .collect();
-    let mut ownership: Vec<_> = tasks
-        .iter()
-        .filter(|t| OWNED.contains(&s(&t["state"])))
-        .cloned()
-        .collect();
-    let mut pressure = json!({});
-    for t in &tasks {
-        pressure[s(&t["source"])] = thresholds(&tasks, s(&t["source"]), &cfg, now());
-    }
-    let models = tiers::session_models();
-    let mapping = tiers::mapping(&site());
-    tasks.sort_by(|a, b| {
-        a["created"]
-            .as_f64()
-            .unwrap_or(0.)
-            .total_cmp(&b["created"].as_f64().unwrap_or(0.))
-    });
+    let current = std::env::var("HC_TERMINAL_ID").unwrap_or_default();
     let mut results = vec![];
-    for mut task in tasks {
-        let source = s(&task["source"]).to_string();
-        if task["state"] != "pending"
-            || pressure[&source]["overloaded"] != true
-            || ownership_conflict(&task, &ownership)
-        {
+    for mut task in tasks.clone() {
+        if !["pending", "sending", "sent", "uncertain"].contains(&s(&task["state"])) {
             continue;
         }
-        let Ok(space) = space_for(&spaces, &source) else {
+        let id = s(&task["id"]).to_string();
+        let reason;
+        if task.get("harness_intake").is_none() {
+            reason =
+                "legacy delivery/intake is unverified; reconcile before re-enqueue".to_string();
+        } else if task["state"] != "pending" || lease_path(&id)?.exists() {
+            reason = "existing lease/delivery requires reconciliation; not resent".to_string();
+        } else if ownership_conflict(
+            &task,
+            &tasks
+                .iter()
+                .filter(|t| is_owned(t))
+                .cloned()
+                .collect::<Vec<_>>(),
+        ) {
+            reason = "existing legacy/harness writer owns this area; reconcile or wait".to_string();
+        } else if current != s(&task["source"]) {
+            reason =
+                "originating agent must run drain; UI timer cannot dispatch as another session"
+                    .to_string();
+        } else if thresholds(&tasks, s(&task["source"]), &cfg, now())["overloaded"] != true {
             continue;
-        };
-        if space["id"] != task["space"] || facts[&source]["state"] != "live" {
-            continue;
-        }
-        let mut peers = vec![];
-        for tab in list(&space["tabs"]) {
-            for t in list(&tab["terminals"]) {
-                let address = s(&t["terminal"]);
-                if address != source {
-                    peers.push(address.to_string());
+        } else {
+            match intake("drain", &task) {
+                Ok(receipt) => {
+                    let state = s(&receipt["state"]).to_string();
+                    task["harness_intake"] = receipt;
+                    if ["handed_off", "sending", "uncertain", "reconcile_required"]
+                        .contains(&state.as_str())
+                    {
+                        event(&mut task, "harness_managed", json!({"intake_state":state}));
+                    }
+                    task["blocked_reason"] = if state == "blocked" {
+                        json!("harness dry-run blocked; originating session may retry")
+                    } else {
+                        Value::Null
+                    };
+                    ledger["tasks"][&id] = task.clone();
+                    save(&ledger)?;
+                    results.push(
+                        json!({"id":id,"state":task["state"],"harness":task["harness_intake"]}),
+                    );
+                    continue;
+                }
+                Err(error) => {
+                    reason = error.to_string();
                 }
             }
         }
-        for target in tier_order(&peers, task["tier"].as_str(), &facts, &models, &mapping)? {
-            if !receiver(&target, &facts, &reserved)? {
-                continue;
-            }
-            let id = s(&task["id"]).to_string();
-            let token = uuid::Uuid::new_v4().simple().to_string();
-            let path = lease_path(&id)?;
-            if path.exists() {
-                event(
-                    &mut task,
-                    "uncertain",
-                    json!({"reason":"orphan lease exists; do not resend"}),
-                );
-                ledger["tasks"][&id] = task.clone();
-                save(&ledger)?;
-                break;
-            }
-            std::fs::create_dir_all(path.parent().unwrap())?;
-            let lease = json!({"id":id,"source":source,"target":target,"token":token,"created":now(),"mode":task["mode"],"owns":task["owns"]});
-            let mut f = OpenOptions::new()
-                .create_new(true)
-                .write(true)
-                .open(&path)?;
-            private(&path)?;
-            serde_json::to_writer(&mut f, &lease)?;
-            f.flush()?;
-            f.sync_all()?;
-            drop(f);
-            task["target"] = target.clone().into();
-            task["lease"] = token.clone().into();
-            event(&mut task, "sending", json!({"pressure":pressure[&source]}));
-            ledger["tasks"][&id] = task.clone();
+        // UI reads do not append events or rewrite an unchanged ledger every two seconds.
+        if task["blocked_reason"] != reason {
+            task["blocked_reason"] = reason.clone().into();
+            ledger["tasks"][&id] = task;
             save(&ledger)?;
-            let (code, result) = routing::call_args(
-                &strings(&[
-                    "hc",
-                    "send",
-                    &target,
-                    "--json",
-                    "--if",
-                    "idle",
-                    &instruction(&task, &token)?,
-                ]),
-                Some(&source),
-            )
-            .unwrap_or_else(|e| (1, json!({"error":e.to_string()})));
-            let code = if code == 0 && result.get("error").is_some() {
-                1
-            } else {
-                code
-            };
-            if code != 0
-                && ["status_mismatch", "blocked", "finished", "not_found"]
-                    .contains(&s(&result["error"]["kind"]))
-            {
-                std::fs::remove_file(&path)?;
-                task.as_object_mut().unwrap().remove("lease");
-                task.as_object_mut().unwrap().remove("target");
-                event(&mut task, "pending", json!({"rejected":result}));
-            } else {
-                event(
-                    &mut task,
-                    if code != 0 { "uncertain" } else { "sent" },
-                    json!({"delivery":result}),
-                );
-                reserved.insert(target.clone());
-                ownership.push(task.clone());
-            }
-            ledger["tasks"][&id] = task.clone();
-            save(&ledger)?;
-            results.push(json!({"id":id,"target":target,"state":task["state"]}));
-            break;
         }
+        results.push(json!({"id":id,"reason":reason}));
     }
     Ok(json!(results))
 }
@@ -458,6 +464,9 @@ fn transition(action: &str, args: &[String]) -> Result<Value> {
     let who = actor(args)?;
     let _lock = locked()?;
     let mut ledger = load()?;
+    if action == "start" {
+        refresh_harness(&mut ledger, true)?;
+    }
     let mut task = ledger["tasks"]
         .get(id)
         .cloned()
@@ -474,11 +483,14 @@ fn transition(action: &str, args: &[String]) -> Result<Value> {
             .as_object()
             .unwrap()
             .values()
-            .filter(|t| OWNED.contains(&s(&t["state"])))
+            .filter(|t| is_owned(t))
             .cloned()
             .collect::<Vec<_>>();
         if ownership_conflict(&task, &others) {
             return Err("이미 진행 중인 작업과 파일 소유 영역이 겹칩니다.".into());
+        }
+        if task.get("harness_intake").is_some() {
+            task["harness_intake"] = intake("local", &task)?;
         }
         event(&mut task, "local_active", json!({}));
     } else if ["accept", "complete"].contains(&action) && task["state"] != "local_active" {
@@ -537,6 +549,11 @@ fn report(args: &[String]) -> Result<Value> {
         .values()
         .filter(|t| t["source"] == who && t["batch"] == batch)
         .collect();
+    if tasks.iter().any(|t| t["state"] == "harness_managed") {
+        return Ok(
+            json!({"state":"harness_managed","reason":"use harness inbox/report routing; this receipt is not completion or acceptance", "tasks":tasks.iter().map(|t| json!({"id":t["id"],"harness_intake":t["harness_intake"]})).collect::<Vec<_>>()}),
+        );
+    }
     if tasks.is_empty() || tasks.iter().any(|t| t["state"] != "completed") {
         return Err("이 batch의 모든 작업이 완료돼야 보고할 수 있습니다.".into());
     }
@@ -564,7 +581,7 @@ pub fn run(args: &[String]) -> Result<()> {
         args,
         &[
             "--id", "--text", "--mode", "--owns", "--batch", "--from", "--tier", "--lease",
-            "--result",
+            "--result", "--repo",
         ],
     );
     let action = positionals.first().map(String::as_str).unwrap_or("");
@@ -588,7 +605,9 @@ pub fn run(args: &[String]) -> Result<()> {
         }
         "status" => {
             let _lock = locked()?;
-            load()?
+            let mut ledger = load()?;
+            refresh_harness(&mut ledger, true)?;
+            ledger
         }
         "enqueue" => enqueue(args)?,
         "drain" => drain()?,

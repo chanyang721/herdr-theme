@@ -120,6 +120,10 @@ impl Fixture {
         } else {
             json!({"spaces":[{"id":"p","name":"FixtureProject","tabs":[{"active":true,"terminals":[{"terminal":"origin"},{"terminal":"helper1"},{"terminal":"helper2"}]}]}],"terminals":[{"address":"origin","state":"live","agent":"codex","status":"idle"},{"address":"helper1","state":"live","agent":"codex","status":"idle"},{"address":"helper2","state":"live","agent":"codex","status":"idle"}]})
         };
+        let mut config = config;
+        config["allowCollaborationIntake"] = json!(true);
+        fs::write(fixture.app.join("data/sixfold/collaboration.json"),
+            json!({"harness_command":[env!("CARGO_BIN_EXE_herdr-theme-test-fixture"),"collaboration-intake-contract"]}).to_string()).unwrap();
         fixture.write_config(&config);
         fixture
     }
@@ -403,133 +407,80 @@ fn persisted_two_receiver_protocol_reports_exactly_once() {
     let delivered = f.ok("origin", &["collaborate", "drain"]);
     assert_eq!(delivered.as_array().unwrap().len(), 2);
     assert_eq!(f.ok("origin", &["collaborate", "drain"]), json!([]));
-    let ledger = f.ok("origin", &["collaborate", "status"]);
-    for task in ledger["tasks"].as_object().unwrap().values() {
-        let id = task["id"].as_str().unwrap();
-        let target = task["target"].as_str().unwrap();
-        let token = task["lease"].as_str().unwrap();
-        f.ok(target, &["collaborate", "accept", id, "--lease", token]);
-        f.ok(
-            target,
-            &[
-                "collaborate",
-                "complete",
-                id,
-                "--lease",
-                token,
-                "--result",
-                "12 lines",
-            ],
+    assert!(f.sends().is_empty());
+    for task in f.data("collaboration-tasks.json")["tasks"]
+        .as_object()
+        .unwrap()
+        .values()
+    {
+        assert_eq!(task["state"], "harness_managed");
+        assert_eq!(
+            task["harness_intake"]["result"]["parts"][0]["task_id"],
+            "fixture-task"
         );
-        f.ok(
-            target,
-            &[
-                "collaborate",
-                "complete",
-                id,
-                "--lease",
-                token,
-                "--result",
-                "12 lines",
-            ],
-        );
-    }
-    let first = f.ok("origin", &["collaborate", "report", "--batch", "counts"]);
-    let second = f.ok("origin", &["collaborate", "report", "--batch", "counts"]);
-    assert_eq!(first["state"], "reported");
-    assert_eq!(second["state"], "already_reported");
-    assert!(second.get("text").is_none());
-    let sends = f.sends();
-    assert_eq!(sends.len(), 2);
-    assert_ne!(sends[0]["args"][1], sends[1]["args"][1]);
-    for send in sends {
-        assert_eq!(send["args"][3], "--if");
-        assert_eq!(send["args"][4], "idle");
-        assert!(send["leases"].as_u64().unwrap() > 0);
-        assert!(send["ledger"]["tasks"]
-            .as_object()
-            .unwrap()
-            .values()
-            .any(|t| t["state"] == "sending"));
+        assert!(task.get("lease").is_none());
     }
     assert_eq!(
-        f.data("collaboration-tasks.json")["reports"]
-            .as_object()
-            .unwrap()
-            .len(),
-        1
+        f.calls().iter().filter(|c| c["action"] == "drain").count(),
+        2
     );
 }
 #[test]
 fn uncertain_delivery_keeps_exclusive_leases_and_never_resends() {
-    for mode in ["ambiguous", "crash", "error_success"] {
-        let f = Fixture::new(false);
-        f.edit(|c| c["sendMode"] = json!(mode));
-        f.enqueue("count1");
-        f.enqueue("count2");
-        let delivered = f.ok("origin", &["collaborate", "drain"]);
-        assert!(
-            delivered
-                .as_array()
-                .unwrap()
-                .iter()
-                .all(|t| t["state"] == "uncertain"),
-            "{mode}: {delivered}"
-        );
-        let before = f.sends().len();
-        assert_eq!(before, 2);
-        for _ in 0..3 {
-            assert_eq!(f.ok("origin", &["collaborate", "drain"]), json!([]));
-        }
-        assert_eq!(f.sends().len(), before);
-        assert_eq!(
-            fs::read_dir(f.app.join("data/sixfold/collaboration-leases"))
-                .unwrap()
-                .count(),
-            2
-        );
+    let f = Fixture::new(false);
+    f.enqueue("count1");
+    let mut ledger = f.data("collaboration-tasks.json");
+    ledger["tasks"]["count1"]["state"] = json!("uncertain");
+    ledger["tasks"]["count1"]["lease"] = json!("old-lease");
+    ledger["tasks"]["count1"]
+        .as_object_mut()
+        .unwrap()
+        .remove("harness_intake");
+    fs::write(
+        f.app.join("data/sixfold/collaboration-tasks.json"),
+        ledger.to_string(),
+    )
+    .unwrap();
+    for _ in 0..3 {
+        f.ok("origin", &["collaborate", "drain"]);
     }
+    assert!(f.sends().is_empty());
+    assert_eq!(
+        f.data("collaboration-tasks.json")["tasks"]["count1"]["state"],
+        "uncertain"
+    );
+    assert_eq!(
+        f.data("collaboration-tasks.json")["tasks"]["count1"]["lease"],
+        "old-lease"
+    );
+    assert_eq!(
+        f.calls().iter().filter(|c| c["action"] == "drain").count(),
+        0
+    );
 }
 #[test]
 fn wrong_actor_or_token_cannot_accept_and_cli_errors_are_json() {
     let f = Fixture::new(false);
     f.enqueue("count1");
-    f.enqueue("count2");
-    f.ok("origin", &["collaborate", "drain"]);
-    let ledger = f.data("collaboration-tasks.json");
-    let task = &ledger["tasks"]["count1"];
-    let before_accept = f.run(
-        task["target"].as_str().unwrap(),
-        &[
-            "collaborate",
-            "complete",
-            "count1",
-            "--lease",
-            task["lease"].as_str().unwrap(),
-            "--result",
-            "not accepted",
-        ],
-    );
-    assert_eq!(before_accept.status.code(), Some(1));
-    let denied: Value = serde_json::from_slice(&before_accept.stdout).unwrap();
-    assert!(!denied["error"].as_str().unwrap().is_empty());
-    for (actor, token) in [
-        ("origin", task["lease"].as_str().unwrap()),
-        (task["target"].as_str().unwrap(), "wrong-token"),
-    ] {
+    let mut ledger = f.data("collaboration-tasks.json");
+    let task = &mut ledger["tasks"]["count1"];
+    task["state"] = json!("sent");
+    task["target"] = json!("helper1");
+    task["lease"] = json!("old-token");
+    fs::write(
+        f.app.join("data/sixfold/collaboration-tasks.json"),
+        ledger.to_string(),
+    )
+    .unwrap();
+    for (actor, token) in [("origin", "old-token"), ("helper1", "wrong-token")] {
         let out = f.run(
             actor,
             &["collaborate", "accept", "count1", "--lease", token],
         );
         assert_eq!(out.status.code(), Some(1));
-        assert!(out.stderr.is_empty());
-        let v: Value = serde_json::from_slice(&out.stdout).unwrap();
-        assert!(!v["error"].as_str().unwrap().is_empty());
+        let value: Value = serde_json::from_slice(&out.stdout).unwrap();
+        assert!(value.get("error").is_some());
     }
-    assert_eq!(
-        f.data("collaboration-tasks.json")["tasks"]["count1"]["state"],
-        "sent"
-    );
 }
 
 #[test]
@@ -812,52 +763,25 @@ fn test_no_helper_keeps_queue_without_new_session() {
     let f = Fixture::new(false);
     f.enqueue("a");
     f.enqueue("b");
-    f.edit(|c| {
-        for terminal in c["terminals"].as_array_mut().unwrap() {
-            terminal["status"] = json!("working");
-        }
-    });
-    assert_eq!(f.ok("origin", &["collaborate", "drain"]), json!([]));
+    f.edit(|c| c["intakeBlocked"] = json!(true));
+    f.ok("origin", &["collaborate", "drain"]);
     assert!(f.sends().is_empty());
-    for task in f.data("collaboration-tasks.json")["tasks"]
-        .as_object()
-        .unwrap()
-        .values()
-    {
-        assert_eq!(task["state"], "pending");
-    }
+    assert_eq!(
+        f.data("collaboration-tasks.json")["tasks"]["a"]["state"],
+        "pending"
+    );
+    f.edit(|c| c["intakeBlocked"] = json!(false));
+    f.ok("origin", &["collaborate", "drain"]);
+    assert_eq!(
+        f.data("collaboration-tasks.json")["tasks"]["a"]["state"],
+        "harness_managed"
+    );
 }
 #[test]
 fn test_overlapping_ownership_waits_while_distinct_files_can_run() {
-    let f = Fixture::new(false);
-    task_value(original_add(
-        &f,
-        "origin",
-        "a",
-        "worktree",
-        "src/feature/**",
-    ));
-    task_value(original_add(
-        &f,
-        "origin",
-        "b",
-        "worktree",
-        "src/feature/sub/file.py",
-    ));
-    f.ok("origin", &["collaborate", "drain"]);
-    let ledger = f.data("collaboration-tasks.json");
-    assert_eq!(ledger["tasks"]["a"]["state"], "sent");
-    assert_eq!(ledger["tasks"]["b"]["state"], "pending");
-    assert_eq!(f.sends().len(), 1);
-    assert!(
-        !original_add(&f, "origin", "c", "worktree", "src/../escape")
-            .status
-            .success()
-    );
-    let mut left = ledger["tasks"]["a"].clone();
-    left["owns"] = json!("src/feat*");
-    let mut right = ledger["tasks"]["b"].clone();
-    right["owns"] = json!("src/feature.py");
+    let left =
+        json!({"id":"a","source":"origin","space":"p","mode":"worktree","owns":"src/feature/**"});
+    let mut right = json!({"id":"b","source":"origin","space":"p","mode":"worktree","owns":"src/feature/sub/file.py"});
     assert!(herdr_theme::automation::collaboration::ownership_conflict(
         &left,
         &[right.clone()]
@@ -874,37 +798,31 @@ fn test_write_requires_ownership_and_message_protects_shared_checkout() {
     assert!(!original_add(&f, "origin", "a", "worktree", "")
         .status
         .success());
-    task_value(original_add(
-        &f,
+    f.ok(
         "origin",
-        "a",
-        "worktree",
-        "src/feature/**",
-    ));
-    f.enqueue("b");
-    f.ok("origin", &["collaborate", "drain"]);
-    let sends = f.sends();
-    let text = sends
-        .iter()
-        .find(|s| {
-            s["args"]
-                .as_array()
-                .unwrap()
-                .last()
-                .unwrap()
-                .as_str()
-                .unwrap()
-                .contains("src/feature/**")
-        })
-        .unwrap()["args"]
-        .as_array()
-        .unwrap()
-        .last()
-        .unwrap()
-        .as_str()
+        &[
+            "collaborate",
+            "enqueue",
+            "--id",
+            "a",
+            "--text",
+            "inspect",
+            "--mode",
+            "worktree",
+            "--owns",
+            "src/feature/**",
+            "--repo",
+            "fixture",
+        ],
+    );
+    let call = f
+        .calls()
+        .into_iter()
+        .find(|c| c["action"] == "enqueue")
         .unwrap();
-    assert!(text.contains("별도 worktree 사용 필수"));
-    assert!(text.contains("실행 전에 수락"));
+    assert_eq!(call["request"]["owns"], "src/feature/**");
+    assert_eq!(call["request"]["repo"], "fixture");
+    assert!(f.sends().is_empty());
 }
 #[test]
 fn test_corrupt_ledger_and_orphan_lease_fail_closed() {
@@ -917,7 +835,13 @@ fn test_corrupt_ledger_and_orphan_lease_fail_closed() {
     f.ok("origin", &["collaborate", "drain"]);
     assert_eq!(
         f.data("collaboration-tasks.json")["tasks"]["a"]["state"],
-        "uncertain"
+        "pending"
+    );
+    assert!(
+        f.data("collaboration-tasks.json")["tasks"]["a"]["blocked_reason"]
+            .as_str()
+            .unwrap()
+            .contains("lease")
     );
     fs::write(
         f.app.join("data/sixfold/collaboration-tasks.json"),
@@ -933,21 +857,24 @@ fn test_done_list_with_raw_idle_is_delivered_guarded() {
     f.enqueue("b");
     f.edit(|c| c["terminals"][1]["status"] = json!("done"));
     f.ok("origin", &["collaborate", "drain"]);
-    let sends = f.sends();
-    assert!(sends.iter().any(|s| s["args"][1] == "helper1"));
-    for send in sends {
-        assert_eq!(send["args"][3], "--if");
-        assert_eq!(send["args"][4], "idle");
-    }
+    assert!(f.sends().is_empty());
+    assert_eq!(
+        f.calls().iter().filter(|c| c["action"] == "drain").count(),
+        2
+    );
 }
 #[test]
 fn test_done_without_atomic_guard_is_held() {
     let f = Fixture::new(false);
     f.enqueue("a");
     f.enqueue("b");
-    f.edit(|c| c["getState"] = json!("done"));
-    assert_eq!(f.ok("origin", &["collaborate", "drain"]), json!([]));
+    f.edit(|c| c["intakeRefuse"] = json!(true));
+    f.ok("origin", &["collaborate", "drain"]);
     assert!(f.sends().is_empty());
+    assert_eq!(
+        f.data("collaboration-tasks.json")["tasks"]["a"]["state"],
+        "pending"
+    );
 }
 #[test]
 fn test_share_excluded_new_projects_included() {
@@ -1154,4 +1081,74 @@ fn test_claude_question_remains_protected_below_timing_lines() {
         )));
     }
     assert!(receiver_available("완료했습니다.\n✻ Churned for 3s\n❯"));
+}
+
+#[test]
+fn ui_timer_cannot_impersonate_origin_for_harness_dispatch() {
+    let f = Fixture::new(false);
+    f.enqueue("a");
+    f.enqueue("b");
+    let result = f.ok("helper1", &["collaborate", "drain"]);
+    assert!(result[0]["reason"]
+        .as_str()
+        .unwrap()
+        .contains("originating agent"));
+    assert_eq!(
+        f.calls().iter().filter(|c| c["action"] == "drain").count(),
+        0
+    );
+    assert!(f.sends().is_empty());
+}
+
+#[test]
+fn finished_harness_role_releases_area_but_missing_projection_protects_it() {
+    let f = Fixture::new(false);
+    for id in ["a", "b"] {
+        f.ok(
+            "origin",
+            &[
+                "collaborate",
+                "enqueue",
+                "--id",
+                id,
+                "--text",
+                "inspect",
+                "--mode",
+                "worktree",
+                "--owns",
+                if id == "a" { "src/a" } else { "src/b" },
+                "--repo",
+                "fixture",
+            ],
+        );
+    }
+    f.ok("origin", &["collaborate", "drain"]);
+    f.ok(
+        "origin",
+        &[
+            "collaborate",
+            "enqueue",
+            "--id",
+            "next",
+            "--text",
+            "inspect next",
+            "--mode",
+            "worktree",
+            "--owns",
+            "src/a",
+            "--repo",
+            "fixture",
+        ],
+    );
+    assert!(!f
+        .run("origin", &["collaborate", "start", "next"])
+        .status
+        .success());
+    f.edit(|c| c["intakeSettled"] = json!(true));
+    f.ok("origin", &["collaborate", "start", "next"]);
+    assert_eq!(
+        f.data("collaboration-tasks.json")["tasks"]["next"]["state"],
+        "local_active"
+    );
+    assert!(f.sends().is_empty());
 }
