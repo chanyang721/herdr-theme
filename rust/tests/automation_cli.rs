@@ -15,6 +15,29 @@ struct Fixture {
     log: PathBuf,
 }
 #[test]
+fn collaboration_capability_probe_is_read_only_and_needs_no_identity_or_config() {
+    let root = tempfile::tempdir().unwrap();
+    let app = root.path().join("app");
+    let out = Command::new(env!("CARGO_BIN_EXE_herdr-theme"))
+        .args(["collaborate", "capabilities"])
+        .env("HOME", root.path())
+        .env("USERPROFILE", root.path())
+        .env("HERDR_APP_HOME", &app)
+        .env("LOCALAPPDATA", root.path().join("local"))
+        .env("PATH", root.path())
+        .env_remove("HC_TERMINAL_ID")
+        .env_remove("HERDR_PANE_ID")
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+    assert_eq!(
+        serde_json::from_slice::<Value>(&out.stdout).unwrap(),
+        json!({"harness_intake_protocol":1})
+    );
+    assert_eq!(fs::read_dir(root.path()).unwrap().count(), 0);
+}
+#[test]
 fn fixture_refuses_without_explicit_test_schema() {
     let out = Command::new(env!("CARGO_BIN_EXE_herdr-theme-test-fixture"))
         .env_remove("HERDR_TEST_FIXTURE")
