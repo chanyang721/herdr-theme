@@ -29,7 +29,8 @@ async function linearHarness() {
   const control = {refuse: 0, hang: 0};
   const cx = {notify() {},
     spawn(fn) { if (control.refuse > 0) { control.refuse--; throw refusal(); } const task = fn(cx); tasks.push(task); return task; },
-    timer: {after(ms, callback) { assert.equal(ms, 20); const timer = {callback, cancel() { timers.delete(timer); }}; timers.add(timer); return timer; },
+    timer: {after(ms, callback) { if (ms !== 20) return {ms, cancel() {}};   // a delayed retry stays pending here
+      const timer = {callback, cancel() { timers.delete(timer); }}; timers.add(timer); return timer; },
       every() { assert.fail('no polling'); }}};
   const snapshot = path => { const raw = files.get(path.split('/').at(-1)); if (raw === undefined) return {status: 'missing', hash: null};
     return {status: 'ready', hash: digest(raw), value: JSON.parse(raw)}; };
@@ -44,10 +45,10 @@ async function linearHarness() {
     writeTextFile: async (path, value, expected) => {
       const name = path.split('/').at(-1);
       if ((files.get(name) ?? null) !== expected) throw new Error('compare-and-swap conflict');
-      files.set(name, value); for (const c of changes) c();
+      files.set(name, value); for (const [watched, c] of changes) if (watched === path) c();   // only the subscribed file
     },
     subscribeJsonFile: (_cx, path, callback) => { callbacks.set(path, callback); return () => callbacks.delete(path); },
-    subscribeFileChanges: (_cx, _path, callback) => { changes.add(callback); return () => changes.delete(callback); },
+    subscribeFileChanges: (_cx, watched, callback) => { const entry = [watched, callback]; changes.add(entry); return () => changes.delete(entry); },
     setShared: (key, value) => { shared[key] = value; },
     openOverlay: () => {},
     spaces: () => [{id: 's1', name: 'Alpha'}, {id: 's0', name: 'Share'}],
@@ -60,7 +61,8 @@ async function linearHarness() {
     .replace("'./arrival-store.js'", `'${storeUrl}'`)
     .replace("'./arrival-model.js'", `'${new URL('../mods/sixfold-desk/arrival-model.js', import.meta.url).href}'`)
     .replace("'./alert-model.js'", `'${new URL('../mods/sixfold-desk/alert-model.js', import.meta.url).href}'`)
-    .replace("'./linear-reads.js'", `'${await linearReadsUrl()}'`);
+    .replace("'./linear-reads.js'", `'${await linearReadsUrl()}'`)
+    .replace("'./watch-guard.js'", `'${new URL('../mods/sixfold-desk/watch-guard.js', import.meta.url).href}'`);
   source = `const {${Object.keys(runtime).join(',')}} = globalThis[${JSON.stringify(key)}];\n` + source;
   const module = await import('data:text/javascript;base64,' + Buffer.from(source).toString('base64') + '#' + key);
   const store = await import(storeUrl);
@@ -129,7 +131,8 @@ test('Slack alerts: after one refused spawn the next change still publishes', as
   let refuse = 0;
   const cx = {notify() {},
     spawn(fn) { if (refuse > 0) { refuse--; throw refusal(); } const task = fn(cx); tasks.push(task); return task; },
-    timer: {after(ms, callback) { assert.equal(ms, 20); const timer = {callback, cancel() { timers.delete(timer); }}; timers.add(timer); return timer; },
+    timer: {after(ms, callback) { if (ms !== 20) return {ms, cancel() {}};   // a delayed retry stays pending here
+      const timer = {callback, cancel() { timers.delete(timer); }}; timers.add(timer); return timer; },
       every() { assert.fail('no polling'); }}};
   const snapshot = path => { const raw = files.get(path.split('/').at(-1)); if (raw === undefined) return {status: 'missing', hash: null};
     return {status: 'ready', hash: digest(raw), value: JSON.parse(raw)}; };
@@ -139,7 +142,8 @@ test('Slack alerts: after one refused spawn the next change still publishes', as
     subscribeFileChanges: () => () => {},
     readJsonSnapshot: async name => snapshot(name),
     readTextFile: async name => files.get(name.split('/').at(-1)) ?? null,
-    writeTextFile: async (name, value, expected) => { const key = name.split('/').at(-1); if ((files.get(key) ?? null) !== expected) throw Error('conflict'); files.set(key, value); }};
+    writeTextFile: async (name, value, expected) => { const key = name.split('/').at(-1); if ((files.get(key) ?? null) !== expected) throw Error('conflict'); files.set(key, value); },
+    ...await import(new URL('../mods/sixfold-desk/watch-guard.js', import.meta.url).href)};
   const key = `__alertStall${Math.random().toString(36).slice(2)}`;
   globalThis[key] = runtime;
   let source = (await readFile(new URL('../mods/sixfold-desk/alerts.js', import.meta.url), 'utf8')).replace(/\r?\n/g, '\n').replace(/^import .*;\n/gm, '');

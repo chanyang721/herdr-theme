@@ -5,6 +5,7 @@ import { addArrival, hasArrivalHost } from './arrival-store.js';
 import { arrivalTarget, ARRIVAL } from './arrival-model.js';
 import { placeItems, alertKind, alertLine } from './alert-model.js';
 import { withLocalReads, onReadConfirmed } from './linear-reads.js';
+import { createRetry, watchRecorder } from './watch-guard.js';
 
 // Linear inbox feed for the sidebar: data/sixfold/linear-alerts.json and
 // linear-live-health.json, written by a machine-local collector. Kept apart from
@@ -99,6 +100,11 @@ export function watchLinear(view, cx) {
   const allowed = () => !disposed && view.sidebarVisible !== false;
   // A refresh whose native read or write never settles stops holding the next one after LOAD_STUCK_MS.
   const busy = () => loading && Date.now() - loadingAt < LOAD_STUCK_MS;
+  // A failed or refused refresh is retried after a delay even when no input changes (watch-guard.js);
+  // the kind and time of a problem go to data/sixfold/linear-alert-watch.json.
+  const statePath = `${base}/linear-alert-watch.json`;
+  const retry = createRetry({timer: (ms, fn) => cx.timer.after(ms, fn), retry: () => schedule(),
+    record: watchRecorder(text => cx.spawn(async () => { try { await writeTextFile(statePath, text, await readTextFile(statePath).catch(() => null)); } catch { /* best effort */ } }))});
   const schedule = () => {
     dirty = true;
     if (!allowed() || busy() || scheduled || cached.size !== inputs.length) return;
@@ -110,7 +116,9 @@ export function watchLinear(view, cx) {
     dirty = false;
     const signature = JSON.stringify(inputs.map(([key]) => cached.get(key).token));
     if (signature === previous) return;
+    if (loading) retry.note('stalled');   // the previous run never settled; it is replaced
     const mine = ++run;
+    const live = () => allowed() && mine === run;   // a replaced run never writes the ledger or announces late
     loading = true; loadingAt = Date.now();
     const release = () => { if (mine !== run) return; loading = false; if (dirty) schedule(); };
     try { (context ?? cx).spawn(async cx => {
@@ -121,20 +129,22 @@ export function watchLinear(view, cx) {
         setShared('sixfold.linearAuto', cached.get('auto').value);
         cx.notify();
         view.panelRetained?.alertsChanged?.();   // an open issue search shows its issues' new alerts
-        const events = await announce(linearPopupEvents(placeItems(feed.items ?? [], names)), allowed);
-        if (!allowed()) return;
+        const events = await announce(linearPopupEvents(placeItems(feed.items ?? [], names)), live);
+        if (!live()) return;
         previous = signature;   // after the ledger write, so a failed write is retried
         announceLinear(events);
         if (events.length) { cx.notify(); view.panelRetained?.alertsChanged?.(); }   // arrivals drawn; chips count them once landed
-      } catch { /* A partial collector write keeps the last valid list; retried on the next change. */ }
+        retry.ok();
+      } catch (error) { if (mine === run) retry.fail(error); /* a partial collector write keeps the last valid list */ }
       finally { release(); }
-    }); } catch {
+    }); } catch (error) {
       // cx.spawn can refuse before the task runs (the host's outstanding-task limit under load). The
       // task's finally then never runs and `loading` stayed true forever: every later collection was
       // skipped and no Linear alert arrived again. Release here; the next input change retries
       // (no immediate retry: a refusing host would get one every 20 ms).
       if (mine === run) loading = false;
       dirty = true;
+      retry.fail(error);   // retried after a delay (5 s, 30 s, 2 min), not every 20 ms
     }
   };
   for (const [key, name, fallback] of inputs) {
@@ -152,7 +162,7 @@ export function watchLinear(view, cx) {
     }));
   }
   subscriptions.push(subscribeFileChanges(cx, `${base}/${LEDGER}`, () => { if (!disposed) schedule(); }));
-  const stop = () => { if (disposed) return; disposed = true; scheduled?.cancel?.(); scheduled = null; subscriptions.forEach(unsubscribe => unsubscribe()); };
+  const stop = () => { if (disposed) return; disposed = true; retry.dispose(); scheduled?.cancel?.(); scheduled = null; subscriptions.forEach(unsubscribe => unsubscribe()); };
   view.refreshLinear = refresh; view.stopLinear = stop; (view.fileSubscriptions ??= []).push(stop);
   return stop;
 }

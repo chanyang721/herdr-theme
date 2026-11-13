@@ -5,6 +5,7 @@ import {createHash} from 'crypto';
 import {readJsonSnapshot,subscribeJsonFile,subscribeFileChanges} from './panel-io.js';
 import {addArrival,hasArrivalHost} from './arrival-store.js';
 import {arrivalTarget,ARRIVAL} from './arrival-model.js';
+import {createRetry,watchRecorder} from './watch-guard.js';
 
 const SHOWN = new Set(['needs-you']);  // Only what a person must decide; the rest stays in the project.
 const MARKS = { 'needs-you': '!', info: '✓', processing: '●' };
@@ -70,6 +71,11 @@ export function watchAlerts(view, cx) {
   const allowed=()=>!disposed&&view.sidebarVisible!==false;
   // A refresh whose native read or write never settles stops holding the next one after ALERT_LOAD_STUCK_MS.
   const busy=()=>loading&&Date.now()-loadingAt<ALERT_LOAD_STUCK_MS;
+  // A failed or refused refresh is retried after a delay even when no input changes (watch-guard.js);
+  // the kind and time of a problem go to data/sixfold/slack-alert-watch.json.
+  const statePath=`${base}/slack-alert-watch.json`;
+  const retry=createRetry({timer:(ms,fn)=>cx.timer.after(ms,fn),retry:()=>schedule(),
+    record:watchRecorder(text=>cx.spawn(async()=>{try{await writeTextFile(statePath,text,await readTextFile(statePath).catch(()=>null));}catch{/* best effort */}}))});
   const schedule=()=>{
     dirty=true;
     if(!allowed()||busy()||scheduled||cached.size!==inputs.length)return;
@@ -81,7 +87,9 @@ export function watchAlerts(view, cx) {
     dirty=false;
     const signature=JSON.stringify(inputs.map(([key])=>cached.get(key).token));
     if(signature===previous)return;
+    if(loading)retry.note('stalled');   // the previous run never settled; it is replaced
     const mine=++run;
+    const live=()=>allowed()&&mine===run;   // a replaced run never writes the ledger or announces late
     loading = true;loadingAt=Date.now();
     // cx.spawn can refuse before the task runs (the host's outstanding-task limit under load); its
     // finally then never runs, so `loading` would stay true and every later change be skipped.
@@ -93,8 +101,8 @@ export function watchAlerts(view, cx) {
         const items = feed.items ?? [];
         const tagged=mentions.items ?? [];
         const states=workflows.jobs ?? {};
-        const events=await notifyNewPopupEvents(popupEvents(tagged,read),allowed);
-        if(!allowed())return;
+        const events=await notifyNewPopupEvents(popupEvents(tagged,read),live);
+        if(!live())return;
         setShared('sixfold.slackHealth',health);
         setShared('sixfold.slackWorkflows',states);
         announceSlack(events);
@@ -105,9 +113,10 @@ export function watchAlerts(view, cx) {
         previous = signature;
         cx.notify();
         view.panelRetained?.alertsChanged?.();   // the cards' meta lines show the new counts
-      } catch { /* Retry after the next input/ledger change or classic-view activation. */ }
+        retry.ok();
+      } catch(error) { if(mine===run)retry.fail(error); /* also retried on the next input/ledger change or activation */ }
       finally { if(mine===run){loading = false;if(dirty)schedule();} }
-    });}catch{if(mine===run)loading=false;dirty=true;}
+    });}catch(error){if(mine===run)loading=false;dirty=true;retry.fail(error);}
   };
   for(const [key,name,fallback] of inputs){
     subscriptions.push(subscribeJsonFile(cx,`${base}/${name}`,snapshot=>{
@@ -124,7 +133,7 @@ export function watchAlerts(view, cx) {
     }));
   }
   subscriptions.push(subscribeFileChanges(cx,`${base}/slack-popup-events.json`,()=>{if(!disposed)schedule();}));
-  const stop=()=>{if(disposed)return;disposed=true;scheduled?.cancel?.();scheduled=null;subscriptions.forEach(unsubscribe=>unsubscribe());};
+  const stop=()=>{if(disposed)return;disposed=true;retry.dispose();scheduled?.cancel?.();scheduled=null;subscriptions.forEach(unsubscribe=>unsubscribe());};
   view.refreshAlerts=refresh;view.stopAlerts=stop;(view.fileSubscriptions??=[]).push(stop);
   return stop;
 }

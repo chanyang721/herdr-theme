@@ -37,7 +37,8 @@ async function fixture({home=`/panel-io-${serial}/app`,nativeJson=true}={}){
       .replace(/import \{([^}]+)\} from 'herdr';/,`const {$1}=globalThis[${JSON.stringify(key)}];`)
       .replace("'./panel-io.js'",JSON.stringify(ioUrl)).replace("'./ask-model.js'",JSON.stringify(new URL('../mods/sixfold-desk/ask-model.js',import.meta.url).href))
       .replace("'./arrival-store.js'",JSON.stringify(new URL('../mods/sixfold-desk/arrival-store.js',import.meta.url).href))
-      .replace("'./arrival-model.js'",JSON.stringify(new URL('../mods/sixfold-desk/arrival-model.js',import.meta.url).href));
+      .replace("'./arrival-model.js'",JSON.stringify(new URL('../mods/sixfold-desk/arrival-model.js',import.meta.url).href))
+      .replace("'./watch-guard.js'",JSON.stringify(new URL('../mods/sixfold-desk/watch-guard.js',import.meta.url).href));
     try{return await import('data:text/javascript;base64,'+Buffer.from(body).toString('base64'));}finally{delete globalThis[key];}
   };
   const wakeOnly=async()=>{await tick();for(const {cx,immediate} of contexts)for(const {task,callback} of immediate.splice(0))if(!task.cancelled)callback(cx);await tick();};

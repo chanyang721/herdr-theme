@@ -69,7 +69,8 @@ test('new Linear alerts become arrivals into their space (Share otherwise); no s
   const files = new Map([['linear-alerts.json', JSON.stringify({items: [{id: 'old', read: false, category: 'assignments', workspace: 'Alpha'}, {id: 'past', read: true, category: 'mentions'}], spaces: ['Alpha']})]]);
   const shared = {}, opens = [], tasks = [], timers = new Set(), callbacks = new Map(), changes = new Set();
   const cx = {notify() {}, spawn(fn) { const task = fn(cx); tasks.push(task); return task; },
-    timer: {after(ms, callback) { assert.equal(ms, 20); const timer = {callback, cancel() { timers.delete(timer); }}; timers.add(timer); return timer; }, every() { assert.fail('no polling'); }}};
+    timer: {after(ms, callback) { if (ms !== 20) return {cancel() {}};   // a delayed retry stays pending here
+      const timer = {callback, cancel() { timers.delete(timer); }}; timers.add(timer); return timer; }, every() { assert.fail('no polling'); }}};
   const snapshot = path => { const raw = files.get(path.split('/').at(-1)); if (raw === undefined) return {status: 'missing', hash: null};
     return {status: 'ready', hash: createHash('sha256').update(raw).digest('hex'), value: JSON.parse(raw)}; };
   globalThis.__linearRuntime = {
@@ -93,7 +94,8 @@ test('new Linear alerts become arrivals into their space (Share otherwise); no s
   source = source.replace(/\r\n/g, '\n').replace(/^import .* from '(herdr|crypto|\.\/panel-io\.js)';\n/gm, '')
     .replace("'./arrival-store.js'", `'${storeUrl}'`).replace("'./arrival-model.js'", `'${modelUrl}'`)
     .replace("'./alert-model.js'", `'${new URL('../mods/sixfold-desk/alert-model.js', import.meta.url).href}'`)
-    .replace("'./linear-reads.js'", `'${await linearReadsUrl()}'`);
+    .replace("'./linear-reads.js'", `'${await linearReadsUrl()}'`)
+    .replace("'./watch-guard.js'", `'${new URL('../mods/sixfold-desk/watch-guard.js', import.meta.url).href}'`);
   source = `const {${Object.keys(globalThis.__linearRuntime).join(',')}} = globalThis.__linearRuntime;\n` + source;
   const store = await import(storeUrl);
   const flush = async () => { for (let n = 0; n < 20; n++) { const due = [...timers]; timers.clear(); due.forEach(t => t.callback(cx)); await Promise.all(tasks.splice(0)); await Promise.resolve(); if (!timers.size && !tasks.length) return; } assert.fail('did not settle'); };
