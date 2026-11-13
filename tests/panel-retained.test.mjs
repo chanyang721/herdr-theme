@@ -613,3 +613,34 @@ test('an open issue window reads the timeline again on its look and shows a stat
     assert.deepEqual(statusOf(),{name:'완료',type:'completed',color:''},'the look read the newer timeline');
   }finally{r.controller.dispose();delete globalThis.__retainedWrites;delete globalThis.__retainedRead;}
 });
+
+// Teams can type the same status name differently; a catalog status takes its type from the issue's own
+// team, and a name the teams disagree on is not guessed from another team.
+test('a status name typed differently by two teams classifies each issue by its own team, whichever source is newer',async()=>{
+  const now=Date.now(),file='/home/data/sixfold/week-timeline.json';let answer=null,timeline=null;globalThis.__retainedWrites=[];
+  globalThis.__retainedRead=path=>path===file?timeline:path.includes('/linear-cache/project-')?answer:null;
+  const r=await runtime(),tasks=[];
+  try{
+    r.controller.cx.spawn=fn=>{tasks.push(fn());};const settle=async()=>{while(tasks.length)await tasks.shift();};
+    const raw=makePanelFixture({tool:'linear'}),sp=raw.spaces[0];sp.name='Demo';
+    sp.issue_catalog={all:[],week:[],milestone:[],updated_at:new Date(now-600000).toISOString()};
+    r.controller.apply(cleanPanelFeed(raw),'ready');r.flush();
+    const feed=at=>JSON.stringify({v:2,updated:new Date(at).toISOString(),week:{start:'2026-11-09',end:'2026-11-15'},
+      projects:[{workspace:'Demo',milestones:[],issues:['DEMO-1','DEMO-2','DEMO-3'].map(key=>({key,title:key,state:'todo',status:'Ready'}))}]});
+    timeline=feed(now-120000);
+    answer=JSON.stringify({schema:1,state:'ok',space:'Demo',at:new Date(now-60000).toISOString(),milestones:[],
+      statuses:{TeamA:[{name:'Ready',type:'completed'}],TeamB:[{name:'Ready',type:'unstarted'}]},
+      issues:[{key:'DEMO-1',status:'Ready',team:'TeamB'},{key:'DEMO-2',status:'Ready',team:'TeamA'}]});
+    r.controller.issuePopover(r.controller.spaceMap.get(sp.id),element(),r.native.theme()).calls.find(c=>c[0]==='on_open_change')[1](true,{});await settle();
+    const extra=()=>{const card=r.controller.withTimeline(r.controller.spaceMap.get(sp.id));
+      return r.controller.issueExtra(card,{pending:new Map(),scope:'all'},{rows:card.issue_catalog.all});};
+    const check=label=>{const out=extra();
+      assert.equal(out.statusOf('DEMO-1').type,'unstarted',`${label}: the TeamB issue takes TeamB's Ready`);
+      assert.equal(out.statusOf('DEMO-2').type,'completed',`${label}: the TeamA issue takes TeamA's Ready`);
+      assert.equal(out.statusOf('DEMO-3').type,'unstarted',`${label}: an issue of no known team keeps its own state, not another team's type`);
+      assert.deepEqual(out.shownRows.map(row=>row.key).sort(),['DEMO-1','DEMO-3'],`${label}: only the completed issue is folded`);};
+    check('cache newer');
+    timeline=feed(now);r.controller.lookTimer.fn();await settle();
+    check('timeline newer');
+  }finally{r.controller.dispose();delete globalThis.__retainedWrites;delete globalThis.__retainedRead;}
+});
