@@ -89,6 +89,12 @@ export const fileTextShown = text => text.length > FILE_TEXT_LIMIT ? `${text.sli
 // file id with the time of the ask, newest first, at most 50 kept for a day. The collector reads the
 // file from Slack within its daily limit and saves the text copy; asking again within 10 minutes is no-op.
 export const FILE_REQUESTS = 'slack-file-requests.json';
+// How long an open 본문 보기 waits for the copy: every 3 s for the first minute, then every 10 s, up to
+// 7 minutes (the collector retries a failed read after 2 minutes, and one read may take up to 3).
+// Past that it says so instead of '본문 준비 중'; closing and opening the text looks again.
+export const FILE_WAIT = Object.freeze({fastMs: 3000, fastForMs: 60000, slowMs: 10000, deadlineMs: 420000});
+export const FILE_LATE = '본문을 아직 받지 못했습니다. 본문 닫기 뒤 다시 열면 다시 확인합니다.';
+export const nextFileWait = elapsed => elapsed >= FILE_WAIT.deadlineMs ? null : elapsed < FILE_WAIT.fastForMs ? FILE_WAIT.fastMs : FILE_WAIT.slowMs;
 export function fileRequestText(old, id, now = Date.now()) {
   if (!FILE_ID.test(String(id ?? ''))) return null;
   let requests = {};

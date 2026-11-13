@@ -1,7 +1,7 @@
 import { div } from 'gpui-kit';
 import { h_flex, v_flex } from 'gpui-base';
 import { readTextFile, writeTextFile, appHome } from 'herdr';
-import { attachments, fileTextPath, fileTextShown, fileRequestText, FILE_REQUESTS } from './alert-slack.js';
+import { attachments, fileTextPath, fileTextShown, fileRequestText, FILE_REQUESTS, FILE_LATE, nextFileWait } from './alert-slack.js';
 
 // The attachments of a Slack alert, one chip each under its text: kind mark, name, kind · size, and
 // two buttons. 본문 보기 shows the collector's local text copy (data/sixfold/slack-files/<id>.txt) or
@@ -27,23 +27,29 @@ export async function askFileText(id, {read = readTextFile, write = writeTextFil
   await write(path, next, old);
   return true;
 }
-// While the text stays open and has no copy: ask once, then look again every `every` ms, at most
-// `tries` times (no busy loop); `shown(cx)` redraws when the copy arrives.
-export function followFileText(id, cx, open, shown, {tries = 40, every = 3000, ask = askFileText, load = loadFileText} = {}) {
+// While the text stays open and has no copy: ask, then look again on the FILE_WAIT schedule (one timer
+// at a time, never a busy loop) until the collector's retry window has passed; then the text says so
+// (state 'late'). `shown(cx)` redraws when the copy arrives or the wait ends.
+export function followFileText(id, cx, open, shown, {wait = nextFileWait, ask = askFileText, load = loadFileText} = {}) {
   if (!cx?.timer?.after) return;
   cx.spawn(async () => { try { await ask(id); } catch { /* the next look asks again */ } });
-  let left = tries;
+  let elapsed = 0;
+  const later = c => {
+    const ms = wait(elapsed);
+    if (ms === null) { texts.set(id, {state: 'late'}); shown(c); return; }
+    elapsed += ms; c.timer.after(ms, look);
+  };
   const look = next => {
     const c = next || cx;
-    if (!open() || left-- <= 0) return;
+    if (!open()) return;
     c.spawn(async c2 => {
       try { await ask(id); } catch { /* asked already or a competing write */ }
       const got = await load(id);
       if (!open()) return;
-      if (got.state === 'ready') shown(c2 || c); else c.timer.after(every, look);
+      if (got.state === 'ready') shown(c2 || c); else later(c);
     });
   };
-  cx.timer.after(every, look);
+  later(cx);
 }
 // The machine-local Slack names (site.local.json `slack.user_names`), the same map the inbox window
 // reads, for names neither the item nor the feed spells. Read when this module loads and again at most
@@ -87,6 +93,6 @@ export function fileChips(item, t, {id, open = null, onView = null, onDownload =
         .border(1).border_color(t.border).bg(t.popover || t.chrome)
         .child(div().min_w(0).truncate().text_size(10).text_color(t.dim).child(`${file.name} · 본문`))
         .child(div().text_size(11).text_color(text?.state === 'ready' ? t.foreground : t.muted)
-          .child(text?.state === 'ready' ? text.text : text?.state === 'loading' ? '본문 읽는 중' : '본문 준비 중'))));
+          .child(text?.state === 'ready' ? text.text : text?.state === 'loading' ? '본문 읽는 중' : text?.state === 'late' ? FILE_LATE : '본문 준비 중'))));
   }));
 }
