@@ -117,14 +117,16 @@ function stageBar(agent,tag,color,t,motion,width,cleanup=null,reason='',waitLabe
   const tone=closing?(t.ansi6||t.accent):color;
   const active=closing?closing.step-1:Math.max(-1,Math.min(4,agent.stage-1));
   const tip=closing?closing.blocked_reason||CLOSE[active]:agent.stage===5?(agent.status==='done'?'완료':'수락됨·정리 전'):STAGES[active]||'대기·계획';
-  const slot=h_flex().w(width<300?64:120).h(18).flex_none().gap(2).items_center().justify_end().tooltip(tag?.label||reason||tip);
+  const slot=h_flex().w(width<300?64:120).h(18).flex_none().gap(2).items_center().justify_end().tooltip([tag?.label,reason||tip].filter(Boolean).join(' · '));
+  // A transient message/event tag must not hide an explicit waiting reason.
+  // Event packet and arrival effects still run on this row.
+  if(waitLabel)return slot.child(text(waitLabel,t.muted,9).id(`panel-wait-${agent.id}`)
+    .accessibility_label(reason||waitLabel));
   if(tag)return slot.child(text(tag.label,blocked?t.blocked:tone,9).flex_1());
   // The short cleanup label takes the stage slot itself: same width and height,
   // so the row stays one line and nothing beside it moves.
   if(cleanup)return slot.child(text(cleanup.text,cleanupTone(cleanup.kind,t),9).id(`panel-cleanup-${agent.id}`)
     .accessibility_label(reason||cleanup.text));
-  if(waitLabel)return slot.child(text(waitLabel,t.muted,9).id(`panel-wait-${agent.id}`)
-    .accessibility_label(reason||waitLabel));
   // Mockup ㉑: a blocked task paints only the stage it is stuck on; finished stages keep their colour.
   const stuck=blocked?Math.max(0,active):-1;
   return slot.children(STAGES.map((_,index)=>div().id(`panel-stage-${agent.id}-${index}`).w(9).h(3).flex_none()

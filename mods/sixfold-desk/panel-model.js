@@ -317,6 +317,15 @@ export function agentWaitLabel(agent) {
     if (state === 'unseen_result') return '결과 확인';
     return null;
   }
+  // Preserve uncertainty before interpreting protection words (unknown pinned
+  // does not establish a pinned pane). These are display categories, not queues.
+  if (/unknown|lookup failed|확인할 수 없|미확인/i.test(reason) && !/identity|신원/i.test(reason)) return '상태 확인';
+  if (/last input was not a dispatched hc message|사람과 대화 중/i.test(reason)) return '대화 보호';
+  if (/last pane in its tab|마지막 칸/i.test(reason)) return '마지막 칸';
+  if (/pinned|사용자가 고정/i.test(reason)) return '고정 유지';
+  if (/focused|보고 있는 칸/i.test(reason)) return '사용 중';
+  if (/this reviewer has no verdict|review verdict missing|reviewers still pending|검수 판정 전|검수 대기/i.test(reason)) return '검수 대기';
+  if (/no delivered hc send report|보고 전달.*대기/i.test(reason)) return '보고전달대기';
   if (/신원|identity|session_id|session identity/i.test(reason)) return '신원 확인';
   if (/검수|review|verdict/i.test(reason)) return '검수 확인';
   if (/수락|accept/i.test(reason)) return '수락 대기';
