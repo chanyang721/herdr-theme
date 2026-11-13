@@ -20,6 +20,7 @@ const QUIET = new Set(['reactions', 'system']);
 const POPUP = {has: category => !QUIET.has(category)};
 const LEDGER = 'linear-popup-events.json';
 const LEDGER_LIMIT = 500;   // ids of notifications already announced; bounded
+export const LOAD_STUCK_MS = 120000;   // a refresh still loading after this no longer blocks the next one
 
 export function linearPopupEvents(items) {
   return (items ?? []).filter(item => typeof item?.id === 'string' && item.id)
@@ -94,21 +95,25 @@ export function watchLinear(view, cx) {
   const inputs = [['feed', 'linear-alerts.json', () => ({items: []})], ['health', 'linear-live-health.json', () => ({})],
                   ['auto', 'linear-auto.json', () => ({entries: []})]];   // Linear auto work: the issue search's '자동 작업'
   const cached = new Map(), subscriptions = [];
-  let loading = false, previous, disposed = false, scheduled = null, dirty = false, version = 0;
+  let loading = false, loadingAt = 0, run = 0, previous, disposed = false, scheduled = null, dirty = false, version = 0;
   const allowed = () => !disposed && view.sidebarVisible !== false;
+  // A refresh whose native read or write never settles stops holding the next one after LOAD_STUCK_MS.
+  const busy = () => loading && Date.now() - loadingAt < LOAD_STUCK_MS;
   const schedule = () => {
     dirty = true;
-    if (!allowed() || loading || scheduled || cached.size !== inputs.length) return;
+    if (!allowed() || busy() || scheduled || cached.size !== inputs.length) return;
     scheduled = cx.timer.after(20, () => { scheduled = null; refresh(cx); });
   };
   const refresh = context => {
     if (!allowed() || cached.size !== inputs.length) return;
-    if (loading) { dirty = true; return; }
+    if (busy()) { dirty = true; return; }
     dirty = false;
     const signature = JSON.stringify(inputs.map(([key]) => cached.get(key).token));
     if (signature === previous) return;
-    loading = true;
-    (context ?? cx).spawn(async cx => {
+    const mine = ++run;
+    loading = true; loadingAt = Date.now();
+    const release = () => { if (mine !== run) return; loading = false; if (dirty) schedule(); };
+    try { (context ?? cx).spawn(async cx => {
       try {
         const feed = cached.get('feed').value, health = cached.get('health').value;
         const names = (spaces() ?? []).map(s => s.name);
@@ -122,8 +127,15 @@ export function watchLinear(view, cx) {
         announceLinear(events);
         if (events.length) { cx.notify(); view.panelRetained?.alertsChanged?.(); }   // arrivals drawn; chips count them once landed
       } catch { /* A partial collector write keeps the last valid list; retried on the next change. */ }
-      finally { loading = false; if (dirty) schedule(); }
-    });
+      finally { release(); }
+    }); } catch {
+      // cx.spawn can refuse before the task runs (the host's outstanding-task limit under load). The
+      // task's finally then never runs and `loading` stayed true forever: every later collection was
+      // skipped and no Linear alert arrived again. Release here; the next input change retries
+      // (no immediate retry: a refusing host would get one every 20 ms).
+      if (mine === run) loading = false;
+      dirty = true;
+    }
   };
   for (const [key, name, fallback] of inputs) {
     subscriptions.push(subscribeJsonFile(cx, `${base}/${name}`, snapshot => {
