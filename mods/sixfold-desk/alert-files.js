@@ -1,7 +1,7 @@
 import { div } from 'gpui-kit';
 import { h_flex, v_flex } from 'gpui-base';
-import { readTextFile, appHome } from 'herdr';
-import { attachments, fileTextPath, fileTextShown } from './alert-slack.js';
+import { readTextFile, writeTextFile, appHome } from 'herdr';
+import { attachments, fileTextPath, fileTextShown, fileRequestText, FILE_REQUESTS } from './alert-slack.js';
 
 // The attachments of a Slack alert, one chip each under its text: kind mark, name, kind · size, and
 // two buttons. 본문 보기 shows the collector's local text copy (data/sixfold/slack-files/<id>.txt) or
@@ -16,6 +16,34 @@ export async function loadFileText(id, {read = readTextFile, home = appHome()} =
   const text = await read(path).catch(() => null);
   texts.set(id, typeof text === 'string' && text.trim() ? {state: 'ready', text: fileTextShown(text)} : {state: 'pending'});
   return texts.get(id);
+}
+// No text copy yet: ask the collector for it (compare-and-swap on the request ledger; a competing
+// write fails this ask and the next look asks again).
+export async function askFileText(id, {read = readTextFile, write = writeTextFile, home = appHome(), now = Date.now()} = {}) {
+  const path = `${home}/data/sixfold/${FILE_REQUESTS}`;
+  const old = await read(path).catch(() => null);
+  const next = fileRequestText(old, id, now);
+  if (next === null) return false;
+  await write(path, next, old);
+  return true;
+}
+// While the text stays open and has no copy: ask once, then look again every `every` ms, at most
+// `tries` times (no busy loop); `shown(cx)` redraws when the copy arrives.
+export function followFileText(id, cx, open, shown, {tries = 40, every = 3000, ask = askFileText, load = loadFileText} = {}) {
+  if (!cx?.timer?.after) return;
+  cx.spawn(async () => { try { await ask(id); } catch { /* the next look asks again */ } });
+  let left = tries;
+  const look = next => {
+    const c = next || cx;
+    if (!open() || left-- <= 0) return;
+    c.spawn(async c2 => {
+      try { await ask(id); } catch { /* asked already or a competing write */ }
+      const got = await load(id);
+      if (!open()) return;
+      if (got.state === 'ready') shown(c2 || c); else c.timer.after(every, look);
+    });
+  };
+  cx.timer.after(every, look);
 }
 // The machine-local Slack names (site.local.json `slack.user_names`), the same map the inbox window
 // reads, for names neither the item nor the feed spells. Read when this module loads and again at most
