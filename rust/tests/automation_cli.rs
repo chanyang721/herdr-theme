@@ -1169,9 +1169,29 @@ fn finished_harness_role_releases_area_but_missing_projection_protects_it() {
         .success());
     f.edit(|c| c["intakeSettled"] = json!(true));
     f.ok("origin", &["collaborate", "start", "next"]);
+    let released = f.data("collaboration-tasks.json");
+    for id in ["a", "b"] {
+        assert_eq!(released["tasks"][id]["state"], "harness_released");
+        assert_eq!(
+            released["tasks"][id]["harness_projection"]["ownership_released"],
+            true
+        );
+    }
     assert_eq!(
         f.data("collaboration-tasks.json")["tasks"]["next"]["state"],
         "local_active"
+    );
+    let before = f.calls().len();
+    f.ok("origin", &["collaborate", "status"]);
+    assert_eq!(
+        f.calls().len(),
+        before,
+        "terminal releases need no status call"
+    );
+    assert_eq!(
+        f.ok("origin", &["collaborate", "report", "--batch", "a"])["state"],
+        "harness_managed",
+        "an area release must not manufacture task completion or a new report"
     );
     assert!(f.sends().is_empty());
 }
@@ -1199,6 +1219,123 @@ fn collaboration_drain_waits_for_a_receiver_beyond_the_ordinary_call_deadline() 
         f.calls().iter().filter(|c| c["action"] == "drain").count(),
         1,
         "a delayed successful receipt is never dispatched twice"
+    );
+    assert!(f.sends().is_empty());
+}
+
+#[test]
+fn released_history_is_retired_before_status_and_survives_service_or_spawn_failures() {
+    let f = Fixture::new(false);
+    for (id, owns) in [("a", "src/a"), ("b", "src/b")] {
+        f.ok(
+            "origin",
+            &[
+                "collaborate",
+                "enqueue",
+                "--id",
+                id,
+                "--text",
+                "inspect",
+                "--mode",
+                "worktree",
+                "--owns",
+                owns,
+                "--repo",
+                "fixture",
+            ],
+        );
+    }
+    f.ok("origin", &["collaborate", "drain"]);
+    f.edit(|c| c["intakeReleasedIds"] = json!(["a"]));
+    let released = f.ok("origin", &["collaborate", "status"]);
+    assert_eq!(released["tasks"]["a"]["state"], "harness_released");
+    assert_eq!(released["tasks"]["b"]["state"], "harness_managed");
+
+    // Older ledgers kept released requests active. Their retained bodies would
+    // exceed the Windows command-line limit if copied into a later status batch.
+    let mut legacy = released.clone();
+    for i in 0..256 {
+        let id = format!("retired-{i}");
+        let mut row = legacy["tasks"]["a"].clone();
+        row["id"] = json!(id);
+        row["state"] = json!("harness_managed");
+        row["text"] = json!("old result ".repeat(256));
+        legacy["tasks"][id] = row;
+    }
+    let ledger_path = f.app.join("data/sixfold/collaboration-tasks.json");
+    fs::write(&ledger_path, legacy.to_string()).unwrap();
+    f.edit(|c| c["intakeStatusRefuse"] = json!(true));
+    let failed_status = f.ok("origin", &["collaborate", "status"]);
+    let calls = f.calls();
+    let status = calls
+        .iter()
+        .rev()
+        .find(|c| c["action"] == "status")
+        .unwrap();
+    assert_eq!(status["request"].as_array().unwrap().len(), 1);
+    assert_eq!(status["request"][0]["id"], "b");
+    for (id, task) in failed_status["tasks"].as_object().unwrap() {
+        if id != "b" {
+            assert_eq!(task["state"], "harness_released", "{id}");
+            assert_eq!(
+                task["harness_projection"]["ownership_released"], true,
+                "{id}"
+            );
+        }
+    }
+    assert_eq!(
+        failed_status["tasks"]["b"]["harness_projection"]["ownership_released"],
+        false
+    );
+
+    let config_path = f.app.join("data/sixfold/collaboration.json");
+    let original_config = fs::read(&config_path).unwrap();
+    fs::write(
+        &config_path,
+        json!({"harness_command":[f.root.join("missing-status-adapter")]}).to_string(),
+    )
+    .unwrap();
+    let after_spawn_failure = f.ok("origin", &["collaborate", "status"]);
+    assert_eq!(
+        after_spawn_failure["tasks"]["a"]["state"],
+        "harness_released"
+    );
+    assert_eq!(
+        after_spawn_failure["tasks"]["a"]["harness_projection"]["ownership_released"],
+        true
+    );
+    assert_eq!(
+        f.calls().len(),
+        calls.len(),
+        "the missing executable was not started"
+    );
+    fs::write(&config_path, original_config).unwrap();
+
+    f.ok(
+        "origin",
+        &[
+            "collaborate",
+            "enqueue",
+            "--id",
+            "next",
+            "--text",
+            "inspect next",
+            "--mode",
+            "worktree",
+            "--owns",
+            "src/a",
+            "--repo",
+            "fixture",
+        ],
+    );
+    f.ok("origin", &["collaborate", "start", "next"]);
+    assert_eq!(
+        f.data("collaboration-tasks.json")["tasks"]["next"]["state"],
+        "local_active"
+    );
+    assert_eq!(
+        f.calls().iter().filter(|c| c["action"] == "drain").count(),
+        2
     );
     assert!(f.sends().is_empty());
 }

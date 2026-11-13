@@ -238,11 +238,20 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
         if action == "status" && request.is_array() {
+            if config["intakeStatusRefuse"] == true {
+                return Err("status service unavailable".into());
+            }
             let rows: Vec<Value> = request
                 .as_array()
                 .unwrap()
                 .iter()
-                .map(|r| json!({"id":r["id"],"ownership_released":config["intakeSettled"] == true}))
+                .map(|r| {
+                    let released = config["intakeSettled"] == true
+                        || config["intakeReleasedIds"]
+                            .as_array()
+                            .is_some_and(|ids| ids.contains(&r["id"]));
+                    json!({"id":r["id"],"ownership_released":released})
+                })
                 .collect();
             return herdr_theme::common::print(&json!(rows));
         }

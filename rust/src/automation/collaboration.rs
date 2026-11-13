@@ -327,7 +327,26 @@ fn is_owned(task: &Value) -> bool {
         && !(task["state"] == "harness_managed"
             && task["harness_projection"]["ownership_released"] == true)
 }
+fn release_confirmed(ledger: &mut Value) -> bool {
+    let mut changed = false;
+    for task in ledger["tasks"].as_object_mut().unwrap().values_mut() {
+        if task["state"] == "harness_managed"
+            && task["harness_projection"]["ownership_released"] == true
+        {
+            event(task, "harness_released", json!({"ownership_released":true}));
+            task["blocked_reason"] = Value::Null;
+            changed = true;
+        }
+    }
+    changed
+}
 fn refresh_harness(ledger: &mut Value, force: bool) -> Result<()> {
+    // Persist an earlier confirmed release before any new process can fail.
+    // This also retires released entries saved by versions that kept querying
+    // them forever. Terminal releases no longer grow the status request.
+    if release_confirmed(ledger) {
+        save(ledger)?;
+    }
     let requests: Vec<Value> = ledger["tasks"]
         .as_object()
         .unwrap()
@@ -359,6 +378,7 @@ fn refresh_harness(ledger: &mut Value, force: bool) -> Result<()> {
         }
         _ => {}
     }
+    release_confirmed(ledger);
     ledger["harness_checked_at"] = json!(now());
     save(ledger)
 }
@@ -552,7 +572,10 @@ fn report(args: &[String]) -> Result<Value> {
         .values()
         .filter(|t| t["source"] == who && t["batch"] == batch)
         .collect();
-    if tasks.iter().any(|t| t["state"] == "harness_managed") {
+    if tasks
+        .iter()
+        .any(|t| ["harness_managed", "harness_released"].contains(&s(&t["state"])))
+    {
         return Ok(
             json!({"state":"harness_managed","reason":"use harness inbox/report routing; this receipt is not completion or acceptance", "tasks":tasks.iter().map(|t| json!({"id":t["id"],"harness_intake":t["harness_intake"]})).collect::<Vec<_>>()}),
         );
