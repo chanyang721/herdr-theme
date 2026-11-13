@@ -26,7 +26,7 @@ async function settle(timers, tasks, cx) {
 async function linearHarness() {
   const files = new Map([['linear-alerts.json', JSON.stringify({items: [], spaces: ['Alpha']})]]);
   const shared = {}, tasks = [], timers = new Set(), callbacks = new Map(), changes = new Set();
-  const control = {refuse: 0, hang: 0};
+  const control = {refuse: 0, hang: 0, holdRead: null, holdWrite: null};
   const cx = {notify() {},
     spawn(fn) { if (control.refuse > 0) { control.refuse--; throw refusal(); } const task = fn(cx); tasks.push(task); return task; },
     timer: {after(ms, callback) { if (ms !== 20) return {ms, cancel() {}};   // a delayed retry stays pending here
@@ -39,6 +39,8 @@ async function linearHarness() {
     readJsonSnapshot: path => {
       // A native read that never settles.
       if (control.hang > 0 && path.endsWith('linear-popup-events.json')) { control.hang--; return new Promise(() => {}); }
+      // A native read that answers only when released (with the file as it was when asked).
+      if (control.holdRead && path.endsWith('linear-popup-events.json')) { const value = snapshot(path), hold = control.holdRead; control.holdRead = null; return hold.then(() => value); }
       return Promise.resolve(snapshot(path));
     },
     readTextFile: async path => files.get(path.split('/').at(-1)) ?? null,
@@ -46,6 +48,8 @@ async function linearHarness() {
       const name = path.split('/').at(-1);
       if ((files.get(name) ?? null) !== expected) throw new Error('compare-and-swap conflict');
       files.set(name, value); for (const [watched, c] of changes) if (watched === path) c();   // only the subscribed file
+      // A native write that commits at once but answers only when released.
+      if (control.holdWrite && name === 'linear-popup-events.json') { const hold = control.holdWrite; control.holdWrite = null; await hold; }
     },
     subscribeJsonFile: (_cx, path, callback) => { callbacks.set(path, callback); return () => callbacks.delete(path); },
     subscribeFileChanges: (_cx, watched, callback) => { const entry = [watched, callback]; changes.add(entry); return () => changes.delete(entry); },
@@ -123,6 +127,45 @@ test('Linear: a refresh whose native read never settles stops blocking after LOA
     h.health('d'); await h.flush();
     assert.deepEqual(h.shared['sixfold.linearItems'].map(i => i.id), ['n2'], 'a later change runs again');
     assert.ok(JSON.parse(h.files.get('linear-popup-events.json')).seen.includes('linear:n2'));
+  } finally { Date.now = realNow; stop(); h.done(); }
+});
+
+const gate = () => { let open; const promise = new Promise(resolve => { open = resolve; }); return {promise, open}; };
+
+test('Linear: an alert whose ledger write commits but answers after the run is replaced still arrives', async () => {
+  const h = await linearHarness();
+  h.store.setArrivalHost(() => true);
+  const realNow = Date.now; let now = realNow(); Date.now = () => now;
+  const stop = h.module.watchLinear({}, h.cx);
+  try {
+    h.health('a'); await h.flush();
+    const write = gate(); h.control.holdWrite = write.promise;
+    h.feed([{id: 'n3', read: false, category: 'mentions', workspace: 'Alpha'}]); await h.flush();
+    assert.ok(JSON.parse(h.files.get('linear-popup-events.json')).seen.includes('linear:n3'), 'the write committed');
+    assert.ok(!h.store.arrivals().some(a => a.key === 'linear:n3'), 'its answer has not come back');
+    now += h.module.LOAD_STUCK_MS + 1;
+    h.health('b'); await h.flush();
+    assert.equal(h.shared['sixfold.linearHealth'].last_success, 'b', 'the replacement published');
+    write.open(); await new Promise(r => setTimeout(r, 10)); await h.flush();
+    assert.equal(h.store.arrivals().filter(a => a.key === 'linear:n3').length, 1, 'arrives once, from the run whose write committed');
+  } finally { Date.now = realNow; stop(); h.store.setArrivalHost(null); h.done(); }
+});
+
+test('Linear: restoring the last published inputs while a run is stuck keeps them published when it returns', async () => {
+  const h = await linearHarness();
+  const realNow = Date.now; let now = realNow(); Date.now = () => now;
+  const stop = h.module.watchLinear({}, h.cx);
+  try {
+    h.health('A'); await h.flush();
+    const read = gate(); h.control.holdRead = read.promise;
+    h.health('B'); await h.flush();                                           // no new alert, so no ledger write follows
+    assert.equal(h.shared['sixfold.linearHealth'].last_success, 'B', 'the stuck run published what it read');
+    now += h.module.LOAD_STUCK_MS + 1;
+    h.health('A'); await h.flush();                                           // back to the published inputs
+    read.open(); await new Promise(r => setTimeout(r, 10)); await h.flush();
+    assert.equal(h.shared['sixfold.linearHealth'].last_success, 'A', 'the restored inputs are published again');
+    h.health('C'); await h.flush();
+    assert.equal(h.shared['sixfold.linearHealth'].last_success, 'C', 'later changes still publish');
   } finally { Date.now = realNow; stop(); h.done(); }
 });
 
