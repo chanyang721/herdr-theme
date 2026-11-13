@@ -78,7 +78,9 @@ export function watchAlerts(view, cx) {
     record:watchRecorder(text=>cx.spawn(async()=>{try{await writeTextFile(statePath,text,await readTextFile(statePath).catch(()=>null));}catch{/* best effort */}}))});
   // Mentions whose ledger write committed but that are not announced yet (a hidden view announces them when shown).
   const held=[];
-  const deliver=()=>{if(held.length&&allowed())announceSlack(held.splice(0));};
+  // `redraw`: announced outside a live run's own notify (a replaced run returns before it; a refresh
+  // with unchanged inputs draws nothing), so redraw the sidebar here.
+  const deliver=(redraw=true)=>{if(!held.length||!allowed())return;announceSlack(held.splice(0));if(redraw){cx.notify();view.panelRetained?.alertsChanged?.();}};
   const schedule=()=>{
     dirty=true;
     if(!allowed()||busy()||scheduled||cached.size!==inputs.length)return;
@@ -110,7 +112,7 @@ export function watchAlerts(view, cx) {
         // Once the ledger write returns these mentions are seen for every run, so they are delivered
         // even when this run was replaced meanwhile (the replacement already saw them as seen).
         held.push(...await notifyNewPopupEvents(popupEvents(tagged,read),live));
-        deliver();
+        deliver(!live());
         if(!live())return;
         setShared('sixfold.slackHealth',health);
         setShared('sixfold.slackWorkflows',states);
