@@ -196,7 +196,7 @@ fn test_inaccessible_or_missing_source_is_not_silently_reported_as_empty() {
 #[test]
 fn test_match_terms_cover_the_folder_below_the_source_root() {
     let f = Temp::new();
-    let guide = f.file("프로젝트/연동/Staging_가이드.md", "guide");
+    let guide = resolved(&f.file("프로젝트/연동/Staging_가이드.md", "guide"));
     f.file("프로젝트_현황.md", "status");
     f.file("다른곳/Staging_가이드.md", "other");
     let rows = docs(
@@ -223,9 +223,9 @@ fn test_match_terms_cover_the_folder_below_the_source_root() {
         .unwrap();
     assert_eq!(
         row["relativePath"],
-        json!("프로젝트/연동/Staging_가이드.md")
+        json!(Path::new("프로젝트").join("연동").join("Staging_가이드.md"))
     );
-    assert_eq!(row["folder"], json!(f.root.join("프로젝트/연동")));
+    assert_eq!(row["folder"], json!(guide.parent().unwrap()));
 }
 #[test]
 fn test_empty_and_unmatched_folders_are_named_not_silent() {
