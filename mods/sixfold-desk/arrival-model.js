@@ -15,6 +15,17 @@ export const ARRIVAL = Object.freeze({showMs: 4000, flyMs: 640, steps: 6, unit: 
 //   another space waits its turn; more alerts for the open one join it and restart its time.
 // - quiet: something else is open (another popover, typing): no popup, the chip counts it.
 // - otherwise the small popup of a card without merged chips.
+// How a new alert shows (`[mode, why]`): 'peek' opens the space's popover beside its card and the
+// alert flies into the card; 'quiet' only flies and counts; '' is the small popup. Any card on
+// screen takes a peek, merged meta line or a separate alerts row alike; Linear needs a Linear chip.
+export function peekMode({host = true, motion = true, card = null, issuesOpen = false, popoverOpen = false, source = 'slack'} = {}) {
+  if (!host) return ['', 'no sidebar'];
+  if (motion === false) return ['', 'motion off'];
+  if (!card) return ['', 'card not on screen'];
+  if (issuesOpen) return ['quiet', 'an issue search is open'];
+  if (popoverOpen) return ['quiet', 'an alert popover is open'];
+  return source === 'linear' && !card.linear ? ['', 'no Linear chip'] : ['peek', ''];
+}
 export const showFor = a => a?.peek ? ARRIVAL.peekMs : ARRIVAL.showMs;
 const held = (a, now) => Boolean(a?.held) && now - a.held < ARRIVAL.holdMs;
 const WAITING = Number.MAX_SAFE_INTEGER;   // a peek queued behind one that is held open

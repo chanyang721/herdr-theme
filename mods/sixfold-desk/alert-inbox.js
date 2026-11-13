@@ -77,7 +77,7 @@ export function alertBadge(id,t,scope={}) {
     .tooltip(`팝업에서 미확인 ${unread}건 · Slack 앱 읽음 상태와 별도`)
     .when(!scope.popover,e=>e.on_mouse_down('left',(_e,cx)=>cx.stop_propagation()).on_mouse_up('left',(_e,cx)=>cx.stop_propagation()))
     .on_click(badgePress(scope,'slack',openInbox))
-    .flex().items_center().gap(3).child(image('mods/sixfold-desk/icons/slack.svg').size(13))
+    .flex().items_center().gap(2).child(image('mods/sixfold-desk/icons/slack.svg').size(13))
     .when(unread>0,e=>e.child(div().child(String(unread))))
     .when(Boolean(slackCopyDelay(shared('sixfold.slackHealth'))),e=>e.child(div().text_size(9).text_color(t.blocked||t.muted).child('사본 지연')));
 }
