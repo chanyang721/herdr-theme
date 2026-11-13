@@ -616,3 +616,14 @@ test('wait labels require producer evidence and preserve progress and cleanup wi
  assert.deepEqual(words(byId(item.row,`panel-wait-${item.agent.id}`)),['검수 대기']);
  assert(all(item.row).some(n=>call(n,'tooltip')?.[1].includes('검수 요청')));
 });
+
+test('canonical working reason keeps progress but a separate blocker remains visible',async()=>{
+ const active=await stateRow({status:'working',state:'working',stage:2,keep_reason:'작업 중이라 유지'});
+ assert.equal(byId(active.row,`panel-wait-${active.agent.id}`),undefined);
+ assert(byId(active.row,`panel-stage-${active.agent.id}-1`));
+ assert(call(active.row,'tooltip')[1].includes('작업 중이라 유지'));
+ const blocked=await stateRow({status:'working',state:'working',stage:2,keep_reason:'검수 대기라 유지'});
+ assert.deepEqual(words(byId(blocked.row,`panel-wait-${blocked.agent.id}`)),['검수 대기']);
+ const combined=await stateRow({status:'working',state:'working',stage:2,keep_reason:'작업 중이라 유지 · 신원 미확인'});
+ assert.deepEqual(words(byId(combined.row,`panel-wait-${combined.agent.id}`)),['신원 확인']);
+});

@@ -317,6 +317,9 @@ export function agentWaitLabel(agent) {
     if (state === 'unseen_result') return '결과 확인';
     return null;
   }
+  // The producer's canonical activity reason is not a waiting obligation.
+  // Exact matching preserves separate blockers, even when the pane is working.
+  if (reason === '작업 중이라 유지') return null;
   // Preserve uncertainty before interpreting protection words (unknown pinned
   // does not establish a pinned pane). These are display categories, not queues.
   if (/unknown|lookup failed|확인할 수 없|미확인/i.test(reason) && !/identity|신원/i.test(reason)) return '상태 확인';
