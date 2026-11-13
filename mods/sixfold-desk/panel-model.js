@@ -61,6 +61,8 @@ const issueExtras = issue => ({
 // Optional producer row state (docs/panel-feed.md). Display only: the
 // panel never derives a state, a keep reason or a close deadline by itself.
 export const ROW_STATES = Object.freeze(['working', 'idle', 'needs_human', 'unseen_result', 'cleanup_wait', 'closing', 'closed']);
+export const WAIT_KINDS = Object.freeze(['active', 'status', 'conversation', 'last_pane', 'pinned', 'in_use', 'review_pending', 'report_delivery', 'identity', 'review', 'acceptance', 'report', 'input', 'cleanup']);
+const WAIT_LABELS = Object.freeze({status:'상태 확인',conversation:'대화 보호',last_pane:'마지막 칸',pinned:'고정 유지',in_use:'사용 중',review_pending:'검수 대기',report_delivery:'보고전달대기',identity:'신원 확인',review:'검수 확인',acceptance:'수락 대기',report:'보고 확인',input:'입력 확인',cleanup:'정리 확인'});
 const MAX_CLEANUP_S = 7 * 24 * 3600;
 function cleanCleanup(value) {
   if (!object(value)) return null;
@@ -73,6 +75,7 @@ const agentExtras = agent => ({
   // four-status mark exactly as an older feed does.
   ...(ROW_STATES.includes(agent.state) ? { state: agent.state } : {}),
   ...(owns(agent, 'keep_reason') ? { keep_reason: text(agent.keep_reason, 120) || null } : {}),
+  ...(WAIT_KINDS.includes(agent.wait_kind) ? { wait_kind: agent.wait_kind } : {}),
   ...(owns(agent, 'cleanup') ? { cleanup: cleanCleanup(agent.cleanup) } : {}),
   ...(owns(agent, 'unread') ? { unread: integer(agent.unread) } : {}),
   ...(owns(agent, 'report_missing') ? { report_missing: agent.report_missing === true } : {}),
@@ -310,6 +313,8 @@ export function agentCleanupLabel(agent, now = Date.now()) {
 // A compact category for explicit producer evidence only. Unknown reasons remain
 // visible without guessing completion, acceptance or permission to close.
 export function agentWaitLabel(agent) {
+  if (agent?.wait_kind === 'active') return null;
+  if (owns(WAIT_LABELS, agent?.wait_kind)) return WAIT_LABELS[agent.wait_kind];
   const reason = agent?.closing?.blocked_reason || agent?.keep_reason || '';
   const state = agentRowState(agent);
   if (!reason) {
@@ -317,24 +322,7 @@ export function agentWaitLabel(agent) {
     if (state === 'unseen_result') return '결과 확인';
     return null;
   }
-  // The producer's canonical activity reason is not a waiting obligation.
-  // Exact matching preserves separate blockers, even when the pane is working.
-  if (reason === '작업 중이라 유지') return null;
-  // Preserve uncertainty before interpreting protection words (unknown pinned
-  // does not establish a pinned pane). These are display categories, not queues.
-  if (/unknown|lookup failed|확인할 수 없|미확인/i.test(reason) && !/identity|신원/i.test(reason)) return '상태 확인';
-  if (/last input was not a dispatched hc message|사람과 대화 중/i.test(reason)) return '대화 보호';
-  if (/last pane in its tab|마지막 칸/i.test(reason)) return '마지막 칸';
-  if (/pinned|사용자가 고정/i.test(reason)) return '고정 유지';
-  if (/focused|보고 있는 칸/i.test(reason)) return '사용 중';
-  if (/this reviewer has no verdict|review verdict missing|reviewers still pending|검수 판정 전|검수 대기/i.test(reason)) return '검수 대기';
-  if (/no delivered hc send report|보고 전달.*대기/i.test(reason)) return '보고전달대기';
-  if (/신원|identity|session_id|session identity/i.test(reason)) return '신원 확인';
-  if (/검수|review|verdict/i.test(reason)) return '검수 확인';
-  if (/수락|accept/i.test(reason)) return '수락 대기';
-  if (/보고|report/i.test(reason)) return '보고 확인';
-  if (/입력|승인|사람 확인|input|approval|permission/i.test(reason)) return '입력 확인';
-  if (/정리|닫|보관|cleanup|close|archiv/i.test(reason)) return '정리 확인';
+  // Unknown/missing categories retain the reason without interpreting producer policy.
   return '상태 확인';
 }
 // The producer supplies recent-first arrays. Stable sorting keeps that order

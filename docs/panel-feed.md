@@ -91,7 +91,14 @@ closed box), so colour is never the only difference; motion off shows still
 frames. A row without a known `state` keeps the four-status mark. Optional
 `keep_reason` is one producer sentence on why the session stays open or when it
 closes, retained verbatim in the row tooltip. Rows stay compact instead of
-adding a second line for every reason. Optional `cleanup`
+adding a second line for every reason. Optional `wait_kind` supplies the compact
+status-slot category: `status`, `conversation`, `last_pane`, `pinned`, `in_use`,
+`review_pending`, `report_delivery`, `identity`, `review`, `acceptance`, `report`,
+`input` or `cleanup`. `active` preserves ordinary progress without a waiting
+label. The producer classifies its own evidence; the theme never interprets
+reason text. Unknown or missing categories with a reason show **상태 확인** and
+keep the full tooltip. This field is display-only and grants no action authority.
+Optional `cleanup`
 (`{idle_since, limit_s, due_at}`, absolute times) adds a countdown to
 `cleanup_wait` and `unseen_result` rows: the sidebar counts the remaining
 minutes on its own clock and redraws only that row once a minute. After

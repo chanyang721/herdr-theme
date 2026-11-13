@@ -571,25 +571,15 @@ test('the cleanup label counts down on the row wake: a new minute gives new text
  assert.deepEqual(words(byId(done.row,`panel-cleanup-${done.agent.id}`)),['정리 대기']);
 });
 
-// Reproduce a done native pane under an issue while its harness role is waiting.
-test('explicit waiting reasons remain readable in a 24px row even when native status is done',async()=>{
- for(const [keep_reason,label] of [
-  ['this reviewer has no verdict on the final report','검수 대기'],
-  ['no delivered hc send report after the last input','보고전달대기'],
-  ['final report not accepted by a trusted actor','수락 대기'],
-  ['사용자 입력이 남아 있음','입력 확인'],
-  ['managed Codex startup identity unverified','신원 확인'],
-  ['정리 보류: 배정 예약이 남음','정리 확인'],
-  ['last input was not a dispatched hc message','대화 보호'],
-  ['사람과 대화 중이라 유지','대화 보호'],
-  ['탭의 마지막 칸이라 유지','마지막 칸'],
-  ['사용자가 고정 · 닫지 않음','고정 유지'],
-  ['보고 있는 칸이라 유지','사용 중'],
-  ['unknown pinned','상태 확인'],
-  ['검수 판정 전이라 유지','검수 대기'],
-  ['알 수 없는 새 차단 사유','상태 확인'],
+test('producer wait categories remain readable in a 24px row even when native status is done',async()=>{
+ for(const [wait_kind,label] of [
+  ['review_pending','검수 대기'],['report_delivery','보고전달대기'],['acceptance','수락 대기'],
+  ['input','입력 확인'],['identity','신원 확인'],['cleanup','정리 확인'],
+  ['conversation','대화 보호'],['last_pane','마지막 칸'],['pinned','고정 유지'],
+  ['in_use','사용 중'],['status','상태 확인'],['review','검수 확인'],['report','보고 확인'],
  ]) {
-  const {agent,row}=await stateRow({status:'done',stage:5,state:'idle',keep_reason});
+  const keep_reason='Producer detail retained in the tooltip';
+  const {agent,row}=await stateRow({status:'done',stage:5,state:'idle',keep_reason,wait_kind});
   assert.deepEqual(words(byId(row,`panel-wait-${agent.id}`)),[label]);
   assert.equal(call(row,'h')[1],24);
   assert.equal(byId(row,`panel-reason-${agent.id}`),undefined);
@@ -607,23 +597,27 @@ test('wait labels require producer evidence and preserve progress and cleanup wi
   item=await stateRow({status:'done',stage:5,state});
   assert.deepEqual(words(byId(item.row,`panel-wait-${item.agent.id}`)),[label]);
  }
- item=await stateRow({state:'closing',closing:{step:2,blocked_reason:'신원 확인 필요'}});
+ item=await stateRow({state:'closing',wait_kind:'identity',closing:{step:2,blocked_reason:'Identity detail'}});
  assert.deepEqual(words(byId(item.row,`panel-wait-${item.agent.id}`)),['신원 확인']);
  item=await stateRow({state:'cleanup_wait',keep_reason:'보고 완료'});
  assert(byId(item.row,`panel-cleanup-${item.agent.id}`));
  assert.equal(byId(item.row,`panel-wait-${item.agent.id}`),undefined);
- item=await stateRow({state:'idle',keep_reason:'검수 대기'},{tag:{label:'검수 요청'}});
+ item=await stateRow({state:'idle',wait_kind:'review_pending',keep_reason:'Review detail'},{tag:{label:'검수 요청'}});
  assert.deepEqual(words(byId(item.row,`panel-wait-${item.agent.id}`)),['검수 대기']);
  assert(all(item.row).some(n=>call(n,'tooltip')?.[1].includes('검수 요청')));
 });
 
-test('canonical working reason keeps progress but a separate blocker remains visible',async()=>{
- const active=await stateRow({status:'working',state:'working',stage:2,keep_reason:'작업 중이라 유지'});
+test('only the explicit active category preserves progress; text never overrides a category',async()=>{
+ const active=await stateRow({status:'working',state:'working',stage:2,wait_kind:'active',keep_reason:'Producer activity detail'});
  assert.equal(byId(active.row,`panel-wait-${active.agent.id}`),undefined);
  assert(byId(active.row,`panel-stage-${active.agent.id}-1`));
- assert(call(active.row,'tooltip')[1].includes('작업 중이라 유지'));
- const blocked=await stateRow({status:'working',state:'working',stage:2,keep_reason:'검수 대기라 유지'});
+ assert(call(active.row,'tooltip')[1].includes('Producer activity detail'));
+ const blocked=await stateRow({status:'working',state:'working',stage:2,wait_kind:'review_pending',keep_reason:'Producer activity detail'});
  assert.deepEqual(words(byId(blocked.row,`panel-wait-${blocked.agent.id}`)),['검수 대기']);
- const combined=await stateRow({status:'working',state:'working',stage:2,keep_reason:'작업 중이라 유지 · 신원 미확인'});
+ const combined=await stateRow({status:'working',state:'working',stage:2,wait_kind:'identity',keep_reason:'Producer activity detail'});
  assert.deepEqual(words(byId(combined.row,`panel-wait-${combined.agent.id}`)),['신원 확인']);
+ for(const wait_kind of [undefined,'future_category','constructor']){
+  const unknown=await stateRow({state:'idle',wait_kind,keep_reason:'Review, acceptance or identity words are only text'});
+  assert.deepEqual(words(byId(unknown.row,`panel-wait-${unknown.agent.id}`)),['상태 확인']);
+ }
 });

@@ -29,6 +29,20 @@ test('cleanup timers are absolute, bounded and copied; malformed timers become n
   const copy=projectPanelFeed(clean).agents.get('a');assert.deepEqual(copy.cleanup,a.cleanup);assert.notEqual(copy.cleanup,a.cleanup);
 });
 
+test('wait category survives cleaning and projection and changing only it updates the row',()=>{
+  const raw=feed([base('a',{keep_reason:'Unchanged producer detail',wait_kind:'review_pending'}),base('b')]);
+  const before=cleanPanelFeed(raw),first=projectPanelFeed(before);
+  assert.equal(first.agents.get('a').wait_kind,'review_pending');
+  raw.spaces[0].agents[0].wait_kind='report_delivery';
+  const second=projectPanelFeed(cleanPanelFeed(raw),first);
+  assert.equal(second.agents.get('a').wait_kind,'report_delivery');
+  assert.notEqual(second.agents.get('a'),first.agents.get('a'));
+  assert.equal(second.agents.get('b'),first.agents.get('b'));
+  assert.equal(first.agents.get('a').wait_kind,'review_pending');
+  raw.spaces[0].agents[0].wait_kind='future_category';
+  assert.equal(Object.hasOwn(cleanPanelFeed(raw).spaces[0].agents[0],'wait_kind'),false);
+});
+
 test('countdown text uses the producer limit and changes exactly at minute boundaries',()=>{
   const [agent]=cleanPanelFeed(feed([base('a',{state:'cleanup_wait',cleanup:{idle_since:'2026-11-09T04:42:00Z',limit_s:1800,due_at:'2026-11-09T05:12:00Z'}})])).spaces[0].agents;
   const now=at('2026-11-09T05:00:00Z');

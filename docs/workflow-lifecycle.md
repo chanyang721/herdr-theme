@@ -58,9 +58,9 @@ accepted or closed real work.
 
 | Boundary | Required check | Source or test |
 | --- | --- | --- |
-| Producer task to display | Task stage and observed pane status remain separate | Producer `integrations/herdr/panel_feed.py`; theme `mods/sixfold-desk/panel-model.js` |
-| Acceptance with last-pane protection | Eligible session report can be accepted and learned while pane closure stays protected; parent-space gate then permits archive and close | Producer `tests/test_completion_stages.py` |
-| Ordinary unfinished work | Pending CI or other remaining work is not silently policy-accepted by completion | Producer `tests/test_completion.py` |
+| Producer task to display | Task stage and observed pane status remain separate | Producer repository's own tests; theme `mods/sixfold-desk/panel-model.js` |
+| Acceptance with last-pane protection | Eligible session report can be accepted and learned while pane closure stays protected; parent-space gate then permits archive and close | Producer repository's own tests |
+| Ordinary unfinished work | Pending CI or other remaining work is not silently policy-accepted by completion | Producer repository's own tests |
 | Accepted but kept rows | Stage 5 with idle/working status stays visible; unfinished child branches are retained | `tests/panel-model.test.mjs`, `tests/panel-view.test.mjs` |
 | Cleanup reason and deadline | Producer reason is preserved, rows stay compact, five-minute limits are not replaced by a theme default | `tests/panel-row-states.test.mjs`, `tests/panel-retained.test.mjs` |
 | Final removal | Only explicit closing phase 4 hides the row; blocking reason retains it | `tests/panel-model.test.mjs` |
