@@ -570,3 +570,42 @@ test('the cleanup label counts down on the row wake: a new minute gives new text
  assert.deepEqual(words(byId(later.row,`panel-cleanup-${later.agent.id}`)),['정리 대기 11분']);
  assert.deepEqual(words(byId(done.row,`panel-cleanup-${done.agent.id}`)),['정리 대기']);
 });
+
+// Reproduce a done native pane under an issue while its harness role is waiting.
+test('explicit waiting reasons remain readable in a 24px row even when native status is done',async()=>{
+ for(const [keep_reason,label] of [
+  ['this reviewer has no verdict on the final report','검수 확인'],
+  ['no delivered hc send report after the last input','보고 확인'],
+  ['final report not accepted by a trusted actor','수락 대기'],
+  ['사용자 입력이 남아 있음','입력 확인'],
+  ['managed Codex startup identity unverified','신원 확인'],
+  ['정리 보류: 배정 예약이 남음','정리 확인'],
+  ['알 수 없는 새 차단 사유','상태 확인'],
+ ]) {
+  const {agent,row}=await stateRow({status:'done',stage:5,state:'idle',keep_reason});
+  assert.deepEqual(words(byId(row,`panel-wait-${agent.id}`)),[label]);
+  assert.equal(call(row,'h')[1],24);
+  assert.equal(byId(row,`panel-reason-${agent.id}`),undefined);
+  assert(call(row,'tooltip')[1].includes(keep_reason));
+  assert.equal(all(row).filter(n=>call(n,'w')?.[1]===64&&call(n,'h')?.[1]===18).length,1);
+ }
+});
+test('wait labels require producer evidence and preserve progress, cleanup and event priority',async()=>{
+ let item=await stateRow({status:'working',stage:2});
+ assert.equal(byId(item.row,`panel-wait-${item.agent.id}`),undefined);
+ assert(byId(item.row,`panel-stage-${item.agent.id}-0`));
+ item=await stateRow({status:'done',stage:5});
+ assert.equal(byId(item.row,`panel-wait-${item.agent.id}`),undefined);
+ for(const [state,label] of [['needs_human','입력 필요'],['unseen_result','결과 확인']]){
+  item=await stateRow({status:'done',stage:5,state});
+  assert.deepEqual(words(byId(item.row,`panel-wait-${item.agent.id}`)),[label]);
+ }
+ item=await stateRow({state:'closing',closing:{step:2,blocked_reason:'신원 확인 필요'}});
+ assert.deepEqual(words(byId(item.row,`panel-wait-${item.agent.id}`)),['신원 확인']);
+ item=await stateRow({state:'cleanup_wait',keep_reason:'보고 완료'});
+ assert(byId(item.row,`panel-cleanup-${item.agent.id}`));
+ assert.equal(byId(item.row,`panel-wait-${item.agent.id}`),undefined);
+ item=await stateRow({state:'idle',keep_reason:'검수 대기'},{tag:{label:'검수 요청'}});
+ assert(words(item.row).includes('검수 요청'));
+ assert.equal(byId(item.row,`panel-wait-${item.agent.id}`),undefined);
+});
