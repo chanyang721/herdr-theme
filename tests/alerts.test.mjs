@@ -213,6 +213,25 @@ test('a mention whose ledger write commits but answers after the run is replaced
   }finally{Date.now=realNow;h.stop();}
 });
 
+// With a sidebar drawing arrivals, that late announcement must also redraw it: the replaced run returns
+// before its own notify, and adding an arrival alone invalidates nothing.
+test('a late-committed mention arriving into a card redraws the sidebar when the replaced run returns',async()=>{
+  const realNow=Date.now;let now=realNow();Date.now=()=>now;
+  const files=new Map(),arrived=[],h=await alertHarness(files,{arrived,host:{value:true}});let release;
+  try{
+    await h.refresh();let once=true;
+    h.setWriteHook(async name=>{if(once&&name.endsWith('/slack-popup-events.json')){once=false;await new Promise(r=>release=r);}});
+    files.set('slack-mentions.json',JSON.stringify({items:[{id:'new'}]}));await h.refresh();
+    now+=120001;
+    files.set('slack-live-health.json',JSON.stringify({last_success:'next'}));await h.refresh();
+    const before=h.notifications();
+    release();await new Promise(r=>setTimeout(r,10));await h.flush();
+    assert.equal(arrived.length,1,'arrives once');
+    assert.ok(h.notifications()>before,'the sidebar is redrawn for it');
+    assert.equal(h.opens.length,0,'into the card, not the window');
+  }finally{Date.now=realNow;h.stop();}
+});
+
 // Inputs restored to the last published value while a run is stuck: the stuck run is retired, so when it
 // returns it cannot publish the older inputs it read.
 test('restoring the last published inputs while a run is stuck keeps them published when the stuck run returns',async()=>{
