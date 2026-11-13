@@ -232,6 +232,11 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             "{}",
             json!({"program":program,"action":action,"request":request,"actor":env::var("HC_TERMINAL_ID").ok()})
         )?;
+        if action == "drain" {
+            if let Some(delay) = config["intakeDrainDelayMs"].as_u64() {
+                std::thread::sleep(std::time::Duration::from_millis(delay));
+            }
+        }
         if action == "status" && request.is_array() {
             let rows: Vec<Value> = request
                 .as_array()

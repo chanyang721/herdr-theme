@@ -177,7 +177,10 @@ fn intake_payload(action: &str, request: &Value) -> Result<Value> {
         serde_json::to_string(request)?,
     ]);
     // Never inject the stored source as HC_TERMINAL_ID. Engine verifies actual ancestry.
-    let (code, result) = routing::call_args(&argv, None)?;
+    // A drain may wait for a newly started receiver. Keep ordinary status and
+    // registration reads bounded without cancelling a valid longer dispatch.
+    let timeout = if action == "drain" { 180. } else { 30. };
+    let (code, result) = routing::call_args_timeout(&argv, None, timeout)?;
     if code != 0 || result.get("error").is_some() {
         return Err(format!("harness intake refused: {result}").into());
     }

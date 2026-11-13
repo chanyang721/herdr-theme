@@ -1175,3 +1175,30 @@ fn finished_harness_role_releases_area_but_missing_projection_protects_it() {
     );
     assert!(f.sends().is_empty());
 }
+
+#[test]
+fn collaboration_drain_waits_for_a_receiver_beyond_the_ordinary_call_deadline() {
+    let f = Fixture::new(false);
+    let path = f.app.join("data/sixfold/collaboration.json");
+    let mut cfg: Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+    cfg["pending_count"] = json!(1);
+    fs::write(&path, cfg.to_string()).unwrap();
+    f.enqueue("slow");
+    f.edit(|c| c["intakeDrainDelayMs"] = json!(31_000));
+    let started = std::time::Instant::now();
+    let receipt = f.ok("origin", &["collaborate", "drain"]);
+    assert!(started.elapsed() >= std::time::Duration::from_secs(30));
+    assert_eq!(receipt[0]["state"], "harness_managed");
+    assert_eq!(receipt[0]["harness"]["state"], "handed_off");
+    assert_eq!(
+        f.data("collaboration-tasks.json")["tasks"]["slow"]["state"],
+        "harness_managed"
+    );
+    f.ok("origin", &["collaborate", "drain"]);
+    assert_eq!(
+        f.calls().iter().filter(|c| c["action"] == "drain").count(),
+        1,
+        "a delayed successful receipt is never dispatched twice"
+    );
+    assert!(f.sends().is_empty());
+}

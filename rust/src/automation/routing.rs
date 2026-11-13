@@ -3,12 +3,19 @@ use crate::common::*;
 use crate::locking::FileLock;
 use serde_json::{json, Value};
 pub fn call_args(argv: &[String], source: Option<&str>) -> Result<(i32, Value)> {
+    call_args_timeout(argv, source, 30.)
+}
+pub fn call_args_timeout(
+    argv: &[String],
+    source: Option<&str>,
+    timeout: f64,
+) -> Result<(i32, Value)> {
     let mut cmd = command(&argv[0]);
     cmd.args(&argv[1..]);
     if let Some(source) = source {
         cmd.env("HC_TERMINAL_ID", source);
     }
-    let (code, out, err) = capture_cmd(cmd, 30.)?;
+    let (code, out, err) = capture_cmd(cmd, timeout)?;
     let text = if out.is_empty() { &err } else { &out };
     let parsed = serde_json::from_str(text).unwrap_or_else(
         |_| json!({"error":{"message":if err.trim().is_empty(){out.trim()}else{err.trim()}}}),
