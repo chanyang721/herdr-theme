@@ -226,10 +226,14 @@ export function cardView(view,card,state,color,computerNames,t,motion,rowEntitie
       .id(`panel-tool-unread-${space.id}`)))
     .when(Boolean(space.work),e=>e.cursor_pointer().tooltip(linearUnread?`새 알림 ${linearUnread}건 · 이번 주 · 마일스톤 · 전체 이슈`:'이번 주 · 마일스톤 · 전체 이슈'));
   const slackUnread=alerts?.slack||0,slackShown=Boolean(space.slack)||Boolean(alerts?.hasSlack);
+  // The Slack mark and its unread count are one chip (as the Linear chip is), the channel after it.
   const slack=h_flex().id(`panel-slack-${space.id}`).gap(5).items_center().min_w(0).flex_1()
-    .when(slackShown,e=>e.child(image('mods/sixfold-desk/icons/slack.svg').size(11).flex_none()))
+    .when(slackShown,e=>e.child(h_flex().id(`panel-slack-mark-${space.id}`).gap(2).items_center().flex_none()
+      .child(image('mods/sixfold-desk/icons/slack.svg').size(11).flex_none())
+      .when(slackUnread>0,e=>e.child(text(String(slackUnread),t.accent_foreground||t.background,9).px(4).rounded(3).bg(t.accent).font_bold().flex_none()
+        .id(`panel-slack-unread-${space.id}`)))))
     .child(text(space.slack?.channel||'',space.slack?t.muted:t.dim,9).flex_1())
-    .when(slackUnread>0,e=>e.child(text(String(slackUnread),t.accent_foreground||t.background,9).px(4).rounded(3).bg(t.accent).font_bold().flex_none()))
+    .when(!slackShown&&slackUnread>0,e=>e.child(text(String(slackUnread),t.accent_foreground||t.background,9).px(4).rounded(3).bg(t.accent).font_bold().flex_none()))
     // The Slack copy has stopped: say so rather than show a quiet 0.
     .when(Boolean(alerts?.delay),e=>e.child(text('사본 지연',t.blocked||t.muted,9).flex_none().id(`panel-slack-delay-${space.id}`)))
     .when(Boolean(alerts?.hasSlack),e=>e.cursor_pointer().tooltip(`Slack 알림${slackUnread?` 미확인 ${slackUnread}건`:''}${alerts?.delay?`\nSlack 사본이 ${alerts.delay}시간째 멈춤 (마지막 메시지 ${alerts.delayAt}) · 새 멘션이 늦게 보일 수 있음`:''}`));
