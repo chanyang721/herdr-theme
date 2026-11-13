@@ -98,6 +98,8 @@ status-slot category: `status`, `conversation`, `last_pane`, `pinned`, `in_use`,
 label. The producer classifies its own evidence; the theme never interprets
 reason text. Unknown or missing categories with a reason show **상태 확인** and
 keep the full tooltip. This field is display-only and grants no action authority.
+When upgrading a producer/consumer pair, update the producer to emit `wait_kind`
+first, so ordinary progress retains its category during the consumer upgrade.
 Optional `cleanup`
 (`{idle_since, limit_s, due_at}`, absolute times) adds a countdown to
 `cleanup_wait` and `unseen_result` rows: the sidebar counts the remaining

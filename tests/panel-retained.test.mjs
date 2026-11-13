@@ -71,6 +71,29 @@ test('20 spaces and 60 rows retain their entities; one title change only renders
   r.controller.dispose();
 });
 
+test('changing only wait_kind redraws the retained slot without moving or growing its row',async()=>{
+  const r=await runtime(),raw=makePanelLoadFixture({spaces:2,agentsPerSpace:2,now:Date.now()});
+  try{
+    const row=raw.spaces[0].agents[0];row.keep_reason='Unchanged producer detail';row.wait_kind='review_pending';
+    r.controller.apply(cleanPanelFeed(raw),'ready');r.flush();
+    const entity=r.controller.rows.get(row.id);
+    const walk=n=>n&&typeof n==='object'?[n,...(n.nodes||[]).flatMap(walk)]:[];
+    const slot=()=>walk(entity.tree).find(n=>n.calls.some(c=>c[0]==='id'&&c[1]===`panel-wait-${row.id}`));
+    assert(slot().nodes.includes('검수 대기'));
+    const before={...r.controller.stats.renders},anchor={...r.controller.layout.anchors.get(row.id)};
+    row.wait_kind='report_delivery';
+    r.controller.apply(cleanPanelFeed(raw),'ready');r.flush();
+    assert.equal(r.controller.rows.get(row.id),entity);
+    assert(slot().nodes.includes('보고전달대기'));
+    assert.deepEqual(r.controller.layout.anchors.get(row.id),anchor);
+    const outer=walk(entity.tree).find(n=>n.calls.some(c=>c[0]==='id'&&c[1]===`panel-agent-${row.id}`));
+    assert.equal(outer.calls.find(c=>c[0]==='h')[1],24);
+    assert(outer.calls.find(c=>c[0]==='tooltip')[1].includes('Unchanged producer detail'));
+    const changed=Object.keys(r.controller.stats.renders).filter(key=>r.controller.stats.renders[key]!==before[key]);
+    assert.deepEqual(changed,[`row:${row.id}`]);
+  }finally{r.controller.dispose();}
+});
+
 test('child completion updates the retained card and fold without focus or expansion changes',async()=>{
   const r=await runtime(),raw=makePanelLoadFixture({spaces:2,agentsPerSpace:7,now:Date.now()});
   const parent=raw.spaces[0].agents[0];for(const child of raw.spaces[0].agents.slice(1))child.parent_id=parent.id;
