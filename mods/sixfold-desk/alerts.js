@@ -76,6 +76,9 @@ export function watchAlerts(view, cx) {
   const statePath=`${base}/slack-alert-watch.json`;
   const retry=createRetry({timer:(ms,fn)=>cx.timer.after(ms,fn),retry:()=>schedule(),
     record:watchRecorder(text=>cx.spawn(async()=>{try{await writeTextFile(statePath,text,await readTextFile(statePath).catch(()=>null));}catch{/* best effort */}}))});
+  // Mentions whose ledger write committed but that are not announced yet (a hidden view announces them when shown).
+  const held=[];
+  const deliver=()=>{if(held.length&&allowed())announceSlack(held.splice(0));};
   const schedule=()=>{
     dirty=true;
     if(!allowed()||busy()||scheduled||cached.size!==inputs.length)return;
@@ -86,10 +89,13 @@ export function watchAlerts(view, cx) {
     if(busy()){dirty=true;return;}
     dirty=false;
     const signature=JSON.stringify(inputs.map(([key])=>cached.get(key).token));
-    if(signature===previous)return;
+    deliver();
+    // Inputs back at the last published value while a run is still out (timed out) still refresh: the new
+    // run replaces the stale one, so it cannot publish the older inputs it read when it finally returns.
+    if(signature===previous&&!loading)return;
     if(loading)retry.note('stalled');   // the previous run never settled; it is replaced
     const mine=++run;
-    const live=()=>allowed()&&mine===run;   // a replaced run never writes the ledger or announces late
+    const live=()=>allowed()&&mine===run;   // a replaced run never writes the ledger or publishes late
     loading = true;loadingAt=Date.now();
     // cx.spawn can refuse before the task runs (the host's outstanding-task limit under load); its
     // finally then never runs, so `loading` would stay true and every later change be skipped.
@@ -101,11 +107,13 @@ export function watchAlerts(view, cx) {
         const items = feed.items ?? [];
         const tagged=mentions.items ?? [];
         const states=workflows.jobs ?? {};
-        const events=await notifyNewPopupEvents(popupEvents(tagged,read),live);
+        // Once the ledger write returns these mentions are seen for every run, so they are delivered
+        // even when this run was replaced meanwhile (the replacement already saw them as seen).
+        held.push(...await notifyNewPopupEvents(popupEvents(tagged,read),live));
+        deliver();
         if(!live())return;
         setShared('sixfold.slackHealth',health);
         setShared('sixfold.slackWorkflows',states);
-        announceSlack(events);
         setShared('sixfold.alertItems',items);
         setShared('sixfold.alertRead',read);
         setShared('sixfold.alertProjects',feed.projects ?? []);

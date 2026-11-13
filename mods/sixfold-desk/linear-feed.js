@@ -105,6 +105,13 @@ export function watchLinear(view, cx) {
   const statePath = `${base}/linear-alert-watch.json`;
   const retry = createRetry({timer: (ms, fn) => cx.timer.after(ms, fn), retry: () => schedule(),
     record: watchRecorder(text => cx.spawn(async () => { try { await writeTextFile(statePath, text, await readTextFile(statePath).catch(() => null)); } catch { /* best effort */ } }))});
+  // Alerts whose ledger write committed but that are not announced yet (a hidden view announces them when shown).
+  const held = [];
+  const deliver = () => {
+    if (!held.length || !allowed()) return;
+    announceLinear(held.splice(0));
+    cx.notify(); view.panelRetained?.alertsChanged?.();   // arrivals drawn; chips count them once landed
+  };
   const schedule = () => {
     dirty = true;
     if (!allowed() || busy() || scheduled || cached.size !== inputs.length) return;
@@ -115,10 +122,13 @@ export function watchLinear(view, cx) {
     if (busy()) { dirty = true; return; }
     dirty = false;
     const signature = JSON.stringify(inputs.map(([key]) => cached.get(key).token));
-    if (signature === previous) return;
+    deliver();
+    // Inputs back at the last published value while a run is still out (timed out) still refresh: that run
+    // already published what it read, and the new run replaces it so it cannot publish more when it returns.
+    if (signature === previous && !loading) return;
     if (loading) retry.note('stalled');   // the previous run never settled; it is replaced
     const mine = ++run;
-    const live = () => allowed() && mine === run;   // a replaced run never writes the ledger or announces late
+    const live = () => allowed() && mine === run;   // a replaced run never writes the ledger or publishes late
     loading = true; loadingAt = Date.now();
     const release = () => { if (mine !== run) return; loading = false; if (dirty) schedule(); };
     try { (context ?? cx).spawn(async cx => {
@@ -129,11 +139,12 @@ export function watchLinear(view, cx) {
         setShared('sixfold.linearAuto', cached.get('auto').value);
         cx.notify();
         view.panelRetained?.alertsChanged?.();   // an open issue search shows its issues' new alerts
-        const events = await announce(linearPopupEvents(placeItems(feed.items ?? [], names)), live);
+        // Once the ledger write returns these alerts are seen for every run, so they are delivered even
+        // when this run was replaced meanwhile (the replacement already saw them as seen).
+        held.push(...await announce(linearPopupEvents(placeItems(feed.items ?? [], names)), live));
+        deliver();
         if (!live()) return;
         previous = signature;   // after the ledger write, so a failed write is retried
-        announceLinear(events);
-        if (events.length) { cx.notify(); view.panelRetained?.alertsChanged?.(); }   // arrivals drawn; chips count them once landed
         retry.ok();
       } catch (error) { if (mine === run) retry.fail(error); /* a partial collector write keeps the last valid list */ }
       finally { release(); }
