@@ -307,6 +307,24 @@ export function agentCleanupLabel(agent, now = Date.now()) {
   if (state === 'closed') return { kind: state, text: '닫힘' };
   return null;
 }
+// A compact category for explicit producer evidence only. Unknown reasons remain
+// visible without guessing completion, acceptance or permission to close.
+export function agentWaitLabel(agent) {
+  const reason = agent?.closing?.blocked_reason || agent?.keep_reason || '';
+  const state = agentRowState(agent);
+  if (!reason) {
+    if (state === 'needs_human') return '입력 필요';
+    if (state === 'unseen_result') return '결과 확인';
+    return null;
+  }
+  if (/신원|identity|session_id|session identity/i.test(reason)) return '신원 확인';
+  if (/검수|review|verdict/i.test(reason)) return '검수 확인';
+  if (/수락|accept/i.test(reason)) return '수락 대기';
+  if (/보고|report/i.test(reason)) return '보고 확인';
+  if (/입력|승인|사람 확인|input|approval|permission/i.test(reason)) return '입력 확인';
+  if (/정리|닫|보관|cleanup|close|archiv/i.test(reason)) return '정리 확인';
+  return '상태 확인';
+}
 // The producer supplies recent-first arrays. Stable sorting keeps that order
 // within each display state; opaque IDs and extra fields carry no date meaning.
 const byState = (a, b) => STATES.indexOf(a.state) - STATES.indexOf(b.state) || a.index - b.index;

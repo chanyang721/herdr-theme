@@ -1,7 +1,7 @@
 import {div, svg, image, PathBuilder} from 'gpui-kit';
 import {h_flex, v_flex} from 'gpui-base';
 import {spaces, panes, shared, setShared, run, settings} from 'herdr';
-import {agentGroups, panelEventStates, panelSpaces, panelSpacePartners, PANEL_TIMING, PANEL_LEGS, agentRowState, agentHasReason, agentReason, agentCleanupLabel} from './panel-model.js';
+import {agentGroups, panelEventStates, panelSpaces, panelSpacePartners, PANEL_TIMING, PANEL_LEGS, agentRowState, agentHasReason, agentReason, agentCleanupLabel, agentWaitLabel} from './panel-model.js';
 import {SESSION_STATES, sessionStatusGlyph} from './session-status.js';
 import {groupColors, paletteMode} from './collab-flow.js';
 import {rowDetailParts} from './task-row-details.js';
@@ -111,18 +111,20 @@ const text=(value,color,size=10)=>div().min_w(0).truncate().text_size(size).text
 // Cleanup label colours: waiting reads like the moon glyph, saving and closing
 // keep the teal closing tone, closed is dimmed with its row.
 const cleanupTone=(kind,t)=>kind==='cleanup_wait'?(t.ansi5||t.muted):kind==='closed'?t.dim:(t.ansi6||t.accent);
-function stageBar(agent,tag,color,t,motion,width,cleanup=null,reason=''){
+function stageBar(agent,tag,color,t,motion,width,cleanup=null,reason='',waitLabel=null){
   const closing=agent.closing;
   const blocked=agent.status==='blocked'||Boolean(closing?.blocked_reason);
   const tone=closing?(t.ansi6||t.accent):color;
   const active=closing?closing.step-1:Math.max(-1,Math.min(4,agent.stage-1));
   const tip=closing?closing.blocked_reason||CLOSE[active]:agent.stage===5?(agent.status==='done'?'완료':'수락됨·정리 전'):STAGES[active]||'대기·계획';
-  const slot=h_flex().w(width<300?64:120).h(18).flex_none().gap(2).items_center().justify_end().tooltip(tag?.label||(cleanup&&reason)||tip);
+  const slot=h_flex().w(width<300?64:120).h(18).flex_none().gap(2).items_center().justify_end().tooltip(tag?.label||reason||tip);
   if(tag)return slot.child(text(tag.label,blocked?t.blocked:tone,9).flex_1());
   // The short cleanup label takes the stage slot itself: same width and height,
   // so the row stays one line and nothing beside it moves.
   if(cleanup)return slot.child(text(cleanup.text,cleanupTone(cleanup.kind,t),9).id(`panel-cleanup-${agent.id}`)
     .accessibility_label(reason||cleanup.text));
+  if(waitLabel)return slot.child(text(waitLabel,t.muted,9).id(`panel-wait-${agent.id}`)
+    .accessibility_label(reason||waitLabel));
   // Mockup ㉑: a blocked task paints only the stage it is stuck on; finished stages keep their colour.
   const stuck=blocked?Math.max(0,active):-1;
   return slot.children(STAGES.map((_,index)=>div().id(`panel-stage-${agent.id}-${index}`).w(9).h(3).flex_none()
@@ -139,9 +141,9 @@ export function agentRow(view,agent,space,tag,state,color,t,motion){
   // follows the producer's observed pane status.
   const status=agent.status;
   // Mockup 26: the producer's seven-state glyph replaces the four-status mark
-  // when present; an older feed keeps the mark. The reason sits on a second line.
+  // when present; an older feed keeps the mark. The full reason remains in the tooltip; short categories share the stage slot.
   const rowState=agentRowState(agent);
-  const reasonText=child?'':agentReason(agent,view.now??Date.now()).text;
+  const reasonText=child?'':agent.closing?.blocked_reason||agentReason(agent,view.now??Date.now()).text;
   const stateLabel=rowState?SESSION_STATES[rowState].label:STATUS_LABEL[status]||'';
   const reasonLine=reasonText?(reasonText.startsWith(stateLabel)?reasonText:[stateLabel,reasonText].filter(Boolean).join(' · ')):'';
   const pulse=rowArrival(state,agent.id);
@@ -167,8 +169,9 @@ export function agentRow(view,agent,space,tag,state,color,t,motion){
   if(child)line.child(div().id(`panel-child-dot-${agent.id}`).size(5).flex_none().rounded(3)
     .bg(detail.statusColor|| (status==='blocked'?t.blocked:status==='working'?color:t.dim)));
   const cleanup=child?null:agentCleanupLabel(agent,view.now??Date.now());
-  const showStage=!child&&(agent.closing||tag||cleanup||agent.stage!==5&&status!=='done');
-  if(showStage&&!stacked)line.child(stageBar(agent,tag,color,t,motion,view.panelWidth||224,cleanup,reasonLine));
+  const waitLabel=child||cleanup?null:agentWaitLabel(agent);
+  const showStage=!child&&(agent.closing||tag||cleanup||waitLabel||agent.stage!==5&&status!=='done');
+  if(showStage&&!stacked)line.child(stageBar(agent,tag,color,t,motion,view.panelWidth||224,cleanup,reasonLine,waitLabel));
   const remembered=agent.closing?.memory;
   // Error and quota marks still take the slot; otherwise a producer state draws
   // its glyph, held still during an event tag on this row.

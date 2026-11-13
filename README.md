@@ -11,7 +11,7 @@ A nine-step walkthrough assembled from native demo captures. Synthetic data; not
 ## Features
 
 - **Computers and workspaces:** per-computer agent counts, shared-project indicators, unread messages and animated message routes.
-- **Tasks:** optional local feeds add task trees, progress stages, issue groups, review events and seven animated pixel-art states. The feed producer manages the work; the theme displays it.
+- **Tasks:** optional local feeds add task trees, progress stages, issue groups, review events and seven animated pixel-art states. The feed producer manages the work; the theme displays it. Explicit wait reasons share the existing progress slot in each single-line row; hover for the full reason.
 - **Terminal headers:** agent state, model, effort and session usage, with an animated cat and a motion-off option. Claude panes also show task-list progress (`할 일 2/5`) and running sub-agents, read by Agent Usage from Claude's own records (refreshed every two minutes; hidden when no refresh came for six minutes).
 - **Monitor strip:** CPU/RAM, MCP connections, CLI sign-in state, Claude/Codex plan limits and session tokens, supplied by the pinned [Workspace Mods](https://github.com/chanyang721/herdr-workspace-mods) release.
 - **Documents:** workspace search, pins and a document tab; an optional file viewer previews Markdown beside your terminals.
