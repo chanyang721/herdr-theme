@@ -191,3 +191,21 @@ test('with a sidebar drawing arrivals a new mention folds into its space card in
   }finally{h.stop();}
 });
 
+// A failed refresh used to wait for the next input change; with the same inputs it waited for good.
+test('a failing refresh is retried after a delay without another input change, and only its kind and time are kept',async()=>{
+  const files=new Map([['slack-mentions.json','{"items":[{"id":"history"}]}']]),h=await alertHarness(files);
+  try{
+    await h.refresh();let fail=1;
+    h.setTypedHook(name=>{if(fail>0&&name.endsWith('/slack-popup-events.json')){fail--;throw new Error('File changed while reading its typed snapshot');}});
+    files.set('slack-mentions.json','{"items":[{"id":"new"},{"id":"history"}]}');h.publish('slack-mentions.json');await h.flush();
+    assert.equal(h.opens.length,0);
+    const failing=nativeParse(files.get('slack-alert-watch.json'));
+    assert.deepEqual({state:failing.state,kind:failing.last_error.kind},{state:'failing',kind:'ledger-changed'});
+    assert.deepEqual(Object.keys(failing).sort(),['failures','last_error','schema','since','state'],'no contents or messages');
+    assert.deepEqual([...h.slowTimers].map(timer=>timer.ms),[5000],'one delayed retry, no busy loop');
+    const [retry]=h.slowTimers;h.slowTimers.delete(retry);retry.callback(h.cx);await h.flush();
+    assert.equal(h.opens.length,1,'the retry announced the mention');
+    assert.deepEqual(nativeParse(files.get('slack-popup-events.json')).seen,['mention:history','mention:new']);
+    assert.equal(nativeParse(files.get('slack-alert-watch.json')).state,'ok','recovery is recorded');
+  }finally{h.stop();}
+});
