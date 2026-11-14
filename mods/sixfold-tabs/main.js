@@ -12,20 +12,48 @@ function find(node, id) {
   return null;
 }
 
+// panes() includes inactive tabs. A tab's label is not proof that its document
+// mod still exists; use the same local-space eligibility as the native installer.
+export function missingDocumentTabs(allSpaces, allPanes) {
+  const documents = new Set(allPanes.filter(p => p.mod === "project-docs-tabs").map(p => p.tab));
+  return allSpaces.filter(space => space.machine == null && !space.id.includes('/')
+    && !(space.tabs ?? []).some(tab => documents.has(tab.id))).map(space => space.id).sort();
+}
+const ENSURERS = '__sixfoldDocumentTabEnsurersV1';
+
 export default class Tabs extends View {
   init(_props, cx) {
     this.pressed = null;
     this.panels = JSON.parse(localStorage.getItem("panels") ?? "{}");
-    // Core document changes append missing tabs without selecting them.
-    // A missing installer on older installations is harmless; no terminal starts.
+    // The model already tells us whether every local space has a document tab.
+    // Keep the five-second repair check, without launching a no-op installer on
+    // every tick. Copies of this mod share one in-flight repair per app home.
     const ensure = cx => {
-      if (this.ensuring) return;
-      this.ensuring = true;
-      cx.spawn(async () => {
-        try { await exec(`${appHome()}/scripts/sixfold/herdr-theme${window()?.platform==='windows' || /^(?:[A-Za-z]:[\\/]|\\\\)/.test(appHome())?'.exe':''}`, ["install_doc_tabs", "--ensure-tabs", "--home", appHome()]); }
-        catch { /* Installation may not have enabled document tabs. */ }
-        finally { this.ensuring = false; }
-      });
+      const missing = missingDocumentTabs(spaces(), panes());
+      if (!missing.length) return;
+      const key = appHome(), signature = JSON.stringify(missing);
+      const ensurers = globalThis[ENSURERS] ?? (globalThis[ENSURERS] = new Map());
+      const state = ensurers.get(key) ?? { pending: false, signature: null, retryAt: 0 };
+      ensurers.set(key, state);
+      if (state.pending || (state.signature === signature && Date.now() < state.retryAt)) return;
+      state.pending = true; state.signature = signature;
+      const release = success => {
+        state.pending = false;
+        // Older installations may not have enabled the document mod yet. Retry
+        // those failures less often; a newly missing space gets its own attempt.
+        state.retryAt = Date.now() + (success ? 5000 : 30000);
+      };
+      try {
+        cx.spawn(async () => {
+          let success = false;
+          try {
+            const result = await exec(`${key}/scripts/sixfold/herdr-theme${window()?.platform==='windows' || /^(?:[A-Za-z]:[\\/]|\\\\)/.test(key)?'.exe':''}`, ["install_doc_tabs", "--ensure-tabs", "--home", key]);
+            success = result?.code === 0;
+          }
+          catch { /* Installation may not have enabled document tabs. */ }
+          finally { release(success); }
+        });
+      } catch { release(false); }
     };
     ensure(cx); cx.timer.every(5000, ensure);
   }
