@@ -8,6 +8,7 @@ pub mod metrics;
 pub mod routing;
 pub mod tiers;
 pub mod workflow;
+pub mod workflow_core;
 pub mod workspace_focus;
 use crate::common::*;
 use serde_json::{json, Value};

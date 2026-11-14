@@ -69,6 +69,81 @@ fn has_console() -> bool {
         false
     }
 }
+fn workflow_core(config: &Value, args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+    if config["allowWorkflowCore"] != true || args != ["connect"] {
+        return Err(
+            "persistent workflow fixture requires explicit enablement and hc connect".into(),
+        );
+    }
+    let log = env::var("HERDR_TEST_CALL_LOG")?;
+    let record = |event: &str, request: Option<&Value>| -> Result<(), std::io::Error> {
+        let mut file = OpenOptions::new().create(true).append(true).open(&log)?;
+        writeln!(
+            file,
+            "{}",
+            json!({"event":event,"program":"hc","args":args,"pid":std::process::id(),"has_console":has_console(),"rpc":request})
+        )
+    };
+    record("start", None)?;
+    let stdin = std::io::stdin();
+    let mut stdout = std::io::stdout().lock();
+    for (index, line) in stdin.lock().lines().enumerate() {
+        let request: Value = serde_json::from_str(&line?)?;
+        if request["jsonrpc"] != "2.0"
+            || request["method"] != "terminal.list"
+            || request["params"] != json!({})
+            || !request["id"].is_u64()
+        {
+            return Err("persistent workflow fixture only accepts terminal.list".into());
+        }
+        record("request", Some(&request))?;
+        let settings = &config["workflowCore"];
+        let mode = settings["modes"][index]
+            .as_str()
+            .or(settings["mode"].as_str())
+            .unwrap_or("reply");
+        let result = settings["snapshots"].get(index).cloned().unwrap_or_else(
+            || json!({"terminals":settings.get("terminals").cloned().unwrap_or(json!([]))}),
+        );
+        let mut reply = json!({"jsonrpc":"2.0","id":request["id"],"result":result});
+        match mode {
+            "reply" => {}
+            "timeout" => {
+                std::thread::sleep(std::time::Duration::from_secs(3));
+            }
+            "disconnect" => return Ok(()),
+            "eof" => {
+                write!(stdout, "{reply}")?;
+                stdout.flush()?;
+                return Ok(());
+            }
+            "oversized" => {
+                let chunk = [b'x'; 1024];
+                for _ in 0..(16 * 1024 + 1) {
+                    stdout.write_all(&chunk)?;
+                }
+                stdout.write_all(b"\n")?;
+                stdout.flush()?;
+                continue;
+            }
+            "wrong-id" => reply["id"] = json!(request["id"].as_u64().unwrap() + 1),
+            "wrong-version" => reply["jsonrpc"] = json!("1.0"),
+            "error" => {
+                reply = json!({"jsonrpc":"2.0","id":request["id"],"error":{"code":-32000,"message":"fixture core failure"}});
+            }
+            "missing-terminals" => reply["result"] = json!({}),
+            "malformed" => {
+                stdout.write_all(b"not JSON\n")?;
+                stdout.flush()?;
+                continue;
+            }
+            _ => return Err("unknown persistent workflow fixture mode".into()),
+        }
+        writeln!(stdout, "{reply}")?;
+        stdout.flush()?;
+    }
+    Ok(())
+}
 fn process_contract(
     config: &Value,
     args: &[String],
@@ -159,6 +234,9 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         program = argv.remove(0);
     }
     let invoked_program = program.clone();
+    if program == "hc" && config["allowWorkflowCore"] == true {
+        return workflow_core(&config, &argv);
+    }
     if program == "capture-stdin-contract" && config["allowProcessContract"] == true {
         match argv.first().map(String::as_str).unwrap_or("") {
             "refuse" => return Err("stdin option unsupported".into()),
