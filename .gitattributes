@@ -6,3 +6,7 @@ extras/windows-layout/sixfold.json -text
 
 # Preserve checksum-pinned upstream whitespace without editing vendored source.
 rust/vendor/pocketfft/pocketfft_hdronly.h whitespace=-blank-at-eol
+
+# Keep JavaScript test suites out of repository language statistics.
+tests/**/*.mjs linguist-detectable=false
+voice/tests/** linguist-detectable=false

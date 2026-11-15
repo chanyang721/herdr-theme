@@ -339,6 +339,11 @@ fn workflow_gui_collector_hides_its_actual_hc_child() {
     )))
     .unwrap();
     let mut c = Command::new(env!("CARGO_BIN_EXE_herdr-theme"));
+    fs::write(
+        &f.schema,
+        json!({"allowProcessContract":true,"allowWorkflowCore":true,"workflowCore":{"terminals":[]}}).to_string(),
+    )
+    .unwrap();
     c.args(["collect-workflow", "--once"]);
     f.configure(&mut c);
     c.env("PATH", path);
@@ -355,9 +360,15 @@ fn workflow_gui_collector_hides_its_actual_hc_child() {
         .map(|l| serde_json::from_str::<Value>(l).unwrap())
         .collect::<Vec<_>>();
     assert!(!calls.is_empty());
+    assert!(calls.iter().all(|c| c["program"] == "hc"
+        && c["args"] == json!(["connect"])
+        && c["has_console"] == false));
+    assert_eq!(calls.iter().filter(|c| c["event"] == "start").count(), 1);
+    assert_eq!(calls.iter().filter(|c| c["event"] == "request").count(), 1);
     assert!(calls
         .iter()
-        .all(|c| c["program"] == "hc" && c["args"][0] == "ls" && c["has_console"] == false));
+        .filter(|c| c["event"] == "request")
+        .all(|c| c["rpc"]["method"] == "terminal.list"));
     let output: Value =
         serde_json::from_slice(&fs::read(f.root.join("app/data/sixfold/workflow.json")).unwrap())
             .unwrap();

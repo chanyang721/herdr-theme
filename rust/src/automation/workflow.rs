@@ -10,6 +10,8 @@ use std::{
 };
 #[derive(Default)]
 pub struct Collector {
+    core: Option<super::workflow_core::Connection>,
+    facts: HashMap<String, Value>,
     holders: HashMap<u32, String>,
     scanned: HashMap<Vec<u32>, f64>,
     processes: (f64, HashMap<u32, u32>),
@@ -212,7 +214,11 @@ pub trait IdentifyBackend {
 struct RuntimeIdentify<'a>(&'a mut Collector);
 impl IdentifyBackend for RuntimeIdentify<'_> {
     fn facts(&mut self, address: &str) -> Result<Value> {
-        hc(&["get", address])
+        self.0
+            .facts
+            .get(address)
+            .cloned()
+            .ok_or_else(|| "terminal missing from current core snapshot".into())
     }
     fn process_tree(&mut self, pid: u32) -> Vec<u32> {
         self.0.tree(pid)
@@ -521,11 +527,30 @@ impl Collector {
     }
     fn collect(&mut self) -> Result<Vec<Value>> {
         let at = now();
-        let listing = hc(&["ls"])?;
+        if self.core.is_none() {
+            let mut process = command(&hc_program().to_string_lossy());
+            process.arg("connect");
+            self.core = Some(super::workflow_core::Connection::start(process)?);
+        }
+        let listing = self.core.as_mut().unwrap().list(Duration::from_secs(10));
+        let listing = match listing {
+            Ok(listing) => listing,
+            Err(error) => {
+                // Discard the stream after a timeout/partial reply. The next
+                // pass reconnects; an old reply must never satisfy a new poll.
+                self.core.take();
+                self.facts.clear();
+                return Err(error);
+            }
+        };
+        self.facts = list(&listing["terminals"])
+            .iter()
+            .map(|terminal| (s(&terminal["address"]).to_string(), terminal.clone()))
+            .collect();
         let listing = list(&listing["terminals"])
             .iter()
             .filter(|t| t["state"] == "live")
-            .cloned()
+            .map(workflow_terminal)
             .collect::<Vec<_>>();
         let live: HashSet<_> = listing
             .iter()
@@ -572,8 +597,17 @@ impl Collector {
         Ok(nodes)
     }
 }
-fn hc(args: &[&str]) -> Result<Value> {
-    hc_with(args, |command| capture_cmd(command, 10.))
+/// Match the CLI's compact agent/status fields while retaining the full fresh
+/// snapshot separately for identification (PID, parent and creation time).
+pub fn workflow_terminal(terminal: &Value) -> Value {
+    let mut result = terminal.clone();
+    let program = s(&terminal["argv"][0]);
+    result["agent"] = terminal["status"]["app"]
+        .as_str()
+        .unwrap_or_else(|| program.rsplit('/').next().unwrap_or_default())
+        .into();
+    result["status"] = terminal["status"]["state"].clone();
+    result
 }
 pub fn hc_with<F>(args: &[&str], run: F) -> Result<Value>
 where
