@@ -222,7 +222,8 @@ test('a click opens other files in the default app; a failure stays open with on
   assert.equal(h.state().error,null);assert.equal(h.state().open,false);
 });
 
-test('chips, folders tab, sort cycle, archive toggle, Escape and the empty states',async()=>{
+test('chips, folders tab, sort cycle, archive toggle, Escape and the empty states',async t=>{
+  t.mock.method(Date,'now',()=>NOW);
   const files=[file('/r/Reports/guide.md',NOW),file('/r/Reports/report.pdf',NOW-DAY),file('/r/Reports/sub/notes.md',NOW-40*DAY),file('/r/Reports/_보관/old.md',NOW)];
   const h=await finder({files});h.mod.setDocsFinderOpen(h.view,h.space,true,h.cx);h.render();
   assert.deepEqual(h.rowNames(),['guide.md','report.pdf','notes.md']);
