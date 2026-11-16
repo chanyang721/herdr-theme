@@ -62,6 +62,20 @@ test('brand SVG assets use full-color images while the space grid remains a tint
   }
 });
 
+test('Codex rows draw the plan-usage chip mark in its colour; Claude keeps its icon and the theme colour',async()=>{
+  const r=await renderer(false);
+  const feed=makePanelFixture({agents:[{title:'claude row',family:'claude'},{title:'codex row',family:'codex'}]});
+  const nodes=all(r.renderPanelTracking(viewFor(feed),t,r.cx));
+  const codex=nodes.filter(n=>n.value==='mods/sixfold-desk/icons/codex-mark.svg');
+  const claude=nodes.filter(n=>n.value==='mods/sixfold-desk/icons/claude.svg');
+  assert(codex.length>0&&claude.length>0);
+  assert(codex.every(n=>n.kind==='svg'&&call(n,'text_color')?.[1]==='#10A37F'));
+  assert(claude.every(n=>n.kind==='svg'&&call(n,'text_color')?.[1]===t.foreground));
+  assert.equal(nodes.filter(n=>n.value==='mods/sixfold-desk/icons/codex.svg').length,0);
+  const mark=await readFile(new URL('../mods/sixfold-desk/icons/codex-mark.svg',import.meta.url),'utf8');
+  assert.match(mark,/^<svg[^>]*viewBox="0 0 24 24"/);
+});
+
 test('all 24 fixture combinations pass the actual view builder, with one-line rows and no addresses',async()=>{
   const r=await renderer(false);
   for(const item of makePanelMatrix(Date.now())){

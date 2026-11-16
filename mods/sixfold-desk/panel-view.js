@@ -93,8 +93,12 @@ export function panelLayout(feed, eventState, nativeSpaces=[],groupMap=null) {
   return {anchors,cards,height:y};
 }
 
-const familyIcon=agent=>['claude','codex'].includes(agent.family)
-  ? svg(`mods/sixfold-desk/icons/${agent.family}.svg`).size(13).flex_none()
+// Codex rows draw the same mark and colour as the plan-usage chip above (mods/plan-usage/codex.svg,
+// provider colour #10A37F), so one agent family looks the same in both places.
+const CODEX_COLOR='#10A37F';
+const familyIcon=agent=>agent.family==='codex'
+  ? svg('mods/sixfold-desk/icons/codex-mark.svg').size(13).flex_none()
+  : agent.family==='claude' ? svg('mods/sixfold-desk/icons/claude.svg').size(13).flex_none()
   : div().size(12).flex_none().rounded(3).border(1);
 export function toolIcon(tool,t){
   if(tool==='linear')return image('mods/sixfold-desk/icons/tool-linear.svg').size(11).flex_none();
@@ -163,7 +167,7 @@ export function agentRow(view,agent,space,tag,state,color,t,motion){
     .when(Boolean(agent.nav)&&agent.closing?.step!==4,e=>e.cursor_pointer().hover(h=>h.bg(t.hover))
       .on_click((_event,cx)=>{cx.stop_propagation();navigatePanelAgent(agent);}));
   line
-    .child(div().relative().size(13).flex_none().child(familyIcon(agent).text_color(t.foreground)).when(Boolean(detail.remoteBadge),e=>e.child(detail.remoteBadge)))
+    .child(div().relative().size(13).flex_none().child(familyIcon(agent).text_color(agent.family==='codex'?CODEX_COLOR:t.foreground)).when(Boolean(detail.remoteBadge),e=>e.child(detail.remoteBadge)))
     .child(text(agent.title||'Untitled task',t.foreground,11).flex_1())
     .when(Boolean(detail.unreadBadge),e=>e.child(detail.unreadBadge));
   if(child)row.child(div().id(`panel-child-branch-${agent.id}`).absolute().left(18+(depth-1)*16).top(0).w(8).h(PANEL_GEOMETRY.child/2)
