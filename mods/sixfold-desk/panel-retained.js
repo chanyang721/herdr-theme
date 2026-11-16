@@ -10,7 +10,7 @@ import {projectPanelFeed,panelEventStates,panelSpaces,panelSpacePartners,PANEL_T
 import {panelLayout,cardView,agentRow,panelFlowLayer,panelCounts,PANEL_GEOMETRY,toolIcon,panelReasonWake,agentRowHeight,panelMetaHeight,rowArrival} from './panel-view.js';
 import {groupColors,paletteMode} from './collab-flow.js';
 import {issuePopover,alertedGroup} from './task-issues-view.js';
-import {issueScopeData,issueCacheLabel,parseTimelineFeed,spaceWithTimeline,rowStatus,milestoneSource} from './task-issue-state.js';
+import {issueScopeData,issueCacheLabel,parseTimelineFeed,spaceWithTimeline,rowStatus,milestoneSource,fromLedger} from './task-issue-state.js';
 import {ensure,cached,waiting,checkCaches,anyWaiting,CACHE_POLL_MS,LOOK_POLL_MS} from './linear-cache.js';
 import {statusIndex,teamStatuses,statusFilters,filterRows,foldedCount,milestoneList,detailData} from './issue-model.js';
 import {nativeTaskSpace,hostedTaskLayout,panelWidthClass} from './panel-host.js';
@@ -245,7 +245,9 @@ export function createRetainedPanel(cx,{macTitlebar=false,onClassic=null,onDispo
     const projectAt=project&&(project.state===undefined||project.state==='ok')?Date.parse(project.at||''):NaN;
     const catalogAt=Date.parse(space.issue_catalog?.updated_at||space.issue_catalog?.cache?.at||'');
     const cacheFirst=Number.isFinite(projectAt)&&(!Number.isFinite(catalogAt)||projectAt>catalogAt);
-    const statusOf=project||rowIndex.map.size?key=>(cacheFirst?memo.index.get(key)||rowIndex.map.get(key):rowIndex.map.get(key)||memo.index.get(key))||null:null;
+    // A ledger catalog's statuses are Linear's own, as current as anything here: the project cache is not mixed in.
+    const statusOf=fromLedger(space)?key=>rowIndex.map.get(key)||null
+      :project||rowIndex.map.size?key=>(cacheFirst?memo.index.get(key)||rowIndex.map.get(key):rowIndex.map.get(key)||memo.index.get(key))||null:null;
     const rows=data.rows||[];
     const lookup=statusOf||(()=>null);
     const unreadKeys=new Set(items.filter(i=>!i.read&&i.workspace===space.name&&i.issue).map(i=>i.issue));
