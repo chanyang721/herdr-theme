@@ -365,6 +365,10 @@ export default class ProjectDocuments extends View {
 
   unit() { return Number(settings()?.zoom) || 1; }
 
+  // Room for a picture in the body, in layout pixels: the body reports its size scaled by the
+  // app's UI zoom, so without dividing it out pictures stop short of the right edge.
+  figureWidth(unit) { return this.width / unit - 40; }
+
   // The viewer's picture area before it has been measured: the pane less the viewer's bars.
   zoomViewport() {
     if (this.zoom?.viewport) return this.zoom.viewport;
@@ -545,7 +549,7 @@ export default class ProjectDocuments extends View {
     const sidebar = !folded && (this.sidebar ?? this.paneWidth >= WITH_SIDEBAR);
     const unit = this.unit();
     // Diagrams squeezed below half size suggest reading mode once, by its button's accent.
-    const crowded = !this.reading && side && !this.html && Boolean(this.blocks?.some(b => b.diagram && b.media?.width && (this.width - 40) / b.media.width < 0.5));
+    const crowded = !this.reading && side && !this.html && Boolean(this.blocks?.some(b => b.diagram && b.media?.width && this.figureWidth(unit) / b.media.width < 0.5));
     const counts = kindCounts(this.documents, this.kinds);
     const kindLabel = counts.find(k => k.id === this.kindFilter)?.label || this.kinds.find(k => k.id === this.kindFilter)?.label;
     const here = locs.find(l => l.key === this.location) || locs[0];
@@ -656,7 +660,7 @@ export default class ProjectDocuments extends View {
       .children(this.blocks.map((block, index) => block.media
         ? tiles
           ? image(block.media.path).w(Math.min(block.media.width, Math.max(1, this.width - 40))).h(Math.min(block.media.width, Math.max(1, this.width - 40)) * block.media.height / block.media.width).flex_none()
-          : figure({ id: `docs-figure-${this.bodyKey}-${index}`, block, width: this.width - 40, t, codeOpen: this.codeOpen.has(index),
+          : figure({ id: `docs-figure-${this.bodyKey}-${index}`, block, width: this.figureWidth(this.unit()), t, codeOpen: this.codeOpen.has(index),
             onOpen: (at, scale, cx) => this.openZoom(index, block, at, scale, cx),
             onPinch: (event, shown, cx) => { if (!this.zoom && event.delta > 0.005 && event.touch_phase !== 'ended') this.openZoom(index, block, fraction(event), shown * (1 + event.delta), cx); },
             onToggleCode: cx => { if (this.codeOpen.has(index)) this.codeOpen.delete(index); else this.codeOpen.add(index); cx.notify(); } })
