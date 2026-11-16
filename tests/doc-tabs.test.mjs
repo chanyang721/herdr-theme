@@ -20,7 +20,7 @@ async function load(file, runtime) {
   return module;
 }
 async function localViews({ documents = [document('a'), document('b')], selection, lineEnding, props: extra = {}, hostWindow = () => null } = {}) {
-  const handlers = new Map(), calls = [], reads = [], labels = [], timer = new Map(), watchers = new Map();
+  const handlers = new Map(), calls = [], reads = [], labels = [], timer = new Map(), watchers = new Map(), actions = new Map(), bindings = [];
   const state = { documents, selected: selection, active: false, text: path => `본문 ${path}`, result: null, stage: async text => ({ blocks: [{ text }], files: [], unavailable: false }) };
   const stored = { 'sixfold.docs.selection.v1': selection ? { Demo: selection, Other: 'other' } : { Other: 'other' } };
   function element() {
@@ -28,6 +28,8 @@ async function localViews({ documents = [document('a'), document('b')], selectio
     proxy = new Proxy({}, { get(_target, key) {
       if (key === 'id') return value => { id = value; return proxy; };
       if (key === 'on_click') return callback => { handlers.set(id, callback); return proxy; };
+      if (key === 'on_action') return (name, callback) => { actions.set(name, callback); return proxy; };
+      if (key === 'map') return transform => transform(proxy);
       if (key === 'when') return (condition, callback) => condition ? callback(proxy) : proxy;
       if (key === 'child') return value => { if (typeof value === 'string') labels.push(value); return proxy; };
       return () => proxy;
@@ -70,12 +72,12 @@ async function localViews({ documents = [document('a'), document('b')], selectio
   source = `const {${Object.keys(runtime).join(',')}} = globalThis[${JSON.stringify(key)}];\n${source}`;
   const { default: Panel } = await import('data:text/javascript;base64,' + Buffer.from(source).toString('base64'));
   delete globalThis[key];
-  const cx = { notify() {}, spawn: task => { const promise = task(cx); promise.catch(() => {}); return promise; }, timer: { every: (ms, callback) => timer.set(ms, callback), after: (ms, callback) => timer.set(`after-${ms}`, callback) } };
+  const cx = { bind_keys: list => { bindings.push(...list); return list.length; }, notify() {}, spawn: task => { const promise = task(cx); promise.catch(() => {}); return promise; }, timer: { every: (ms, callback) => timer.set(ms, callback), after: (ms, callback) => timer.set(`after-${ms}`, callback) } };
   const view = new Panel(); view.init({}, cx);
   const flush = async () => { for (let i = 0; i < 4; i++) await new Promise(resolve => setImmediate(resolve)); };
-  const render = () => { handlers.clear(); labels.length = 0; view.render(cx); };
+  const render = () => { handlers.clear(); actions.clear(); labels.length = 0; view.render(cx); };
   await flush();
-  return { state, view, calls, reads, handlers, labels, stored, timer, watchers, cx, flush, render };
+  return { state, view, calls, reads, handlers, labels, stored, timer, watchers, cx, flush, render, actions, bindings };
 }
 
 for (const lineEnding of ['\n', '\r\n']) {
@@ -555,4 +557,15 @@ test('pictures use the body width the app reports through its UI zoom', async t 
   assert.ok(h.labels.includes('축소 표시 26%'), 'at 100% UI zoom: 800 of 3072');
   h.state.settings = { zoom: 0.9 }; h.render();
   assert.ok(h.labels.includes('축소 표시 29%'), 'at 90% the same report is 840/0.9 − 40 = 893 layout pixels');
+});
+
+test('the viewer binds ⌘= ⌘− ⌘0 ⌘9 under its own key context, so they beat the app zoom and tab 9 only while it is open', async t => {
+  const h = await bigDiagram(t);
+  const chords = Object.fromEntries(h.bindings.map(b => [b.keystroke, b]));
+  for (const key of ['cmd-=', 'cmd-+', 'cmd--', 'cmd-0', 'cmd-9']) assert.equal(chords[key]?.context, 'DocsZoomViewer', key);
+  assert.ok(!h.actions.size, 'nothing answers those actions while the viewer is closed');
+  h.handlers.get(`${h.id}-zoom`)(null, h.cx); h.view.zoomMeasured({ width: 1200, height: 800 }, h.cx); h.render();
+  h.actions.get(chords['cmd-0'].action)({}, h.cx); assert.equal(h.view.zoom.view.scale, 1, '⌘0 reaches the viewer as an action');
+  h.actions.get(chords['cmd--'].action)({}, h.cx); assert.equal(h.view.zoom.view.scale, 0.8);
+  h.actions.get(chords['cmd-9'].action)({}, h.cx); assert.ok(h.view.zoom.view.scale < 0.4, '⌘9 fits');
 });

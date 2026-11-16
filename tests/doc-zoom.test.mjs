@@ -93,3 +93,10 @@ test('keys follow Preview: ⌘+ ⌘= ⌘− zoom, ⌘0 actual size, ⌘9 fit, ar
   near(command(actual, 'right-page', media, viewport).x, Math.max(actual.x - 1200 * 0.9, 1200 - 3072 - PAD), '⌥→ moves most of a screen');
   assert.equal(percent(0.3825), '38%');
 });
+
+test('viewer bindings name one action per command, all under the viewer context', async () => {
+  const { viewerBindings, viewerAction, VIEWER_CONTEXT } = await import('../mods/project-docs-tabs/zoom.js');
+  const list = viewerBindings();
+  assert.ok(list.every(b => b.context === VIEWER_CONTEXT));
+  assert.deepEqual([...new Set(list.map(b => b.action))].sort(), ['actual', 'fit', 'in', 'out'].map(viewerAction).sort());
+});
