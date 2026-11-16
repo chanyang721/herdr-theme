@@ -63,3 +63,17 @@ test('mentions routed to a space give it a Slack badge, an unread count and a me
   openInbox({project:'Share'});openInbox({project:'Alpha'});
   assert.deepEqual(store.get('opened').map(o=>o.props.newMessages),[false,true],'Share opens its mentions; a tracked space its channel messages');
 });
+
+// 2026-11-16 review: an arrival for a space that is not on the sidebar ('미연결') lands on Share, but the
+// grouping kept its own space, so once the peek folded Share's badge, unread count and popover lost it.
+test('mentions of a space not on the sidebar count on Share, as their arrival does',async()=>{
+  const {cardAlertCounts,hasSlackAlerts,popover}=await inbox();
+  const items=[{id:'slack:C0TEST09:1.1',project:'미연결'},{id:'slack:D0TEST01:2.1',project:'Share'},{id:'slack:C0TEST01:3.1',project:'Alpha'},{id:'slack:C0TEST02:4.1',project:'Gone'}];
+  popover.setSpaceMentions(items,['Alpha','Share']);
+  assert.equal(cardAlertCounts('Share').slack,3,'Share + 미연결 + a space no longer on the sidebar');
+  assert.deepEqual(popover.spaceMentions('Share').map(i=>i.id),['slack:C0TEST09:1.1','slack:D0TEST01:2.1','slack:C0TEST02:4.1']);
+  assert.deepEqual(popover.spaceMentions('Alpha').map(i=>i.id),['slack:C0TEST01:3.1'],'a sidebar space keeps its own');
+  assert.equal(hasSlackAlerts('미연결'),false,'no group under the unmapped name');
+  popover.setSpaceMentions(items);
+  assert.deepEqual(popover.spaceMentions('미연결').map(i=>i.id),['slack:C0TEST09:1.1'],'no sidebar names yet: each keeps its own space');
+});

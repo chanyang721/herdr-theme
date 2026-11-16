@@ -125,7 +125,7 @@ export function watchAlerts(view, cx) {
         setShared('sixfold.alertItems',items);
         setShared('sixfold.alertRead',read);
         setShared('sixfold.alertProjects',feed.projects ?? []);
-        setSpaceMentions(tagged);   // a space's mentions count on its card too (alert-inbox.js); module state, not shared
+        setSpaceMentions(tagged,(spaces?.()??[]).map(s=>s.name));   // a space's mentions count on its card too (alert-inbox.js; off-sidebar ones on Share); module state, not shared
         view.alerts = legacy.items ?? [];
         previous = signature;
         cx.notify();
