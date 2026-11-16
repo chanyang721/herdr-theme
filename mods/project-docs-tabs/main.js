@@ -353,8 +353,9 @@ export default class ProjectDocuments extends View {
   }
 
   toggleSidebar(cx) {
-    this.sidebar = !(this.sidebar ?? this.paneWidth >= WITH_SIDEBAR);
-    if (this.sidebar) this.reading = false;
+    // Reading mode hides the sidebar whatever was chosen, so there the button brings it back.
+    if (this.reading) { this.reading = false; this.sidebar = true; }
+    else this.sidebar = !(this.sidebar ?? this.paneWidth >= WITH_SIDEBAR);
     this.paneFocus?.focus(); this.remember(); cx.notify();
   }
 
