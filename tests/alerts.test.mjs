@@ -20,7 +20,7 @@ async function alertHarness(files,{lineEnding='\n',opens=[],home='/test',arrived
     subscribeFileChanges:(_cx,name,callback)=>{const listener={path:name,callback};service.add(listener);return()=>service.delete(listener);},
     readJsonSnapshot:async name=>{const value=snapshot(name);await typedHook?.(name,value);return value;},
     readTextFile:async name=>files.get(name.split('/').at(-1))??null,
-    createRetry:guardModule.createRetry,watchRecorder:guardModule.watchRecorder,
+    createRetry:guardModule.createRetry,watchRecorder:guardModule.watchRecorder,setSpaceMentions:items=>shared.set('spaceMentions',items),
     writeTextFile:async(name,value,expected)=>{const key=name.split('/').at(-1),old=files.get(key)??null;if(old!==expected)throw Error('compare-and-swap conflict');writes.push({name,value,expected});files.set(key,value);change(name);await writeHook?.(name,value);},
   };
   const key=`__alertWatch${watcherId++}`;globalThis[key]=runtime;
@@ -183,11 +183,16 @@ test('with a sidebar drawing arrivals a new mention folds into its space card in
     h.publish('slack-mentions.json');await h.flush();
     assert.equal(h.opens.length,0,'no window, no focus change');
     assert.deepEqual(arrived.map(a=>[a.key,a.id,a.source,a.space,a.line]),[['mention:m1','m1','slack','Share','Kim: hello']]);
+    assert.deepEqual(arrived[0].item,{id:'m1',project:'Alpha',text:'hello',author:'Kim'},'the arrival carries the mention, so the peek can list it');
     host.value=false;
     files.set('slack-mentions.json',JSON.stringify({items:[{id:'history'},{id:'m1'},{id:'m2',project:'Alpha'}]}));
     h.publish('slack-mentions.json');await h.flush();
     assert.equal(h.opens.length,1,'no sidebar host: the Slack window opens as before');
     assert.equal(arrived.length,1);
+    host.value=true;arrived.length=0;
+    files.set('slack-mentions.json',JSON.stringify({items:[{id:'history'},{id:'m1'},{id:'n1',project:'Alpha',text:'hi',author:'U0BOSS0001',author_name:'대표'},{id:'n2',project:'Alpha',text:'yo',author:'U0BOSS0002'}]}));
+    h.publish('slack-mentions.json');await h.flush();
+    assert.deepEqual(arrived.filter(a=>/^n[12]$/.test(a.id)).map(a=>a.line).sort(),['U0BOSS0002: yo','대표: hi'].sort(),'the popup shows the sender name, and the ID only when no name was collected');
   }finally{h.stop();}
 });
 
@@ -265,5 +270,17 @@ test('a failing refresh is retried after a delay without another input change, a
     assert.equal(h.opens.length,1,'the retry announced the mention');
     assert.deepEqual(nativeParse(files.get('slack-popup-events.json')).seen,['mention:history','mention:new']);
     assert.equal(nativeParse(files.get('slack-alert-watch.json')).state,'ok','recovery is recorded');
+  }finally{h.stop();}
+});
+
+// 2026-11-16: the whole mention list as a shared value was persisted and copied on every badge read and
+// pushed the sidebar past its render budget. It goes to the popover module instead.
+test('mentions reach the cards through module state, never as a shared value',async()=>{
+  const files=new Map([['slack-mentions.json','{"items":[{"id":"m1","project":"Share"}]}']]);
+  const h=await alertHarness(files);
+  try{
+    await h.refresh();
+    assert.deepEqual(h.shared.get('spaceMentions'),[{id:'m1',project:'Share'}]);
+    assert.equal([...h.shared.keys()].some(k=>/mention/i.test(k)&&k!=='spaceMentions'),false);
   }finally{h.stop();}
 });

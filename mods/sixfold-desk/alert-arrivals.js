@@ -86,7 +86,7 @@ export function alertArrivalLayer(view, cx, {cards, motion, t, right}) {
   const peek = ({space, source, arrivals: shown, anchor}) => {
     const fresh = shown.map(a => a.id);
     const body = source === 'linear' ? view.panelRetained?.peekIssues?.(space, fresh, t)
-      : slackPeek(space, t, fresh, () => openInbox({project: space}));
+      : slackPeek(space, t, fresh, () => openInbox({project: space}), shown.map(a => a.item).filter(Boolean));
     if (!body) return null;
     const key = `${projectKey(space)}-${source}`;
     return div().id(`sf-peek-${key}`).absolute().left(anchor.edge ?? anchor.badgeX).top(anchor.badgeY).size(2)

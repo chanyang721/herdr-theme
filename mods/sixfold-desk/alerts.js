@@ -6,16 +6,20 @@ import {readJsonSnapshot,subscribeJsonFile,subscribeFileChanges} from './panel-i
 import {addArrival,hasArrivalHost} from './arrival-store.js';
 import {arrivalTarget,ARRIVAL} from './arrival-model.js';
 import {createRetry,watchRecorder} from './watch-guard.js';
+import {setSpaceMentions} from './alert-mentions.js';
 
 const SHOWN = new Set(['needs-you']);  // Only what a person must decide; the rest stays in the project.
 const MARKS = { 'needs-you': '!', info: '✓', processing: '●' };
 const ALERT_LOAD_STUCK_MS = 120000;   // a refresh still loading after this no longer blocks the next one
 
+// Sender shown in the popup: the collector's author_name first, the raw author (an ID) only when there is no name.
+const senderLabel = item => String(item?.author_name ?? '').trim() || String(item?.author ?? '');
+
 function popupEvents(mentions, read) {
   const events = [];
   for (const item of mentions ?? []) {
     if (typeof item?.id === 'string' && item.id) {
-      events.push({key: `mention:${item.id}`, id: item.id, popup: read[item.id] !== item.id, project: item.project ?? '', title: item.title || '', line: String(item.text || '').split('\n')[0].slice(0,200), author: item.author || '', url: item.link || ''});
+      events.push({key: `mention:${item.id}`, id: item.id, popup: read[item.id] !== item.id, project: item.project ?? '', title: String(item.author_name ?? '').trim() || item.title || '', line: String(item.text || '').split('\n')[0].slice(0,200), author: senderLabel(item), url: item.link || '', item});
     }
   }
   return events;
@@ -48,13 +52,15 @@ async function notifyNewPopupEvents(events,allowed=()=>true) {
 }
 
 // A new mention arrives into its space card when a sidebar draws arrivals;
-// otherwise the Slack window opens as before, so it is never dropped.
+// otherwise the Slack window opens as before, so it is never dropped. The arrival carries the
+// mention itself: the peek lists it even when the tracked feed (project-alerts.json) does not,
+// as for unmapped mentions, DMs and thread replies that land in Share.
 function announceSlack(events){
   if(!events.length)return;
   if(!hasArrivalHost())return openOverlay({mod:'sixfold-slack-inbox',kind:'window',key:'slack-mentions',keep:true,width:1040,height:800,props:{window:true,review:Boolean(events[0].review)}});
   const names=(spaces()??[]).map(s=>s.name);
   // Mentions are newest first: the newest few, oldest of them first so the newest lands last.
-  for(const event of events.slice(0,ARRIVAL.visible).reverse())addArrival({key:event.key,id:event.id,source:'slack',space:arrivalTarget(event.project,names),title:event.title,line:event.author?`${event.author}: ${event.line}`:event.line,url:event.url});
+  for(const event of events.slice(0,ARRIVAL.visible).reverse())addArrival({key:event.key,id:event.id,source:'slack',space:arrivalTarget(event.project,names),title:event.title,line:event.author?`${event.author}: ${event.line}`:event.line,url:event.url,item:event.item});
 }
 
 // Tracked Slack, GitHub and pane requests, ordered by the watcher: needs-you first.
@@ -119,6 +125,7 @@ export function watchAlerts(view, cx) {
         setShared('sixfold.alertItems',items);
         setShared('sixfold.alertRead',read);
         setShared('sixfold.alertProjects',feed.projects ?? []);
+        setSpaceMentions(tagged,(spaces?.()??[]).map(s=>s.name));   // a space's mentions count on its card too (alert-inbox.js; off-sidebar ones on Share); module state, not shared
         view.alerts = legacy.items ?? [];
         previous = signature;
         cx.notify();

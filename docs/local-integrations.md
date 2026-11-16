@@ -107,10 +107,22 @@ space and the Slack inbox window show the same thing:
   link's label).
 - Each file is a chip: kind, name, size, **본문 보기** and **다운로드**. 본문 보기
   shows the collector's local copy `data/sixfold/slack-files/<id>.txt`, or
-  `본문 준비 중` while there is none. 다운로드 hands the Slack https link to the
-  default browser, and only on a press. A file id that is not plain
-  letters and digits is never read; a link that is not a Slack https address
-  shows no download button. The arrival peek shows the chips without buttons.
+  `본문 준비 중` while there is none. 다운로드 hands the file's direct address
+  `https://files.slack.com/files-pri/<team id>-<file id>/download/<name>` to the
+  default browser, only on a press; the browser's own Slack sign-in fetches it,
+  so no token is kept. The team ID is `site.local.json` `slack.team_id`; without
+  it the button reads **Slack에서 열기** and opens the file's Slack page. A file id
+  that is not plain letters and digits is never read; a link that is not a Slack
+  https address shows no button. The arrival peek shows the chips without buttons.
+- A row's body is one line in the card popover and the peek (the whole text is
+  in its tooltip and the inbox window).
+- Mentions routed to a space (`slack-mentions.json` `project`; unmapped
+  channels, DMs and thread replies go to Share) also give that space its Slack
+  badge, unread count and popover rows. A mention whose space is not on the
+  sidebar (`미연결`, a closed space) counts on Share, where its arrival lands.
+  A space with no tracked channel feed (Share) opens the mentions window from
+  전체 보기 on that space's mentions (the off-sidebar ones included); 전체
+  there shows every space.
 
 In the inbox window 본문 보기 opens a popover. In the card popover it opens a
 panel under the chip instead: the card popover is itself a popover, and a

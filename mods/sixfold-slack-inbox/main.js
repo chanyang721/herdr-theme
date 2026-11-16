@@ -1,13 +1,14 @@
 import { View, div, image } from 'gpui-kit';
 import { h_flex, v_flex, Popover } from 'gpui-base';
-import { theme, props, appHome, home, readTextFile, writeTextFile, shared, setShared, openOverlay, closeOverlay, exec } from 'herdr';
-import { readable, threadGroups, freshness, collectLine, feedNames, namesFor, alertTitle, attachments, fileTextPath, fileTextShown, fileRequestText, FILE_REQUESTS, FILE_LATE, nextFileWait } from './model.js';
+import { theme, props, appHome, home, readTextFile, writeTextFile, shared, setShared, openOverlay, closeOverlay, exec, spaces } from 'herdr';
+import { readable, threadGroups, freshness, collectLine, feedNames, namesFor, alertTitle, attachments, fileAction, fileTextPath, fileTextShown, fileRequestText, FILE_REQUESTS, FILE_LATE, nextFileWait, inSpace } from './model.js';
 
 export default class MentionInbox extends View {
   init(_props,cx) {
-    this.items=[];this.feed={};this.fileOpen=null;this.fileTexts=new Map();this.site={};this.project=null;this.onlyUnread=!props()?.review;this.expanded=new Set();this.error='';
+    this.items=[];this.feed={};this.fileOpen=null;this.fileTexts=new Map();this.site={};this.project=null;this.space=props()?.space || null;this.onlyUnread=!props()?.review;this.expanded=new Set();this.error='';
+    // A card's 전체 보기 (Share) reopens as the mentions window starting on that space's mentions.
     if(props()?.overlay && !props()?.window && !props()?.newMessages){
-      openOverlay({mod:'sixfold-slack-inbox',kind:'window',key:'slack-mentions',keep:true,width:1040,height:800,props:{window:true}});
+      openOverlay({mod:'sixfold-slack-inbox',kind:'window',key:'slack-mentions',keep:true,width:1040,height:800,props:{window:true,...(props()?.project?{space:props().project}:{})}});
       closeOverlay(props().overlay);
     }
     let busy=false,previous;
@@ -67,13 +68,14 @@ export default class MentionInbox extends View {
     cx.spawn(async c2=>{if(await load(c2||cx))return;try{await ask();}catch{/* the next look asks again */}if(cx.timer?.after)later(cx);});
   }
   // Attachment chips under a message: kind, name, size; 본문 보기 opens a popover with the text,
-  // 다운로드 hands the Slack link to the default browser. Both only on a press.
+  // 다운로드 hands the file's direct address to the default browser (Slack에서 열기, the file's Slack
+  // page, when site.local.json has no slack.team_id). Both only on a press.
   files(item,id,t){
     const list=attachments(item);
     if(!list.length)return null;
     const small=(key,label)=>div().id(key).flex_none().px(8).py(3).rounded(4).text_size(11).font_semibold().bg(t.chrome).text_color(t.accent).hover(s=>s.bg(t.hover)).cursor_pointer().child(label);
     return v_flex().id(`${id}-files`).gap(5).children(list.map((file,i)=>{
-      const key=`${item.id}|${file.id}`,open=this.fileOpen===key,text=this.fileTexts.get(file.id);
+      const key=`${item.id}|${file.id}`,open=this.fileOpen===key,text=this.fileTexts.get(file.id),act=fileAction(file,this.site?.slack?.team_id);
       const tone={PDF:t.blocked,이미지:t.ansi5,동영상:t.ansi5,표:t.ansi2,슬라이드:t.ansi3,문서:t.ansi4,압축:t.dim,코드:t.ansi6}[file.kind] || t.muted;
       const view=Popover.new(`${id}-file-pop-${i}`).anchor('top_left').open(open)
         .on_open_change((value,cx)=>this.viewFile(value?key:null,file,cx))
@@ -86,7 +88,7 @@ export default class MentionInbox extends View {
           .border(1).border_color(t.border).bg(t.popover || t.surface).text_color(t.foreground)
           .child(div().min_w(0).truncate().text_size(12).font_bold().child(`${file.name} · 본문`))
           .child(div().text_size(13).text_color(text?t.foreground:t.muted).child(this.fileTexts.has(file.id)?(text || (this.fileLate?.has(file.id)?FILE_LATE:'본문 준비 중')):'본문 읽는 중'))):view)
-        .when(Boolean(file.link),e=>e.child(small(`${id}-file-download-${i}`,'다운로드').on_click((_e,cx)=>cx.open_url(file.link))));
+        .when(Boolean(act),e=>e.child(small(`${id}-file-download-${i}`,act?.label).on_click((_e,cx)=>cx.open_url(act.url))));
     }));
   }
   render(){
@@ -103,7 +105,8 @@ export default class MentionInbox extends View {
     const slackUrl=typeof site.slack?.workspace_url==='string'?site.slack.workspace_url.replace(/\/+$/,''):null;
     const slackLink=link=>slackUrl?String(link).startsWith(`${slackUrl}/archives/`):/^https:\/\/[a-z0-9-]+\.slack\.com\/archives\//.test(link);
     const names=site.slack?.user_names || {};
-    const shown=groups.filter(g=>(!this.project || g.project===this.project) && (!this.onlyUnread || g.unread>0));
+    const sidebar=(spaces?.()??[]).map(s=>s.name),ofSpace=g=>inSpace(g.project,props()?.space,sidebar);
+    const shown=groups.filter(g=>(!this.space || ofSpace(g)) && (!this.project || g.project===this.project) && (!this.onlyUnread || g.unread>0));
     const button=(id,label,selected,action)=>div().id(id).px(12).py(7).rounded(5).text_size(13).font_semibold()
       .bg(selected?t.selected:t.surface).text_color(selected?t.accent:t.muted).hover(s=>s.bg(t.hover)).on_click(action).child(label);
     return v_flex().id('sf-mentions').size_full().p(20).gap(12).bg(t.chrome).text_color(t.foreground)
@@ -117,8 +120,9 @@ export default class MentionInbox extends View {
       .when(health.slack_freshness==='unknown',e=>e.child(div().text_size(12).text_color(t.muted).child('MCP 미러 기준 · Slack 최신성·인덱싱 지연 미확인')))
       .when(Boolean(freshness(health,Date.now())),e=>e.child(div().text_size(12).text_color(t.blocked).child(freshness(health,Date.now()))))
       .child(h_flex().gap(7).items_center()
-        .child(button('sf-filter-all-projects',`전체 ${groups.length}`,!this.project,(_e,cx)=>{this.project=null;cx.notify();}))
-        .children(projects.map(project=>button(`sf-filter-${project}`,`${project} · ${groups.filter(g=>g.project===project && g.unread>0).length} 미확인`,this.project===project,(_e,cx)=>{this.project=project;cx.notify();}).text_color(color(project)))))
+        .child(button('sf-filter-all-projects',`전체 ${groups.length}`,!this.project && !this.space,(_e,cx)=>{this.project=null;this.space=null;cx.notify();}))
+        .when(Boolean(props()?.space),e=>e.child(button('sf-filter-space',`${props().space} 멘션 · ${groups.filter(g=>ofSpace(g) && g.unread>0).length} 미확인`,Boolean(this.space) && !this.project,(_e,cx)=>{this.space=props().space;this.project=null;cx.notify();})))
+        .children(projects.map(project=>button(`sf-filter-${project}`,`${project} · ${groups.filter(g=>g.project===project && g.unread>0).length} 미확인`,this.project===project,(_e,cx)=>{this.project=project;this.space=null;cx.notify();}).text_color(color(project)))))
       .child(h_flex().gap(7).items_center()
         .child(button('sf-filter-unread','미확인만',this.onlyUnread,(_e,cx)=>{this.onlyUnread=!props()?.review;cx.notify();}))
         .child(button('sf-filter-all','확인한 스레드 포함',!this.onlyUnread,(_e,cx)=>{this.onlyUnread=false;cx.notify();}))

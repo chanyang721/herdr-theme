@@ -88,6 +88,19 @@ for (const [label, m] of [['inbox', inbox], ['desk', desk]]) {
     assert.equal(m.fileTextPath('/h', '../x'), null);
     assert.equal(m.fileTextShown('x'.repeat(m.FILE_TEXT_LIMIT + 5)).endsWith(`(앞 ${m.FILE_TEXT_LIMIT}자만 표시)`), true);
   });
+
+  // 2026-11-16: 다운로드 opened the file's Slack page. The direct address skips it (the browser's sign-in fetches it).
+  test(`${label}: 다운로드 is the direct address from the permalink and the team ID, else Slack에서 열기`, () => {
+    const [file] = m.attachments({files: [{id: 'F0TEST0001', name: '견적서 최종.pdf', permalink: 'https://example-team.slack.com/files/U0AAA0001/F0TEST0001/___________.pdf'}]});
+    assert.equal(m.downloadLink(file, 'T0TEST0001'), 'https://files.slack.com/files-pri/T0TEST0001-F0TEST0001/download/___________.pdf');
+    assert.deepEqual(m.fileAction(file, 'T0TEST0001'), {label: '다운로드', url: 'https://files.slack.com/files-pri/T0TEST0001-F0TEST0001/download/___________.pdf'});
+    assert.deepEqual(m.fileAction(file, ''), {label: 'Slack에서 열기', url: file.link}, 'no team ID');
+    assert.deepEqual(m.fileAction(file, 'x/../T0'), {label: 'Slack에서 열기', url: file.link}, 'a malformed team ID');
+    assert.equal(m.downloadLink({...file, id: 'F0OTHER001'}, 'T0TEST0001'), '', 'the permalink names another file');
+    assert.equal(m.downloadLink({...file, link: 'https://example-team.slack.com/archives/C0TEST01/p1'}, 'T0TEST0001'), '', 'not a file permalink');
+    assert.equal(m.downloadLink({...file, link: 'https://example-team.slack.com/files/U0AAA0001/F0TEST0001/x.pdf?evil=1'}, 'T0TEST0001'), '');
+    assert.equal(m.fileAction({id: 'F0TEST0002', link: ''}, 'T0TEST0001'), null, 'no Slack link, no button');
+  });
 }
 
 // --- The desk popover with stubbed native modules: rows, chips and their two buttons.
@@ -111,11 +124,14 @@ async function popover(files = new Map()) {
     shared: k => store.get(k), setShared: (k, v) => store.set(k, v), appHome: () => '/h', readTextFile: async p => files.get(p) ?? null};
   const base = new URL('../mods/sixfold-desk/', import.meta.url);
   const transform = s => s.replace(/import \{([^}]+)\} from '(?:gpui-kit|gpui-base|herdr)';/g, 'const {$1}=globalThis.__slackPop;')
-    .replace("'./alert-model.js'", JSON.stringify(new URL('alert-model.js', base).href)).replace("'./alert-slack.js'", JSON.stringify(new URL('alert-slack.js', base).href));
+    .replace("'./alert-model.js'", JSON.stringify(new URL('alert-model.js', base).href)).replace("'./alert-slack.js'", JSON.stringify(new URL('alert-slack.js', base).href))
+    .replace("'./alert-mentions.js'", JSON.stringify(new URL('alert-mentions.js', base).href));
   const asUrl = s => 'data:text/javascript;base64,' + Buffer.from(s).toString('base64');
   const filesUrl = asUrl(transform(await readFile(new URL('alert-files.js', base), 'utf8')) + `//${Math.random()}`);
   const src = transform(await readFile(new URL('alert-popover.js', base), 'utf8')).replace("'./alert-files.js'", JSON.stringify(filesUrl));
-  return {store, ...(await import(asUrl(src + `//${Math.random()}`))), files: await import(filesUrl)};
+  const pop = await import(asUrl(src + `//${Math.random()}`));
+  pop.setSpaceMentions([]);   // module state (alert-mentions.js) outlives one test
+  return {store, ...pop, files: await import(filesUrl)};
 }
 const theme = new Proxy({}, {get: (_t, k) => `#${String(k)}`});
 
@@ -133,9 +149,10 @@ test('the popover row says who wrote to whom, reads the tags and shows the attac
   assert.ok(all.includes('@이다라 @박마바 확인 부탁드려요 #beta 참고 설계 문서'));
   assert.ok(all.includes('견적서_최종.pdf') && all.includes('PDF · 240KB') && all.includes('메모.txt'));
   assert.equal(all.filter(s => s === '본문 보기').length, 2);
-  assert.equal(all.filter(s => s === '다운로드').length, 1, 'no download without a Slack link');
+  assert.equal(all.filter(s => s === 'Slack에서 열기').length, 1, 'no team ID: the Slack page; no button without a Slack link');
+  assert.ok(!all.includes('다운로드'));
 
-  // 다운로드: only on a press, the Slack link to the default browser.
+  // Slack에서 열기: only on a press, the Slack link to the default browser.
   const opened = [], cx = {notify() {}, stop_propagation() {}, open_url: u => opened.push(u), spawn: fn => (cx.task = fn(cx))};
   byId(shown, 'sf-alert-pop-slack-0-file-download-0').handlers.on_click({}, cx);
   assert.deepEqual(opened, [item.files[0].permalink]);
@@ -153,6 +170,34 @@ test('the popover row says who wrote to whom, reads the tags and shows the attac
   byId(shown, 'sf-alert-pop-slack-0-file-view-1').handlers.on_click({}, cx);
   assert.equal(pop.store.get('sixfold.alertPopover').file, null, '본문 닫기');
   assert.deepEqual(opened, [item.files[0].permalink], 'viewing opens nothing');
+
+  // With the team ID (site.local.json slack.team_id) the button is 다운로드 and opens the direct address.
+  await pop.files.refreshLocalNames({read: async () => JSON.stringify({slack: {team_id: 'T0TEST0001'}}), home: '/h'});
+  shown = pop.alertPopover({id: 's1', project: 'Alpha', trigger: element(), t: theme, hasSlack: true, hasLinear: false, onAll() {}});
+  all = texts(shown);
+  assert.equal(all.filter(s => s === '다운로드').length, 1, all.join(' | '));
+  byId(shown, 'sf-alert-pop-slack-0-file-download-0').handlers.on_click({}, cx);
+  assert.equal(opened.at(-1), 'https://files.slack.com/files-pri/T0TEST0001-F0TEST0001/download/x.pdf');
+});
+
+// 2026-11-16: a multi-line message (a daily report, a code block) drew every line and made the popup tall.
+test('a row shows its text on one line and keeps the whole text in the tooltip', async () => {
+  const pop = await popover();
+  pop.store.set('sixfold.alertItems', [{id: 'slack:C0TEST01:500.1', project: 'Alpha', author: 'U0AAA0001', text: '1. 요약\n```* 항목\n  1) 점검```\n\n2. 위험'}]);
+  pop.showPopover('Alpha', 'slack');
+  const all = texts(pop.alertPopover({id: 's4', project: 'Alpha', trigger: element(), t: theme, hasSlack: true, hasLinear: false, onAll() {}}));
+  assert.ok(all.includes('1. 요약 ```* 항목 1) 점검``` 2. 위험'), all.join(' | '));
+  assert.ok(!all.some(s => s.includes('\n') && s.includes('요약')));
+});
+
+// 2026-11-16: Share's card popover listed nothing: its mentions are not in the tracked feed.
+test('the card popover of a space lists the mentions routed to it', async () => {
+  const pop = await popover();
+  pop.store.set('sixfold.alertItems', [{id: 'slack:C0TEST01:90.1', project: 'Alpha', author: 'U0AAA0001', text: '다른 공간 글'}]);
+  pop.setSpaceMentions([{id: 'slack:D0TEST01:600.1', project: 'Share', kind: 'dm', author: 'U0BBB0002', author_name: '이다라', at: '2026-11-16T01:00:00Z', text: 'DM 멘션입니다'}]);
+  pop.showPopover('Share', 'slack');
+  const all = texts(pop.alertPopover({id: 's5', project: 'Share', trigger: element(), t: theme, hasSlack: true, hasLinear: false, onAll() {}}));
+  assert.ok(all.includes('DM 멘션입니다') && all.includes('미확인 1') && !all.includes('다른 공간 글'), all.join(' | '));
 });
 
 test('the card popover reads the machine-local names, as the inbox window does', async () => {
@@ -176,6 +221,31 @@ test('the arrival peek shows the chips without buttons', async () => {
   const all = texts(pop.slackPeek('Alpha', theme, [feed[0].id]));
   assert.ok(all.includes('김가나 → 이다라 외 1') && all.includes('견적서_최종.pdf'));
   assert.ok(!all.includes('본문 보기') && !all.includes('다운로드'));
+});
+
+// 2026-11-16: mentions routed to Share (unmapped, DMs, thread replies) are not in the tracked feed, so the
+// peek had no rows, fell back to the small in-list popup and was not seen. The arrival carries the mention.
+test('a peek lists the mention that opened it even when the tracked feed does not, and lists it first', async () => {
+  const pop = await popover();
+  pop.store.set('sixfold.alertItems', [{id: 'slack:C0TEST01:90.1', project: 'Alpha', author: 'U0AAA0001', text: '다른 공간 글'}]);
+  const reply = {id: 'slack:C0TEST04:300.1', project: 'Share', kind: 'thread', channel: 'C0TEST04', channel_name: '#gamma',
+    author: 'U0BBB0002', author_name: '이다라', at: '2026-11-16T01:00:00Z', text: '스레드 답글입니다'};
+  assert.equal(pop.slackPeek('Share', theme, [reply.id]), null, 'nothing to list without the arrived mention');
+  const all = texts(pop.slackPeek('Share', theme, [reply.id], null, [reply]));
+  assert.ok(all.includes('스레드 답글입니다') && all.includes('이다라 → #gamma'), all.join(' | '));
+  assert.ok(all.includes('미확인 1') && !all.includes('다른 공간 글'), 'only this space');
+
+  // Five newer unread items of the space do not push the arrived one out of the five rows.
+  const newer = Array.from({length: 5}, (_, i) => ({id: `slack:C0TEST01:${400 + i}.1`, project: 'Alpha', author: 'U0AAA0001', at: `2026-11-16T02:0${i}:00Z`, text: `새 글 ${i}`}));
+  const old = {id: 'slack:C0TEST01:100.9', project: 'Alpha', author: 'U0AAA0001', at: '2026-11-15T00:00:00Z', text: '방금 온 멘션'};
+  pop.store.set('sixfold.alertItems', [...newer, old]);
+  const peek = texts(pop.slackPeek('Alpha', theme, [old.id], null, [old]));
+  assert.ok(peek.includes('방금 온 멘션'), peek.join(' | '));
+  assert.equal(peek.filter(s => /^새 글 /.test(s)).length, 4, 'five rows in all, the arrived one first');
+  // The card popover keeps its own order (no arrivals).
+  pop.showPopover('Alpha', 'slack');
+  const card = texts(pop.alertPopover({id: 's3', project: 'Alpha', trigger: element(), t: theme, hasSlack: true, hasLinear: false, onAll() {}}));
+  assert.ok(!card.includes('방금 온 멘션') && card.filter(s => /^새 글 /.test(s)).length === 5);
 });
 
 test('a missing or empty text copy reads as pending; an unsafe id is never read', async () => {
