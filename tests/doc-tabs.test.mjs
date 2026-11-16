@@ -579,3 +579,31 @@ test('the sidebar button in reading mode shows the sidebar at once instead of fl
   assert.equal(h.stored['sixfold.docs.finder.v1'].Demo.sidebar, true);
   assert.equal(h.stored['sixfold.docs.finder.v1'].Demo.reading, undefined);
 });
+
+test('rereading the same document moves the viewer to the redrawn picture, or closes it when the diagram is gone', async t => {
+  const h = await bigDiagram(t);
+  h.handlers.get(`${h.id}-code-toggle`)(null, h.cx); h.handlers.get(`${h.id}-zoom`)(null, h.cx);
+  const key = h.view.bodyKey;
+  // The theme changed: the same source is drawn again into another PNG.
+  h.state.mermaid = () => ({ code: 0, stdout: JSON.stringify({ diagrams: [{ code: 'flowchart LR\nA-->B', path: 'mods/project-docs-tabs/.cache/big-light.png', width: 3072, height: 1864 }] }), stderr: '' });
+  h.state.settings = { ...h.state.settings, dark: false };
+  h.view.load(h.cx); await h.flush(); h.render();
+  assert.equal(h.view.bodyKey, key);
+  assert.equal(h.view.zoom?.media.path, 'mods/project-docs-tabs/.cache/big-light.png', 'the viewer shows the new drawing');
+  // The file was saved with another diagram in front: the open source follows its code, not its position.
+  h.state.text = () => '# 구성\n```mermaid\nflowchart TB\nX-->Y\n```\n```mermaid\nflowchart LR\nA-->B\n```\n끝';
+  h.state.mermaid = () => ({ code: 0, stdout: JSON.stringify({ diagrams: [
+    { code: 'flowchart TB\nX-->Y', path: 'mods/project-docs-tabs/.cache/new.png', width: 3072, height: 1864 },
+    { code: 'flowchart LR\nA-->B', path: 'mods/project-docs-tabs/.cache/big-light.png', width: 3072, height: 1864 }] }), stderr: '' });
+  h.view.load(h.cx); await h.flush(); h.render();
+  const [first, second] = h.view.blocks.map((b, i) => b.diagram ? i : -1).filter(i => i >= 0);
+  assert.equal(h.view.zoom?.index, second, 'the viewer follows its picture to the new position');
+  assert.ok(h.labels.includes('```mermaid\nflowchart LR\nA-->B\n```'), 'the open source is still the one that was opened');
+  assert.ok(!h.labels.includes('```mermaid\nflowchart TB\nX-->Y\n```'), 'and the new diagram in front stays closed');
+  assert.ok(first < second);
+  // The diagram was deleted from the file.
+  h.state.text = () => '# 구성\n끝';
+  h.state.mermaid = () => ({ code: 0, stdout: JSON.stringify({ diagrams: [] }), stderr: '' });
+  h.view.load(h.cx); await h.flush(); h.render();
+  assert.equal(h.view.zoom, null, 'a viewer whose picture is gone closes'); assert.equal(h.view.codeOpen.size, 0);
+});
