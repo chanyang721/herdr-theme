@@ -109,3 +109,13 @@ test('sharpness: image pixels per point over screen pixels per point', async () 
   near(sharpScale(1), 0.5, 'a 1x picture turns soft past 50% on Retina');
   near(sharpScale(2, 1, 1), 2, 'and a 1x display could go to 200%');
 });
+
+test('⌘-scroll zooms in on the gesture that scrolls toward the top, out on the other, as browsers do', () => {
+  const at = { x: 600, y: 400 }, actual = zoomTo(fitView(media, viewport), 1, media, viewport);
+  const towardTop = { delta: { x: 0, y: 40 }, local_position: at };
+  assert.ok(wheelStep(actual, { ...towardTop, modifiers: {} }, media, viewport).y > actual.y, 'without ⌘ it brings the top of the picture into view');
+  assert.ok(wheelStep(actual, { ...towardTop, modifiers: { platform: true } }, media, viewport).scale > 1, 'with ⌘ the same gesture zooms in');
+  assert.ok(wheelStep(actual, { delta: { x: 0, y: -40 }, local_position: at, modifiers: { platform: true } }, media, viewport).scale < 1, 'and the other way zooms out');
+  const wheel = { delta: { x: 0, y: 0 }, delta_lines: { x: 0, y: 1 }, local_position: at };
+  assert.ok(wheelStep(actual, { ...wheel, modifiers: { platform: true } }, media, viewport).scale > 1, 'a mouse wheel notch the same way');
+});

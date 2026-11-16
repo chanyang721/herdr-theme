@@ -98,6 +98,9 @@ export function toggleView(view, point, media, viewport) {
 // A wheel step. ⌘ or ⌥ held zooms around the pointer (Preview); ⌃ is left to the system's
 // screen zoom. Otherwise it pans; ⇧ turns a mouse wheel sideways. A wheel reporting lines
 // moves 40px a line and zooms one notch per line; a trackpad reports pixels.
+// Direction: GPUI hands over macOS's scrollingDelta, already turned for natural scrolling, and a
+// positive y scrolls a list toward its top. The gesture that brings the top of the picture
+// into view zooms in, as ⌘/Ctrl-scroll does in browsers and Figma.
 export function wheelStep(view, event, media, viewport, point = event.local_position || null) {
   const m = event.modifiers || {}, lines = event.delta_lines && (event.delta_lines.x || event.delta_lines.y);
   let dx = lines ? event.delta_lines.x * 40 : event.delta?.x || 0;
