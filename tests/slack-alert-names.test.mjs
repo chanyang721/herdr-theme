@@ -177,6 +177,16 @@ test('the popover row says who wrote to whom, reads the tags and shows the attac
   assert.equal(opened.at(-1), 'https://files.slack.com/files-pri/T0TEST0001-F0TEST0001/download/x.pdf');
 });
 
+// 2026-11-16: a multi-line message (a daily report, a code block) drew every line and made the popup tall.
+test('a row shows its text on one line and keeps the whole text in the tooltip', async () => {
+  const pop = await popover();
+  pop.store.set('sixfold.alertItems', [{id: 'slack:C0TEST01:500.1', project: 'Alpha', author: 'U0AAA0001', text: '1. 요약\n```* 항목\n  1) 점검```\n\n2. 위험'}]);
+  pop.showPopover('Alpha', 'slack');
+  const all = texts(pop.alertPopover({id: 's4', project: 'Alpha', trigger: element(), t: theme, hasSlack: true, hasLinear: false, onAll() {}}));
+  assert.ok(all.includes('1. 요약 ```* 항목 1) 점검``` 2. 위험'), all.join(' | '));
+  assert.ok(!all.some(s => s.includes('\n') && s.includes('요약')));
+});
+
 test('the card popover reads the machine-local names, as the inbox window does', async () => {
   const site = '/h/data/sixfold/site.local.json';
   const pop = await popover(new Map([[site, JSON.stringify({slack: {user_names: {U0LOC0007: '로컬가', U0LOC0008: '로컬나'}}})]]));

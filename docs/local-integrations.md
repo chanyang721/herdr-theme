@@ -114,6 +114,8 @@ space and the Slack inbox window show the same thing:
   it the button reads **Slack에서 열기** and opens the file's Slack page. A file id
   that is not plain letters and digits is never read; a link that is not a Slack
   https address shows no button. The arrival peek shows the chips without buttons.
+- A row's body is one line in the card popover and the peek (the whole text is
+  in its tooltip and the inbox window).
 
 In the inbox window 본문 보기 opens a popover. In the card popover it opens a
 panel under the chip instead: the card popover is itself a popover, and a

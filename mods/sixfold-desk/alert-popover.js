@@ -32,6 +32,9 @@ const viewFile = (key, file, cx) => {
 };
 // The address fileChips chose (the direct download, or the Slack page when there is no team ID).
 const downloadFile = (url, cx) => cx.open_url(url);
+// A row's body on one line: a long message (a multi-line report, a code block) would otherwise draw every
+// line and make the popover tall. The tooltip and 전체 보기 keep the whole text.
+export const oneLine = text => String(text ?? '').replace(/\s+/g, ' ').trim();
 // A card's alert popover is open now: this run's own state, not expired (a value left from
 // an earlier run or an hour ago does not count).
 export const alertPopoverOpen = (now = Date.now()) => {
@@ -63,7 +66,7 @@ function slackRows(project, t, fresh = new Set(), interactive = true, arrived = 
   const lit = popoverRows(items.filter(item => fresh.has(item.id)), 5, unread);
   const rows = [...lit, ...popoverRows(items.filter(item => !fresh.has(item.id)), 5 - lit.length, unread)];
   return {unread: items.filter(unread).length, rows: rows.map((item, i) => {
-    const text = readable(item.text || item.title || '', namesFor(item, feed, site), item.mentions);
+    const full = readable(item.text || item.title || '', namesFor(item, feed, site), item.mentions), text = oneLine(full);
     const files = fileChips(item, t, {id: `sf-alert-pop-slack-${i}`, open,
       onView: interactive ? viewFile : null, onDownload: interactive ? downloadFile : null});
     return v_flex().id(`sf-alert-pop-slack-${i}`).gap(2).p(8).rounded(6).bg(unread(item) ? t.selected : t.chrome)
@@ -72,7 +75,7 @@ function slackRows(project, t, fresh = new Set(), interactive = true, arrived = 
         .child(div().size(6).flex_none().rounded(3).bg(unread(item) ? t.accent : t.border))
         .child(line(alertTitle(item, feed, site), t.foreground, 12).font_bold().flex_1())
         .child(line(short(item.at), t.dim, 10).flex_none()))
-      .child(line(text, t.muted, 12).tooltip(text.slice(0, 400)))
+      .child(line(text, t.muted, 12).tooltip(full.slice(0, 400)))
       .when(Boolean(files), e => e.child(files));
   })};
 }
