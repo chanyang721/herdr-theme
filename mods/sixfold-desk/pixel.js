@@ -54,6 +54,14 @@ export function pixelLanding(id, x, y, open, color, u = 1) {
   return block.transition('opacity', { duration: LANDING.fade, delay: LANDING.hold, easing: 'ease-out' });
 }
 
+// A message received (2026-11-16, user: "송신만 나오고"): the lone 3x3 blink was
+// too small to notice next to the 15px ring the sending end opens. The receiving
+// end opens that same 1px ring in the flow colour around the blink, held for the
+// blink's moment. Still not the done mark: no foreground, no 2px, no second ring.
+export function pixelReceipt(id, x, y, open, color, u = 1) {
+  return [pixelLanding(id, x, y, open, color, u), pixelRing(`${id}-ring`, x, y, open, color, u, { hold: LANDING.hold })];
+}
+
 // The arrival ("done") mark of a task event, made to be seen (2026-11-10): a 5x5 block lights
 // on the receiving end, a 2px ring opens and stays lit, and a second ring opens
 // a moment later, so it blinks twice. `color` should contrast with the
