@@ -221,6 +221,7 @@ export default class ProjectDocuments extends View {
             const html = await this.page(doc.path, look, width);
             if (!current()) return;
             this.bodyText = text; this.diagramLook = look; this.blocks = html.blocks; this.html = html; this.imageWarning = null; this.truncated = false;
+            this.keepFigures();
           }
           this.bodyError = null; this.lastSuccess = Date.now();
           return;
@@ -233,6 +234,7 @@ export default class ProjectDocuments extends View {
           const diagrams = await this.diagrams(body, doc.path, look);
           if (!current()) return;
           this.bodyText = text; this.diagramLook = look; this.blocks = applyDiagrams(staged.blocks, diagrams); this.imageWarning = staged.unavailable;
+          this.keepFigures();
           this.watch(staged.files.map(dirname), cx);
           this.truncated = text.length > LIMIT;
         }
@@ -370,6 +372,23 @@ export default class ProjectDocuments extends View {
   }
 
   unit() { return Number(settings()?.zoom) || 1; }
+
+  // A reread of the same document (the file saved, the theme changed) rebuilds the blocks. The
+  // viewer follows its picture — the same file, or the same Mermaid source drawn again — or
+  // closes when it is gone; open sources are kept by their code, not by their position.
+  keepFigures() {
+    const z = this.zoom, blocks = this.html ? [] : this.blocks || [];
+    if (z) {
+      const index = blocks.findIndex(b => b.media && (b.media.path === z.media.path || (z.code && b.code === z.code)));
+      if (index < 0) this.zoom = null;
+      else {
+        z.index = index;
+        if (blocks[index].media !== z.media) { z.media = blocks[index].media; z.view = clampView(z.view, z.media, this.zoomViewport()); }
+      }
+    }
+    const codes = new Set(blocks.map(b => b.code).filter(Boolean));
+    for (const code of [...this.codeOpen]) if (!codes.has(code)) this.codeOpen.delete(code);
+  }
 
   // Room for a picture in the body, in layout pixels: the body reports its size scaled by the
   // app's UI zoom, so without dividing it out pictures stop short of the right edge.
@@ -666,10 +685,10 @@ export default class ProjectDocuments extends View {
       .children(this.blocks.map((block, index) => block.media
         ? tiles
           ? image(block.media.path).w(Math.min(block.media.width, Math.max(1, this.width - 40))).h(Math.min(block.media.width, Math.max(1, this.width - 40)) * block.media.height / block.media.width).flex_none()
-          : figure({ id: `docs-figure-${this.bodyKey}-${index}`, block, width: this.figureWidth(this.unit()), t, codeOpen: this.codeOpen.has(index),
+          : figure({ id: `docs-figure-${this.bodyKey}-${index}`, block, width: this.figureWidth(this.unit()), t, codeOpen: Boolean(block.code) && this.codeOpen.has(block.code),
             onOpen: (at, scale, cx) => this.openZoom(index, block, at, scale, cx),
             onPinch: (event, shown, cx) => { if (!this.zoom && event.delta > 0.005 && event.touch_phase !== 'ended') this.openZoom(index, block, fraction(event), shown * (1 + event.delta), cx); },
-            onToggleCode: cx => { if (this.codeOpen.has(index)) this.codeOpen.delete(index); else this.codeOpen.add(index); cx.notify(); } })
+            onToggleCode: cx => { if (this.codeOpen.has(block.code)) this.codeOpen.delete(block.code); else this.codeOpen.add(block.code); cx.notify(); } })
         : TextView.markdown(`docs-markdown-${this.bodyKey}-${index}`, block.text).selectable(true).scrollable(false).w_full().flex_none().text_size(14).text_color(t.foreground)
           .on_link_click((url, cx) => this.follow(doc.path, url, cx)))));
   }
