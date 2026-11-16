@@ -51,7 +51,7 @@ async function localViews({ documents = [document('a'), document('b')], selectio
       return { code: 0, stdout: JSON.stringify({ spaceId: 'Demo', documents: state.documents, warnings: [], checkedAt: 1, watchRoots: ['/docs'] }), stderr: '' };
     },
     watchFolder: root => { const pending = deferred(); watchers.set(root, pending); return pending.promise; },
-    theme: () => ({ canvas: '#101010' }), settings: () => ({ dark: true }), mermaidFences, applyDiagrams, shared: key => stored[key], setShared: (key, value) => { stored[key] = value; },
+    theme: () => ({ canvas: '#101010' }), settings: () => ({ dark: true, ...state.settings }), mermaidFences, applyDiagrams, shared: key => stored[key], setShared: (key, value) => { stored[key] = value; },
     spaces: () => [{ id: 'Demo', active: state.active, tabs: [{ id: 'tab-docs', active: true }] }],
     panes: () => [{ mod: 'project-docs-tabs', tab: 'tab-docs' }],
     stageMarkdown: (...args) => state.stage(...args), dirname: path => path.slice(0, path.lastIndexOf('/')),
@@ -548,4 +548,11 @@ test('the first frame, before the document list arrives, draws no viewer', async
   // As init leaves it until the resolver answers: no body key and no open picture.
   h.view.bodyKey = undefined; h.view.blocks = null; h.view.zoom = null;
   h.render(); assert.ok(!h.handlers.has('docs-zoom-close'));
+});
+
+test('pictures use the body width the app reports through its UI zoom', async t => {
+  const h = await bigDiagram(t);
+  assert.ok(h.labels.includes('축소 표시 26%'), 'at 100% UI zoom: 800 of 3072');
+  h.state.settings = { zoom: 0.9 }; h.render();
+  assert.ok(h.labels.includes('축소 표시 29%'), 'at 90% the same report is 840/0.9 − 40 = 893 layout pixels');
 });
