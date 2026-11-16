@@ -81,6 +81,22 @@ export function attachments(item) {
     return {id: String(f.id), name, kind, ext: (ext || kind).slice(0, 4).toUpperCase(), size: sizeLabel(f.size), link: SLACK_FILE.test(plain(f.permalink)) ? plain(f.permalink) : ''};
   });
 }
+// The direct download address of an attachment (Slack's url_private_download), built from its permalink
+// `https://<domain>.slack.com/files/<U…>/<F…>/<name>` and the workspace's team ID (site.local.json
+// `slack.team_id`): `https://files.slack.com/files-pri/<T…>-<F…>/download/<name>`. The browser's own Slack
+// sign-in fetches it, so no token is kept here. '' when either part is missing or the ids disagree.
+const TEAM_ID = /^T[A-Z0-9]{6,20}$/;
+const FILE_PERMALINK = /^https:\/\/[a-z0-9-]+\.slack\.com\/files\/[UWB][A-Z0-9]+\/(F[A-Z0-9]{6,24})\/([^/?#\s]+)$/;
+export function downloadLink(file, teamId) {
+  const team = plain(teamId), found = FILE_PERMALINK.exec(plain(file?.link));
+  return TEAM_ID.test(team) && found && found[1] === String(file?.id ?? '') ? `https://files.slack.com/files-pri/${team}-${found[1]}/download/${found[2]}` : '';
+}
+// The chip's second button: 다운로드 (the direct address) when it can be built, else Slack에서 열기 (the
+// permalink, Slack's file page); none without a Slack link.
+export function fileAction(file, teamId) {
+  const direct = downloadLink(file, teamId);
+  return direct ? {label: '다운로드', url: direct} : file?.link ? {label: 'Slack에서 열기', url: file.link} : null;
+}
 // The collector's local text copy of a file (data/sixfold/slack-files/<id>.txt); none for an unsafe id.
 export const fileTextPath = (home, id) => FILE_ID.test(String(id ?? '')) ? `${home}/data/sixfold/slack-files/${id}.txt` : null;
 export const FILE_TEXT_LIMIT = 20000;

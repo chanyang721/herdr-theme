@@ -1,7 +1,7 @@
 import { View, div, image } from 'gpui-kit';
 import { h_flex, v_flex, Popover } from 'gpui-base';
 import { theme, props, appHome, home, readTextFile, writeTextFile, shared, setShared, openOverlay, closeOverlay, exec } from 'herdr';
-import { readable, threadGroups, freshness, collectLine, feedNames, namesFor, alertTitle, attachments, fileTextPath, fileTextShown, fileRequestText, FILE_REQUESTS, FILE_LATE, nextFileWait } from './model.js';
+import { readable, threadGroups, freshness, collectLine, feedNames, namesFor, alertTitle, attachments, fileAction, fileTextPath, fileTextShown, fileRequestText, FILE_REQUESTS, FILE_LATE, nextFileWait } from './model.js';
 
 export default class MentionInbox extends View {
   init(_props,cx) {
@@ -67,13 +67,14 @@ export default class MentionInbox extends View {
     cx.spawn(async c2=>{if(await load(c2||cx))return;try{await ask();}catch{/* the next look asks again */}if(cx.timer?.after)later(cx);});
   }
   // Attachment chips under a message: kind, name, size; 본문 보기 opens a popover with the text,
-  // 다운로드 hands the Slack link to the default browser. Both only on a press.
+  // 다운로드 hands the file's direct address to the default browser (Slack에서 열기, the file's Slack
+  // page, when site.local.json has no slack.team_id). Both only on a press.
   files(item,id,t){
     const list=attachments(item);
     if(!list.length)return null;
     const small=(key,label)=>div().id(key).flex_none().px(8).py(3).rounded(4).text_size(11).font_semibold().bg(t.chrome).text_color(t.accent).hover(s=>s.bg(t.hover)).cursor_pointer().child(label);
     return v_flex().id(`${id}-files`).gap(5).children(list.map((file,i)=>{
-      const key=`${item.id}|${file.id}`,open=this.fileOpen===key,text=this.fileTexts.get(file.id);
+      const key=`${item.id}|${file.id}`,open=this.fileOpen===key,text=this.fileTexts.get(file.id),act=fileAction(file,this.site?.slack?.team_id);
       const tone={PDF:t.blocked,이미지:t.ansi5,동영상:t.ansi5,표:t.ansi2,슬라이드:t.ansi3,문서:t.ansi4,압축:t.dim,코드:t.ansi6}[file.kind] || t.muted;
       const view=Popover.new(`${id}-file-pop-${i}`).anchor('top_left').open(open)
         .on_open_change((value,cx)=>this.viewFile(value?key:null,file,cx))
@@ -86,7 +87,7 @@ export default class MentionInbox extends View {
           .border(1).border_color(t.border).bg(t.popover || t.surface).text_color(t.foreground)
           .child(div().min_w(0).truncate().text_size(12).font_bold().child(`${file.name} · 본문`))
           .child(div().text_size(13).text_color(text?t.foreground:t.muted).child(this.fileTexts.has(file.id)?(text || (this.fileLate?.has(file.id)?FILE_LATE:'본문 준비 중')):'본문 읽는 중'))):view)
-        .when(Boolean(file.link),e=>e.child(small(`${id}-file-download-${i}`,'다운로드').on_click((_e,cx)=>cx.open_url(file.link))));
+        .when(Boolean(act),e=>e.child(small(`${id}-file-download-${i}`,act?.label).on_click((_e,cx)=>cx.open_url(act.url))));
     }));
   }
   render(){

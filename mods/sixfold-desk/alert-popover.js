@@ -30,7 +30,8 @@ const viewFile = (key, file, cx) => {
     if (got.state === 'pending' && isOpen()) followFileText(file.id, cx, isOpen, redraw);   // 본문 준비 중: ask the collector
   });
 };
-const downloadFile = (file, cx) => cx.open_url(file.link);
+// The address fileChips chose (the direct download, or the Slack page when there is no team ID).
+const downloadFile = (url, cx) => cx.open_url(url);
 // A card's alert popover is open now: this run's own state, not expired (a value left from
 // an earlier run or an hour ago does not count).
 export const alertPopoverOpen = (now = Date.now()) => {

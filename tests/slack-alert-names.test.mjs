@@ -88,6 +88,19 @@ for (const [label, m] of [['inbox', inbox], ['desk', desk]]) {
     assert.equal(m.fileTextPath('/h', '../x'), null);
     assert.equal(m.fileTextShown('x'.repeat(m.FILE_TEXT_LIMIT + 5)).endsWith(`(앞 ${m.FILE_TEXT_LIMIT}자만 표시)`), true);
   });
+
+  // 2026-11-16: 다운로드 opened the file's Slack page. The direct address skips it (the browser's sign-in fetches it).
+  test(`${label}: 다운로드 is the direct address from the permalink and the team ID, else Slack에서 열기`, () => {
+    const [file] = m.attachments({files: [{id: 'F0TEST0001', name: '견적서 최종.pdf', permalink: 'https://example-team.slack.com/files/U0AAA0001/F0TEST0001/___________.pdf'}]});
+    assert.equal(m.downloadLink(file, 'T0TEST0001'), 'https://files.slack.com/files-pri/T0TEST0001-F0TEST0001/download/___________.pdf');
+    assert.deepEqual(m.fileAction(file, 'T0TEST0001'), {label: '다운로드', url: 'https://files.slack.com/files-pri/T0TEST0001-F0TEST0001/download/___________.pdf'});
+    assert.deepEqual(m.fileAction(file, ''), {label: 'Slack에서 열기', url: file.link}, 'no team ID');
+    assert.deepEqual(m.fileAction(file, 'x/../T0'), {label: 'Slack에서 열기', url: file.link}, 'a malformed team ID');
+    assert.equal(m.downloadLink({...file, id: 'F0OTHER001'}, 'T0TEST0001'), '', 'the permalink names another file');
+    assert.equal(m.downloadLink({...file, link: 'https://example-team.slack.com/archives/C0TEST01/p1'}, 'T0TEST0001'), '', 'not a file permalink');
+    assert.equal(m.downloadLink({...file, link: 'https://example-team.slack.com/files/U0AAA0001/F0TEST0001/x.pdf?evil=1'}, 'T0TEST0001'), '');
+    assert.equal(m.fileAction({id: 'F0TEST0002', link: ''}, 'T0TEST0001'), null, 'no Slack link, no button');
+  });
 }
 
 // --- The desk popover with stubbed native modules: rows, chips and their two buttons.
@@ -133,9 +146,10 @@ test('the popover row says who wrote to whom, reads the tags and shows the attac
   assert.ok(all.includes('@이다라 @박마바 확인 부탁드려요 #beta 참고 설계 문서'));
   assert.ok(all.includes('견적서_최종.pdf') && all.includes('PDF · 240KB') && all.includes('메모.txt'));
   assert.equal(all.filter(s => s === '본문 보기').length, 2);
-  assert.equal(all.filter(s => s === '다운로드').length, 1, 'no download without a Slack link');
+  assert.equal(all.filter(s => s === 'Slack에서 열기').length, 1, 'no team ID: the Slack page; no button without a Slack link');
+  assert.ok(!all.includes('다운로드'));
 
-  // 다운로드: only on a press, the Slack link to the default browser.
+  // Slack에서 열기: only on a press, the Slack link to the default browser.
   const opened = [], cx = {notify() {}, stop_propagation() {}, open_url: u => opened.push(u), spawn: fn => (cx.task = fn(cx))};
   byId(shown, 'sf-alert-pop-slack-0-file-download-0').handlers.on_click({}, cx);
   assert.deepEqual(opened, [item.files[0].permalink]);
@@ -153,6 +167,14 @@ test('the popover row says who wrote to whom, reads the tags and shows the attac
   byId(shown, 'sf-alert-pop-slack-0-file-view-1').handlers.on_click({}, cx);
   assert.equal(pop.store.get('sixfold.alertPopover').file, null, '본문 닫기');
   assert.deepEqual(opened, [item.files[0].permalink], 'viewing opens nothing');
+
+  // With the team ID (site.local.json slack.team_id) the button is 다운로드 and opens the direct address.
+  await pop.files.refreshLocalNames({read: async () => JSON.stringify({slack: {team_id: 'T0TEST0001'}}), home: '/h'});
+  shown = pop.alertPopover({id: 's1', project: 'Alpha', trigger: element(), t: theme, hasSlack: true, hasLinear: false, onAll() {}});
+  all = texts(shown);
+  assert.equal(all.filter(s => s === '다운로드').length, 1, all.join(' | '));
+  byId(shown, 'sf-alert-pop-slack-0-file-download-0').handlers.on_click({}, cx);
+  assert.equal(opened.at(-1), 'https://files.slack.com/files-pri/T0TEST0001-F0TEST0001/download/x.pdf');
 });
 
 test('the card popover reads the machine-local names, as the inbox window does', async () => {
