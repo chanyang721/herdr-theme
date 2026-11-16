@@ -512,6 +512,37 @@ test('choosing another document closes the viewer and the source panel', async t
   assert.equal(h.view.zoom, null); assert.equal(h.view.codeOpen.size, 0);
 });
 
+test('reading mode folds the sidebar and browser, a search still shows results, and both choices persist per space', async t => {
+  const h = await localViews({ documents: catalogDocs() }); t.after(() => h.view.close());
+  h.view.kinds = KINDS; h.view.paneWidth = 1400; h.render();
+  assert.ok(h.handlers.has('docs-loc-docs') && h.handlers.has('docs-col-docs-c0-회신안'));
+  h.handlers.get('docs-reading')(null, h.cx); h.render();
+  assert.ok(!h.handlers.has('docs-loc-docs') && !h.handlers.has('docs-col-docs-c0-회신안'), 'reading mode leaves only the document');
+  assert.ok(h.handlers.has('docs-sidebar-toggle') && h.handlers.has('docs-path-0'), 'the toolbar and path bar stay to unfold them');
+  assert.equal(h.stored['sixfold.docs.finder.v1'].Demo.reading, true);
+  h.state.input.text = '회신'; h.state.input.events.change({}, h.cx); h.render();
+  assert.ok(h.handlers.has('docs-search-row-hit/new'), 'search results show while reading');
+  h.state.input.text = ''; h.state.input.events.change({}, h.cx);
+  h.view.paneKey(keyOf('r', { platform: true, shift: true }), { ...h.cx, stop_propagation() {} }); h.render();
+  assert.equal(h.view.reading, false); assert.ok(h.handlers.has('docs-loc-docs'));
+  h.view.paneKey(keyOf('s', { platform: true, control: true }), { ...h.cx, stop_propagation() {} }); h.render();
+  assert.ok(!h.handlers.has('docs-loc-docs'), '⌃⌘S hides the sidebar');
+  assert.equal(h.stored['sixfold.docs.finder.v1'].Demo.sidebar, false);
+  const again = await localViews({ documents: catalogDocs() }); t.after(() => again.view.close());
+  Object.assign(again.stored, h.stored); again.view.init({}, again.cx); again.view.paneWidth = 1400; again.view.kinds = KINDS; again.render();
+  assert.equal(again.view.sidebar, false, 'a hidden sidebar stays hidden on a wide pane after a reload');
+  assert.ok(!again.handlers.has('docs-loc-docs'));
+});
+
+test('the column browser is only as wide as the columns it shows', async t => {
+  const h = await localViews({ documents: catalogDocs() }); t.after(() => h.view.close());
+  h.view.kinds = KINDS;
+  assert.equal(h.view.browserWidth(h.view.locs()), 201, 'one column at the top level');
+  h.view.openPath('회신안', true, h.cx);
+  assert.equal(h.view.browserWidth(h.view.locs()), 401, 'two columns once a folder opens');
+  h.view.setView('list', h.cx); assert.equal(h.view.browserWidth(h.view.locs()), 480);
+});
+
 test('the first frame, before the document list arrives, draws no viewer', async t => {
   const h = await localViews({ documents: [] }); t.after(() => h.view.close());
   // As init leaves it until the resolver answers: no body key and no open picture.
