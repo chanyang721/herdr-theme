@@ -5,7 +5,7 @@ import {agentGroups, panelEventStates, panelSpaces, panelSpacePartners, PANEL_TI
 import {SESSION_STATES, sessionStatusGlyph} from './session-status.js';
 import {groupColors, paletteMode} from './collab-flow.js';
 import {rowDetailParts} from './task-row-details.js';
-import {PACKET_PIXELS, pixelUnitFor, snap, centred, pixelBlock, pixelRoute as drawPixelRoute, pixelRing, pixelArrival, pixelLanding, ARRIVAL} from './pixel.js';
+import {PACKET_PIXELS, pixelUnitFor, snap, centred, pixelBlock, pixelRoute as drawPixelRoute, pixelRing, pixelArrival, pixelReceipt, ARRIVAL} from './pixel.js';
 import {PANEL_FLOW, panelFlowAnchor, panelMessageAnchors, messageFlowGeometry, computerFlow} from './panel-host.js';
 
 const MARK={working:'●',idle:'○',blocked:'!',done:'✓'};
@@ -345,9 +345,9 @@ function packetMarks(base,id,packet,{startX,endX,lane,from,to},color,done=color)
   }
   base.child(pixelRing(`panel-sender-${id}`,startX,from,packet.phase!=='start',color,u));
   const landed=['ping','fade'].includes(packet.phase);
-  // A message lands with one small blink in its own colour; only a task event
-  // gets the done mark (2px foreground ring, second blink, core block).
-  if(packet.kind==='message')base.child(pixelLanding(`panel-receiver-${id}`,endX,to,landed,color,u));
+  // A message lands with the departure's ring and one small blink in its own
+  // colour; only a task event gets the done mark (2px foreground ring, second blink, core block).
+  if(packet.kind==='message')base.children(pixelReceipt(`panel-receiver-${id}`,endX,to,landed,color,u));
   else base.children(pixelArrival(`panel-receiver-${id}`,endX,to,landed,done,u));
 }
 
