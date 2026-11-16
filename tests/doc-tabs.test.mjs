@@ -607,3 +607,14 @@ test('rereading the same document moves the viewer to the redrawn picture, or cl
   h.view.load(h.cx); await h.flush(); h.render();
   assert.equal(h.view.zoom, null, 'a viewer whose picture is gone closes'); assert.equal(h.view.codeOpen.size, 0);
 });
+
+test('the soft mark counts the picture density and the app UI zoom, not a fixed 100%', async t => {
+  const h = await bigDiagram(t, {}); h.state.settings = { ...h.state.settings, zoom: 0.9 };
+  h.handlers.get(`${h.id}-zoom`)(null, h.cx); h.view.zoomMeasured({ width: 1200, height: 800 }, h.cx);
+  const shown = scale => { h.view.zoom.view = { ...h.view.zoom.view, scale }; h.render(); return h.labels.find(l => /^\d+%/.test(l)); };
+  assert.equal(shown(1.05), '105%', 'a 2x diagram under UI zoom 0.9 still has a pixel for every screen pixel at 105%');
+  assert.equal(shown(1.2), '120% · 흐림');
+  h.view.zoom.code = null; // a plain picture carries one pixel per point
+  assert.equal(shown(0.6), '60% · 흐림');
+  assert.equal(shown(0.5), '50%');
+});

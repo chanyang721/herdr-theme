@@ -100,3 +100,12 @@ test('viewer bindings name one action per command, all under the viewer context'
   assert.ok(list.every(b => b.context === VIEWER_CONTEXT));
   assert.deepEqual([...new Set(list.map(b => b.action))].sort(), ['actual', 'fit', 'in', 'out'].map(viewerAction).sort());
 });
+
+test('sharpness: image pixels per point over screen pixels per point', async () => {
+  const { sharpScale, ASSUMED_DPR } = await import('../mods/project-docs-tabs/zoom.js');
+  assert.equal(ASSUMED_DPR, 2);
+  near(sharpScale(2), 1, 'a 2x diagram on Retina is sharp up to 100%');
+  near(sharpScale(2, 0.9), 2 / 1.8, 'the app UI zoom enlarges it on screen too');
+  near(sharpScale(1), 0.5, 'a 1x picture turns soft past 50% on Retina');
+  near(sharpScale(2, 1, 1), 2, 'and a 1x display could go to 200%');
+});
