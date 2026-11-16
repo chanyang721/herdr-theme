@@ -118,8 +118,11 @@ space and the Slack inbox window show the same thing:
   in its tooltip and the inbox window).
 - Mentions routed to a space (`slack-mentions.json` `project`; unmapped
   channels, DMs and thread replies go to Share) also give that space its Slack
-  badge, unread count and popover rows. A space with no tracked channel feed
-  (Share) opens its mentions from 전체 보기.
+  badge, unread count and popover rows. A mention whose space is not on the
+  sidebar (`미연결`, a closed space) counts on Share, where its arrival lands.
+  A space with no tracked channel feed (Share) opens the mentions window from
+  전체 보기 on that space's mentions (the off-sidebar ones included); 전체
+  there shows every space.
 
 In the inbox window 본문 보기 opens a popover. In the card popover it opens a
 panel under the chip instead: the card popover is itself a popover, and a

@@ -145,6 +145,14 @@ export function threadGroups(items,read={}) {
 }
 // Mirror lag and the Slack app's own unread badge (local app status, no message content).
 // The mirror's newest message stops moving when the mirror stalls; say so instead of "0 new".
+// The mentions window opened from a space card's 전체 보기 starts on that space's mentions, by the
+// cards' rule (sixfold-desk/arrival-model.js arrivalTarget; mods cannot import each other): a thread
+// whose space is not on the sidebar ('미연결', a closed space) belongs to Share. No names: its own space.
+const spaceKey = name => String(name ?? '').toLowerCase().replace(/[\s_-]/g, '');
+export function inSpace(project, space, names = [], fallback = 'Share') {
+  const shown = new Set((names ?? []).map(spaceKey)), key = spaceKey(project);
+  return (shown.size && !shown.has(key) ? spaceKey(fallback) : key) === spaceKey(space);
+}
 export function freshness(health={},now=Date.now(),staleHours=6) {
   const parts=[];
   const latest=Date.parse(health.mirror_latest_at || '');
