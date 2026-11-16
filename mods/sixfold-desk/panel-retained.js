@@ -245,8 +245,9 @@ export function createRetainedPanel(cx,{macTitlebar=false,onClassic=null,onDispo
     const projectAt=project&&(project.state===undefined||project.state==='ok')?Date.parse(project.at||''):NaN;
     const catalogAt=Date.parse(space.issue_catalog?.updated_at||space.issue_catalog?.cache?.at||'');
     const cacheFirst=Number.isFinite(projectAt)&&(!Number.isFinite(catalogAt)||projectAt>catalogAt);
-    // A ledger catalog's statuses are Linear's own, as current as anything here: the project cache is not mixed in.
-    const statusOf=fromLedger(space)?key=>rowIndex.map.get(key)||null
+    // A ledger catalog's statuses are Linear's own, as current as anything here: they win over the project
+    // cache, which only names a row the catalog sent without a status.
+    const statusOf=fromLedger(space)?key=>rowIndex.map.get(key)||memo.index.get(key)||null
       :project||rowIndex.map.size?key=>(cacheFirst?memo.index.get(key)||rowIndex.map.get(key):rowIndex.map.get(key)||memo.index.get(key))||null:null;
     const rows=data.rows||[];
     const lookup=statusOf||(()=>null);

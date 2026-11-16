@@ -684,3 +684,40 @@ test('a status name typed differently by two teams classifies each issue by its 
     check('timeline newer');
   }finally{r.controller.dispose();delete globalThis.__retainedWrites;delete globalThis.__retainedRead;}
 });
+
+// The harness Linear ledger catalog, through the app's own path (cleanPanelFeed -> apply -> spaceMap ->
+// withTimeline -> issueExtra): its source and Linear's row statuses survive cleaning, a newer timeline
+// and a newer project cache never replace it, and every row keeps its status.
+test('a ledger catalog survives feed cleaning and is not replaced by a newer timeline or project cache',async()=>{
+  const now=Date.now(),file='/home/data/sixfold/week-timeline.json';let answer=null,timeline=null;globalThis.__retainedWrites=[];
+  globalThis.__retainedRead=path=>path===file?timeline:path.includes('/linear-cache/project-')?answer:null;
+  const r=await runtime(),tasks=[];
+  try{
+    r.controller.cx.spawn=fn=>{tasks.push(fn());};const settle=async()=>{while(tasks.length)await tasks.shift();};
+    const raw=makePanelFixture({tool:'linear'}),sp=raw.spaces[0];sp.name='Demo';
+    const rows=[{key:'DEMO-1',title:'One',state:'working',status:'In Progress',status_type:'started'},
+      {key:'DEMO-2',title:'Two',state:'done',status:'Done',status_type:'completed',closed:'completed'},
+      {key:'DEMO-3',title:'Three',state:'waiting',status:'Todo',status_type:'bogus',closed:'nope'}];
+    sp.issue_catalog={source:'linear-ledger',all:rows,week:[rows[0]],milestone:[],updated_at:new Date(now-600000).toISOString()};
+    const clean=cleanPanelFeed(raw);
+    const row=clean.spaces[0].issue_catalog.all;
+    assert.equal(clean.spaces[0].issue_catalog.source,'linear-ledger');
+    assert.deepEqual([row[1].status,row[1].status_type,row[1].closed],['Done','completed','completed']);
+    assert.deepEqual([row[2].status,row[2].status_type,row[2].closed],['Todo',undefined,undefined],'unknown type and closing are dropped');
+    const other=makePanelFixture({tool:'linear'});other.spaces[0].issue_catalog={source:'elsewhere',all:[],week:[],milestone:[]};
+    assert.equal(cleanPanelFeed(other).spaces[0].issue_catalog.source,undefined,'only the ledger names a source');
+    r.controller.apply(clean,'ready');r.flush();
+    timeline=JSON.stringify({v:2,updated:new Date(now).toISOString(),week:{start:'2026-11-09',end:'2026-11-15'},
+      projects:[{workspace:'Demo',milestones:[],issues:[{key:'DEMO-9',title:'Mine',state:'todo',status:'Todo'}]}]});
+    answer=JSON.stringify({schema:1,state:'ok',space:'Demo',at:new Date(now).toISOString(),milestones:[],
+      statuses:{Team:[{name:'Backlog',type:'backlog'}]},issues:[{key:'DEMO-1',status:'Backlog',team:'Team'}]});
+    r.controller.issuePopover(r.controller.spaceMap.get(sp.id),element(),r.native.theme()).calls.find(c=>c[0]==='on_open_change')[1](true,{});await settle();
+    const card=r.controller.withTimeline(r.controller.spaceMap.get(sp.id));
+    assert.equal(card.issue_catalog.from_timeline,undefined,'the newer timeline does not take over');
+    assert.deepEqual(card.issue_catalog.all.map(i=>i.key),['DEMO-1','DEMO-2','DEMO-3']);
+    const extra=r.controller.issueExtra(card,{pending:new Map(),scope:'all'},{rows:card.issue_catalog.all});
+    assert.deepEqual(extra.statusOf('DEMO-1'),{name:'In Progress',type:'started',color:''},'the ledger status, not the newer cache');
+    assert.equal(extra.statusOf('DEMO-2').type,'completed');
+    assert.equal(extra.statusOf('DEMO-3').name,'Todo');
+  }finally{r.controller.dispose();delete globalThis.__retainedWrites;delete globalThis.__retainedRead;}
+});

@@ -138,7 +138,18 @@ provided HTTP(S) URL without embedded credentials is accepted; no URL is guessed
 from an issue key. Without it the footer states that the link is unavailable.
 
 Optional issue fields `week`, `pinned` and `milestone_id` preserve the producer's
-selection. Milestone metadata supplies its name, optional `YYYY-MM-DD` due date
+selection. Optional `status` (the service's status name, up to 80 characters),
+`status_type` (`triage`, `backlog`, `unstarted`, `started`, `completed`,
+`canceled` or `duplicate`) and `closed` (`completed`, `canceled` or `duplicate`)
+carry the service's own status of a row; other values are dropped.
+
+`issue_catalog.source: "linear-ledger"` marks a catalog the harness made from its
+local Linear ledger, the one copy both the issue window and the week band are
+made from. Any other value is dropped. Such a catalog is shown as it is: a newer
+`week-timeline.json` does not replace it, its milestones are its own, and its
+row statuses win over the Linear project cache (which only fills a row sent
+without a status). A catalog without `source` keeps the newer-copy-wins rule.
+ Milestone metadata supplies its name, optional `YYYY-MM-DD` due date
 and a numeric progress percentage from 0 to 100. Missing dates or progress are
 left blank. Per-scope cache metadata distinguishes stored, stale and uncollected
 lists; it does not claim the external service is currently connected.
