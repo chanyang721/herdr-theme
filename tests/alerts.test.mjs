@@ -183,6 +183,7 @@ test('with a sidebar drawing arrivals a new mention folds into its space card in
     h.publish('slack-mentions.json');await h.flush();
     assert.equal(h.opens.length,0,'no window, no focus change');
     assert.deepEqual(arrived.map(a=>[a.key,a.id,a.source,a.space,a.line]),[['mention:m1','m1','slack','Share','Kim: hello']]);
+    assert.deepEqual(arrived[0].item,{id:'m1',project:'Alpha',text:'hello',author:'Kim'},'the arrival carries the mention, so the peek can list it');
     host.value=false;
     files.set('slack-mentions.json',JSON.stringify({items:[{id:'history'},{id:'m1'},{id:'m2',project:'Alpha'}]}));
     h.publish('slack-mentions.json');await h.flush();

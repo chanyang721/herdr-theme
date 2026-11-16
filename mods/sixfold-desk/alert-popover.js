@@ -48,12 +48,20 @@ const line = (value, color, size = 12) => div().min_w(0).truncate().text_size(si
 
 // A Slack row: "보낸 사람 → 받는 사람" and the time, the text with its tags spelled as names, and
 // its attachments. `interactive` is off for the arrival peek (read-only, takes no focus).
-function slackRows(project, t, fresh = new Set(), interactive = true) {
+// `arrived`: the mentions that just arrived for this space (the peek). Those the tracked feed does
+// not list (unmapped mentions, DMs, thread replies routed to Share) are shown too, and the
+// arrived ones come first, so a peek always shows what opened it.
+function slackRows(project, t, fresh = new Set(), interactive = true, arrived = []) {
   const read = shared('sixfold.alertRead') ?? {};
   const unread = item => read[item.id] !== alertVersion(item);
-  const all = shared('sixfold.alertItems') ?? [], feed = feedNames(all), site = localNames(), items = scopedAlerts(all, {project});
+  const all = shared('sixfold.alertItems') ?? [], scoped = scopedAlerts(all, {project});
+  const known = new Set(scoped.map(item => item.id));
+  const extra = (arrived ?? []).filter(item => item && typeof item.id === 'string' && !known.has(item.id) && (known.add(item.id), true));
+  const items = [...extra, ...scoped], feed = feedNames([...all, ...extra]), site = localNames();
   const open = interactive ? popoverState()?.file ?? null : null;
-  return {unread: items.filter(unread).length, rows: popoverRows(items, 5, unread).map((item, i) => {
+  const lit = popoverRows(items.filter(item => fresh.has(item.id)), 5, unread);
+  const rows = [...lit, ...popoverRows(items.filter(item => !fresh.has(item.id)), 5 - lit.length, unread)];
+  return {unread: items.filter(unread).length, rows: rows.map((item, i) => {
     const text = readable(item.text || item.title || '', namesFor(item, feed, site), item.mentions);
     const files = fileChips(item, t, {id: `sf-alert-pop-slack-${i}`, open,
       onView: interactive ? viewFile : null, onDownload: interactive ? downloadFile : null});
@@ -124,8 +132,8 @@ export function alertPopover({id, project, trigger, t, hasSlack, hasLinear, onAl
 
 // A peek: the Slack alerts of a space opened by new alerts beside its card (the arrival layer
 // draws it in a Popup, which takes no focus); the ones just arrived are lit. Read-only.
-export function slackPeek(project, t, fresh = [], onAll = null) {
-  const data = slackRows(project, t, new Set(fresh), false);
+export function slackPeek(project, t, fresh = [], onAll = null, arrived = []) {
+  const data = slackRows(project, t, new Set(fresh), false, arrived);
   if (!data.rows.length) return null;
   return v_flex().id(`sf-alert-peek-${projectKey(project)}`).w(400).gap(8).p(12).rounded(10).border(1).border_color(t.ansi5 || t.accent)
     .bg(t.popover || t.surface).text_color(t.foreground)

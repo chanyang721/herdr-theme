@@ -178,6 +178,31 @@ test('the arrival peek shows the chips without buttons', async () => {
   assert.ok(!all.includes('본문 보기') && !all.includes('다운로드'));
 });
 
+// 2026-11-16: mentions routed to Share (unmapped, DMs, thread replies) are not in the tracked feed, so the
+// peek had no rows, fell back to the small in-list popup and was not seen. The arrival carries the mention.
+test('a peek lists the mention that opened it even when the tracked feed does not, and lists it first', async () => {
+  const pop = await popover();
+  pop.store.set('sixfold.alertItems', [{id: 'slack:C0TEST01:90.1', project: 'Alpha', author: 'U0AAA0001', text: '다른 공간 글'}]);
+  const reply = {id: 'slack:C0TEST04:300.1', project: 'Share', kind: 'thread', channel: 'C0TEST04', channel_name: '#gamma',
+    author: 'U0BBB0002', author_name: '이다라', at: '2026-11-16T01:00:00Z', text: '스레드 답글입니다'};
+  assert.equal(pop.slackPeek('Share', theme, [reply.id]), null, 'nothing to list without the arrived mention');
+  const all = texts(pop.slackPeek('Share', theme, [reply.id], null, [reply]));
+  assert.ok(all.includes('스레드 답글입니다') && all.includes('이다라 → #gamma'), all.join(' | '));
+  assert.ok(all.includes('미확인 1') && !all.includes('다른 공간 글'), 'only this space');
+
+  // Five newer unread items of the space do not push the arrived one out of the five rows.
+  const newer = Array.from({length: 5}, (_, i) => ({id: `slack:C0TEST01:${400 + i}.1`, project: 'Alpha', author: 'U0AAA0001', at: `2026-11-16T02:0${i}:00Z`, text: `새 글 ${i}`}));
+  const old = {id: 'slack:C0TEST01:100.9', project: 'Alpha', author: 'U0AAA0001', at: '2026-11-15T00:00:00Z', text: '방금 온 멘션'};
+  pop.store.set('sixfold.alertItems', [...newer, old]);
+  const peek = texts(pop.slackPeek('Alpha', theme, [old.id], null, [old]));
+  assert.ok(peek.includes('방금 온 멘션'), peek.join(' | '));
+  assert.equal(peek.filter(s => /^새 글 /.test(s)).length, 4, 'five rows in all, the arrived one first');
+  // The card popover keeps its own order (no arrivals).
+  pop.showPopover('Alpha', 'slack');
+  const card = texts(pop.alertPopover({id: 's3', project: 'Alpha', trigger: element(), t: theme, hasSlack: true, hasLinear: false, onAll() {}}));
+  assert.ok(!card.includes('방금 온 멘션') && card.filter(s => /^새 글 /.test(s)).length === 5);
+});
+
 test('a missing or empty text copy reads as pending; an unsafe id is never read', async () => {
   const reads = [];
   const pop = await popover();
