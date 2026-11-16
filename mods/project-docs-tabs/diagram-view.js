@@ -2,7 +2,7 @@
 // description: handlers come from the view, geometry from zoom.js; theme tokens only.
 import { div, image } from 'gpui-kit';
 import { v_flex, h_flex, TextView } from 'gpui-base';
-import { percent, SHARP_SCALE } from './zoom.js';
+import { percent, SHARP_SCALE, VIEWER_CONTEXT, VIEWER_KEYS, viewerAction } from './zoom.js';
 
 // Where on an element an event landed, as fractions of its size (unit-free, so the app's UI
 // zoom does not matter). Falls back to the centre.
@@ -60,6 +60,8 @@ export function viewer({ zoom, t, title, focus, unit = 1, onKey, onCommand, onCl
   const soft = view && view.scale > SHARP_SCALE + 0.005;
   const root = v_flex().id('docs-zoom').absolute().inset_0().bg(t.canvas).text_color(t.foreground)
     .when(Boolean(focus), el => el.track_focus(focus))
+    .key_context(VIEWER_CONTEXT)
+    .map(el => [...new Set(VIEWER_KEYS.map(k => k.command))].reduce((el, name) => el.on_action(viewerAction(name), (_e, cx) => onCommand(name, cx)), el))
     .on_key_down((event, cx) => onKey(event, cx))
     .on_mouse_down('left', stop).on_mouse_up('left', stop).on_scroll_wheel(stop)
     .child(h_flex().id('docs-zoom-bar').h(36).flex_none().px(8).gap(2).items_center().bg(t.chrome).border_b(1).border_color(t.border)

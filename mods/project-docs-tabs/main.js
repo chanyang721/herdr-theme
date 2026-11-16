@@ -7,7 +7,7 @@ import { mermaidFences, applyDiagrams } from './mermaid.js';
 import { locations, locate, listTree, searchTree, kindCounts, foldersOf, describeWarnings } from './tree.js';
 import { columnView, columnsFor, visibleColumns } from './column-view.js';
 import { figure, viewer, fraction } from './diagram-view.js';
-import { openView, viewAt, clampScale, clampView, toggleView, wheelStep, pinchStep, keyCommand, command, panBy } from './zoom.js';
+import { openView, viewAt, clampScale, clampView, toggleView, wheelStep, pinchStep, keyCommand, command, panBy, viewerBindings } from './zoom.js';
 import { listView, breadcrumb, icon } from './finder.js';
 
 const LIMIT = 400000;
@@ -77,6 +77,7 @@ function run() {
 }`;
 // Same steps as native render_html, so a pane resize re-renders only at 40px steps; rounding
 // down keeps the picture at 1:1 instead of shrinking it a little.
+let viewerKeysBound = false;
 export const htmlWidth = width => Math.min(2000, Math.max(320, Math.floor(width / 40) * 40));
 export default class ProjectDocuments extends View {
   init(_props, cx) {
@@ -98,6 +99,10 @@ export default class ProjectDocuments extends View {
     this.reading = saved.reading === true; this.paneHeight = 800; this.codeOpen = new Set(); this.zoom = null;
     // Focus is retained, so the handles are made here: the pane's (⌃⌘S, ⇧⌘R) and the viewer's.
     this.paneFocus = cx.focus_handle?.() || null; this.zoomFocus = cx.focus_handle?.() || null;
+    // The keymap is the app's, so the viewer's ⌘ keys are bound once per load of this module.
+    if (!viewerKeysBound && cx.bind_keys) {
+      try { cx.bind_keys(viewerBindings()); viewerKeysBound = true; } catch (error) { this.actionError = `확대 단축키 등록 실패 · ${String(error.message || error)}`; }
+    }
     this.expanded = new Set(); this.sort = { key: 'date', dir: -1 }; this.query = '';
     // Retained input state is made here, never while rendering.
     this.search = InputState?.new ? InputState.new({ placeholder: '이름·종류 검색' }) : null;

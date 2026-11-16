@@ -127,6 +127,17 @@ export function keyCommand(event) {
   return null;
 }
 
+// keys.json binds ⌘= ⌘− ⌘0 ⌘9 to the app's own zoom and to tab 9, and the app's bindings run
+// before any on_key_down. Bindings under the viewer's own key context are deeper in the tree,
+// so they win while the viewer holds the keyboard and leave those keys alone everywhere else.
+export const VIEWER_CONTEXT = 'DocsZoomViewer';
+export const VIEWER_KEYS = [
+  { keystroke: 'cmd-=', command: 'in' }, { keystroke: 'cmd-+', command: 'in' }, { keystroke: 'cmd-shift-=', command: 'in' },
+  { keystroke: 'cmd--', command: 'out' }, { keystroke: 'cmd-0', command: 'actual' }, { keystroke: 'cmd-9', command: 'fit' },
+];
+export const viewerAction = name => `docs_zoom_${name}`;
+export const viewerBindings = () => VIEWER_KEYS.map(k => ({ keystroke: k.keystroke, action: viewerAction(k.command), context: VIEWER_CONTEXT }));
+
 // Applies a keyboard or toolbar command.
 export function command(view, name, media, viewport) {
   const [direction, page] = String(name).split('-');
