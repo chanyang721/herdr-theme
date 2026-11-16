@@ -20,7 +20,7 @@ async function alertHarness(files,{lineEnding='\n',opens=[],home='/test',arrived
     subscribeFileChanges:(_cx,name,callback)=>{const listener={path:name,callback};service.add(listener);return()=>service.delete(listener);},
     readJsonSnapshot:async name=>{const value=snapshot(name);await typedHook?.(name,value);return value;},
     readTextFile:async name=>files.get(name.split('/').at(-1))??null,
-    createRetry:guardModule.createRetry,watchRecorder:guardModule.watchRecorder,
+    createRetry:guardModule.createRetry,watchRecorder:guardModule.watchRecorder,setSpaceMentions:items=>shared.set('spaceMentions',items),
     writeTextFile:async(name,value,expected)=>{const key=name.split('/').at(-1),old=files.get(key)??null;if(old!==expected)throw Error('compare-and-swap conflict');writes.push({name,value,expected});files.set(key,value);change(name);await writeHook?.(name,value);},
   };
   const key=`__alertWatch${watcherId++}`;globalThis[key]=runtime;
@@ -266,5 +266,17 @@ test('a failing refresh is retried after a delay without another input change, a
     assert.equal(h.opens.length,1,'the retry announced the mention');
     assert.deepEqual(nativeParse(files.get('slack-popup-events.json')).seen,['mention:history','mention:new']);
     assert.equal(nativeParse(files.get('slack-alert-watch.json')).state,'ok','recovery is recorded');
+  }finally{h.stop();}
+});
+
+// 2026-11-16: the whole mention list as a shared value was persisted and copied on every badge read and
+// pushed the sidebar past its render budget. It goes to the popover module instead.
+test('mentions reach the cards through module state, never as a shared value',async()=>{
+  const files=new Map([['slack-mentions.json','{"items":[{"id":"m1","project":"Share"}]}']]);
+  const h=await alertHarness(files);
+  try{
+    await h.refresh();
+    assert.deepEqual(h.shared.get('spaceMentions'),[{id:'m1',project:'Share'}]);
+    assert.equal([...h.shared.keys()].some(k=>/mention/i.test(k)&&k!=='spaceMentions'),false);
   }finally{h.stop();}
 });

@@ -2,13 +2,16 @@ import { div, image } from 'gpui-kit';
 import { h_flex } from 'gpui-base';
 import { shared, openOverlay } from 'herdr';
 import { scopedAlerts, linearScoped, slackCopyDelay } from './alert-model.js';
-import { alertPopover, showPopover, popoverState } from './alert-popover.js';
+import { alertPopover, showPopover, popoverState, spaceMentions } from './alert-popover.js';
 import { arrivals } from './arrival-store.js';
 import { flyingIds } from './arrival-model.js';
 
 // An alert still flying in from its popup is counted once it lands.
 const landedOnly = (items, scope) => { const flying = flyingIds(arrivals(), Date.now(), scope.motion !== false); return flying.size ? items.filter(i => !flying.has(i.id)) : items; };
-const slackUnread = scope => landedOnly(scopedAlerts(shared('sixfold.alertItems') ?? [],{...scope,read:shared('sixfold.alertRead') ?? {},unread:true}),scope).length;
+// The space's tracked Slack alerts plus the mentions routed to it that the tracked feed does not list.
+const slackItems = project => { const tracked = shared('sixfold.alertItems') ?? [], ids = new Set(tracked.map(i => i.id));
+  return [...tracked, ...spaceMentions(project).filter(i => !ids.has(i.id))]; };
+const slackUnread = scope => landedOnly(scopedAlerts(slackItems(scope.project),{...scope,read:shared('sixfold.alertRead') ?? {},unread:true}),scope).length;
 const linearUnreadNow = scope => landedOnly(linearScoped(shared('sixfold.linearItems') ?? [],scope.project).filter(i=>!i.read),scope).length;
 // What the card's alerts row shows; part of the retained card's signature so the row redraws when it changes.
 export function alertSignature(name, motion = true) {
@@ -20,14 +23,17 @@ export function alertSignature(name, motion = true) {
     delay?`${delay.hours}:${delay.at}`:''].join('|');
 }
 
+// A space with a tracked feed opens its channel messages; one without (Share, which only receives
+// mentions) opens its mentions, so 전체 보기 is never an empty list.
 export function openInbox(scope = {}) {
-  return openOverlay({mod:'sixfold-slack-inbox',kind:'dialog',width:760,height:620,props:{...scope,newMessages:true}});
+  const newMessages = !scope.project || named(shared('sixfold.alertProjects'), scope.project);
+  return openOverlay({mod:'sixfold-slack-inbox',kind:'dialog',width:760,height:620,props:{...scope,newMessages}});
 }
 export function openLinearInbox(scope = {}) {
   return openOverlay({mod:'sixfold-linear-inbox',kind:'dialog',width:860,height:680,props:{...scope}});
 }
 const named = (list,name) => (list ?? []).some(p=>String(p).toLowerCase()===name?.toLowerCase());
-export const hasSlackAlerts = name => named(shared('sixfold.alertProjects'),name);
+export const hasSlackAlerts = name => named(shared('sixfold.alertProjects'),name) || spaceMentions(name).length > 0;
 export const hasLinearAlerts = name => named(shared('sixfold.linearSpaces'),name);
 // The sidebar reserves the alerts row from this (row height), so it covers both sources.
 export const hasWorkspaceAlerts = name => hasSlackAlerts(name) || hasLinearAlerts(name);

@@ -10,7 +10,7 @@ function element(){let proxy;const data={nodes:[],calls:[]};proxy=new Proxy(data
   return (...a)=>{t.calls.push([k,...a]);return proxy;};}});return proxy;}
 async function inbox(){
   const store=new Map([['sixfold.alertProjects',['Alpha']],['sixfold.linearSpaces',['Alpha']],['sixfold.alertItems',[]],['sixfold.linearItems',[]]]);
-  globalThis.__alertInbox={div:element,image:element,h_flex:element,v_flex:element,Popover:{new:element},shared:k=>store.get(k),setShared:(k,v)=>store.set(k,v),openOverlay(){},arrivals:()=>[]};
+  globalThis.__alertInbox={div:element,image:element,h_flex:element,v_flex:element,Popover:{new:element},shared:k=>store.get(k),setShared:(k,v)=>store.set(k,v),openOverlay:o=>store.set('opened',[...(store.get('opened')??[]),o]),arrivals:()=>[]};
   const base=new URL('../mods/sixfold-desk/',import.meta.url);
   const transform=s=>s.replace(/import \{([^}]+)\} from '(?:gpui-kit|gpui-base|herdr)';/g,'const {$1}=globalThis.__alertInbox;');
   const asUrl=s=>'data:text/javascript;base64,'+Buffer.from(s).toString('base64');
@@ -18,11 +18,12 @@ async function inbox(){
   const slackUrl=JSON.stringify(new URL('alert-slack.js',base).href);
   const filesUrl=asUrl(transform(await readFile(new URL('alert-files.js',base),'utf8')).replace("'./alert-slack.js'",slackUrl));
   const popUrl=asUrl(transform(await readFile(new URL('alert-popover.js',base),'utf8')).replace("'./alert-model.js'",JSON.stringify(new URL('alert-model.js',base).href))
-    .replace("'./alert-slack.js'",slackUrl).replace("'./alert-files.js'",JSON.stringify(filesUrl)));
+    .replace("'./alert-slack.js'",slackUrl).replace("'./alert-files.js'",JSON.stringify(filesUrl)).replace("'./alert-mentions.js'",JSON.stringify(new URL('alert-mentions.js',base).href))+`//${Math.random()}`);   // a fresh module per call: it reads this call's store
   const src=transform(await readFile(new URL('alert-inbox.js',base),'utf8')).replace("'./alert-model.js'",JSON.stringify(new URL('alert-model.js',base).href))
     .replace("'./alert-popover.js'",JSON.stringify(popUrl)).replace("import { arrivals } from './arrival-store.js';",'const {arrivals}=globalThis.__alertInbox;')
     .replace("'./arrival-model.js'",JSON.stringify(new URL('arrival-model.js',base).href));
-  return {store,...await import(asUrl(src)+`#${Math.random()}`),popover:await import(popUrl)};
+  const popover=await import(popUrl);popover.setSpaceMentions([]);   // module state outlives one test
+  return {store,...await import(asUrl(src)+`#${Math.random()}`),popover};
 }
 
 test('the alerts-row card key changes when the Slack copy delay starts, moves or ends',async()=>{
@@ -46,4 +47,19 @@ test('a card has one alerts popover: the meta-line Slack chip only when the meta
   assert.equal(slackAlertsChip({id:'a',name:'Alpha',work:{tool:'jira'},slack:{channel:'c'}},trigger,{}),trigger);
   assert.equal(alertsOnMetaLine({work:{tool:'linear'}},'Alpha'),true);
   assert.notEqual(slackAlertsChip({id:'a',name:'Alpha',work:{tool:'linear'}},trigger,{}),trigger);
+});
+
+// 2026-11-16: Share only receives mentions (slack-mentions.json), never tracked-feed items, so its card
+// had no Slack badge and 전체 보기 opened the empty channel-message list.
+test('mentions routed to a space give it a Slack badge, an unread count and a mention inbox',async()=>{
+  const {store,hasSlackAlerts,cardAlertCounts,openInbox,popover}=await inbox();
+  assert.equal(hasSlackAlerts('Share'),false,'no mentions, no badge');
+  popover.setSpaceMentions([{id:'slack:D0TEST01:1.1',project:'Share'},{id:'slack:D0TEST01:2.1',project:'Share'},{id:'slack:C0TEST01:3.1',project:'Alpha'}]);
+  store.set('sixfold.alertRead',{'slack:D0TEST01:1.1':'slack:D0TEST01:1.1'});
+  store.set('sixfold.alertItems',[{id:'slack:C0TEST01:3.1',project:'Alpha'}]);
+  assert.equal(hasSlackAlerts('Share'),true);
+  assert.equal(cardAlertCounts('Share').slack,1,'the unread mention only');
+  assert.equal(cardAlertCounts('Alpha').slack,1,'a mention also in the tracked feed counts once');
+  openInbox({project:'Share'});openInbox({project:'Alpha'});
+  assert.deepEqual(store.get('opened').map(o=>o.props.newMessages),[false,true],'Share opens its mentions; a tracked space its channel messages');
 });

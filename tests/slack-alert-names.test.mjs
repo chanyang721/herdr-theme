@@ -124,11 +124,14 @@ async function popover(files = new Map()) {
     shared: k => store.get(k), setShared: (k, v) => store.set(k, v), appHome: () => '/h', readTextFile: async p => files.get(p) ?? null};
   const base = new URL('../mods/sixfold-desk/', import.meta.url);
   const transform = s => s.replace(/import \{([^}]+)\} from '(?:gpui-kit|gpui-base|herdr)';/g, 'const {$1}=globalThis.__slackPop;')
-    .replace("'./alert-model.js'", JSON.stringify(new URL('alert-model.js', base).href)).replace("'./alert-slack.js'", JSON.stringify(new URL('alert-slack.js', base).href));
+    .replace("'./alert-model.js'", JSON.stringify(new URL('alert-model.js', base).href)).replace("'./alert-slack.js'", JSON.stringify(new URL('alert-slack.js', base).href))
+    .replace("'./alert-mentions.js'", JSON.stringify(new URL('alert-mentions.js', base).href));
   const asUrl = s => 'data:text/javascript;base64,' + Buffer.from(s).toString('base64');
   const filesUrl = asUrl(transform(await readFile(new URL('alert-files.js', base), 'utf8')) + `//${Math.random()}`);
   const src = transform(await readFile(new URL('alert-popover.js', base), 'utf8')).replace("'./alert-files.js'", JSON.stringify(filesUrl));
-  return {store, ...(await import(asUrl(src + `//${Math.random()}`))), files: await import(filesUrl)};
+  const pop = await import(asUrl(src + `//${Math.random()}`));
+  pop.setSpaceMentions([]);   // module state (alert-mentions.js) outlives one test
+  return {store, ...pop, files: await import(filesUrl)};
 }
 const theme = new Proxy({}, {get: (_t, k) => `#${String(k)}`});
 
@@ -185,6 +188,16 @@ test('a row shows its text on one line and keeps the whole text in the tooltip',
   const all = texts(pop.alertPopover({id: 's4', project: 'Alpha', trigger: element(), t: theme, hasSlack: true, hasLinear: false, onAll() {}}));
   assert.ok(all.includes('1. 요약 ```* 항목 1) 점검``` 2. 위험'), all.join(' | '));
   assert.ok(!all.some(s => s.includes('\n') && s.includes('요약')));
+});
+
+// 2026-11-16: Share's card popover listed nothing: its mentions are not in the tracked feed.
+test('the card popover of a space lists the mentions routed to it', async () => {
+  const pop = await popover();
+  pop.store.set('sixfold.alertItems', [{id: 'slack:C0TEST01:90.1', project: 'Alpha', author: 'U0AAA0001', text: '다른 공간 글'}]);
+  pop.setSpaceMentions([{id: 'slack:D0TEST01:600.1', project: 'Share', kind: 'dm', author: 'U0BBB0002', author_name: '이다라', at: '2026-11-16T01:00:00Z', text: 'DM 멘션입니다'}]);
+  pop.showPopover('Share', 'slack');
+  const all = texts(pop.alertPopover({id: 's5', project: 'Share', trigger: element(), t: theme, hasSlack: true, hasLinear: false, onAll() {}}));
+  assert.ok(all.includes('DM 멘션입니다') && all.includes('미확인 1') && !all.includes('다른 공간 글'), all.join(' | '));
 });
 
 test('the card popover reads the machine-local names, as the inbox window does', async () => {

@@ -116,6 +116,10 @@ space and the Slack inbox window show the same thing:
   https address shows no button. The arrival peek shows the chips without buttons.
 - A row's body is one line in the card popover and the peek (the whole text is
   in its tooltip and the inbox window).
+- Mentions routed to a space (`slack-mentions.json` `project`; unmapped
+  channels, DMs and thread replies go to Share) also give that space its Slack
+  badge, unread count and popover rows. A space with no tracked channel feed
+  (Share) opens its mentions from 전체 보기.
 
 In the inbox window 본문 보기 opens a popover. In the card popover it opens a
 panel under the chip instead: the card popover is itself a popover, and a

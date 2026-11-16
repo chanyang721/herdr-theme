@@ -66,7 +66,8 @@ test('card popover: a file without a copy is asked for once, looked for every 3 
     shared: k => store.get(k), setShared: (k, v) => store.set(k, v), appHome: () => '/h', ...io};
   const base = new URL('../mods/sixfold-desk/', import.meta.url);
   const transform = s => s.replace(/import \{([^}]+)\} from '(?:gpui-kit|gpui-base|herdr)';/g, 'const {$1}=globalThis.__fileReq;')
-    .replace("'./alert-model.js'", JSON.stringify(new URL('alert-model.js', base).href)).replace("'./alert-slack.js'", JSON.stringify(new URL('alert-slack.js', base).href));
+    .replace("'./alert-model.js'", JSON.stringify(new URL('alert-model.js', base).href)).replace("'./alert-slack.js'", JSON.stringify(new URL('alert-slack.js', base).href))
+    .replace("'./alert-mentions.js'", JSON.stringify(new URL('alert-mentions.js', base).href));
   const filesUrl = asUrl(transform(await readFile(new URL('alert-files.js', base), 'utf8')) + `//${Math.random()}`);
   const pop = await import(asUrl(transform(await readFile(new URL('alert-popover.js', base), 'utf8')).replace("'./alert-files.js'", JSON.stringify(filesUrl)) + `//${Math.random()}`));
   const item = {id: 'slack:C0TEST01:100.1', project: 'Alpha', channel: 'C0TEST01', author: 'U0TEST01', text: '자료 첨부합니다',

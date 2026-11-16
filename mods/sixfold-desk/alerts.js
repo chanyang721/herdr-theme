@@ -6,6 +6,7 @@ import {readJsonSnapshot,subscribeJsonFile,subscribeFileChanges} from './panel-i
 import {addArrival,hasArrivalHost} from './arrival-store.js';
 import {arrivalTarget,ARRIVAL} from './arrival-model.js';
 import {createRetry,watchRecorder} from './watch-guard.js';
+import {setSpaceMentions} from './alert-mentions.js';
 
 const SHOWN = new Set(['needs-you']);  // Only what a person must decide; the rest stays in the project.
 const MARKS = { 'needs-you': '!', info: '✓', processing: '●' };
@@ -121,6 +122,7 @@ export function watchAlerts(view, cx) {
         setShared('sixfold.alertItems',items);
         setShared('sixfold.alertRead',read);
         setShared('sixfold.alertProjects',feed.projects ?? []);
+        setSpaceMentions(tagged);   // a space's mentions count on its card too (alert-inbox.js); module state, not shared
         view.alerts = legacy.items ?? [];
         previous = signature;
         cx.notify();

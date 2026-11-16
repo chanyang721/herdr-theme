@@ -4,6 +4,8 @@ import { shared, setShared } from 'herdr';
 import { scopedAlerts, alertVersion, linearScoped, changeLines, linearCategory, popoverOpen, popoverRows, projectKey, alertKind, alertLine, kindTone } from './alert-model.js';
 import { feedNames, namesFor, alertTitle, readable } from './alert-slack.js';
 import { fileChips, loadFileText, followFileText, localNames } from './alert-files.js';
+import { spaceMentions, setSpaceMentions } from './alert-mentions.js';
+export { spaceMentions, setSpaceMentions };
 
 // A small surface beside a space card: the newest Slack and Linear alerts of that
 // space, opened by its alert badges or by a new alert. The full inboxes stay one
@@ -60,7 +62,7 @@ function slackRows(project, t, fresh = new Set(), interactive = true, arrived = 
   const unread = item => read[item.id] !== alertVersion(item);
   const all = shared('sixfold.alertItems') ?? [], scoped = scopedAlerts(all, {project});
   const known = new Set(scoped.map(item => item.id));
-  const extra = (arrived ?? []).filter(item => item && typeof item.id === 'string' && !known.has(item.id) && (known.add(item.id), true));
+  const extra = [...(arrived ?? []), ...spaceMentions(project)].filter(item => item && typeof item.id === 'string' && !known.has(item.id) && (known.add(item.id), true));
   const items = [...extra, ...scoped], feed = feedNames([...all, ...extra]), site = localNames();
   const open = interactive ? popoverState()?.file ?? null : null;
   const lit = popoverRows(items.filter(item => fresh.has(item.id)), 5, unread);
