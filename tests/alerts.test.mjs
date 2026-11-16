@@ -189,6 +189,10 @@ test('with a sidebar drawing arrivals a new mention folds into its space card in
     h.publish('slack-mentions.json');await h.flush();
     assert.equal(h.opens.length,1,'no sidebar host: the Slack window opens as before');
     assert.equal(arrived.length,1);
+    host.value=true;arrived.length=0;
+    files.set('slack-mentions.json',JSON.stringify({items:[{id:'history'},{id:'m1'},{id:'n1',project:'Alpha',text:'hi',author:'U0BOSS0001',author_name:'대표'},{id:'n2',project:'Alpha',text:'yo',author:'U0BOSS0002'}]}));
+    h.publish('slack-mentions.json');await h.flush();
+    assert.deepEqual(arrived.filter(a=>/^n[12]$/.test(a.id)).map(a=>a.line).sort(),['U0BOSS0002: yo','대표: hi'].sort(),'the popup shows the sender name, and the ID only when no name was collected');
   }finally{h.stop();}
 });
 

@@ -12,11 +12,14 @@ const SHOWN = new Set(['needs-you']);  // Only what a person must decide; the re
 const MARKS = { 'needs-you': '!', info: '✓', processing: '●' };
 const ALERT_LOAD_STUCK_MS = 120000;   // a refresh still loading after this no longer blocks the next one
 
+// Sender shown in the popup: the collector's author_name first, the raw author (an ID) only when there is no name.
+const senderLabel = item => String(item?.author_name ?? '').trim() || String(item?.author ?? '');
+
 function popupEvents(mentions, read) {
   const events = [];
   for (const item of mentions ?? []) {
     if (typeof item?.id === 'string' && item.id) {
-      events.push({key: `mention:${item.id}`, id: item.id, popup: read[item.id] !== item.id, project: item.project ?? '', title: item.title || '', line: String(item.text || '').split('\n')[0].slice(0,200), author: item.author || '', url: item.link || '', item});
+      events.push({key: `mention:${item.id}`, id: item.id, popup: read[item.id] !== item.id, project: item.project ?? '', title: String(item.author_name ?? '').trim() || item.title || '', line: String(item.text || '').split('\n')[0].slice(0,200), author: senderLabel(item), url: item.link || '', item});
     }
   }
   return events;
