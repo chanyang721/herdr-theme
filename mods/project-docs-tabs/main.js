@@ -5,7 +5,7 @@ import { stageMarkdown } from './vendor/markdown.js';
 import { dirname, resolveLink } from './vendor/paths.js';
 import { mermaidFences, applyDiagrams } from './mermaid.js';
 import { locations, locate, listTree, searchTree, kindCounts, foldersOf, describeWarnings } from './tree.js';
-import { columnView } from './column-view.js';
+import { columnView, columnsFor, visibleColumns } from './column-view.js';
 import { figure, viewer, fraction } from './diagram-view.js';
 import { openView, viewAt, clampScale, clampView, toggleView, wheelStep, pinchStep, keyCommand, command, panBy } from './zoom.js';
 import { listView, breadcrumb, icon } from './finder.js';
@@ -22,6 +22,8 @@ const SIDE_BY_SIDE = 760;
 // Below this width the sidebar starts hidden (the toolbar button still shows it).
 const WITH_SIDEBAR = 1100;
 const COLUMN = 200;
+// The ‹ button that shows columns scrolled off to the left.
+const COLUMN_BACK = 18;
 // The viewer's toolbar and hint line, around the picture.
 const VIEWER_CHROME = 36 + 24;
 const LOCATION_ICONS = { docs: '🗂', localViews: '🧭', opened: '👁', archived: '🗄' };
@@ -91,9 +93,11 @@ export default class ProjectDocuments extends View {
     this.kinds = []; this.localViews = null; this.kindFilter = null; this.kindMenu = false; this.sidebar = null;
     const saved = shared(FINDER)?.[this.spaceId] || {};
     this.view = saved.view === 'list' ? 'list' : 'column'; this.location = saved.location || 'docs'; this.colPath = saved.colPath || '';
-    this.paneHeight = 800; this.codeOpen = new Set(); this.zoom = null;
-    // Focus is retained, so the viewer's handle is made here.
-    this.zoomFocus = cx.focus_handle?.() || null;
+    // A sidebar the person showed or hid wins over the width rule; reading mode folds both panes.
+    if (typeof saved.sidebar === 'boolean') this.sidebar = saved.sidebar;
+    this.reading = saved.reading === true; this.paneHeight = 800; this.codeOpen = new Set(); this.zoom = null;
+    // Focus is retained, so the handles are made here: the pane's (⌃⌘S, ⇧⌘R) and the viewer's.
+    this.paneFocus = cx.focus_handle?.() || null; this.zoomFocus = cx.focus_handle?.() || null;
     this.expanded = new Set(); this.sort = { key: 'date', dir: -1 }; this.query = '';
     // Retained input state is made here, never while rendering.
     this.search = InputState?.new ? InputState.new({ placeholder: '이름·종류 검색' }) : null;
@@ -337,7 +341,26 @@ export default class ProjectDocuments extends View {
   locs() { return locations(this.documents, { kinds: this.kinds, localViews: this.localViews, kind: this.kindFilter }); }
 
   remember() {
-    setShared(FINDER, { ...(shared(FINDER) || {}), [this.spaceId]: { view: this.view, location: this.location, colPath: this.colPath } });
+    const state = { view: this.view, location: this.location, colPath: this.colPath };
+    if (typeof this.sidebar === 'boolean') state.sidebar = this.sidebar;
+    if (this.reading) state.reading = true;
+    setShared(FINDER, { ...(shared(FINDER) || {}), [this.spaceId]: state });
+  }
+
+  toggleSidebar(cx) {
+    this.sidebar = !(this.sidebar ?? this.paneWidth >= WITH_SIDEBAR);
+    if (this.sidebar) this.reading = false;
+    this.paneFocus?.focus(); this.remember(); cx.notify();
+  }
+
+  toggleReading(cx) { this.reading = !this.reading; this.paneFocus?.focus(); this.remember(); cx.notify(); }
+
+  // ⌃⌘S shows or hides the sidebar (Finder) and ⇧⌘R folds both panes (Safari's reader), while
+  // the keyboard is anywhere in this pane.
+  paneKey(event, cx) {
+    const m = event.modifiers || {}, key = String(event.key || '').toLowerCase();
+    if (m.platform && m.control && !m.shift && !m.alt && key === 's') { cx.stop_propagation(); this.toggleSidebar(cx); }
+    else if (m.platform && m.shift && !m.control && !m.alt && key === 'r') { cx.stop_propagation(); this.toggleReading(cx); }
   }
 
   unit() { return Number(settings()?.zoom) || 1; }
@@ -366,7 +389,7 @@ export default class ProjectDocuments extends View {
     return viewAt(clampScale(scale, media, viewport), at.u, at.v, { x: at.u * viewport.width, y: at.v * viewport.height }, media, viewport);
   }
 
-  closeZoom(cx) { this.zoom = null; cx.notify(); }
+  closeZoom(cx) { this.zoom = null; this.paneFocus?.focus(); cx.notify(); }
 
   setZoom(view, cx) { if (!this.zoom) return; this.zoom.view = view; this.zoom.touched = true; cx.notify(); }
 
@@ -517,8 +540,12 @@ export default class ProjectDocuments extends View {
       .bg(on ? t.selected : t.chrome).text_color(on ? t.foreground : t.muted).hover(s => s.bg(on ? t.selected : t.hover)).on_click((_e, cx) => action(cx)).child(label);
     const locs = this.locs();
     const side = this.paneWidth >= SIDE_BY_SIDE;
-    const sidebar = this.sidebar ?? this.paneWidth >= WITH_SIDEBAR;
+    // Reading mode folds the sidebar and the browser; a search shows the results meanwhile.
+    const folded = this.reading && !this.query.trim();
+    const sidebar = !folded && (this.sidebar ?? this.paneWidth >= WITH_SIDEBAR);
     const unit = this.unit();
+    // Diagrams squeezed below half size suggest reading mode once, by its button's accent.
+    const crowded = !this.reading && side && !this.html && Boolean(this.blocks?.some(b => b.diagram && b.media?.width && (this.width - 40) / b.media.width < 0.5));
     const counts = kindCounts(this.documents, this.kinds);
     const kindLabel = counts.find(k => k.id === this.kindFilter)?.label || this.kinds.find(k => k.id === this.kindFilter)?.label;
     const here = locs.find(l => l.key === this.location) || locs[0];
@@ -527,12 +554,14 @@ export default class ProjectDocuments extends View {
       : [...foldersOf(this.colPath, Boolean(here?.entries.find(e => e.path === this.colPath)?.dir)).map(p => ({ name: here?.entries.find(e => e.path === p)?.name || p.split('/').pop(), folder: true, path: p })),
         ...(doc && here?.entries.some(e => e.path === this.colPath && !e.dir) ? [{ name: doc.label, fileName: doc.name }] : [])];
     let root = v_flex().id('project-documents').relative().size_full().min_w(0).min_h(0).overflow_hidden().bg(t.canvas).text_color(t.foreground).text_size(13)
+      .when(Boolean(this.paneFocus), el => el.track_focus(this.paneFocus))
+      .on_key_down((event, cx) => this.paneKey(event, cx))
       .on_size_change((size, cx) => {
         const changed = Math.abs(this.paneWidth - size.width) > 1 || Math.abs(this.paneHeight - size.height) > 1;
         if (changed) { this.paneWidth = size.width; this.paneHeight = size.height; cx.notify(); }
       })
       .child(h_flex().id('docs-toolbar').h(40).flex_none().px(8).gap(6).items_center().bg(t.chrome).border_b(1).border_color(t.border)
-        .child(button('docs-sidebar-toggle', '◧', cx => { this.sidebar = !sidebar; cx.notify(); }).tooltip('사이드바'))
+        .child(button('docs-sidebar-toggle', '◧', cx => this.toggleSidebar(cx)).tooltip('사이드바 (⌃⌘S)').accessibility_label('사이드바 보기·숨기기'))
         .child(h_flex().flex_none().rounded(5).overflow_hidden().border(1).border_color(t.border)
           .child(segment('docs-view-column', '▥ 열', this.view === 'column', cx => this.setView('column', cx)))
           .child(segment('docs-view-list', '☰ 목록', this.view === 'list', cx => this.setView('list', cx))))
@@ -540,6 +569,9 @@ export default class ProjectDocuments extends View {
         .when(Boolean(this.search), el => el.child(div().flex_1().min_w(80).child(Input.new(this.search).w_full().h(26).text_size(12))))
         .when(!this.search, el => el.child(div().flex_1()))
         .when(Boolean(this.query), el => el.child(button('docs-query-clear', '✕', cx => { this.search?.set_value(''); this.query = ''; cx.notify(); }).text_color(t.muted)))
+        .child(button('docs-reading', this.reading ? '▤ 목록 펼치기' : '▭ 읽기 모드', cx => this.toggleReading(cx)).text_size(12)
+          .when(crowded, el => el.border(1).border_color(t.accent).text_color(t.foreground))
+          .tooltip(this.reading ? '사이드바와 목록 다시 보기 (⇧⌘R)' : '사이드바와 목록을 접고 본문을 넓게 (⇧⌘R)'))
         .child(button('docs-refresh', '새로 고침', cx => this.refresh(cx)).text_size(12))
         .child(button('docs-settings', '분류 규칙', cx => this.external('code', ['--reuse-window', this.config], cx)).text_size(12)))
       .when(this.kindMenu, el => el.child(h_flex().id('docs-kinds').flex_none().flex_wrap().gap(4).px(8).py(4).border_b(1).border_color(t.border)
@@ -552,21 +584,32 @@ export default class ProjectDocuments extends View {
       .when(Boolean(this.warnings?.length), el => el.child(v_flex().children(describeWarnings(this.warnings).map(line => notice(`조회 주의 · ${line}`)))))
       .when(Boolean(this.actionError), el => el.child(notice(this.actionError)))
       .when(Boolean(this.copied), el => el.child(notice(this.copied)));
-    const browserWidth = this.view === 'list' || this.query.trim() ? 480 : 2 * COLUMN + 24;
+    const browserWidth = this.browserWidth(locs);
     const viewer = this.renderViewer(t, doc, button, notice);
     const body = side
       ? h_flex().flex_1().min_h(0).min_w(0).items_start()
         .when(sidebar, el => el.child(this.renderSidebar(t, locs)))
-        .child(div().w(browserWidth).flex_none().h_full().min_h(0).border_r(1).border_color(t.border).child(this.renderBrowser(t, locs, browserWidth)))
+        .when(!folded, el => el.child(div().w(browserWidth).flex_none().h_full().min_h(0).border_r(1).border_color(t.border).child(this.renderBrowser(t, locs, browserWidth))))
         .child(viewer.flex_1().min_w(0).h_full())
       : v_flex().flex_1().min_h(0).min_w(0)
-        .child(h_flex().h(260).flex_none().min_w(0).border_b(1).border_color(t.border)
+        .when(!folded, el => el.child(h_flex().h(260).flex_none().min_w(0).border_b(1).border_color(t.border)
           .when(sidebar, el => el.child(this.renderSidebar(t, locs)))
-          .child(div().flex_1().min_w(0).h_full().child(this.renderBrowser(t, locs, Math.max(COLUMN, this.paneWidth - (sidebar ? 184 : 0))))))
+          .child(div().flex_1().min_w(0).h_full().child(this.renderBrowser(t, locs, Math.max(COLUMN, this.paneWidth - (sidebar ? 184 : 0)))))))
         .child(viewer.flex_1().min_h(0));
     root = root.child(body);
     if (this.zoom && this.zoom.key === this.bodyKey) root = root.child(zoomViewer(this, t, doc, unit));
     return root;
+  }
+
+  // The browser is as wide as what it shows: the column view's columns (at most two, plus the
+  // ‹ button when earlier ones scroll off), so no empty column space sits beside the document.
+  browserWidth(locs) {
+    if (this.view === 'list' || this.query.trim()) return 480;
+    const here = locs.find(l => l.key === this.location) || locs[0];
+    if (!here) return 2 * COLUMN;
+    const count = columnsFor(here.entries, here.key === this.location ? this.colPath : '', { order: here.order, newestFirst: /./ }).length;
+    const shown = visibleColumns(count, { width: 2 * COLUMN + COLUMN_BACK, columnWidth: COLUMN });
+    return shown * COLUMN + (count > shown ? COLUMN_BACK : 0) + 1;
   }
 
   renderViewer(t, doc, button, notice) {
