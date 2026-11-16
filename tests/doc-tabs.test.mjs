@@ -438,3 +438,83 @@ test('folder warnings name the path and tell missing, denied and empty apart', (
   assert.deepEqual(describeWarnings(['source_unavailable']), ['문서 폴더를 읽지 못함']);
   assert.deepEqual(describeWarnings(['manifest_conflict']), ['manifest_conflict']);
 });
+
+// A document whose Mermaid diagram is the size of the Medihomes architecture flowchart.
+async function bigDiagram(t, options = {}) {
+  const h = await localViews(options); t.after(() => h.view.close());
+  h.state.mermaid = () => ({ code: 0, stdout: JSON.stringify({ diagrams: [{ code: 'flowchart LR\nA-->B', path: 'mods/project-docs-tabs/.cache/big.png', width: 3072, height: 1864 }] }), stderr: '' });
+  h.state.text = () => '# 구성\n```mermaid\nflowchart LR\nA-->B\n```\n끝'; h.view.width = 840; h.view.paneWidth = 1400; h.view.paneHeight = 900;
+  h.view.load(h.cx); await h.flush(); h.render();
+  const index = h.view.blocks.findIndex(b => b.diagram);
+  return { ...h, index, id: `docs-figure-${h.view.bodyKey}-${index}` };
+}
+const keyOf = (key, modifiers = {}) => ({ key, modifiers });
+
+test('a shrunk diagram says so under it and opens the viewer readable, not fitted to a postage stamp', async t => {
+  const h = await bigDiagram(t);
+  assert.ok(h.labels.includes('축소 표시 26%'), 'the caption says how small the picture is');
+  assert.ok(h.handlers.has(`${h.id}-zoom`) && h.handlers.has(`${h.id}-code-toggle`), 'enlarge and code are always visible, not hover-only');
+  h.handlers.get(`${h.id}-zoom`)(null, h.cx); h.render();
+  assert.equal(h.view.zoom.index, h.index);
+  const z = h.view.zoom, viewport = h.view.zoomViewport();
+  assert.ok(z.view.scale >= (viewport.width - 48) / 3072 - 1e-9, 'opens at least width-fitted');
+  assert.ok(h.labels.some(l => /^구성도 1\/1 · /.test(l)), 'the viewer names the figure');
+  assert.ok(h.handlers.has('docs-zoom-close') && h.handlers.has('docs-zoom-actual') && h.handlers.has('docs-zoom-fit') && h.handlers.has('docs-zoom-preview'));
+});
+
+test('the viewer zooms with Preview keys, scroll, pinch and drag, and closes with Esc keeping the document', async t => {
+  const h = await bigDiagram(t);
+  h.handlers.get(`${h.id}-zoom`)(null, h.cx);
+  const viewport = { width: 1200, height: 800 }; h.view.zoomMeasured(viewport, h.cx);
+  const stops = []; const cx = { ...h.cx, stop_propagation: () => stops.push(true) };
+  h.view.zoomKey(keyOf('0', { platform: true }), cx); assert.equal(h.view.zoom.view.scale, 1, '⌘0 is actual size');
+  h.view.zoomKey(keyOf('-', { platform: true }), cx); assert.equal(h.view.zoom.view.scale, 0.8);
+  h.view.zoomKey(keyOf('9', { platform: true }), cx); assert.ok(h.view.zoom.view.scale < 0.4, '⌘9 fits the whole diagram');
+  h.view.zoomKey(keyOf('w', { platform: true }), cx); assert.equal(stops.length, 3, 'other chords pass through to the app');
+  const fit = h.view.zoom.view.scale;
+  h.view.zoomWheel({ delta: { x: 0, y: 80 }, modifiers: { platform: true } }, { x: 600, y: 400 }, h.cx);
+  assert.ok(h.view.zoom.view.scale > fit, '⌘-scroll zooms');
+  h.view.zoomPinch({ delta: 0.5, touch_phase: 'moved' }, { x: 600, y: 400 }, h.cx);
+  const pinched = { ...h.view.zoom.view };
+  h.view.zoomWheel({ delta: { x: 0, y: -60 }, modifiers: {} }, null, h.cx);
+  assert.deepEqual(h.view.zoom.view, pinched, 'momentum right after a pinch does not slide the picture');
+  h.view.zoom.pinchAt = 0;
+  h.view.zoomDrag('start', { x: 100, y: 100 }, h.cx); h.view.zoomDrag('move', { x: 60, y: 70 }, h.cx); h.view.zoomDrag('end', null, h.cx);
+  assert.equal(h.view.zoom.view.x, pinched.x - 40, 'dragging moves the picture with the pointer');
+  assert.equal(h.view.zoom.drag, null);
+  h.view.zoomKey(keyOf('escape'), cx);
+  assert.equal(h.view.zoom, null); assert.equal(h.view.bodyText, '# 구성\n```mermaid\nflowchart LR\nA-->B\n```\n끝');
+});
+
+test('a pinch on the body diagram continues in the viewer from the size it reached', async t => {
+  const h = await bigDiagram(t);
+  const shown = (840 - 40) / 3072;
+  h.view.openZoom(h.index, h.view.blocks[h.index], { u: 0.25, v: 0.5 }, shown * 1.2, h.cx);
+  const z = h.view.zoom;
+  assert.ok(Math.abs(z.view.scale - shown * 1.2) < 1e-9 || z.view.scale >= 0.25, 'starts where the pinch was');
+  h.view.zoomMeasured({ width: 1200, height: 800 }, h.cx);
+  assert.equal(h.view.zoom.touched, false, 'measuring before any gesture just places the picture again');
+});
+
+test('the Mermaid source shows as selectable text under the diagram; Preview opens the PNG', async t => {
+  const h = await bigDiagram(t);
+  h.handlers.get(`${h.id}-code-toggle`)(null, h.cx); h.render();
+  assert.ok(h.labels.includes('```mermaid\nflowchart LR\nA-->B\n```') && h.labels.includes('코드 숨기기'));
+  h.handlers.get(`${h.id}-zoom`)(null, h.cx); h.render();
+  h.handlers.get('docs-zoom-preview')({}, { ...h.cx, stop_propagation() {} }); await h.flush();
+  assert.ok(h.calls.some(c => c.command === 'open' && c.args.join(' ') === '-a Preview /app/mods/project-docs-tabs/.cache/big.png'));
+});
+
+test('choosing another document closes the viewer and the source panel', async t => {
+  const h = await bigDiagram(t);
+  h.handlers.get(`${h.id}-code-toggle`)(null, h.cx); h.handlers.get(`${h.id}-zoom`)(null, h.cx);
+  h.view.choose('b', h.cx); await h.flush();
+  assert.equal(h.view.zoom, null); assert.equal(h.view.codeOpen.size, 0);
+});
+
+test('the first frame, before the document list arrives, draws no viewer', async t => {
+  const h = await localViews({ documents: [] }); t.after(() => h.view.close());
+  // As init leaves it until the resolver answers: no body key and no open picture.
+  h.view.bodyKey = undefined; h.view.blocks = null; h.view.zoom = null;
+  h.render(); assert.ok(!h.handlers.has('docs-zoom-close'));
+});
