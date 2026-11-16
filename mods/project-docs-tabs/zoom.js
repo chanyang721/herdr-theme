@@ -2,11 +2,19 @@
 //
 // A view is { scale, x, y }: `scale` is screen points per natural diagram point (1 = 100%, the
 // size Mermaid laid the diagram out at), and x/y place the picture's top-left corner inside the
-// viewport. Diagram PNGs carry twice their natural size, so on a Retina screen 100% is one image
-// pixel per screen pixel; past SHARP_SCALE the picture is enlarged and turns soft.
+// viewport. Diagram PNGs carry twice their natural size (density 2); other pictures carry one
+// pixel per point. Past sharpScale() the picture is enlarged beyond its pixels and turns soft.
 export const MIN_SCALE = 0.25;
 export const MAX_SCALE = 4;
-export const SHARP_SCALE = 1;
+// Screen pixels per point. No host call reports the display's backing scale, so a Retina
+// display is assumed; on a 1x display the "soft" mark comes on later than it could.
+export const ASSUMED_DPR = 2;
+// The largest scale that still has an image pixel for every screen pixel. `unit` is the app's UI
+// zoom, which enlarges layout points on screen too.
+export function sharpScale(density = 1, unit = 1, dpr = ASSUMED_DPR) {
+  return Math.max(0.01, density) / (Math.max(0.01, unit) * Math.max(1, dpr));
+}
+
 // Below this the fitted diagram is too small to read, so the viewer opens fitted to the width.
 export const READABLE_SCALE = 0.6;
 export const PAD = 24;

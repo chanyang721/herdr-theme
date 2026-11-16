@@ -2,7 +2,7 @@
 // description: handlers come from the view, geometry from zoom.js; theme tokens only.
 import { div, image } from 'gpui-kit';
 import { v_flex, h_flex, TextView } from 'gpui-base';
-import { percent, SHARP_SCALE, VIEWER_CONTEXT, VIEWER_KEYS, viewerAction } from './zoom.js';
+import { percent, VIEWER_CONTEXT, VIEWER_KEYS, viewerAction } from './zoom.js';
 
 // Where on an element an event landed, as fractions of its size (unit-free, so the app's UI
 // zoom does not matter). Falls back to the centre.
@@ -52,12 +52,12 @@ export function figure({ id, block, width, t, codeOpen = false, onOpen, onPinch,
 // The viewer that covers the 문서 pane: a toolbar, the picture in a clipped viewport and a hint
 // line. Every pointer event it handles stops there, so the body underneath neither scrolls
 // nor selects; the body stays mounted, keeping its scroll position for when the viewer closes.
-export function viewer({ zoom, t, title, focus, unit = 1, onKey, onCommand, onClose, onPreview, onViewport, onWheel, onPinch, onDrag, onDouble }) {
+export function viewer({ zoom, t, title, focus, unit = 1, sharp = 1, onKey, onCommand, onClose, onPreview, onViewport, onWheel, onPinch, onDrag, onDouble }) {
   const view = zoom.view, media = zoom.media;
   const stop = (_e, cx) => cx.stop_propagation();
   const tool = (id, label, tip, action) => div().id(id).flex_none().px(8).py(4).rounded(5).cursor_pointer().text_size(12)
     .hover(s => s.bg(t.hover)).tooltip(tip).accessibility_label(tip).on_click((_e, cx) => { cx.stop_propagation(); action(cx); }).child(label);
-  const soft = view && view.scale > SHARP_SCALE + 0.005;
+  const soft = view && view.scale > sharp + 0.005;
   const root = v_flex().id('docs-zoom').absolute().inset_0().bg(t.canvas).text_color(t.foreground)
     .when(Boolean(focus), el => el.track_focus(focus))
     .key_context(VIEWER_CONTEXT)

@@ -7,7 +7,7 @@ import { mermaidFences, applyDiagrams } from './mermaid.js';
 import { locations, locate, listTree, searchTree, kindCounts, foldersOf, describeWarnings } from './tree.js';
 import { columnView, columnsFor, visibleColumns } from './column-view.js';
 import { figure, viewer, fraction } from './diagram-view.js';
-import { openView, viewAt, clampScale, clampView, toggleView, wheelStep, pinchStep, keyCommand, command, panBy, viewerBindings } from './zoom.js';
+import { openView, viewAt, clampScale, clampView, toggleView, wheelStep, pinchStep, keyCommand, command, panBy, viewerBindings, sharpScale } from './zoom.js';
 import { listView, breadcrumb, icon } from './finder.js';
 
 const LIMIT = 400000;
@@ -700,7 +700,8 @@ export default class ProjectDocuments extends View {
 function zoomViewer(view, t, doc, unit) {
   const z = view.zoom, figures = view.blocks?.filter(b => b.media).length || 1;
   const number = view.blocks ? view.blocks.slice(0, z.index + 1).filter(b => b.media).length : 1;
-  return viewer({ zoom: z, t, unit, focus: view.zoomFocus,
+  // Rendered diagrams are drawn at twice their size; other pictures at their own.
+  return viewer({ zoom: z, t, unit, focus: view.zoomFocus, sharp: sharpScale(z.code ? 2 : 1, unit),
     title: `${z.code ? '구성도' : '그림'} ${number}/${figures} · ${doc?.label || doc?.name || ''}`,
     onKey: (event, cx) => view.zoomKey(event, cx), onCommand: (name, cx) => view.zoomCommand(name, cx), onClose: cx => view.closeZoom(cx),
     onPreview: cx => view.previewZoom(cx), onViewport: (size, cx) => view.zoomMeasured(size, cx),

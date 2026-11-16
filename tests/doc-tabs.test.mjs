@@ -61,10 +61,10 @@ async function localViews({ documents = [document('a'), document('b')], selectio
   };
   const columns = await load('column-view.js', { div: element, v_flex: element, h_flex: element, Button: runtime.Button });
   const finder = await load('finder.js', { div: element, v_flex: element, h_flex: element, entryIcon: columns.icon });
-  const diagrams = await load('diagram-view.js', { div: element, image: element, v_flex: element, h_flex: element, TextView: runtime.TextView, percent: zoom.percent, SHARP_SCALE: zoom.SHARP_SCALE, VIEWER_CONTEXT: zoom.VIEWER_CONTEXT, VIEWER_KEYS: zoom.VIEWER_KEYS, viewerAction: zoom.viewerAction });
-  const { openView, viewAt, clampScale, clampView, toggleView, wheelStep, pinchStep, keyCommand, command, panBy, viewerBindings } = zoom;
+  const diagrams = await load('diagram-view.js', { div: element, image: element, v_flex: element, h_flex: element, TextView: runtime.TextView, percent: zoom.percent, VIEWER_CONTEXT: zoom.VIEWER_CONTEXT, VIEWER_KEYS: zoom.VIEWER_KEYS, viewerAction: zoom.viewerAction });
+  const { openView, viewAt, clampScale, clampView, toggleView, wheelStep, pinchStep, keyCommand, command, panBy, viewerBindings, sharpScale } = zoom;
   Object.assign(runtime, { columnView: columns.columnView, columnsFor: columns.columnsFor, visibleColumns: columns.visibleColumns, listView: finder.listView, breadcrumb: finder.breadcrumb, icon: finder.icon,
-    figure: diagrams.figure, viewer: diagrams.viewer, fraction: diagrams.fraction, openView, viewAt, clampScale, clampView, toggleView, wheelStep, pinchStep, keyCommand, command, panBy, viewerBindings });
+    figure: diagrams.figure, viewer: diagrams.viewer, fraction: diagrams.fraction, openView, viewAt, clampScale, clampView, toggleView, wheelStep, pinchStep, keyCommand, command, panBy, viewerBindings, sharpScale });
   const key = `__documentTabs${moduleId++}`; globalThis[key] = runtime;
   let source = await readFile(new URL('../mods/project-docs-tabs/main.js', import.meta.url), 'utf8');
   if (lineEnding) source = source.replace(/\r?\n/g, lineEnding);
