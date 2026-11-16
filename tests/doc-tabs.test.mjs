@@ -569,3 +569,13 @@ test('the viewer binds ⌘= ⌘− ⌘0 ⌘9 under its own key context, so they 
   h.actions.get(chords['cmd--'].action)({}, h.cx); assert.equal(h.view.zoom.view.scale, 0.8);
   h.actions.get(chords['cmd-9'].action)({}, h.cx); assert.ok(h.view.zoom.view.scale < 0.4, '⌘9 fits');
 });
+
+test('the sidebar button in reading mode shows the sidebar at once instead of flipping a hidden choice', async t => {
+  const h = await localViews({ documents: catalogDocs() }); t.after(() => h.view.close());
+  h.view.kinds = KINDS; h.view.paneWidth = 1400;
+  h.view.toggleReading(h.cx); h.render(); assert.ok(!h.handlers.has('docs-loc-docs'));
+  h.handlers.get('docs-sidebar-toggle')(null, h.cx); h.render();
+  assert.equal(h.view.reading, false); assert.ok(h.handlers.has('docs-loc-docs'), 'one press brings the sidebar back');
+  assert.equal(h.stored['sixfold.docs.finder.v1'].Demo.sidebar, true);
+  assert.equal(h.stored['sixfold.docs.finder.v1'].Demo.reading, undefined);
+});
