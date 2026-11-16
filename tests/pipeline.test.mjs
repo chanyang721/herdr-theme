@@ -68,6 +68,26 @@ test('a workspace pipe packet leaves the sender, runs down the lane and enters t
   assert(Math.min(legs.out,legs.back)>=200,'each corner leg is visible');
 });
 
+// 2026-11-16, user: "송신만 나오고" — only the send read as an effect. A lone 3x3
+// blink for 160 ms was too small to notice on the receiving row.
+test('a workspace pipe receiver opens a ring in the flow colour around the landing blink, closed during the flight',async()=>{
+  const {pipeline}=await load();
+  const options={id:'route',width:8,inset:14,from:10,to:100,color:'#79D1DC',motion:true};
+  const draw=phase=>pipeline({...options,phase,packets:[{id:'one',phase,travelMs:1600}]});
+  const landed=draw('arrived'),ring=find(landed,'sf-pipeline-receiver-one-ring');
+  assert(ring,'the receiving end has its own ring');
+  assert.equal(call(ring,'w'),15,'as large as a departure ring');assert.equal(call(ring,'h'),15);
+  assert.equal(call(ring,'border'),1,'1px, not the 2px done mark');
+  assert.equal(call(ring,'border_color'),'#79D1DC','in the flow colour, not white');
+  assert.equal(call(ring,'left')+7,14,'centred on the receiving end');assert.equal(call(ring,'top')+7,90);
+  const fade=ring.calls.find(c=>c[0]==='transition'&&c[1]==='opacity')[2];
+  assert.equal(call(ring,'opacity'),0);assert(fade.delay>=160,'held lit a moment before it fades');
+  assert(fade.delay+fade.duration<=2140,'gone before the arrived send is removed');
+  const flying=find(draw('travel'),'sf-pipeline-receiver-one-ring');
+  assert.equal(call(flying,'w'),0,'invisible during the flight');assert.equal(call(flying,'opacity'),1);
+  assert(!find(landed,'sf-pipeline-receiver-one-again')&&!find(landed,'sf-pipeline-receiver-one-core'),'no second ring or core block');
+});
+
 test('an upward send runs up the same lane, and motion off draws only the pixel pipe',async()=>{
   const {pipeline}=await load();
   const options={id:'up',width:18,inset:14,from:100,to:10,color:'#79D1DC'};

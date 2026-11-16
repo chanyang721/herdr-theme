@@ -398,6 +398,24 @@ test('a task event done mark is easy to see (2px foreground ring held lit, secon
   }
 });
 
+// 2026-11-16, user: "송신만 나오고" — the send's 15px ring showed, the 3x3 landing
+// blink alone did not read as a receive. The receiving end mirrors the departure ring.
+test('a message receiver opens the same flow-colour ring as its sender, closed during the flight, never the done mark',async()=>{
+  const r=await renderer(true),view=viewFor(makePanelFixture()),feed=view.panelState.feed;
+  r.renderPanelTracking(view,t,r.cx);const layout=r.panelLayout(feed,view.panelEvents),[a,b]=feed.spaces[0].agents;
+  const draw=phase=>r.panelFlowLayer(feed,layout,{...view.panelEvents,packets:[{id:'m',kind:'message',from:a.id,to:b.id,phase,elapsed:PANEL_TIMING.packetMs}]},()=>t.accent,t,true,224);
+  const landed=draw('ping'),sender=byId(landed,'panel-sender-m'),ring=byId(landed,'panel-receiver-m-ring');
+  assert(ring,'the receiving end has its own ring');
+  for(const key of ['w','h','border','border_color'])assert.deepEqual(call(ring,key),call(sender,key),`${key} matches the departure ring`);
+  assert.equal(call(ring,'border')[1],1,'1px, not the 2px done mark');assert.equal(call(ring,'border_color')[1],'#79D1DC','the flow colour');
+  assert.equal(call(byId(landed,'panel-receiver-m'),'w')[1],3,'the 3x3 blink stays inside it');
+  const fade=ring.calls.find(c=>c[0]==='transition'&&c[1]==='opacity')[2];
+  assert(PANEL_TIMING.pingMs+PANEL_TIMING.coolMs>=fade.delay+fade.duration,'it fades before the packet is removed');
+  for(const phase of ['start','travel'])assert.equal(call(byId(draw(phase),'panel-receiver-m-ring'),'w')[1],0,`closed while ${phase}`);
+  assert(!byId(landed,'panel-receiver-m-again')&&!byId(landed,'panel-receiver-m-core'),'no second ring or core block');
+  assert(!all(landed).some(n=>call(n,'border_color')?.[1]===t.foreground),'nothing in the foreground colour');
+});
+
 test('a row an event arrives on gets a 2px foreground overlay that blinks twice without moving the row',async()=>{
   const r=await renderer(false),view=viewFor(makePanelFixture()),space=view.panelState.feed.spaces[0],agent=space.agents[0];
   const state={packets:[{id:'x',kind:'dispatch',to:agent.id,phase:'ping'}],spawning:new Set(),active:[]};
