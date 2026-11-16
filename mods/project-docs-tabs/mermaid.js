@@ -21,7 +21,8 @@ export function mermaidFences(text) {
   return fences;
 }
 
-// Split text blocks around rendered diagrams; unrendered ones stay as code.
+// Split text blocks around rendered diagrams; unrendered ones stay as code. A rendered block
+// keeps its Mermaid source so the viewer can show it as selectable text.
 export function applyDiagrams(blocks, diagrams) {
   if (!diagrams.size) return blocks;
   return blocks.flatMap(block => {
@@ -32,7 +33,7 @@ export function applyDiagrams(blocks, diagrams) {
       const media = diagrams.get(fence.code);
       if (!media) continue;
       if (fence.start > cursor) parts.push({ text: block.text.slice(cursor, fence.start) });
-      parts.push({ media, diagram: true });
+      parts.push({ media, diagram: true, code: fence.code });
       cursor = fence.end;
     }
     if (!parts.length) return [block];

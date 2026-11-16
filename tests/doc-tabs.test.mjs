@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises';
 import { resolveLink } from '../mods/project-docs-tabs/vendor/paths.js';
 import { mermaidFences, applyDiagrams } from '../mods/project-docs-tabs/mermaid.js';
 import { locations, locate, listTree, searchTree, kindCounts, foldersOf, shortDate, matches, describeWarnings } from '../mods/project-docs-tabs/tree.js';
+import * as zoom from '../mods/project-docs-tabs/zoom.js';
 
 const document = (id, path = `/docs/${id}.md`, pinned = true) => ({ id, path, pinned, label: id, name: path.split('/').at(-1), status: 'ok' });
 const deferred = () => { let resolve, reject; const promise = new Promise((yes, no) => { resolve = yes; reject = no; }); return { promise, resolve, reject }; };
@@ -58,7 +59,10 @@ async function localViews({ documents = [document('a'), document('b')], selectio
   };
   const columns = await load('column-view.js', { div: element, v_flex: element, h_flex: element, Button: runtime.Button });
   const finder = await load('finder.js', { div: element, v_flex: element, h_flex: element, entryIcon: columns.icon });
-  Object.assign(runtime, { columnView: columns.columnView, listView: finder.listView, breadcrumb: finder.breadcrumb, icon: finder.icon });
+  const diagrams = await load('diagram-view.js', { div: element, image: element, v_flex: element, h_flex: element, TextView: runtime.TextView, percent: zoom.percent, SHARP_SCALE: zoom.SHARP_SCALE });
+  const { openView, viewAt, clampScale, clampView, toggleView, wheelStep, pinchStep, keyCommand, command, panBy } = zoom;
+  Object.assign(runtime, { columnView: columns.columnView, listView: finder.listView, breadcrumb: finder.breadcrumb, icon: finder.icon,
+    figure: diagrams.figure, viewer: diagrams.viewer, fraction: diagrams.fraction, openView, viewAt, clampScale, clampView, toggleView, wheelStep, pinchStep, keyCommand, command, panBy });
   const key = `__documentTabs${moduleId++}`; globalThis[key] = runtime;
   let source = await readFile(new URL('../mods/project-docs-tabs/main.js', import.meta.url), 'utf8');
   if (lineEnding) source = source.replace(/\r?\n/g, lineEnding);
@@ -232,7 +236,7 @@ test('mermaid fences are found by exact code and unrendered diagrams stay as cod
   assert.deepEqual(mermaidFences('```mermaid\nunclosed'), []);
   const media = { path: 'mods/project-docs-tabs/.cache/m.png', width: 10, height: 5 };
   const blocks = applyDiagrams([{ text }], new Map([['flowchart LR\n  A-->B', media]]));
-  assert.equal(blocks[0].text, '앞\n'); assert.deepEqual(blocks[1], { media, diagram: true });
+  assert.equal(blocks[0].text, '앞\n'); assert.deepEqual(blocks[1], { media, diagram: true, code: 'flowchart LR\n  A-->B' });
   assert.ok(blocks[2].text.includes('~~~~ mermaid\nsequenceDiagram'), 'a failed diagram keeps its code');
   assert.deepEqual(applyDiagrams([{ text }], new Map()), [{ text }]);
 });

@@ -6,6 +6,8 @@ import { dirname, resolveLink } from './vendor/paths.js';
 import { mermaidFences, applyDiagrams } from './mermaid.js';
 import { locations, locate, listTree, searchTree, kindCounts, foldersOf, describeWarnings } from './tree.js';
 import { columnView } from './column-view.js';
+import { figure, viewer, fraction } from './diagram-view.js';
+import { openView, viewAt, clampScale, clampView, toggleView, wheelStep, pinchStep, keyCommand, command, panBy } from './zoom.js';
 import { listView, breadcrumb, icon } from './finder.js';
 
 const LIMIT = 400000;
@@ -20,6 +22,8 @@ const SIDE_BY_SIDE = 760;
 // Below this width the sidebar starts hidden (the toolbar button still shows it).
 const WITH_SIDEBAR = 1100;
 const COLUMN = 200;
+// The viewer's toolbar and hint line, around the picture.
+const VIEWER_CHROME = 36 + 24;
 const LOCATION_ICONS = { docs: '🗂', localViews: '🧭', opened: '👁', archived: '🗄' };
 const LOCAL_VIEW_TAG = '로컬 보기 · 읽기 전용';
 const isHtml = path => /\.html?$/i.test(path);
@@ -87,6 +91,9 @@ export default class ProjectDocuments extends View {
     this.kinds = []; this.localViews = null; this.kindFilter = null; this.kindMenu = false; this.sidebar = null;
     const saved = shared(FINDER)?.[this.spaceId] || {};
     this.view = saved.view === 'list' ? 'list' : 'column'; this.location = saved.location || 'docs'; this.colPath = saved.colPath || '';
+    this.paneHeight = 800; this.codeOpen = new Set(); this.zoom = null;
+    // Focus is retained, so the viewer's handle is made here.
+    this.zoomFocus = cx.focus_handle?.() || null;
     this.expanded = new Set(); this.sort = { key: 'date', dir: -1 }; this.query = '';
     // Retained input state is made here, never while rendering.
     this.search = InputState?.new ? InputState.new({ placeholder: '이름·종류 검색' }) : null;
@@ -181,6 +188,7 @@ export default class ProjectDocuments extends View {
     if (this.bodyKey !== key) {
       this.bodyKey = key; this.blocks = null; this.bodyText = null; this.bodyError = null; this.html = null;
       this.lastSuccess = null; this.newVersion = Boolean(this.lastPath && doc?.path && this.lastPath !== doc.path && this.lastId === doc.id);
+      this.zoom = null; this.codeOpen.clear();
     }
     const generation = ++this.generation;
     this.loading = false;
@@ -332,6 +340,89 @@ export default class ProjectDocuments extends View {
     setShared(FINDER, { ...(shared(FINDER) || {}), [this.spaceId]: { view: this.view, location: this.location, colPath: this.colPath } });
   }
 
+  unit() { return Number(settings()?.zoom) || 1; }
+
+  // The viewer's picture area before it has been measured: the pane less the viewer's bars.
+  zoomViewport() {
+    if (this.zoom?.viewport) return this.zoom.viewport;
+    const unit = this.unit();
+    return { width: Math.max(200, this.paneWidth / unit), height: Math.max(160, this.paneHeight / unit - VIEWER_CHROME) };
+  }
+
+  // Opens the viewer over this pane. `at` is where the picture was pressed (fractions); a pinch
+  // passes the scale it reached, so the picture keeps growing from there.
+  openZoom(index, block, at, scale, cx) {
+    if (!block?.media?.width || !block.media.height) return;
+    this.zoom = { key: this.bodyKey, index, media: block.media, code: block.code || null, open: { at, scale }, viewport: null, drag: null, touched: false, pinchAt: 0 };
+    this.zoom.view = this.initialZoom(this.zoomViewport());
+    this.zoomFocus?.focus();
+    cx.timer?.after?.(30, () => { if (this.zoom) this.zoomFocus?.focus(); });
+    cx.notify();
+  }
+
+  initialZoom(viewport) {
+    const { media, open: { at, scale } } = this.zoom;
+    if (!scale) return openView(media, viewport, at.u, at.v);
+    return viewAt(clampScale(scale, media, viewport), at.u, at.v, { x: at.u * viewport.width, y: at.v * viewport.height }, media, viewport);
+  }
+
+  closeZoom(cx) { this.zoom = null; cx.notify(); }
+
+  setZoom(view, cx) { if (!this.zoom) return; this.zoom.view = view; this.zoom.touched = true; cx.notify(); }
+
+  zoomMeasured(viewport, cx) {
+    const z = this.zoom;
+    if (!z || (z.viewport && Math.abs(z.viewport.width - viewport.width) < 1 && Math.abs(z.viewport.height - viewport.height) < 1)) return;
+    z.viewport = viewport;
+    z.view = z.touched ? clampView(z.view, z.media, viewport) : this.initialZoom(viewport);
+    cx.notify();
+  }
+
+  zoomCommand(name, cx) {
+    if (!this.zoom) return;
+    if (name === 'close') return this.closeZoom(cx);
+    this.setZoom(command(this.zoom.view, name, this.zoom.media, this.zoomViewport()), cx);
+  }
+
+  zoomKey(event, cx) {
+    const name = keyCommand(event);
+    if (!name) return;
+    cx.stop_propagation(); this.zoomCommand(name, cx);
+  }
+
+  zoomWheel(event, point, cx) {
+    const z = this.zoom;
+    if (!z) return;
+    const m = event.modifiers || {};
+    // A trackpad keeps scrolling for a moment after a pinch ends; that must not slide the picture.
+    if (!m.platform && !m.alt && Date.now() - z.pinchAt < 250) return;
+    this.setZoom(wheelStep(z.view, event, z.media, this.zoomViewport(), point), cx);
+  }
+
+  zoomPinch(event, point, cx) {
+    const z = this.zoom;
+    if (!z) return;
+    z.pinchAt = Date.now();
+    this.setZoom(pinchStep(z.view, event, z.media, this.zoomViewport(), point), cx);
+  }
+
+  zoomDrag(phase, position, cx) {
+    const z = this.zoom;
+    if (!z) return;
+    if (phase === 'start') { z.drag = { x: position.x, y: position.y, view: z.view }; return cx.notify(); }
+    if (phase === 'end') { if (z.drag) { z.drag = null; cx.notify(); } return; }
+    if (z.drag) this.setZoom(panBy(z.drag.view, position.x - z.drag.x, position.y - z.drag.y, z.media, this.zoomViewport()), cx);
+  }
+
+  // The diagram PNG in Preview, the escape hatch when the viewer is not enough.
+  previewZoom(cx) {
+    const path = this.zoom?.media?.path;
+    if (!path) return;
+    const file = /^(\/|[A-Za-z]:[\\/])/.test(path) ? path : `${appHome()}/${path}`;
+    if (windows()) this.external('open', [file], cx);
+    else this.external('open', ['-a', 'Preview', file], cx);
+  }
+
   // Keeps the browser on the chosen document unless it is already showing it.
   revealInBrowser(id) {
     const locs = this.locs(), here = locs.find(l => l.key === this.location);
@@ -427,6 +518,7 @@ export default class ProjectDocuments extends View {
     const locs = this.locs();
     const side = this.paneWidth >= SIDE_BY_SIDE;
     const sidebar = this.sidebar ?? this.paneWidth >= WITH_SIDEBAR;
+    const unit = this.unit();
     const counts = kindCounts(this.documents, this.kinds);
     const kindLabel = counts.find(k => k.id === this.kindFilter)?.label || this.kinds.find(k => k.id === this.kindFilter)?.label;
     const here = locs.find(l => l.key === this.location) || locs[0];
@@ -434,8 +526,11 @@ export default class ProjectDocuments extends View {
     const crumbs = this.query.trim() ? (doc ? [{ name: doc.label, fileName: doc.name }] : [])
       : [...foldersOf(this.colPath, Boolean(here?.entries.find(e => e.path === this.colPath)?.dir)).map(p => ({ name: here?.entries.find(e => e.path === p)?.name || p.split('/').pop(), folder: true, path: p })),
         ...(doc && here?.entries.some(e => e.path === this.colPath && !e.dir) ? [{ name: doc.label, fileName: doc.name }] : [])];
-    let root = v_flex().id('project-documents').size_full().min_w(0).min_h(0).overflow_hidden().bg(t.canvas).text_color(t.foreground).text_size(13)
-      .on_size_change((size, cx) => { if (Math.abs(this.paneWidth - size.width) > 1) { this.paneWidth = size.width; cx.notify(); } })
+    let root = v_flex().id('project-documents').relative().size_full().min_w(0).min_h(0).overflow_hidden().bg(t.canvas).text_color(t.foreground).text_size(13)
+      .on_size_change((size, cx) => {
+        const changed = Math.abs(this.paneWidth - size.width) > 1 || Math.abs(this.paneHeight - size.height) > 1;
+        if (changed) { this.paneWidth = size.width; this.paneHeight = size.height; cx.notify(); }
+      })
       .child(h_flex().id('docs-toolbar').h(40).flex_none().px(8).gap(6).items_center().bg(t.chrome).border_b(1).border_color(t.border)
         .child(button('docs-sidebar-toggle', '◧', cx => { this.sidebar = !sidebar; cx.notify(); }).tooltip('사이드바'))
         .child(h_flex().flex_none().rounded(5).overflow_hidden().border(1).border_color(t.border)
@@ -469,7 +564,9 @@ export default class ProjectDocuments extends View {
           .when(sidebar, el => el.child(this.renderSidebar(t, locs)))
           .child(div().flex_1().min_w(0).h_full().child(this.renderBrowser(t, locs, Math.max(COLUMN, this.paneWidth - (sidebar ? 184 : 0))))))
         .child(viewer.flex_1().min_h(0));
-    return root.child(body);
+    root = root.child(body);
+    if (this.zoom && this.zoom.key === this.bodyKey) root = root.child(zoomViewer(this, t, doc, unit));
+    return root;
   }
 
   renderViewer(t, doc, button, notice) {
@@ -514,10 +611,28 @@ export default class ProjectDocuments extends View {
     return root.child(v_flex().id(`docs-body-${this.bodyKey}`).flex_1().min_h(0).min_w(0).overflow_y_scrollbar().p(20).gap(tiles ? 0 : 12)
       .on_size_change((size, cx) => { if (Math.abs(this.width - size.width) > 1) { this.width = size.width; this.resized(cx); cx.notify(); } })
       .children(this.blocks.map((block, index) => block.media
-        ? image(block.media.path).w(Math.min(block.media.width, Math.max(1, this.width - 40))).h(Math.min(block.media.width, Math.max(1, this.width - 40)) * block.media.height / block.media.width).flex_none()
+        ? tiles
+          ? image(block.media.path).w(Math.min(block.media.width, Math.max(1, this.width - 40))).h(Math.min(block.media.width, Math.max(1, this.width - 40)) * block.media.height / block.media.width).flex_none()
+          : figure({ id: `docs-figure-${this.bodyKey}-${index}`, block, width: this.width - 40, t, codeOpen: this.codeOpen.has(index),
+            onOpen: (at, scale, cx) => this.openZoom(index, block, at, scale, cx),
+            onPinch: (event, shown, cx) => { if (!this.zoom && event.delta > 0.005 && event.touch_phase !== 'ended') this.openZoom(index, block, fraction(event), shown * (1 + event.delta), cx); },
+            onToggleCode: cx => { if (this.codeOpen.has(index)) this.codeOpen.delete(index); else this.codeOpen.add(index); cx.notify(); } })
         : TextView.markdown(`docs-markdown-${this.bodyKey}-${index}`, block.text).selectable(true).scrollable(false).w_full().flex_none().text_size(14).text_color(t.foreground)
           .on_link_click((url, cx) => this.follow(doc.path, url, cx)))));
   }
 
   close() { this.closed = true; ++this.generation; this.watchers.clear(); }
+}
+
+// The zoom viewer for the open picture, over the whole pane.
+function zoomViewer(view, t, doc, unit) {
+  const z = view.zoom, figures = view.blocks?.filter(b => b.media).length || 1;
+  const number = view.blocks ? view.blocks.slice(0, z.index + 1).filter(b => b.media).length : 1;
+  return viewer({ zoom: z, t, unit, focus: view.zoomFocus,
+    title: `${z.code ? '구성도' : '그림'} ${number}/${figures} · ${doc?.label || doc?.name || ''}`,
+    onKey: (event, cx) => view.zoomKey(event, cx), onCommand: (name, cx) => view.zoomCommand(name, cx), onClose: cx => view.closeZoom(cx),
+    onPreview: cx => view.previewZoom(cx), onViewport: (size, cx) => view.zoomMeasured(size, cx),
+    onWheel: (event, point, cx) => view.zoomWheel(event, point, cx), onPinch: (event, point, cx) => view.zoomPinch(event, point, cx),
+    onDrag: (phase, position, cx) => view.zoomDrag(phase, position, cx),
+    onDouble: (point, cx) => view.setZoom(toggleView(z.view, point, z.media, view.zoomViewport()), cx) });
 }
