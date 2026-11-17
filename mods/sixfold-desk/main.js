@@ -31,13 +31,13 @@ import {TASK_FEED_FILE,createTaskFeedSource} from './task-feed-source.js';
 import {issueRequest,saveIssueRequest} from './task-issue-state.js';
 import {createRetainedPanel} from './panel-retained.js';
 import {taskComputerAnchors,taskComputerRecord} from './panel-host.js';
-import {subscribeJsonFile,subscribeFileChanges,readJsonSnapshot,fileDelivery,FILE_CHANGED_COMMAND} from './panel-io.js';
+import {subscribeJsonFile,subscribeFileChanges,fileDelivery,FILE_CHANGED_COMMAND} from './panel-io.js';
 import {watchSidebarFiles} from './sidebar-files.js';
 import {orderSpaceCards,spaceBadges,lineBadges,metaBadges} from './sidebar-meta.js';
 import {watchMic,paneMic,paneMicChip,MIC_KEY} from './mic.js';
 import {subscribeLiveEvents} from './live-events.js';
 import {createRetainedCards} from './retained-cards.js';
-import {createHash} from 'crypto';
+import {createPoll,changeGate} from './poll.js';
 
 const hasPanel=node=>node?.id==='panel'||(node?.children||[]).some(hasPanel);
 const native = () => `${appHome()}/scripts/sixfold/herdr-theme${(typeof window==='function' && window()?.platform==='windows') || /^(?:[A-Za-z]:[\\/]|\\\\)/.test(appHome())?'.exe':''}`;
@@ -321,26 +321,28 @@ export default class SixfoldDesk extends View {
         } finally {computersBusy=false;cx.notify();}
       });
     });
-    // Kept on disk so a restart does not count the whole message log as unread.
-    let readBusy=false;
-    cx.timer.every(1000,cx=>{
-      if(this.sidebarVisible===false||!this.messageEvents?.length||readBusy)return;
-      readBusy=true;
-      spawnOrRelease(cx,()=>{readBusy=false;},async cx=>{
+    // Kept on disk so a restart does not count the whole message log as unread. Runs when the
+    // events, focus or finished agents change; the 5 s fallback covers reads due by time alone
+    // (HANDLED_AFTER_MS) and another copy's write.
+    const readInputs=changeGate();
+    this.readPoll=createPoll(cx,{every:1000,fallback:5000,
+      visible:()=>this.sidebarVisible!==false&&Boolean(this.messageEvents?.length),
+      due:()=>{
+        const events=this.messageEvents??[],last=events.at(-1);
+        return readInputs(`${events.length}|${last?.seq??''}|${last?.at??''}|${focused()?.terminal??''}|${agents().filter(a=>a.status==='idle'||a.status==='done').map(a=>a.address).join(',')}`);
+      },
+      job:async cx=>{
         try{
           const path=`${appHome()}/data/sixfold/messages-read.json`;
           const old=await readTextFile(path).catch(()=>null);
-          const ledger=await readJsonSnapshot(path);
-          if(old!==null&&ledger.hash!==createHash('sha256').update(old).digest('hex'))return;
-          const saved=ledger.status==='ready'?ledger.value||{}:{};
+          let saved={};
+          if(old!==null){const value=JSON.parse(old);if(value&&typeof value==='object'&&!Array.isArray(value))saved=value;}
           const next=readThrough(this.messageEvents??[],agents(),focused()?.terminal,{...this.readMessages,...saved},Date.now());
           const text=JSON.stringify(next);
           if(text!==old)await writeTextFile(path,text,old);
-          if(text!==JSON.stringify(this.readMessages)){this.readMessages=next;cx.notify();}
-        }catch{ /* Retry a partial or conflicting write on the next tick. */ }
-        finally{readBusy=false;}
-      });
-    });
+          if(text!==this.readMessagesText){this.readMessages=next;this.readMessagesText=text;cx.notify();}
+        }catch{ /* Retry a partial or conflicting write on the next change or fallback. */ }
+      }});
     cx.timer.every(2000, cx => {
       if (this.routeBusy || !this.routeScript || !this.queuedRoutes.some(item=>!item.hold)) return;
       this.routeBusy = true;
@@ -466,6 +468,7 @@ export default class SixfoldDesk extends View {
     this.classicCards?.dispose();
     this.stopArrivals?.();
     this.linkFlowTimer?.cancel();this.linkWakeTimer?.cancel();this.cometTimer?.cancel();
+    this.readPoll?.stop();
     for(const stop of this.fileSubscriptions||[])stop();
     this.fileSubscriptions=[];this.stopLiveMessages?.();this.stopLiveMessages=null;this.panelRetained?.dispose();
   }
