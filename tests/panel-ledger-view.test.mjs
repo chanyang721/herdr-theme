@@ -169,3 +169,51 @@ test('a new day recomputes the cached groups; the same day reuses them', () => {
   assert.equal(next.stats.groupsComputed, 1);
   assert.equal(next.groups.get(feed.spaces[0].id).doneFold, null);
 });
+
+test('review fix: blocked-looking and waiting-for-a-person panes keep finished and unstarted issues', () => {
+  const cases = { report_missing: { report_missing: true }, error: { error: 'Connection unavailable' },
+    closing: { closing: { step: 2, blocked_reason: 'Save pending' } }, unseen: { state: 'unseen_result' }, input: { wait_kind: 'input' } };
+  for (const [name, extra] of Object.entries(cases)) {
+    for (const [index, key] of [[0, 'DEMO-502'], [14, 'DEMO-610']]) {
+      const raw = makeLedgerFieldFeed({ now: NOW }).feed;
+      Object.assign(raw.spaces[0].agents[index], extra);
+      assert(keys(agentGroups(cleanPanelFeed(raw).spaces[0], { today: localDay(NOW) })).includes(key), `${name} keeps ${key}`);
+    }
+  }
+  const plain = makeLedgerFieldFeed({ now: NOW }).feed;
+  Object.assign(plain.spaces[0].agents[0], { keep_reason: 'work left', wait_kind: 'status' });
+  assert(!keys(agentGroups(cleanPanelFeed(plain).spaces[0], { today: localDay(NOW) })).includes('DEMO-502'), 'a plain kept shell does not');
+});
+
+test('review fix: an unknown-issue subtask that works, is blocked or waits for a person is never folded', () => {
+  for (const extra of [{ status: 'working' }, { status: 'blocked' }, { state: 'needs_human' }, { state: 'unseen_result' }, { error: 'failed' }]) {
+    const made = makeLedgerFieldFeed({ now: NOW });
+    Object.assign(made.feed.spaces[0].agents[5], extra);
+    const result = agentGroups(cleanPanelFeed(made.feed).spaces[0], { today: localDay(NOW) });
+    assert(under(result, 'DEMO-490').includes(made.ids[6]), JSON.stringify(extra));
+    assert.equal(result.rowMeta.get(made.ids[6]).parent, made.ids[3], 'it stays under its parent');
+    const fold = groupOf(result, 'DEMO-490').folds.find(item => item.parent === made.ids[3]);
+    assert.deepEqual([fold.hidden, fold.unknown], [1, 1], 'only the idle one stays folded');
+  }
+  const both = makeLedgerFieldFeed({ now: NOW });
+  for (const n of [6, 7]) both.feed.spaces[0].agents[n - 1].status = 'working';
+  const result = agentGroups(cleanPanelFeed(both.feed).spaces[0], { today: localDay(NOW) });
+  assert(!groupOf(result, 'DEMO-490').folds.some(item => item.parent === both.ids[3]), 'nothing left to fold: no +0 row');
+});
+
+test('review fix: without new fields, sorting follows working panes and catalog-known issues get their own row', () => {
+  const { space, ids } = field({ ledger: false });
+  const result = agentGroups(space, { today: localDay(NOW) });
+  // (a) DEMO-417 and DEMO-412 say working but no pane works: they sort after DEMO-490 and the working waiting ones.
+  const order = keys(result);
+  assert(order.indexOf('DEMO-490') < order.indexOf('DEMO-417'));
+  assert(order.indexOf('DEMO-611') < order.indexOf('DEMO-412'), 'a waiting issue with a working pane sorts with the working ones');
+  // (b) a pane whose issue the space does not list but the catalog knows sits under that issue.
+  const raw = makeLedgerFieldFeed({ now: NOW, ledger: false }).feed;
+  raw.spaces[0].agents[11].issue = 'DEMO-503';
+  raw.spaces[0].agents[12].issue = 'DEMO-999';
+  const moved = agentGroups(cleanPanelFeed(raw).spaces[0], { today: localDay(NOW) });
+  assert.deepEqual(under(moved, 'DEMO-503'), [ids[12]]);
+  assert.equal(groupOf(moved, 'DEMO-503').issue.title, 'Stock sync');
+  assert.deepEqual(under(moved, null), [ids[13]], 'a key nothing knows stays under 이슈 없음');
+});

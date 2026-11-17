@@ -713,3 +713,25 @@ test('without the new fields no role, held-issue or 오늘 마무리 rows are dr
   assert.equal(byId(tree,`panel-done-${space.id}`),undefined);
   for(const issue of space.issues)assert(byId(tree,`panel-issue-${space.id}-${issue.key}`),issue.key);
 });
+
+test('224px: role and held-issue count share one shrinkable chip and the title keeps its minimum width',async()=>{
+  const r=await renderer(false),{feed,ids}=makeLedgerFieldFeed({now:Date.now()}),view=viewFor(feed);
+  view.panelWidth=224;const tree=r.renderPanelTracking(view,t,r.cx);
+  for(const n of [3,12,13]){
+    assert.equal(byId(tree,`panel-role-${ids[n]}`),undefined);assert.equal(byId(tree,`panel-issues-${ids[n]}`),undefined);
+    const title=byId(tree,`panel-title-${ids[n]}`);
+    assert.equal(call(title,'flex_1')?.[0],'flex_1');
+    assert.equal(title.calls.filter(c=>c[0]==='min_w').at(-1)[1],r.TITLE_MIN,`row ${n} title keeps ${r.TITLE_MIN}px`);
+    const tags=byId(tree,`panel-tags-${ids[n]}`);
+    assert(!call(tags,'flex_none'),'the chip shrinks first');assert(call(tags,'truncate'));
+  }
+  assert.deepEqual(words(byId(tree,`panel-tags-${ids[13]}`)),['검+1']);
+  assert.deepEqual(words(byId(tree,`panel-tags-${ids[3]}`)),['통+3']);
+  assert.deepEqual(words(byId(tree,`panel-tags-${ids[12]}`)),['구']);
+  assert.match(call(byId(tree,`panel-tags-${ids[13]}`),'tooltip')[1],/역할 검수[\s\S]*DEMO-411/);
+  assert.match(call(byId(tree,`panel-agent-${ids[13]}`),'tooltip')[1],/DEMO-411/,'the row tooltip keeps the full list');
+  const plain=byId(tree,`panel-title-${ids[16]}`);
+  assert.equal(plain.calls.filter(c=>c[0]==='min_w').at(-1)[1],0,'a row without chips keeps the old title');
+  assert.equal(byId(tree,`panel-tags-${ids[16]}`),undefined);
+  assert(r.TITLE_MIN>=28);
+});

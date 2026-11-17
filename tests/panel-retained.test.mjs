@@ -854,3 +854,17 @@ test('field case: the 오늘 마무리 fold and issue labels redraw only their o
   assert.equal(r.controller.stats.renders[`space:${other.id}`],before[`space:${other.id}`]);
   r.controller.dispose();
 });
+
+test('a 오늘 마무리 fold wakes the panel once just after the next local midnight',async()=>{
+  const r=await runtime(),made=makeLedgerFieldFeed({now:Date.now()});
+  r.controller.apply(cleanPanelFeed(made.feed),'ready');r.flush();
+  const d=new Date(),midnight=new Date(d.getFullYear(),d.getMonth(),d.getDate()+1).getTime()+1000;
+  assert.equal(r.controller.wakeAt,midnight);
+  const live=r.timers.filter(timer=>!timer.cancelled);
+  r.controller.apply(cleanPanelFeed(made.feed),'ready');
+  assert.equal(r.timers.filter(timer=>!timer.cancelled).length,live.length,'re-applying replaces the wake, never adds one');
+  const none=makeLedgerFieldFeed({now:Date.now(),ledger:false});
+  r.controller.apply(cleanPanelFeed(none.feed),'ready');
+  assert.equal(r.controller.wakeAt,null,'no fold, no midnight wake');
+  r.controller.dispose();
+});
