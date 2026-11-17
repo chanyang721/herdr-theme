@@ -3,7 +3,7 @@ import {h_flex, v_flex} from 'gpui-base';
 import {spaces, panes, shared, setShared, run, settings} from 'herdr';
 import {agentGroups, panelEventStates, panelSpaces, panelSpacePartners, PANEL_TIMING, PANEL_LEGS, agentRowState, agentHasReason, agentReason, agentCleanupLabel, agentWaitLabel} from './panel-model.js';
 import {SESSION_STATES, sessionStatusGlyph} from './session-status.js';
-import {motionEnabled, motionToggled, motionLabel} from './motion.js';
+import {motionEnabled, motionToggled, motionLabel, briefWindow} from './motion.js';
 import {groupColors, paletteMode} from './collab-flow.js';
 import {rowDetailParts} from './task-row-details.js';
 import {PACKET_PIXELS, pixelUnitFor, snap, centred, pixelBlock, pixelRoute as drawPixelRoute, pixelRing, pixelArrival, pixelLanding, ARRIVAL} from './pixel.js';
@@ -31,6 +31,18 @@ export function panelReasonWake(feed,now){
   let at=null;
   for(const agent of (feed?.spaces||[]).flatMap(space=>space.agents)){const next=agentReason(agent,now).nextAt;if(next!==null&&next>now&&(at===null||next<at))at=next;}
   return at;
+}
+// A row's animated status image plays only for the brief window after its state
+// changes (motion.js); otherwise the still PNG. Sets view.animated, returns the wake.
+export function briefRows(view,feed,motion,now=Date.now()){
+  view.statusBrief??=briefWindow();
+  const animated=new Set();
+  for(const agent of (feed?.spaces||[]).flatMap(space=>space.agents)){
+    const state=agentRowState(agent);
+    if(view.statusBrief.active(agent.id,state,now)&&motion&&state&&SESSION_STATES[state].animated)animated.add(agent.id);
+  }
+  view.animated=animated;
+  return animated.size?view.statusBrief.nextAt(now):null;
 }
 export function panelCounts(feed){
   const counts={working:0,idle:0,blocked:0,done:0,total:0};
@@ -178,7 +190,7 @@ export function agentRow(view,agent,space,tag,state,color,t,motion){
   const remembered=agent.closing?.memory;
   // Error and quota marks still take the slot; otherwise a producer state draws
   // its glyph, held still during an event tag on this row.
-  const glyph=!detail.statusMark&&rowState&&!child?sessionStatusGlyph({state:rowState,reason:reasonText},t,{id:agent.id,size:12,motion,eventActive:Boolean(tag)}):null;
+  const glyph=!detail.statusMark&&rowState&&!child?sessionStatusGlyph({state:rowState,reason:reasonText},t,{id:agent.id,size:12,motion:motion&&Boolean(view.animated?.has(agent.id)),eventActive:Boolean(tag)}):null;
   if(glyph)line.child(div().id(`panel-status-${agent.id}`).w(12).flex_none().child(glyph));
   else if(!child||detail.statusMark)line.child(div().id(`panel-status-${agent.id}`).w(9).flex_none().text_size(10)
     .text_color(detail.statusColor|| (status==='blocked'?t.blocked:status==='working'?color:t.dim))
@@ -422,6 +434,7 @@ export function renderPanelTracking(view,t,cx,{macTitlebar=false}={}){
   const state=panelEventStates(feed,now,{previous:view.panelEvents,motion});view.panelEvents=state;view.now=now;
   let nextAt=state.nextAt;
   const reasonAt=panelReasonWake(feed,now);if(reasonAt!==null&&(nextAt===null||reasonAt<nextAt))nextAt=reasonAt;
+  const briefAt=briefRows(view,feed,motion,now);if(briefAt!==null&&(nextAt===null||briefAt<nextAt))nextAt=briefAt;
   for(const packet of state.packets)for(const offset of PANEL_LEGS.slice(1)){
     const at=packet.at+offset;if(at>now&&(nextAt===null||at<nextAt))nextAt=at;
   }

@@ -465,9 +465,10 @@ test('closing warnings do not replace the observed working marker or summary',as
 });
 
 // Mockup 26: producer row state, keep reason and cleanup countdown.
-const stateRow=async(fields,{motion=false,now=Date.parse('2026-11-09T05:00:00Z'),tag=null}={})=>{
+const stateRow=async(fields,{motion=false,now=Date.parse('2026-11-09T05:00:00Z'),tag=null,brief=false}={})=>{
  const r=await renderer(motion),raw=makePanelFixture();Object.assign(raw.spaces[0].agents[0],{stage:2,status:'idle',closing:null},fields);
  const view=viewFor(raw);view.now=now;const space=view.panelState.feed.spaces[0],agent=space.agents[0];
+ if(brief)view.animated=new Set([agent.id]);
  const state={packets:[],connections:[],spawning:new Set(),active:[]};
  return {r,view,space,agent,row:r.agentRow(view,agent,space,tag,state,t.accent,t,motion)};
 };
@@ -479,9 +480,11 @@ const reasonOf=(row,agent)=>{
 
 test('a seven-state row draws the packaged glyph and keeps its live countdown reason in the tooltip',async()=>{
  const cleanup={idle_since:'2026-11-09T04:42:00Z',limit_s:1800,due_at:'2026-11-09T05:12:00Z'};
- const {agent,row}=await stateRow({status:'idle',state:'cleanup_wait',cleanup},{motion:true});
+ const {agent,row}=await stateRow({status:'idle',state:'cleanup_wait',cleanup},{motion:true,brief:true});
  const glyph=all(byId(row,`panel-status-${agent.id}`)).find(n=>n.kind==='image');
- assert.equal(glyph.value,'mods/sixfold-desk/icons/status/cleanup_wait-12-dark.webp');
+ assert.equal(glyph.value,'mods/sixfold-desk/icons/status/cleanup_wait-12-dark.webp','animated within the brief window');
+ const still=(await stateRow({status:'idle',state:'cleanup_wait',cleanup},{motion:true})).row;
+ assert(all(still).find(n=>n.kind==='image').value.endsWith('cleanup_wait-12-dark.png'),'outside it the still PNG');
  assert.equal(reasonOf(row,agent),'정리 대기 · 30분 쉬면 닫힘 (남은 12분)');
  assert.equal(call(row,'h')[1],24,'a reason never grows a compact row');
  assert(call(row,'tooltip')[1].includes('남은 12분'));
@@ -501,7 +504,7 @@ test('keep reasons are shown verbatim, needs_human maps to its asset and motion-
 
 test('an event tag freezes the glyph, and an expired timer says the next cleanup closes it',async()=>{
  const cleanup={idle_since:'2026-11-09T04:00:00Z',limit_s:1800,due_at:'2026-11-09T04:30:00Z'};
- const {agent,row}=await stateRow({state:'cleanup_wait',cleanup},{motion:true,tag:{id:'x',label:'검수 요청'}});
+ const {agent,row}=await stateRow({state:'cleanup_wait',cleanup},{motion:true,brief:true,tag:{id:'x',label:'검수 요청'}});
  assert(all(row).find(n=>n.kind==='image').value.endsWith('cleanup_wait-12-dark.png'));
  assert.equal(reasonOf(row,agent),'정리 대기 · 다음 정리 때 닫힘');
 });
@@ -620,4 +623,21 @@ test('only the explicit active category preserves progress; text never overrides
   const unknown=await stateRow({state:'idle',wait_kind,keep_reason:'Review, acceptance or identity words are only text'});
   assert.deepEqual(words(byId(unknown.row,`panel-wait-${unknown.agent.id}`)),['상태 확인']);
  }
+});
+
+test('a status image animates for the brief window after a state change, then the panel wakes to the still PNG',async()=>{
+ const r=await renderer(true),raw=makePanelFixture();
+ const realNow=Date.now;let now=Date.parse('2026-11-09T05:00:00Z');
+ try{
+  Date.now=()=>now;
+  Object.assign(raw.spaces[0].agents[0],{state:'idle'});
+  const view=viewFor(raw),agent=view.panelState.feed.spaces[0].agents[0];
+  assert.equal(r.briefRows(view,view.panelState.feed,true,now),null,'first sight: still');
+  now+=5000;agent.state='working';
+  const at=r.briefRows(view,view.panelState.feed,true,now);
+  assert(view.animated.has(agent.id));assert.equal(at,now+8000);
+  assert.equal(r.briefRows(view,view.panelState.feed,false,now),null,'motion off: never animated');
+  now+=8000;
+  assert.equal(r.briefRows(view,view.panelState.feed,true,now),null);assert(!view.animated.has(agent.id));
+ }finally{Date.now=realNow;}
 });

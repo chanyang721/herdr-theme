@@ -7,7 +7,7 @@ import {autoView,autoSignature} from './linear-auto-model.js';
 import {approve,local,busyKeys,doneIds,autoError,checkApprovals,settleLedger,AUTO_POLL_MS} from './linear-auto.js';
 import {autoGroup} from './linear-auto-view.js';
 import {projectPanelFeed,panelEventStates,panelSpaces,panelSpacePartners,PANEL_TIMING,PANEL_LEGS,panelLeg,agentReason} from './panel-model.js';
-import {panelLayout,cardView,agentRow,panelFlowLayer,panelCounts,PANEL_GEOMETRY,toolIcon,panelReasonWake,agentRowHeight,panelMetaHeight,rowArrival} from './panel-view.js';
+import {panelLayout,cardView,agentRow,panelFlowLayer,panelCounts,PANEL_GEOMETRY,toolIcon,panelReasonWake,agentRowHeight,panelMetaHeight,rowArrival,briefRows} from './panel-view.js';
 import {groupColors,paletteMode} from './collab-flow.js';
 import {issuePopover,alertedGroup} from './task-issues-view.js';
 import {issueScopeData,issueCacheLabel,parseTimelineFeed,spaceWithTimeline,rowStatus,milestoneSource} from './task-issue-state.js';
@@ -503,6 +503,7 @@ export function createRetainedPanel(cx,{macTitlebar=false,onClassic=null,onDispo
     c.input=input;c.status=status;c.now=Date.now();
     if(!c.visible||!c.hostVisible||!c.enabled){
       c.motion=false;c.events=panelEventStates(input,Date.now(),{motion:false});
+      briefRows(c,input,false,c.now);   // changes while hidden are absorbed, not replayed
       c.wake?.cancel();c.wake=null;c.wakeAt=null;
       c.stats.hiddenSnapshots=(c.stats.hiddenSnapshots||0)+1;
       return;
@@ -514,6 +515,7 @@ export function createRetainedPanel(cx,{macTitlebar=false,onClassic=null,onDispo
     c.projection=projectPanelFeed(input,c.projection,{includeClosedIds:new Set(c.events.tags.keys()),expandedIssueSpaces:c.expandedIssueSpaces,expandedParents:c.expandedParents});
     c.stats.projections.push(c.projection.stats);if(c.stats.projections.length>32)c.stats.projections.shift();
     c.feed=c.projection.feed;
+    const briefAt=briefRows(c,c.feed,c.motion,c.now);
     const native=panelSpaces(c.feed,spaces());c.spaceMap=new Map(native.map(space=>[space.id,space]));
     c.agentSpaces=new Map(native.flatMap(space=>space.agents.map(agent=>[agent.id,space])));
     c.rowMeta=new Map([...c.projection.groups.values()].flatMap(group=>[...group.rowMeta]));
@@ -545,7 +547,7 @@ export function createRetainedPanel(cx,{macTitlebar=false,onClassic=null,onDispo
         const tag=c.events.tags.get(agent.id),ping=rowArrival(c.events,agent.id);
         const born=c.events.spawning.has(agent.id);
         const revealed=c.motion&&born&&c.events.active.some(event=>event.to===agent.id&&(event.kind==='spawn'||event.allocation?.kind==='new')&&event.elapsed>=PANEL_TIMING.packetMs);
-        const rowKey=signature([agent,agentReason(agent,c.now).text,c.rowMeta.get(agent.id),tag?.id||null,tag?.label||null,ping,born,revealed,c.motion,panelWidthClass(c.panelWidth),c.themeRevision]);
+        const rowKey=signature([agent,agentReason(agent,c.now).text,c.rowMeta.get(agent.id),tag?.id||null,tag?.label||null,ping,born,revealed,c.motion,c.animated.has(agent.id),panelWidthClass(c.panelWidth),c.themeRevision]);
         if(c.rowKeys.get(agent.id)!==rowKey){c.rowKeys.set(agent.id,rowKey);c.notify(c.rows.get(agent.id));}
       }
       if(!c.cards.has(space.id)){c.cards.set(space.id,make(PanelSpace,space.id));structure=true;}
@@ -577,6 +579,7 @@ export function createRetainedPanel(cx,{macTitlebar=false,onClassic=null,onDispo
       let at=c.events.nextAt;const now=Date.now();
       // Countdown text changes once a minute at most; only rows with a timer wake.
       const reasonAt=panelReasonWake(c.feed,now);if(reasonAt!==null&&(at===null||reasonAt<at))at=reasonAt;
+      if(briefAt!==null&&(at===null||briefAt<at))at=briefAt;
       for(const packet of c.events.packets)for(const offset of PANEL_LEGS.slice(1)){
         const boundary=packet.at+offset;if(boundary>now&&(at===null||boundary<at))at=boundary;
       }
