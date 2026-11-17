@@ -39,7 +39,8 @@ async function fixture({home=`/panel-io-${serial}/app`,nativeJson=true}={}){
       .replace("'./arrival-store.js'",JSON.stringify(new URL('../mods/sixfold-desk/arrival-store.js',import.meta.url).href))
       .replace("'./arrival-model.js'",JSON.stringify(new URL('../mods/sixfold-desk/arrival-model.js',import.meta.url).href))
       .replace("'./watch-guard.js'",JSON.stringify(new URL('../mods/sixfold-desk/watch-guard.js',import.meta.url).href))
-      .replace("'./alert-mentions.js'",JSON.stringify(new URL('../mods/sixfold-desk/alert-mentions.js',import.meta.url).href));
+      .replace("'./alert-mentions.js'",JSON.stringify(new URL('../mods/sixfold-desk/alert-mentions.js',import.meta.url).href))
+      .replace("'./shared-publish.js'",JSON.stringify(new URL('../mods/sixfold-desk/shared-publish.js',import.meta.url).href));
     try{return await import('data:text/javascript;base64,'+Buffer.from(body).toString('base64'));}finally{delete globalThis[key];}
   };
   const wakeOnly=async()=>{await tick();for(const {cx,immediate} of contexts)for(const {task,callback} of immediate.splice(0))if(!task.cancelled)callback(cx);await tick();};
