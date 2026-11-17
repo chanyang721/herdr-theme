@@ -155,9 +155,11 @@ export function createRetainedPanel(cx,{macTitlebar=false,onClassic=null,onDispo
   };
   // Read marks: one request per alert (the collector runs it once through its guard). While any is
   // pending, its result is read every READ_POLL_MS; the timer stops when none is left (at most 3 min).
+  // These result checks wait while the panel or its window is hidden; showing it resumes them.
+  c.hidden=()=>!c.visible||(typeof window==='function'&&window()?.visible===false);
   c.readTimer=null;
   c.pollReads=()=>{
-    if(c.disposed||c.readTimer||!readPendingIds().size)return;
+    if(c.disposed||c.readTimer||c.hidden()||!readPendingIds().size)return;
     c.readTimer=c.cx.timer.after(READ_POLL_MS,()=>{c.readTimer=null;if(c.disposed)return;
       c.cx.spawn(async()=>{try{await checkReads();}catch{}c.alertsChanged();c.pollReads();});});
   };
@@ -172,7 +174,7 @@ export function createRetainedPanel(cx,{macTitlebar=false,onClassic=null,onDispo
   // only when its `updated` changes). Stops once every search is closed.
   c.lookTimer=null;
   c.pollLook=()=>{
-    if(c.disposed||c.lookTimer||typeof c.cx.spawn!=='function'||![...c.issueStates.values()].some(state=>state.open))return;
+    if(c.disposed||c.lookTimer||c.hidden()||typeof c.cx.spawn!=='function'||![...c.issueStates.values()].some(state=>state.open))return;
     c.lookTimer=c.cx.timer.after(LOOK_POLL_MS,()=>{c.lookTimer=null;if(c.disposed)return;
       c.cx.spawn(async()=>{
         for(const [id,state] of c.issueStates){
@@ -184,7 +186,7 @@ export function createRetainedPanel(cx,{macTitlebar=false,onClassic=null,onDispo
   c.repaintIssues=()=>{for(const [id,state] of c.issueStates)if(state.open)c.notify(c.cards.get(id));};
   c.pollCaches=()=>{
     const writing=[...c.issueStates.values()].some(state=>state.write&&!state.write.done);
-    if(c.disposed||c.cacheTimer||(!anyWaiting()&&!writing))return;
+    if(c.disposed||c.cacheTimer||c.hidden()||(!anyWaiting()&&!writing))return;
     c.cacheTimer=c.cx.timer.after(CACHE_POLL_MS,()=>{c.cacheTimer=null;if(c.disposed)return;
       c.cx.spawn(async()=>{
         try{await checkCaches();}catch{}
@@ -296,7 +298,7 @@ export function createRetainedPanel(cx,{macTitlebar=false,onClassic=null,onDispo
   // result is read every AUTO_POLL_MS (the ledger itself arrives through watchLinear).
   c.autoTimer=null;
   c.pollAuto=()=>{
-    if(c.disposed||c.autoTimer||!busyKeys().size)return;
+    if(c.disposed||c.autoTimer||c.hidden()||!busyKeys().size)return;
     c.autoTimer=c.cx.timer.after(AUTO_POLL_MS,()=>{c.autoTimer=null;if(c.disposed)return;
       c.cx.spawn(async()=>{try{await checkApprovals();}catch{}c.alertsChanged();c.pollAuto();});});
   };
@@ -609,6 +611,7 @@ export function createRetainedPanel(cx,{macTitlebar=false,onClassic=null,onDispo
       // shows current work without replaying a backlog of message animations.
       if(visible&&c.input)c.events=panelEventStates(c.input,Date.now(),{motion:false});
       c.preferences();
+      if(visible){c.pollReads();c.pollLook();c.pollCaches();c.pollAuto();}
     }
   };
   c.setEnabled=enabled=>{if(c.enabled!==enabled){c.enabled=enabled;c.preferences();}};

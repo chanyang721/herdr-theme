@@ -721,3 +721,18 @@ test('a ledger catalog survives feed cleaning and is not replaced by a newer tim
     assert.equal(extra.statusOf('DEMO-3').name,'Todo');
   }finally{r.controller.dispose();delete globalThis.__retainedWrites;delete globalThis.__retainedRead;}
 });
+
+test('result checks wait while the panel is hidden and resume when it is shown',async()=>{
+  const r=await runtime(),c=r.controller;
+  const feed=cleanPanelFeed(makePanelLoadFixture({spaces:1,agentsPerSpace:1,now:Date.now()}));
+  c.apply(feed,'ready');r.flush();
+  c.cx.spawn=()=>{};c.issueStates.set(feed.spaces[0].id,{open:true,scope:'week',query:'',pending:new Map(),error:null});
+  const looks=()=>r.timers.filter(timer=>timer.ms===5000&&!timer.cancelled).length;
+  c.setVisible(false);c.pollLook();
+  assert.equal(looks(),0,'hidden: no look timer');
+  globalThis.__retainedHostVisible=false;c.setVisible(true);
+  assert.equal(looks(),0,'a hidden window holds it too');
+  c.setVisible(false);globalThis.__retainedHostVisible=true;c.setVisible(true);
+  assert.equal(looks(),1,'shown: the look resumes');
+  c.dispose();
+});
