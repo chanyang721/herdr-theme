@@ -15,7 +15,7 @@ import {ensure,cached,waiting,checkCaches,anyWaiting,CACHE_POLL_MS,LOOK_POLL_MS}
 import {statusIndex,teamStatuses,statusFilters,filterRows,foldedCount,milestoneList,detailData} from './issue-model.js';
 import {nativeTaskSpace,hostedTaskLayout,panelWidthClass} from './panel-host.js';
 import {motionEnabled,motionToggled,motionLabel} from './motion.js';
-import {loadStartConfig,runStart,startGuarded} from './issue-start.js';
+import {loadStartConfig,runStart,startGuarded,startGuardLeft} from './issue-start.js';
 import {startPick,startSignature} from './issue-start-model.js';
 
 // Each retained entity receives only a local controller key. Display data stays
@@ -333,6 +333,15 @@ export function createRetainedPanel(cx,{macTitlebar=false,onClassic=null,onDispo
           if(result)starts.set(issue,{running:false,ok:result.ok,text:result.text});
           else if(before)starts.set(issue,before);else starts.delete(issue);
           c.notify(c.cards.get(space.id));
+          // One redraw when the guard ends, so [작업 시작] comes back; ignored once this search closed.
+          const left=startGuardLeft(space.name,issue);
+          if(left>0&&c.cx.timer?.after){
+            state.startTimer?.cancel?.();
+            state.startTimer=c.cx.timer.after(left+50,()=>{
+              state.startTimer=null;
+              if(!c.disposed&&state.open&&state.starts===starts)c.notify(c.cards.get(space.id));
+            });
+          }
         });
       }};
   };
@@ -519,7 +528,7 @@ export function createRetainedPanel(cx,{macTitlebar=false,onClassic=null,onDispo
         if(open)c.ensureInputs(space.id);
         if(open)for(const [id,other] of c.issueStates)if(id!==space.id&&other.open){other.open=false;c.notify(c.cards.get(id));}
         current.open=open;
-        if(!open){current.detail=null;current.menu=null;current.hoverKey=null;current.startKey=null;current.startPick=null;current.starts=new Map();}
+        if(!open){current.detail=null;current.menu=null;current.hoverKey=null;current.startKey=null;current.startPick=null;current.starts=new Map();current.startTimer?.cancel?.();current.startTimer=null;}
         else{c.askLinear('project',space.name);c.loadTimeline();c.loadStartConfig();}
         c.notify(c.cards.get(space.id));
       }),

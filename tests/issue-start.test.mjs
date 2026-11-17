@@ -9,6 +9,8 @@ const CONFIG={v:1,command:'/opt/demo/bin/start',args:['send','{space}','{issue} 
   tiers:[{id:'low',label:'낮음'},{id:'mid',label:'중간'},{id:'high',label:'높음'},{id:'max',label:'최고'}],
   default:{provider:'claude',tier:'high'},timeout_ms:300000};
 const config=parseStartConfig(JSON.stringify(CONFIG));
+// The result line's text (the guard release flag is checked on its own).
+const shown=r=>r&&{ok:r.ok,text:r.text};
 const params={space:'Demo',issue:'DEMO-12',title:'Fix the  login\tpage',provider:'codex',tier:'mid'};
 
 test('a valid setting parses with its defaults; anything off gives no setting',()=>{
@@ -48,18 +50,18 @@ test('the result line reads the last JSON line of stdout',()=>{
   const out=lines=>({code:0,stdout:lines.join('\n')});
   assert.deepEqual(lastJson('log\n{"a":1}\nnot json\n{"b":2}\n\n'),{b:2});
   assert.equal(lastJson('no json here'),null);assert.equal(lastJson('[1,2]'),null);assert.equal(lastJson(undefined),null);
-  assert.deepEqual(startResult(out(['working…','{"outcome":"sent","task_id":"t-1","target":"Demo session","model":"opus"}'])),{ok:true,text:'보냄 · Demo session · opus'});
-  assert.deepEqual(startResult(out(['{"outcome":"pending","task_id":"t-2","target":"Demo"}'])),{ok:true,text:'보냄 · Demo'});
-  assert.deepEqual(startResult(out(['{"outcome":"unconfirmed","task_id":"t-3"}'])),{ok:true,text:'보냄'});
-  assert.deepEqual(startResult(out(['{"outcome":"sent"}'])),{ok:false,text:'안 보냄 · sent'},'no task id: not counted as sent');
+  assert.deepEqual(shown(startResult(out(['working…','{"outcome":"sent","task_id":"t-1","target":"Demo session","model":"opus"}']))),{ok:true,text:'보냄 · Demo session · opus'});
+  assert.deepEqual(shown(startResult(out(['{"outcome":"pending","task_id":"t-2","target":"Demo"}']))),{ok:true,text:'보냄 · Demo'});
+  assert.deepEqual(shown(startResult(out(['{"outcome":"unconfirmed","task_id":"t-3"}']))),{ok:true,text:'보냄'});
+  assert.deepEqual(shown(startResult(out(['{"outcome":"sent"}']))),{ok:false,text:'안 보냄 · sent'},'no task id: not counted as sent');
   const reason='x'.repeat(300);
-  assert.deepEqual(startResult(out([`{"outcome":"blocked","reason":"${reason}"}`])),{ok:false,text:`안 보냄 · ${'x'.repeat(120)}`});
-  assert.deepEqual(startResult(out(['{"outcome":"failed","reason":"no idle session"}'])),{ok:false,text:'안 보냄 · no idle session'});
-  assert.deepEqual(startResult(out(['{"outcome":"weird"}'])),{ok:false,text:'안 보냄 · weird'});
-  assert.deepEqual(startResult(out(['{}'])),{ok:false,text:'안 보냄'});
-  assert.deepEqual(startResult({code:2,stdout:'boom'}),{ok:false,text:'실행 실패(코드 2)'});
-  assert.deepEqual(startResult(null),{ok:false,text:'실행 실패(코드 ?)'},'exec itself failed');
-  assert.deepEqual(startResult({code:1,stdout:'{"outcome":"blocked","reason":"busy"}'}),{ok:false,text:'안 보냄 · busy'},'a JSON answer is read whatever the exit code');
+  assert.deepEqual(shown(startResult(out([`{"outcome":"blocked","reason":"${reason}"}`]))),{ok:false,text:`안 보냄 · ${'x'.repeat(120)}`});
+  assert.deepEqual(shown(startResult(out(['{"outcome":"failed","reason":"no idle session"}']))),{ok:false,text:'안 보냄 · no idle session'});
+  assert.deepEqual(shown(startResult(out(['{"outcome":"weird"}']))),{ok:false,text:'안 보냄 · weird'});
+  assert.deepEqual(shown(startResult(out(['{}']))),{ok:false,text:'안 보냄'});
+  assert.deepEqual(shown(startResult({code:2,stdout:'boom'})),{ok:false,text:'실행 실패(코드 2)'});
+  assert.deepEqual(shown(startResult(null)),{ok:false,text:'실행 실패(코드 ?)'},'exec itself failed');
+  assert.deepEqual(shown(startResult({code:1,stdout:'{"outcome":"blocked","reason":"busy"}'})),{ok:false,text:'안 보냄 · busy'},'a JSON answer is read whatever the exit code');
 });
 
 test('one start per issue: none while running, none within three minutes',()=>{
@@ -102,19 +104,19 @@ test('runStart execs the argv once and ignores a second press while running or w
   assert.equal(await io.runStart(config,params,{run,now:()=>clock}),null,'a press while running sends nothing');
   assert.equal(io.startGuarded('Demo','DEMO-12',clock),true);
   release({code:0,stdout:'{"outcome":"sent","task_id":"t-9","target":"Demo","model":"sonnet"}\n'});
-  assert.deepEqual(await first,{ok:true,text:'보냄 · Demo · sonnet'});
+  assert.deepEqual(shown(await first),{ok:true,text:'보냄 · Demo · sonnet'});
   assert.deepEqual(calls,[['/opt/demo/bin/start',['send','Demo','DEMO-12 Fix the login page','--agent','codex','--level','mid'],{timeout:300000}]]);
   clock+=60_000;
   assert.equal(await io.runStart(config,params,{run,now:()=>clock}),null,'within three minutes: ignored');
   // Another issue is its own guard.
   const other=io.runStart(config,{...params,issue:'DEMO-13'},{run:async()=>({code:3,stdout:''}),now:()=>clock});
-  assert.deepEqual(await other,{ok:false,text:'실행 실패(코드 3)'});
+  assert.deepEqual(shown(await other),{ok:false,text:'실행 실패(코드 3)'});
   clock+=START_GUARD_MS;
   assert.equal(io.startGuarded('Demo','DEMO-12',clock),false);
-  assert.deepEqual(await io.runStart(config,params,{run:async()=>{throw new Error('spawn failed');},now:()=>clock}),{ok:false,text:'실행 실패(코드 ?)'});
+  assert.deepEqual(shown(await io.runStart(config,params,{run:async()=>{throw new Error('spawn failed');},now:()=>clock})),{ok:false,text:'실행 실패(코드 ?)'});
   // Bad values: nothing runs and no guard is taken.
   let ran=0;
-  assert.deepEqual(await io.runStart(config,{...params,issue:'bad'},{run:async()=>{ran++;},now:()=>clock}),{ok:false,text:'안 보냄 · 작업 시작 값 확인 실패'});
+  assert.deepEqual(shown(await io.runStart(config,{...params,issue:'bad'},{run:async()=>{ran++;},now:()=>clock})),{ok:false,text:'안 보냄 · 작업 시작 값 확인 실패'});
   assert.equal(ran,0);assert.equal(io.startGuarded('Demo','bad',clock),false);
   io.resetStartGuards();
 });

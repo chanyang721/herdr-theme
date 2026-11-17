@@ -2,6 +2,12 @@
 // a choice of agent and tier; [작업 시작] runs one command template from the local setting file
 // (data/sixfold/issue-start.json) without a shell. Every value placed into the command is checked
 // here first; anything off means nothing is run.
+//
+// Duplicate guard: it lives only in this window's memory (one start per issue while running and
+// for three minutes after). Duplicates across windows or restarts must be refused by the command
+// being run. In the setting, never use {title} (or {space}) as an argument on its own: write
+// "{issue} {title}" so a value cannot stand where an option would; a value that would start an
+// argument with '-' where the template's argument does not is refused anyway.
 
 export const ISSUE_KEY = /^[A-Z][A-Z0-9]{0,9}-\d{1,7}$/;
 export const START_GUARD_MS = 3 * 60 * 1000;
@@ -57,11 +63,13 @@ export function startArgv(config, {space, issue, title, provider, tier} = {}) {
   if (!config || !Array.isArray(config.args) || !absolute(config.command)) return null;
   if (typeof issue !== 'string' || !ISSUE_KEY.test(issue)) return null;
   if (!config.providers?.some(item => item.id === provider) || !config.tiers?.some(item => item.id === tier)) return null;
-  const name = typeof space === 'string' ? space.replace(CONTROL, '').trim() : '';
+  const name = typeof space === 'string' ? cleanText(space.replace(CONTROL, ''), 80) : '';
   if (!name) return null;
   const values = {space: name, issue, title: cleanText(title, 80), provider, tier};
   const args = config.args.map(arg => arg.replace(/\{(space|issue|title|provider|tier)\}/g, (_m, key) => values[key]));
-  if (args.length > MAX_ARGS) return null;
+  if (args.length > MAX_ARGS || args.some(arg => arg.length > MAX_ARG)) return null;
+  // A value must not turn an argument into an option ('-…') the template did not write as one.
+  if (args.some((arg, i) => arg.startsWith('-') && !config.args[i].startsWith('-'))) return null;
   return {command: config.command, args, timeout: config.timeout};
 }
 
@@ -76,16 +84,18 @@ export function lastJson(stdout) {
   return null;
 }
 
-// exec's {code, stdout} (or null when exec itself threw) -> {ok, text} for the result line.
+// exec's {code, stdout} (or null when exec itself threw) -> {ok, text, release} for the result line.
+// `release`: surely not sent (a JSON answer whose outcome is not a sent kind), so the guard may be
+// lifted at once. A timeout, no JSON, or any sent kind keeps the three-minute guard.
 export function startResult(result) {
   const code = Number.isInteger(result?.code) ? result.code : null;
   const json = result ? lastJson(result.stdout) : null;
-  if (!json) return {ok: false, text: `실행 실패(코드 ${code ?? '?'})`};
+  if (!json) return {ok: false, text: `실행 실패(코드 ${code ?? '?'})`, release: false};
   const word = value => typeof value === 'string' || typeof value === 'number' ? cleanText(String(value), 60) : '';
   const outcome = word(json.outcome), task = word(json.task_id);
-  if (SENT.has(outcome) && task) return {ok: true, text: ['보냄', word(json.target), word(json.model)].filter(Boolean).join(' · ')};
+  if (SENT.has(outcome) && task) return {ok: true, text: ['보냄', word(json.target), word(json.model)].filter(Boolean).join(' · '), release: false};
   const reason = cleanText(typeof json.reason === 'string' ? json.reason : '', 120) || outcome;
-  return {ok: false, text: reason ? `안 보냄 · ${reason}` : '안 보냄'};
+  return {ok: false, text: reason ? `안 보냄 · ${reason}` : '안 보냄', release: Boolean(outcome) && !SENT.has(outcome)};
 }
 
 // One start per issue at a time: none while one is running, none within START_GUARD_MS of the last.

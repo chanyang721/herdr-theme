@@ -1,5 +1,5 @@
 import {appHome, exec, readTextFile} from 'herdr';
-import {parseStartConfig, startArgv, startResult, startAllowed} from './issue-start-model.js';
+import {parseStartConfig, startArgv, startResult, startAllowed, START_GUARD_MS} from './issue-start-model.js';
 
 // The IO of "작업 시작": read the local setting file and run its command once per press.
 // The guard lives here (not in a popover) so closing and reopening the search cannot send twice.
@@ -15,6 +15,11 @@ export async function loadStartConfig({read = readTextFile, path = startConfigPa
 }
 
 export const startGuarded = (space, issue, now = Date.now()) => !startAllowed(guards.get(guardKey(space, issue)), now);
+// Milliseconds until a finished start's guard ends (0 when none, or while it still runs).
+export function startGuardLeft(space, issue, now = Date.now()) {
+  const guard = guards.get(guardKey(space, issue));
+  return !guard || guard.running ? 0 : Math.max(0, guard.at + START_GUARD_MS - now);
+}
 
 // Runs the command for one issue. Returns null when the press is ignored (one already running or
 // sent within the guard window), else {ok, text}. A value that fails the checks runs nothing.
@@ -22,14 +27,16 @@ export async function runStart(config, params, {run = exec, now = () => Date.now
   const key = guardKey(params?.space, params?.issue);
   if (!startAllowed(guards.get(key), now())) return null;
   const argv = startArgv(config, params);
-  if (!argv) return {ok: false, text: '안 보냄 · 작업 시작 값 확인 실패'};
+  if (!argv) return {ok: false, text: '안 보냄 · 작업 시작 값 확인 실패', release: true};
   const guard = {running: true, at: now()};
   guards.set(key, guard);   // claimed before anything is awaited
   let result = null;
   try { result = await run(argv.command, argv.args, {timeout: argv.timeout}); } catch { result = null; }
   guard.running = false; guard.at = now();
   for (const [k, g] of guards) if (startAllowed(g, now())) guards.delete(k);   // drop expired guards
-  return startResult(result);
+  const answer = startResult(result);
+  if (answer.release && guards.get(key) === guard) guards.delete(key);   // surely not sent: press again at once
+  return answer;
 }
 
 // Tests only.

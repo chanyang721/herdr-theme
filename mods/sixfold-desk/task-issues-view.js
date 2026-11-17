@@ -170,7 +170,7 @@ export function startStrip(model,key,t,change){
       .bg(enabled?t.accent:t.popover||t.surface).border(1).border_color(enabled?t.accent:t.border)
       .text_size(10).font_bold().text_color(enabled?t.accent_foreground||t.background:t.dim)
       .when(enabled,e=>e.cursor_pointer().on_click(change(model.onStart,key)))
-      .when(!enabled&&start.blocked===true&&!running,e=>e.tooltip('방금 보낸 이슈입니다 · 3분 뒤에 다시 보낼 수 있습니다'))
+      .when(!enabled&&start.blocked===true&&!running,e=>e.tooltip('방금 시작 요청한 이슈입니다 · 3분 뒤 다시 누를 수 있습니다'))
       .child(running?'보내는 중…':'작업 시작'))
     .child(text(line,running?t.muted:entry?.ok?t.ansi2||t.accent:entry?t.blocked:t.dim,10).flex_1()
       .id(`task-issue-start-result-${id}-${key}`).tooltip(line||'결과가 여기에 표시됩니다')));
