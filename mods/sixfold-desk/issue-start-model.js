@@ -17,6 +17,10 @@ const CHOICE_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,31}$/;
 // C0, DEL and C1 control characters, and the line/paragraph separators.
 const CONTROL = /[\u0000-\u001f\u007f-\u009f\u2028\u2029]/g, HAS_CONTROL = /[\u0000-\u001f\u007f-\u009f\u2028\u2029]/;
 const SENT = new Set(['sent', 'pending', 'unconfirmed']);
+// Outcomes that surely sent nothing, so the guard is lifted at once. Only these (an allow list):
+// any other outcome may have sent something. A setting may name its own with "release_outcomes".
+export const DEFAULT_RELEASE_OUTCOMES = Object.freeze(['blocked', 'plan']);
+const OUTCOME_ID = /^[a-z][a-z0-9_]{0,31}$/;
 
 const absolute = path => typeof path === 'string' && path.length <= 1024 && !HAS_CONTROL.test(path)
   && (/^\/[^/]/.test(path) || /^[A-Za-z]:[\\/]/.test(path));
@@ -53,8 +57,11 @@ export function parseStartConfig(text) {
   if (!provider || !tier) return null;
   const timeout = value.timeout_ms === undefined ? DEFAULT_TIMEOUT_MS : value.timeout_ms;
   if (!Number.isInteger(timeout) || timeout < 1000 || timeout > 600000) return null;
+  const release = value.release_outcomes === undefined ? DEFAULT_RELEASE_OUTCOMES : value.release_outcomes;
+  if (!Array.isArray(release) || release.length > 20
+    || release.some(item => typeof item !== 'string' || !OUTCOME_ID.test(item) || SENT.has(item))) return null;
   return Object.freeze({command: value.command, args: Object.freeze([...value.args]), providers, tiers,
-    defaults: Object.freeze({provider, tier}), timeout});
+    defaults: Object.freeze({provider, tier}), timeout, release: Object.freeze([...new Set(release)])});
 }
 
 // {space, issue, title, provider, tier} -> {command, args, timeout}, or null when a value is off.
@@ -85,9 +92,9 @@ export function lastJson(stdout) {
 }
 
 // exec's {code, stdout} (or null when exec itself threw) -> {ok, text, release} for the result line.
-// `release`: surely not sent (a JSON answer whose outcome is not a sent kind), so the guard may be
-// lifted at once. A timeout, no JSON, or any sent kind keeps the three-minute guard.
-export function startResult(result) {
+// `release`: surely not sent (a JSON answer whose outcome is on the `release` allow list), so the
+// guard may be lifted at once. A timeout, no JSON, an empty or any other outcome keeps the guard.
+export function startResult(result, release = DEFAULT_RELEASE_OUTCOMES) {
   const code = Number.isInteger(result?.code) ? result.code : null;
   const json = result ? lastJson(result.stdout) : null;
   if (!json) return {ok: false, text: `실행 실패(코드 ${code ?? '?'})`, release: false};
@@ -95,7 +102,7 @@ export function startResult(result) {
   const outcome = word(json.outcome), task = word(json.task_id);
   if (SENT.has(outcome) && task) return {ok: true, text: ['보냄', word(json.target), word(json.model)].filter(Boolean).join(' · '), release: false};
   const reason = cleanText(typeof json.reason === 'string' ? json.reason : '', 120) || outcome;
-  return {ok: false, text: reason ? `안 보냄 · ${reason}` : '안 보냄', release: Boolean(outcome) && !SENT.has(outcome)};
+  return {ok: false, text: reason ? `안 보냄 · ${reason}` : '안 보냄', release: Boolean(outcome) && !SENT.has(outcome) && release.includes(outcome)};
 }
 
 // One start per issue at a time: none while one is running, none within START_GUARD_MS of the last.

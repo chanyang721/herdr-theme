@@ -15,6 +15,16 @@ export async function loadStartConfig({read = readTextFile, path = startConfigPa
 }
 
 export const startGuarded = (space, issue, now = Date.now()) => !startAllowed(guards.get(guardKey(space, issue)), now);
+// The finished starts of one space still guarded: [[issue, ms left]] (to redraw as each ends).
+export function startGuardsOf(space, now = Date.now()) {
+  const prefix = `${space}\u0000`, out = [];
+  for (const [key, guard] of guards) {
+    if (!key.startsWith(prefix) || guard.running) continue;
+    const left = guard.at + START_GUARD_MS - now;
+    if (left > 0) out.push([key.slice(prefix.length), left]);
+  }
+  return out;
+}
 // Milliseconds until a finished start's guard ends (0 when none, or while it still runs).
 export function startGuardLeft(space, issue, now = Date.now()) {
   const guard = guards.get(guardKey(space, issue));
@@ -34,7 +44,7 @@ export async function runStart(config, params, {run = exec, now = () => Date.now
   try { result = await run(argv.command, argv.args, {timeout: argv.timeout}); } catch { result = null; }
   guard.running = false; guard.at = now();
   for (const [k, g] of guards) if (startAllowed(g, now())) guards.delete(k);   // drop expired guards
-  const answer = startResult(result);
+  const answer = startResult(result, config.release);
   if (answer.release && guards.get(key) === guard) guards.delete(key);   // surely not sent: press again at once
   return answer;
 }

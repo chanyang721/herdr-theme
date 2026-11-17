@@ -102,7 +102,7 @@ test('a value cannot become an option, a long space is cut, and a grown argument
 test('only a surely-unsent answer releases the guard',()=>{
   const out=stdout=>startResult({code:0,stdout});
   assert.equal(out('{"outcome":"blocked","reason":"busy"}').release,true);
-  assert.equal(out('{"outcome":"failed"}').release,true);
+  assert.equal(out('{"outcome":"failed"}').release,false,'failed may come after a try: kept');
   assert.equal(out('{"outcome":"plan","reason":"dry run"}').release,true);
   for(const kept of ['{"outcome":"sent","task_id":"t"}','{"outcome":"pending","task_id":"t"}','{"outcome":"unconfirmed"}','{"outcome":"sent"}','{}','no json'])
     assert.equal(out(kept).release,false,kept);

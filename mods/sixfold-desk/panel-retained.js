@@ -15,7 +15,7 @@ import {ensure,cached,waiting,checkCaches,anyWaiting,CACHE_POLL_MS,LOOK_POLL_MS}
 import {statusIndex,teamStatuses,statusFilters,filterRows,foldedCount,milestoneList,detailData} from './issue-model.js';
 import {nativeTaskSpace,hostedTaskLayout,panelWidthClass} from './panel-host.js';
 import {motionEnabled,motionToggled,motionLabel} from './motion.js';
-import {loadStartConfig,runStart,startGuarded,startGuardLeft} from './issue-start.js';
+import {loadStartConfig,runStart,startGuarded,startGuardLeft,startGuardsOf} from './issue-start.js';
 import {startPick,startSignature} from './issue-start-model.js';
 
 // Each retained entity receives only a local controller key. Display data stays
@@ -304,6 +304,17 @@ export function createRetainedPanel(cx,{macTitlebar=false,onClassic=null,onDispo
     let next=null;try{next=await loadStartConfig();}catch{}
     if(c.disposed||signature(next)===signature(c.startConfig))return;
     c.startConfig=next;c.repaintIssues();});};
+  // One redraw per issue as its guard ends, so [작업 시작] comes back; cancelled when the search closes
+  // and armed again for the issues still guarded when it opens.
+  c.armStartTimer=(space,state,issue,left)=>{
+    if(!(left>0)||!c.cx.timer?.after)return;
+    const timers=state.startTimers||(state.startTimers=new Map());
+    timers.get(issue)?.cancel?.();
+    timers.set(issue,c.cx.timer.after(left+50,()=>{
+      timers.delete(issue);
+      if(!c.disposed&&state.open)c.notify(c.cards.get(space.id));
+    }));
+  };
   c.startExtra=(space,state)=>{
     const starts=state.starts||(state.starts=new Map()),key=state.startKey||null,config=c.startConfig;
     const pick=startPick(config,state.startPick);
@@ -333,15 +344,7 @@ export function createRetainedPanel(cx,{macTitlebar=false,onClassic=null,onDispo
           if(result)starts.set(issue,{running:false,ok:result.ok,text:result.text});
           else if(before)starts.set(issue,before);else starts.delete(issue);
           c.notify(c.cards.get(space.id));
-          // One redraw when the guard ends, so [작업 시작] comes back; ignored once this search closed.
-          const left=startGuardLeft(space.name,issue);
-          if(left>0&&c.cx.timer?.after){
-            state.startTimer?.cancel?.();
-            state.startTimer=c.cx.timer.after(left+50,()=>{
-              state.startTimer=null;
-              if(!c.disposed&&state.open&&state.starts===starts)c.notify(c.cards.get(space.id));
-            });
-          }
+          c.armStartTimer(space,state,issue,startGuardLeft(space.name,issue));
         });
       }};
   };
@@ -528,8 +531,9 @@ export function createRetainedPanel(cx,{macTitlebar=false,onClassic=null,onDispo
         if(open)c.ensureInputs(space.id);
         if(open)for(const [id,other] of c.issueStates)if(id!==space.id&&other.open){other.open=false;c.notify(c.cards.get(id));}
         current.open=open;
-        if(!open){current.detail=null;current.menu=null;current.hoverKey=null;current.startKey=null;current.startPick=null;current.starts=new Map();current.startTimer?.cancel?.();current.startTimer=null;}
-        else{c.askLinear('project',space.name);c.loadTimeline();c.loadStartConfig();}
+        if(!open){current.detail=null;current.menu=null;current.hoverKey=null;current.startKey=null;current.startPick=null;current.starts=new Map();for(const timer of current.startTimers?.values()||[])timer?.cancel?.();current.startTimers=new Map();}
+        else{c.askLinear('project',space.name);c.loadTimeline();c.loadStartConfig();
+          for(const [issue,left] of startGuardsOf(space.name))c.armStartTimer(space,current,issue,left);}
         c.notify(c.cards.get(space.id));
       }),
       onScope:scope=>{if(state&&state.scope!==scope){state.scope=scope;c.notify(c.cards.get(space.id));}},
