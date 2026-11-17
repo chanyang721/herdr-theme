@@ -1,7 +1,7 @@
 use super::{common::*, pins::documents};
 use regex::Regex;
 use serde_json::{json, Value};
-use std::{fs, io::Read, path::Path};
+use std::{fs, io::Read, path::Path, sync::LazyLock};
 pub fn load(path: &Path) -> Option<Value> {
     let data = read_json(path).ok()?;
     if data["version"] != 1 || !data["spaces"].is_object() {
@@ -41,7 +41,8 @@ pub fn load(path: &Path) -> Option<Value> {
     Some(json!({"fallback":data["fallback"],"sources":sources,"spaces":spaces}))
 }
 fn html_text(text: &str) -> String {
-    let stripped = Regex::new(r"(?s)<[^>]+>").unwrap().replace_all(text, " ");
+    static TAG: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?s)<[^>]+>").unwrap());
+    let stripped = TAG.replace_all(text, " ");
     html_escape::decode_html_entities(&stripped).into_owned()
 }
 fn normalize(text: &str) -> String {
@@ -66,23 +67,26 @@ pub fn head(item: &Value) -> (String, String) {
         .read_to_end(&mut bytes);
     let text = String::from_utf8_lossy(&bytes);
     let (title, body) = if ext == ".html" || ext == ".htm" {
-        let title = Regex::new(r"(?is)<title[^>]*>(.*?)</title\s*>")
-            .unwrap()
+        static TITLE: LazyLock<Regex> =
+            LazyLock::new(|| Regex::new(r"(?is)<title[^>]*>(.*?)</title\s*>").unwrap());
+        static SCRIPT: LazyLock<Regex> =
+            LazyLock::new(|| Regex::new(r"(?is)<script\b.*?</script\s*>").unwrap());
+        static STYLE: LazyLock<Regex> =
+            LazyLock::new(|| Regex::new(r"(?is)<style\b.*?</style\s*>").unwrap());
+        let title = TITLE
             .captures(&text)
             .map(|c| html_text(&c[1]))
             .unwrap_or_default();
         let mut clean = text.to_string();
-        for tag in ["script", "style"] {
-            clean = Regex::new(&format!(r"(?is)<{tag}\b.*?</{tag}\s*>"))
-                .unwrap()
-                .replace_all(&clean, " ")
-                .into_owned()
+        for tag in [&SCRIPT, &STYLE] {
+            clean = tag.replace_all(&clean, " ").into_owned()
         }
         let body = html_text(&clean).chars().take(4096).collect();
         (title, body)
     } else {
-        let title = Regex::new(r"(?m)^\s{0,3}#{1,6}\s+(.+?)\s*#*\s*$")
-            .unwrap()
+        static HEADING: LazyLock<Regex> =
+            LazyLock::new(|| Regex::new(r"(?m)^\s{0,3}#{1,6}\s+(.+?)\s*#*\s*$").unwrap());
+        let title = HEADING
             .captures(&text)
             .map(|c| c[1].to_owned())
             .unwrap_or_default();
