@@ -1,7 +1,7 @@
 import {div,svg} from 'gpui-kit';
 import {h_flex,v_flex,Popover} from 'gpui-base';
 import {kindTone} from './alert-model.js';
-import {issueDetail,milestoneRows,statusChip} from './issue-detail-view.js';
+import {issueDetail,milestoneRows,statusChip,treeIndent,ghostRow,treeEntries} from './issue-detail-view.js';
 import {statusTone,statusLook} from './issue-model.js';
 
 export const ISSUE_SCOPES=Object.freeze([
@@ -74,7 +74,7 @@ export function issuePopover(model,t){
         .child(text(f.name,t.foreground,10)).child(text(String(f.count),t.dim,9)))));
   }
   const list=v_flex().id(`task-issues-list-${id}`).min_h(42).max_h(560).overflow_y_scroll().gap(2);
-  const issueRow=issue=>{
+  const issueRow=(issue,depth=0)=>{
     const busy=busyKeys.has(issue.key),status=model.statusOf?.(issue.key)||null,hover=model.hoverKey===issue.key;
     const included=scope!=='week'&&(issue.week||issue.pinned);
     // Left dot and right label: Linear's real status (상태 미확인 until read); Herdr's own state only as a fallback colour.
@@ -85,7 +85,7 @@ export function issuePopover(model,t){
     const enabled=model.canImport===true&&!busy&&Boolean(label);
     // An issue with new alerts gets a small count here; what changed is in the shared group above the tabs.
     const alerts=model.alertsFor?.(issue.key)||null;
-    const row=h_flex().id(`task-issue-${id}-${issue.key}`).h(34).px(8).gap(8).items_center().rounded(6)
+    const row=h_flex().id(`task-issue-${id}-${issue.key}`).h(34).pr(8).gap(8).items_center().rounded(6)
       .opacity(issue.state==='done'&&!alerts?0.5:1)
       .when(Boolean(model.onDetail),row=>row.cursor_pointer().on_click(change(model.onDetail,issue.key)))
       .when(Boolean(model.onHover),row=>row.on_hover((hovered,cx)=>model.onHover(hovered?issue.key:null,issue.key,cx)))
@@ -105,8 +105,13 @@ export function issuePopover(model,t){
         .text_color(issue.pinned?t.ansi6||t.accent:t.muted).text_size(10).font_bold()
         .when(enabled,button=>button.cursor_pointer().on_click(change(model.onPull,issue.key,!issue.pinned)))
         .child(label)));
-    return row;
+    return treeIndent(row,depth,`task-issue-branch-${id}-${issue.key}`,t,34);
   };
+  // Parent/child tree: a row under its parent; a parent the list does not show is a dimmed header
+  // (ids carry the group, since one parent can head rows in two milestone groups).
+  const entryRows=(items,group='')=>treeEntries(model,items).map(entry=>entry.ghost
+    ?ghostRow(model,t,entry,`task-issue-head-${id}-${group?`${group}-`:''}${entry.issue.key}`)
+    :issueRow(entry.issue,entry.depth));
   if(scope==='milestone'&&model.milestones?.length)list.child(milestoneRows(model,t));
   else if(scope==='milestone'){
     for(const group of groups){
@@ -114,11 +119,11 @@ export function issuePopover(model,t){
         .child(text(group.name,t.foreground,11).font_bold())
         .child(text(group.due||'',t.dim,10)).child(div().flex_1())
         .child(text(group.progress||'',t.dim,10)));
-      list.children(group.items.map(issueRow));
+      list.children(entryRows(group.items,group.id));
     }
   }else{
     const shown=model.shownRows||rows;
-    list.children(shown.map(issueRow));
+    list.children(entryRows(shown));
     if(model.foldedCount>0&&(model.filter||'전체')==='전체')list.child(h_flex().id(`task-issues-folded-${id}`).h(26).px(8).items_center().cursor_pointer()
       .on_click(change(model.onShowFolded,!model.showFolded))
       .child(text(model.showFolded?`완료·취소 ${model.foldedCount}건 접기`:`완료·취소 ${model.foldedCount}건 보기`,t.dim,10)));

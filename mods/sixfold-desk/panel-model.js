@@ -64,7 +64,10 @@ const issueExtras = issue => ({
   ...(typeof issue.status === 'string' && text(issue.status, 80) ? { status: text(issue.status, 80) } : {}),
   ...(STATUS_TYPES.includes(issue.status_type) ? { status_type: issue.status_type } : {}),
   ...(CLOSED.includes(issue.closed) ? { closed: issue.closed } : {}),
+  // Optional parent issue key (the issue window's parent/child tree); a malformed or self key is dropped.
+  ...(typeof issue.parent === 'string' && ISSUE_PARENT.test(issue.parent) && issue.parent !== (issue.key ?? issue.id) ? { parent: issue.parent } : {}),
 });
+const ISSUE_PARENT = /^[A-Z][A-Z0-9]{0,9}-\d{1,7}$/;
 // Only the harness Linear ledger names a catalog's source; any other value is dropped.
 const catalogSource = value => value?.source === 'linear-ledger' ? { source: 'linear-ledger' } : {};
 // Optional producer row state (docs/panel-feed.md). Display only: the

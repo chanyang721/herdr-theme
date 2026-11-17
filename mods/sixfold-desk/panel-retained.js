@@ -12,7 +12,7 @@ import {groupColors,paletteMode} from './collab-flow.js';
 import {issuePopover,alertedGroup} from './task-issues-view.js';
 import {issueScopeData,issueCacheLabel,parseTimelineFeed,spaceWithTimeline,rowStatus,milestoneSource,fromLedger} from './task-issue-state.js';
 import {ensure,cached,waiting,checkCaches,anyWaiting,CACHE_POLL_MS,LOOK_POLL_MS} from './linear-cache.js';
-import {statusIndex,teamStatuses,statusFilters,filterRows,foldedCount,milestoneList,detailData} from './issue-model.js';
+import {statusIndex,teamStatuses,statusFilters,filterRows,foldedCount,milestoneList,detailData,issueLedger,issueTree} from './issue-model.js';
 import {nativeTaskSpace,hostedTaskLayout,panelWidthClass} from './panel-host.js';
 import {motionEnabled,motionToggled,motionLabel} from './motion.js';
 import {loadStartConfig,runStart,startGuarded,startGuardLeft,startGuardsOf} from './issue-start.js';
@@ -260,6 +260,18 @@ export function createRetainedPanel(cx,{macTitlebar=false,onClassic=null,onDispo
     const unreadKeys=new Set(items.filter(i=>!i.read&&i.workspace===space.name&&i.issue).map(i=>i.issue));
     const milestones=milestoneList(milestoneSource(space,project),space.issue_catalog,unreadKeys);
     const writes=shared('sixfold.linearWrites')??[];
+    // Parent/child tree of every list (tabs, filters, milestones): parents from the rows that name one,
+    // titles from every list this space knows (its catalog, its issues, the project cache). Remade only
+    // when one of them changes; a list without any parent stays flat.
+    let tree=c.treeMemo?.get(space.id);
+    if(!tree||tree.catalog!==space.issue_catalog||tree.issues!==space.issues||tree.project!==project){
+      const catalog=space.issue_catalog||{};
+      tree={catalog:space.issue_catalog,issues:space.issues,project,
+        ledger:issueLedger(catalog.all,catalog.week,catalog.milestone,space.issues,Array.isArray(project?.issues)?project.issues:[])};
+      (c.treeMemo||(c.treeMemo=new Map())).set(space.id,tree);
+      for(const key of c.treeMemo.keys())if(!c.spaceMap.has(key))c.treeMemo.delete(key);
+    }
+    const ledger=tree.ledger;
     const onDetail=key=>{
       if((key||null)!==(state.detail||null))state.startPick=null;
       state.detail=key||null;state.menu=null;state.writeNote='';state.hoverKey=null;
@@ -274,6 +286,7 @@ export function createRetainedPanel(cx,{macTitlebar=false,onClassic=null,onDispo
     }
     return {
       statusOf,hoverKey:state.hoverKey||null,
+      treeOf:ledger.parents.size?items=>issueTree(items,ledger):null,
       onHover:(key,own)=>{if(key?state.hoverKey!==key:state.hoverKey===own){state.hoverKey=key;c.notify(c.cards.get(space.id));}},
       filters:statusOf?statusFilters(rows,lookup):[],filter:state.filter||'전체',
       shownRows:statusOf?filterRows(rows,lookup,state.filter||'전체',state.showFolded===true):rows,

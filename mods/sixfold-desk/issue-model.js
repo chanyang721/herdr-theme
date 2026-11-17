@@ -115,3 +115,78 @@ export function detailData(key, {issueCache = null, row = null, status = null, a
     at: issueCache?.at || '',
   };
 }
+
+// --- Parent/child tree of an issue list -----------------------------------------------------------
+// What the lists know of each issue: its row (title, for a parent shown outside the list) and its
+// parent key. Only rows that name a parent give one (week-timeline.json does; a feed catalog only when
+// its producer sends `parent`); without any, every list stays flat as before.
+const ISSUE_KEY = /^[A-Z][A-Z0-9]{0,9}-\d{1,7}$/;
+export const TREE_MAX_DEPTH = 3;
+export function issueLedger(...lists) {
+  const rows = new Map(), parents = new Map();
+  for (const list of lists) for (const issue of Array.isArray(list) ? list : []) {
+    if (!issue?.key) continue;
+    const seen = rows.get(issue.key);
+    if (!seen || (!seen.title && issue.title)) rows.set(issue.key, issue);
+    if (!parents.has(issue.key) && ISSUE_KEY.test(issue.parent || '') && issue.parent !== issue.key) parents.set(issue.key, issue.parent);
+  }
+  return {rows, parents};
+}
+// The shown rows as a tree: [{issue, depth, ghost, known}]. A row's parent that the list does not show
+// (another tab, filtered out, another milestone) is a dimmed header (`ghost`), with the ledger's row
+// when known (`known`), else its key only. Groups keep the rows' order: a group sits where its first
+// shown member was, and inside it the rows keep their order. A parent loop is cut where it closes;
+// depth stops growing at TREE_MAX_DEPTH. Headers are display only: counts stay the rows' own.
+export function issueTree(rows, ledger = null) {
+  const list = (Array.isArray(rows) ? rows : []).filter(row => row?.key);
+  const parents = ledger?.parents;
+  if (!parents?.size) return list.map(issue => ({issue, depth: 0, ghost: false, known: true}));
+  const order = new Map(), nodes = new Map();
+  for (const issue of list) if (!nodes.has(issue.key)) { order.set(issue.key, order.size); nodes.set(issue.key, {issue, ghost: false, known: true}); }
+  for (const issue of list) {
+    let at = issue.key; const seen = new Set([at]);
+    for (let step = 0; step < 32; step++) {
+      const up = parents.get(at);
+      if (!up || seen.has(up)) break;
+      seen.add(up);
+      if (!nodes.has(up)) {
+        const known = ledger.rows?.get(up);
+        nodes.set(up, {issue: known || {key: up, title: ''}, ghost: true, known: Boolean(known)});
+      }
+      at = up;
+    }
+  }
+  // Keep a parent link only when it does not close a loop through the links kept so far.
+  const link = new Map();
+  for (const key of nodes.keys()) {
+    const up = parents.get(key);
+    if (!up || !nodes.has(up)) continue;
+    let at = up, loop = false;
+    for (let step = 0; at && step <= nodes.size; step++) { if (at === key) { loop = true; break; } at = link.get(at); }
+    if (!loop) link.set(key, up);
+  }
+  const kids = new Map(), roots = [];
+  for (const key of nodes.keys()) {
+    const up = link.get(key);
+    if (up) { if (!kids.has(up)) kids.set(up, []); kids.get(up).push(key); } else roots.push(key);
+  }
+  const rank = new Map();
+  const rankOf = key => {
+    if (rank.has(key)) return rank.get(key);
+    rank.set(key, Infinity);
+    let best = order.has(key) ? order.get(key) : Infinity;
+    for (const kid of kids.get(key) || []) best = Math.min(best, rankOf(kid));
+    rank.set(key, best);
+    return best;
+  };
+  const byRank = (a, b) => { const x = rankOf(a), y = rankOf(b); return x === y ? 0 : x < y ? -1 : 1; };
+  const out = [];
+  const visit = (key, depth) => {
+    if (rankOf(key) === Infinity) return;
+    const node = nodes.get(key);
+    out.push({issue: node.issue, depth: Math.min(depth, TREE_MAX_DEPTH), ghost: node.ghost, known: node.known});
+    for (const kid of (kids.get(key) || []).slice().sort(byRank)) visit(kid, depth + 1);
+  };
+  for (const key of roots.sort(byRank)) visit(key, 0);
+  return out;
+}

@@ -83,6 +83,31 @@ export function issueDetail(model,t){
   return body;
 }
 
+// Parent/child tree rows (issueTree in issue-model.js): 12px a level with a branch guide on the left,
+// as the panel's child rows. A parent the list does not show is a dimmed header: key, title and status
+// when the lists know it (pressing it opens its detail), else its key only.
+export const TREE_STEP=12;
+export function treeIndent(row,depth,guideId,t,height,base=8){
+  if(!(depth>0))return row.pl(base);
+  return row.relative().pl(base+depth*TREE_STEP)
+    .child(div().id(guideId).absolute().left(base+(depth-1)*TREE_STEP+3).top(0).w(6).h(Math.round(height/2))
+      .border_l(1).border_b(1).border_color(t.border));
+}
+export function ghostRow(model,t,entry,rowId,{height=28,base=8}={}){
+  const issue=entry.issue,known=entry.known===true;
+  const status=known?model.statusOf?.(issue.key)||null:null,open=known&&Boolean(model.onDetail);
+  const row=h_flex().id(rowId).h(height).pr(8).gap(8).items_center().rounded(6).opacity(0.55)
+    .tooltip(`목록에 없는 상위 이슈 · ${issue.key}${known&&issue.title?` ${issue.title}`:''}`)
+    .when(open,r=>r.cursor_pointer().on_click(press(model.onDetail,issue.key)))
+    .child(div().size(7).flex_none().rounded(4).border(1).border_color(statusTone(status,t)))
+    .child(text(issue.key,t.muted,10).w(58).flex_none().font_bold())
+    .child(text(known?issue.title||'':'',t.muted,11).flex_1())
+    .when(known,r=>r.child(statusChip(status,t,`${rowId}-status`)));
+  return treeIndent(row,entry.depth,`${rowId}-branch`,t,height,base);
+}
+// The rows as tree entries when the caller can place parents (`model.treeOf`), else flat.
+export const treeEntries=(model,items)=>model.treeOf?model.treeOf(items):items.map(issue=>({issue,depth:0,ghost:false,known:true}));
+
 const MILESTONE_ICON={done:'✔',started:'◐',planned:'○'};
 // Every milestone of the project, Linear's order: icon · name · target · issues · progress, unread
 // alerts on it; a pressed row unfolds its issues (a pressed issue opens its detail).
@@ -104,14 +129,18 @@ export function milestoneRows(model,t){
         .when(m.counted,c=>c.tooltip('Linear 값이 없어 이슈 상태로 계산한 값'))));
     if(open){
       if(!m.items.length)list.child(text(model.projectWaiting?'이슈를 읽는 중…':'이 마일스톤의 이슈를 아직 읽지 않았습니다',t.dim,10).pl(28).py(4));
-      for(const issue of m.items.slice(0,40)){
+      // Parent/child tree inside the milestone; a parent in another milestone is a dimmed header.
+      for(const entry of treeEntries(model,m.items.slice(0,40))){
+        const issue=entry.issue;
+        if(entry.ghost){list.child(ghostRow(model,t,entry,`task-issues-milestone-head-${id}-${m.id}-${issue.key}`,{base:28}));continue;}
         const status=model.statusOf?.(issue.key);
-        list.child(h_flex().id(`task-issues-milestone-issue-${id}-${issue.key}`).h(28).pl(28).pr(8).gap(8).items_center().rounded(6).cursor_pointer()
+        list.child(treeIndent(h_flex().id(`task-issues-milestone-issue-${id}-${issue.key}`).h(28).pr(8).gap(8).items_center().rounded(6).cursor_pointer()
           .on_click(press(model.onDetail,issue.key))
           .child(div().size(7).flex_none().rounded(4).bg(statusTone(status,t)))
           .child(text(issue.key,t.muted,10).w(58).flex_none().font_bold())
           .child(text(issue.title||'',t.foreground,11).flex_1().tooltip(issue.title||''))
-          .child(statusChip(status,t,`task-issues-milestone-status-${id}-${issue.key}`)));
+          .child(statusChip(status,t,`task-issues-milestone-status-${id}-${issue.key}`)),
+        entry.depth,`task-issues-milestone-branch-${id}-${issue.key}`,t,28,28));
       }
     }
   }

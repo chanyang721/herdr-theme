@@ -136,7 +136,8 @@ export function parseTimelineFeed(text) {
         milestones: (Array.isArray(p.milestones) ? p.milestones : []).slice(0, 100).filter(m => m && typeof m.id === 'string' && m.id && typeof m.name === 'string')
           .map(m => ({id: m.id.slice(0, 80), name: m.name.slice(0, 100), due: DAY.test(m.target || '') ? m.target : '',
             progress: typeof m.progress === 'number' && m.progress >= 0 && m.progress <= 100 ? m.progress : null})),
-        issues: raw.map(({raw: _raw, parent: _parent, ...i}) => ({...i, inWeek: members.has(i.key)}))};
+        // `parent` stays (empty dropped): the issue window draws the parent/child tree from it.
+        issues: raw.map(({raw: _raw, parent, ...i}) => ({...i, ...(parent ? {parent} : {}), inWeek: members.has(i.key)}))};
     })};
 }
 

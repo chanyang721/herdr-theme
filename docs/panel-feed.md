@@ -141,7 +141,12 @@ Optional issue fields `week`, `pinned` and `milestone_id` preserve the producer'
 selection. Optional `status` (the service's status name, up to 80 characters),
 `status_type` (`triage`, `backlog`, `unstarted`, `started`, `completed`,
 `canceled` or `duplicate`) and `closed` (`completed`, `canceled` or `duplicate`)
-carry the service's own status of a row; other values are dropped. Milestone metadata supplies its name, optional `YYYY-MM-DD` due date
+carry the service's own status of a row; other values are dropped. Optional
+`parent` (the parent issue's key, e.g. `DEMO-3`) draws the list as a parent/child
+tree: a row sits indented under its parent, and a parent the current list does not
+show (another tab, filtered out, another milestone) is a dimmed header that is not
+counted. Without `parent` (and without a newer `week-timeline.json`, which names
+parents) the lists stay flat. Milestone metadata supplies its name, optional `YYYY-MM-DD` due date
 and a numeric progress percentage from 0 to 100. Missing dates or progress are
 left blank. Per-scope cache metadata distinguishes stored, stale and uncollected
 lists; it does not claim the external service is currently connected.
