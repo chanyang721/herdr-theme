@@ -15,6 +15,8 @@ import {ensure,cached,waiting,checkCaches,anyWaiting,CACHE_POLL_MS,LOOK_POLL_MS}
 import {statusIndex,teamStatuses,statusFilters,filterRows,foldedCount,milestoneList,detailData} from './issue-model.js';
 import {nativeTaskSpace,hostedTaskLayout,panelWidthClass} from './panel-host.js';
 import {motionEnabled,motionToggled,motionLabel} from './motion.js';
+import {loadStartConfig,runStart,startGuarded} from './issue-start.js';
+import {startPick,startSignature} from './issue-start-model.js';
 
 // Each retained entity receives only a local controller key. Display data stays
 // in this generation's registry, not in persisted shared state (which refreshes
@@ -151,7 +153,8 @@ export function createRetainedPanel(cx,{macTitlebar=false,onClassic=null,onDispo
     const state=c.issueStates.get(space.id);
     return JSON.stringify([c.cardAlerts?.(space)||null,c.cardBadges?.(space)?.key||null,state?.open?issueAlertSignature(shared('sixfold.linearItems')??[],space.name):'',shared('sixfold.alertPopover')?.space===space.name?shared('sixfold.alertPopover'):null,
       state?.open?[[...readPendingIds()].sort().join(','),lastReadError()]:null,
-      state?.open?[autoSignature(shared('sixfold.linearAuto'),space.name),[...busyKeys()].sort().join(','),[...doneIds()].sort().join(','),autoError()]:null]);
+      state?.open?[autoSignature(shared('sixfold.linearAuto'),space.name),[...busyKeys()].sort().join(','),[...doneIds()].sort().join(','),autoError()]:null,
+      state?.open?startSignature(state):null]);
   };
   // Read marks: one request per alert (the collector runs it once through its guard). While any is
   // pending, its result is read every READ_POLL_MS; the timer stops when none is left (at most 3 min).
@@ -278,6 +281,7 @@ export function createRetainedPanel(cx,{macTitlebar=false,onClassic=null,onDispo
       projectWaiting:waiting('project',space.name),
       onMilestone:id=>{const set=state.expanded||(state.expanded=new Set());set.has(id)?set.delete(id):set.add(id);if(set.size>20)set.delete(set.values().next().value);c.notify(c.cards.get(space.id));},
       onDetail,detail,detailWaiting:detail?waiting('issue',detail.key):false,
+      ...c.startExtra(space,state),
       writes,menu:state.menu||null,writeNote:state.writeNote||'',
       statuses:detail?teamStatuses(project,detail.team):[],
       onMenu:menu=>{state.menu=menu;if(menu==='comment')c.ensureInputs(space.id);c.notify(c.cards.get(space.id));},
@@ -291,6 +295,46 @@ export function createRetainedPanel(cx,{macTitlebar=false,onClassic=null,onDispo
         c.writeIssue(space,state,'comment',{body});
       },
     };
+  };
+  // "작업 시작": a row press unfolds one issue's strip (agent, tier, [작업 시작], one result line).
+  // The setting file is read when a search opens; without a valid one the strip says so and runs nothing.
+  // Results stay while this search is open; the send guard (issue-start.js) outlives it.
+  c.startConfig=null;
+  c.loadStartConfig=()=>{if(typeof c.cx.spawn!=='function')return;c.cx.spawn(async()=>{
+    let next=null;try{next=await loadStartConfig();}catch{}
+    if(c.disposed||signature(next)===signature(c.startConfig))return;
+    c.startConfig=next;c.repaintIssues();});};
+  c.startExtra=(space,state)=>{
+    const starts=state.starts||(state.starts=new Map()),key=state.startKey||null,config=c.startConfig;
+    const pick=startPick(config,state.startPick);
+    return {startKey:key,
+      start:key?{config,pick,entry:starts.get(key)||null,blocked:startGuarded(space.name,key)}:null,
+      onExpand:issue=>{
+        if(state.startKey===issue)state.startKey=null;else{state.startKey=issue;state.startPick=null;}
+        c.notify(c.cards.get(space.id));
+      },
+      onStartPick:(kind,id)=>{
+        if(!config||!state.startKey||starts.get(state.startKey)?.running)return;
+        const now=startPick(config,state.startPick);
+        if(kind!=='provider'&&kind!=='tier')return;
+        state.startPick={...now,[kind]:id};c.notify(c.cards.get(space.id));
+      },
+      onStart:issue=>{
+        if(!config||starts.get(issue)?.running||startGuarded(space.name,issue)||typeof c.cx.spawn!=='function')return;
+        const row=['week','milestone','all'].flatMap(scope=>space.issue_catalog?.[scope]||[]).find(item=>item.key===issue)||(space.issues||[]).find(item=>item.key===issue);
+        const chosen=startPick(config,state.startKey===issue?state.startPick:null),before=starts.get(issue)||null;
+        starts.set(issue,{running:true});c.notify(c.cards.get(space.id));
+        c.cx.spawn(async()=>{
+          let result=null;
+          try{result=await runStart(config,{space:space.name,issue,title:row?.title||'',...chosen});}
+          catch{result={ok:false,text:'실행 실패(코드 ?)'};}
+          // Closed meanwhile (state.starts replaced): the line is not kept; the guard still is.
+          if(c.disposed||state.starts!==starts)return;
+          if(result)starts.set(issue,{running:false,ok:result.ok,text:result.text});
+          else if(before)starts.set(issue,before);else starts.delete(issue);
+          c.notify(c.cards.get(space.id));
+        });
+      }};
   };
   // Linear auto work ('자동 작업'): a pressed approval drops one request file; while any is busy its
   // result is read every AUTO_POLL_MS (the ledger itself arrives through watchLinear).
@@ -475,8 +519,8 @@ export function createRetainedPanel(cx,{macTitlebar=false,onClassic=null,onDispo
         if(open)c.ensureInputs(space.id);
         if(open)for(const [id,other] of c.issueStates)if(id!==space.id&&other.open){other.open=false;c.notify(c.cards.get(id));}
         current.open=open;
-        if(!open){current.detail=null;current.menu=null;current.hoverKey=null;}
-        else{c.askLinear('project',space.name);c.loadTimeline();}
+        if(!open){current.detail=null;current.menu=null;current.hoverKey=null;current.startKey=null;current.startPick=null;current.starts=new Map();}
+        else{c.askLinear('project',space.name);c.loadTimeline();c.loadStartConfig();}
         c.notify(c.cards.get(space.id));
       }),
       onScope:scope=>{if(state&&state.scope!==scope){state.scope=scope;c.notify(c.cards.get(space.id));}},

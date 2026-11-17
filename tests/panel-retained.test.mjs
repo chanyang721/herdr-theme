@@ -48,6 +48,9 @@ async function runtime(motion=false,options={}){
   source=source.replace("'./linear-auto-model.js'",JSON.stringify(autoModel)).replace("'./linear-auto.js'",JSON.stringify(await autoModule('linear-auto')))
     .replace("'./linear-auto-view.js'",JSON.stringify(await autoModule('linear-auto-view')));
   source=source.replace("'./task-issues-view.js'",JSON.stringify(issuesUrl)).replace("'./task-issue-state.js'",JSON.stringify(new URL('../mods/sixfold-desk/task-issue-state.js',import.meta.url).href));
+  const startModel=new URL('../mods/sixfold-desk/issue-start-model.js',import.meta.url).href;
+  source=source.replace("'./issue-start-model.js'",JSON.stringify(startModel))
+    .replace("'./issue-start.js'",JSON.stringify(`data:text/javascript;base64,${Buffer.from(transform(await readFile(new URL('../mods/sixfold-desk/issue-start.js',import.meta.url),'utf8')).replace("'./issue-start-model.js'",JSON.stringify(startModel))).toString('base64')}#${loads++}`));
   const mod=await import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}#${loads++}`);
   const controller=mod.createRetainedPanel(cx,options);
   const flush=()=>{for(const entity of objects)if(entity.dirty&&!entity.released){entity.dirty=false;rendering=true;try{entity.tree=entity.view.render(cx);}finally{rendering=false;}}};
