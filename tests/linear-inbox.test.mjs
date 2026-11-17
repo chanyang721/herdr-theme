@@ -29,12 +29,12 @@ test('a status notification shows its own before → after from Linear history, 
   const base = {id: 'n1', type: 'issueStatusChanged', category: 'statusChanges', issue: 'LUK-123', subtitle: 'Marked as completed by Kim'};
   // First sighting: no between-runs diff, but the collector found the history entry.
   const fresh = {...base, changes: [], state_change: {from: '진행 중', to: '검수 대기'}};
-  assert.equal(desk.alertLine(fresh), '상태 진행 중 → 검수 대기');
+  assert.equal(desk.alertLine(fresh), '상태 진행 중 → 검수 대기 · Kim');   // who changed it stays visible
   assert.deepEqual(desk.changeLines(fresh), ['상태 진행 중 → 검수 대기']);
   assert.deepEqual(inbox.changeLines(fresh), desk.changeLines(fresh));
   // The notification's own change wins over a later diff of the issue; other fields stay.
   const both = {...fresh, changes: [{field: 'status', from: '검수 대기', to: 'Done'}, {field: 'assignee', from: 'Kim', to: 'Lee'}]};
-  assert.equal(desk.alertLine(both), '상태 진행 중 → 검수 대기');
+  assert.equal(desk.alertLine(both), '상태 진행 중 → 검수 대기 · Kim');
   assert.deepEqual(desk.changeLines(both), ['상태 진행 중 → 검수 대기', '담당 Kim → Lee']);
   assert.deepEqual(inbox.changeLines(both), desk.changeLines(both));
   // No history entry: as before, Linear's own line, never a made-up earlier state.
@@ -44,10 +44,14 @@ test('a status notification shows its own before → after from Linear history, 
     assert.deepEqual(inbox.changeLines(item), []);
   }
   // A first state (no earlier one in the history) says so.
-  assert.equal(desk.alertLine({...base, state_change: {from: '', to: 'Todo'}}), '상태 없음 → Todo');
+  assert.equal(desk.alertLine({...base, state_change: {from: '', to: 'Todo'}}), '상태 없음 → Todo · Kim');
   // The issue search row uses the same line (so does the arrival popup: linear-feed.js alertLine); the card key notices it.
   const row = {...fresh, workspace: 'Alpha', read: false, at: '2026-11-17T00:00:00Z'};
-  assert.equal(desk.issueAlerts([row], 'Alpha', 'LUK-123').lines[0].text, '상태 진행 중 → 검수 대기');
+  assert.equal(desk.issueAlerts([row], 'Alpha', 'LUK-123').lines[0].text, '상태 진행 중 → 검수 대기 · Kim');
+  // The card popover: the state line carries who changed it, other changed fields follow as before.
+  assert.deepEqual(desk.popoverChangeLines(both), ['상태 진행 중 → 검수 대기 · Kim', '담당 Kim → Lee']);
+  assert.deepEqual(desk.popoverChangeLines({...both, subtitle: 'Kim changed status'}), ['상태 진행 중 → 검수 대기', '담당 Kim → Lee']);
+  assert.deepEqual(desk.popoverChangeLines({type: 'issueNewComment', changes: [{field: 'status', from: 'A', to: 'B'}], subtitle: 'x by y'}), ['상태 A → B']);
   assert.notEqual(desk.issueAlertSignature([row], 'Alpha'), desk.issueAlertSignature([{...row, state_change: undefined}], 'Alpha'));
 });
 
