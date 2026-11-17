@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { fitScale, widthScale, fitView, clampView, openView, zoomAt, zoomTo, panBy, toggleView, wheelStep, pinchStep, keyCommand, command, percent, MAX_SCALE, PAD } from '../mods/project-docs-tabs/zoom.js';
 
-// The Medihomes architecture flowchart: 3072pt wide, shown in a 1200×800 pane.
+// A large architecture flowchart: 3072pt wide, shown in a 1200×800 pane.
 const media = { width: 3072, height: 1864 };
 const viewport = { width: 1200, height: 800 };
 const near = (actual, expected, message) => assert.ok(Math.abs(actual - expected) < 1e-6, `${message}: ${actual} ≠ ${expected}`);

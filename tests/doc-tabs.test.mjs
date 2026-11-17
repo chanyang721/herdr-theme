@@ -445,7 +445,7 @@ test('folder warnings name the path and tell missing, denied and empty apart', (
   assert.deepEqual(describeWarnings(['manifest_conflict']), ['manifest_conflict']);
 });
 
-// A document whose Mermaid diagram is the size of the Medihomes architecture flowchart.
+// A document whose Mermaid diagram is the size of a large architecture flowchart.
 async function bigDiagram(t, options = {}) {
   const h = await localViews(options); t.after(() => h.view.close());
   h.state.mermaid = () => ({ code: 0, stdout: JSON.stringify({ diagrams: [{ code: 'flowchart LR\nA-->B', path: 'mods/project-docs-tabs/.cache/big.png', width: 3072, height: 1864 }] }), stderr: '' });
