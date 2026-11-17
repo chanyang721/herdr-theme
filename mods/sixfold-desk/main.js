@@ -788,7 +788,11 @@ export default class SixfoldDesk extends View {
     this.linkWake = wakes.length ? Math.min(...wakes) : null;
     this.scheduleLinkWake?.(this.linkWake);
     const lanes = tracked.lanes.map(entry => ({ ...entry, colors: linkColors[entry.slot % linkColors.length] }));
-    this.linkFlowing = motion && lanes.some(lane => lane.link.working && !lane.gone);
+    // The slow dot runs for the brief window after a link starts being worked on
+    // (motion.js), not for as long as the work lasts.
+    this.linkBrief ??= briefWindow();
+    const pulsing = new Set(lanes.filter(lane => this.linkBrief.active(lane.link.key, Boolean(lane.link.working)) && motion && lane.link.working && !lane.gone).map(lane => lane.link.key));
+    this.linkFlowing = pulsing.size > 0;
     this.scheduleLinkFlow?.();
     // A workspace inside a project link, with the other computers in it. `gone` while
     // the link fades: the border is back to normal and the ⇄ mark fades with the pipe.
@@ -1160,7 +1164,7 @@ export default class SixfoldDesk extends View {
             const parts = [fade(div().id(`sf-link-${lane.link.key}`).absolute().right(right).top(top).w(2).h(bottom - top).border_r(1).border_dashed().border_color(color).tooltip(tip))];
             for (const row of rows) parts.push(fade(div().id(`sf-link-${lane.link.key}-${row}`).absolute().right(right).top(rowY(row)).w(LINK_MARGIN - right).h(2).border_t(1).border_dashed().border_color(color)));
             // A pulse as wide as the 1px pipe, kept between its two ends, so it never sticks out.
-            if (lane.link.working && motion && !lane.gone && bottom - top > LINK_PULSE) parts.push(div().id(`sf-link-flow-${lane.link.key}`).absolute().right(right).w(1).h(LINK_PULSE).bg(color)
+            if (pulsing.has(lane.link.key) && bottom - top > LINK_PULSE) parts.push(div().id(`sf-link-flow-${lane.link.key}`).absolute().right(right).w(1).h(LINK_PULSE).bg(color)
               .top(this.linkFlowEnd ? bottom - LINK_PULSE + 1 : top).transition('top', { duration: LINK_FLOW_MS - 200, easing: 'linear' }));
             return parts;
           }))
