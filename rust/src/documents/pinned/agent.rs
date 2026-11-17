@@ -7,6 +7,7 @@ use std::{
     fs,
     io::{Read, Seek, SeekFrom},
     path::{Path, PathBuf},
+    sync::{LazyLock, Mutex},
     time::UNIX_EPOCH,
 };
 const FIELDS: &[&str] = &["input", "output", "cacheRead", "cacheWrite"];
@@ -268,14 +269,11 @@ pub fn model_name(model: &Value) -> Option<String> {
     let model = model
         .as_str()
         .filter(|s| !s.is_empty() && s.chars().count() <= 80)?;
-    let text = Regex::new(r"-\d{8}$")
-        .unwrap()
-        .replace(model, "")
-        .replace("[1m]", " 1M");
-    if let Some(c) = Regex::new(r"^claude-([a-z]+)-(\d+)(?:-(\d+))?( 1M)?$")
-        .unwrap()
-        .captures(&text)
-    {
+    static DATED: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"-\d{8}$").unwrap());
+    static CLAUDE: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(r"^claude-([a-z]+)-(\d+)(?:-(\d+))?( 1M)?$").unwrap());
+    let text = DATED.replace(model, "").replace("[1m]", " 1M");
+    if let Some(c) = CLAUDE.captures(&text) {
         let mut chars = c[1].chars();
         let family = chars
             .next()
@@ -481,11 +479,30 @@ pub fn codex_meta(path: &Path) -> Result<Value> {
         json!({"model":found["model"],"effort":found["effort"],"speed":speed(s(&found["tier"])),"permission":permission}),
     )
 }
+/// Transcript files under one root, listed once per process: `--meta` looks up
+/// every live terminal, and each lookup used to walk the whole tree again.
+fn transcript_files(root: &Path, depth: usize) -> Vec<(String, PathBuf)> {
+    static LISTED: LazyLock<Mutex<BTreeMap<(PathBuf, usize), Vec<(String, PathBuf)>>>> =
+        LazyLock::new(Default::default);
+    let mut listed = LISTED.lock().unwrap();
+    listed
+        .entry((root.to_owned(), depth))
+        .or_insert_with(|| {
+            walkdir::WalkDir::new(root)
+                .min_depth(depth)
+                .max_depth(depth)
+                .into_iter()
+                .filter_map(|e| e.ok())
+                .filter(|e| e.file_type().is_file())
+                .map(|e| (filename(e.path()), e.path().to_owned()))
+                .collect()
+        })
+        .clone()
+}
 pub fn transcript(kind: &str, session: &str, claude: &Path, codex: &Path) -> Option<PathBuf> {
-    if !Regex::new(r"^[0-9A-Za-z][0-9A-Za-z_-]{7,127}$")
-        .unwrap()
-        .is_match(session)
-    {
+    static SESSION: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(r"^[0-9A-Za-z][0-9A-Za-z_-]{7,127}$").unwrap());
+    if !SESSION.is_match(session) {
         return None;
     }
     let (root, depth) = if kind == "claude" {
@@ -493,21 +510,16 @@ pub fn transcript(kind: &str, session: &str, claude: &Path, codex: &Path) -> Opt
     } else {
         (codex.join("sessions"), 4)
     };
-    let mut matches = walkdir::WalkDir::new(root)
-        .min_depth(depth)
-        .max_depth(depth)
+    let mut matches = transcript_files(&root, depth)
         .into_iter()
-        .filter_map(|e| e.ok())
-        .filter(|e| e.file_type().is_file())
-        .filter_map(|e| {
-            let name = filename(e.path());
+        .filter_map(|(name, path)| {
             let matching = if kind == "claude" {
                 name == format!("{session}.jsonl")
             } else {
                 name.starts_with("rollout-")
                     && name.ends_with(&format!("-{}.jsonl", session.to_lowercase()))
             };
-            matching.then(|| e.path().to_owned())
+            matching.then_some(path)
         })
         .collect::<Vec<_>>();
     if matches.len() == 1 {
