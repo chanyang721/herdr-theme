@@ -60,6 +60,11 @@ test('every remaining loop, spin and frame cycle is bounded',async()=>{
     for(const line of lines)found.push([file,line]);
   }
   assert.ok(found.length>0,'the scan reads the mods');
-  for(const [file,line] of found)assert.ok(allowed[file]?.test(line),
-    `${file}: unbounded motion: ${line.trim().slice(0,120)}\n    -> bound it with briefWindow/wakeAtBriefEnd (mods/sixfold-desk/motion.js) or an event phase the view wakes out of`);
+  const used=new Set();
+  for(const [file,line] of found){
+    assert.ok(allowed[file]?.test(line),
+      `mods/${file}: unbounded motion: ${line.trim().slice(0,120)}\n    -> bound it with briefWindow/wakeAtBriefEnd (mods/sixfold-desk/motion.js) or an event phase the view wakes out of`);
+    used.add(file);
+  }
+  for(const file of Object.keys(allowed))assert.ok(used.has(file),`mods/${file}: this motion allowlist entry no longer matches anything, remove it`);
 });
