@@ -371,7 +371,8 @@ export default class SixfoldDesk extends View {
       this.collaborationWork=work;
       if(started)this.collaborationPoll?.kick(cx);
     }));
-    this.collaborationPoll=createPoll(cx,{every:2000,fallback:COLLABORATION_FALLBACK_MS,
+    // The fallback only catches a missed ledger event, so it waits while the sidebar is hidden.
+    this.collaborationPoll=createPoll(cx,{every:2000,fallback:COLLABORATION_FALLBACK_MS,fallbackWhen:()=>this.sidebarVisible!==false,
       due:()=>Boolean(this.collaborationScript)&&this.collaborationWork,
       job:async()=>{
         if(!this.collaborationScript)return;

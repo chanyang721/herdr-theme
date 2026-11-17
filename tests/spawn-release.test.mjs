@@ -90,7 +90,7 @@ test('voice focus is written on change at once and otherwise only as a heartbeat
  assert.equal(run.counts().helperCalls,2,'and announced to the helper');
 });
 
-test('collaborate drain runs every tick only while the ledger holds work, else on the 60 s fallback',async()=>{
+test('collaborate drain runs every tick only while the ledger holds work, else on the 60 s fallback while shown',async()=>{
  const block=source.match(/    this\.collaborationWork=true;[\s\S]*?\n      \}\}\);\n/)[0];
  const work=new Set(JSON.parse(source.match(/const COLLABORATION_WORK = new Set\((\[[^\]]*\])\)/)[1].replace(/'/g,'"')));
  let tick,deliver,now=0,drains=0;const pending=[];
@@ -109,4 +109,10 @@ test('collaborate drain runs every tick only while the ledger holds work, else o
  deliver({status:'ready',value:{tasks:{a:{state:'completed'}}}});
  await run(2000);assert.equal(drains,4);
  await run(60000);assert.equal(drains,5,'the fallback still drains once a minute');
+ view.sidebarVisible=false;await run(60000);await run(60000);assert.equal(drains,5,'a hidden sidebar holds the fallback');
+ deliver({status:'ready',value:{tasks:{a:{state:'pending'}}}});await Promise.all(pending.splice(0));
+ assert.equal(drains,6,'work found while hidden still drains');
+ deliver({status:'ready',value:{tasks:{a:{state:'completed'}}}});
+ view.sidebarVisible=true;await run(60000);assert.equal(drains,7,'shown again: the fallback resumes');
 });
+

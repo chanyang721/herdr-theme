@@ -34,6 +34,16 @@ test('a poll runs only when due or after its fallback, and kick forces a run',as
   due=false;poll.kick(h.cx);await Promise.all(h.state.tasks.splice(0));assert.equal(runs,4);
 });
 
+test('fallbackWhen holds the fallback but not a due run',async()=>{
+  const h=host();let runs=0,due=false,shown=false;
+  createPoll(h.cx,{every:1000,now:h.now,due:()=>due,fallback:5000,fallbackWhen:()=>shown,job:()=>{runs++;}});
+  await h.tick();assert.equal(runs,0,'hidden: no fallback run');
+  h.state.at=60000;await h.tick();assert.equal(runs,0);
+  due=true;h.state.at=61000;await h.tick();assert.equal(runs,1,'a due run still goes');
+  due=false;shown=true;h.state.at=62000;await h.tick();assert.equal(runs,1,'the fallback counts from the last run');
+  h.state.at=66000;await h.tick();assert.equal(runs,2,'shown: the fallback runs');
+});
+
 test('failures back off, success resets, and a refused spawn is not a run',async()=>{
   const h=host();let runs=0,fail=true;
   createPoll(h.cx,{every:1000,now:h.now,backoff:{base:4000,max:8000},job:()=>{runs++;if(fail)throw new Error('down');}});
