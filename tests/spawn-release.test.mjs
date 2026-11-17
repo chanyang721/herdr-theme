@@ -6,6 +6,7 @@ const source=await readFile(new URL('../mods/sixfold-desk/main.js',import.meta.u
 const helperText=source.match(/export function spawnOrRelease\(cx, release, task\) \{[\s\S]*?\n\}/)[0].replace('export ','');
 const spawnOrRelease=new Function(`${helperText}\nreturn spawnOrRelease;`)();
 const {createPoll,changeGate}=await import(new URL('../mods/sixfold-desk/poll.js',import.meta.url).href);
+const heartbeatMs=Number(source.match(/const VOICE_HEARTBEAT_MS = (\d+);/)[1]);
 
 test('a spawn that throws before its callback runs releases the busy flag',()=>{
  let busy=true,ran=0;
@@ -49,23 +50,23 @@ test('every busy-flag job starts through spawnOrRelease',()=>{
  }
 });
 
-const voiceBlock=()=>source.match(/    let voiceBusy=false, voiceActionBusy=false, voiceKey=null;\n    cx\.timer\.every\(500,[\s\S]*?\n    \}\);\n/)[0];
-async function voiceRun(spawnPlan,helper){
- let tick,spawnCalls=0,helperCalls=0,heartbeats=0;const pending=[];
+const voiceBlock=()=>source.match(/    let voiceBusy=false, voiceActionBusy=false, voiceKey=null, voiceText=null, voiceAt=0;\n    cx\.timer\.every\(500,[\s\S]*?\n    \}\);\n/)[0];
+async function voiceRun(spawnPlan,helper,focus={terminal:'t-demo'}){
+ let tick,spawnCalls=0,helperCalls=0,heartbeats=0,now=10000;const pending=[],written=[];
  const cx={timer:{every(_ms,fn){tick=fn;}},spawn(task){spawnCalls++;if(spawnPlan(spawnCalls))throw new Error('host rejected spawn');pending.push(task(cx));}};
  const view={sidebarFiles:{voice:{command:['demo-helper']}}};
- new Function('cx','spawnOrRelease','focused','terminals','window','agents','appHome','readTextFile','writeTextFile','invokeHelper','exec',voiceBlock()).call(view,cx,spawnOrRelease,
-  ()=>({terminal:'t-demo'}),()=>[{address:'t-demo',labels:{}}],()=>({active:true}),()=>[],()=>'/demo-app',async()=>null,
-  async()=>{heartbeats++;},async()=>{helperCalls++;return helper(helperCalls);},async()=>({code:0}));
+ new Function('cx','spawnOrRelease','focused','terminals','window','agents','appHome','readTextFile','writeTextFile','invokeHelper','exec','Date','VOICE_HEARTBEAT_MS',voiceBlock()).call(view,cx,spawnOrRelease,
+  ()=>focus,()=>[{address:'t-demo',labels:{}},{address:'t-other',labels:{}}],()=>({active:true}),()=>[],()=>'/demo-app',async()=>null,
+  async(_path,text)=>{heartbeats++;written.push(JSON.parse(text));},async()=>{helperCalls++;return helper(helperCalls);},async()=>({code:0}),{now:()=>now},heartbeatMs);
  const settle=async()=>{while(pending.length)await Promise.allSettled(pending.splice(0));};
- return {tick:async()=>{tick(cx);await settle();},counts:()=>({spawnCalls,helperCalls,heartbeats})};
+ return {tick:async(ms=500)=>{now+=ms;tick(cx);await settle();},counts:()=>({spawnCalls,helperCalls,heartbeats}),written,focus};
 }
 
 test('a voice action whose spawn is rejected runs on the next tick for the same focus',async()=>{
  const run=await voiceRun(n=>n===2,()=>({code:0}));
  await run.tick();assert.equal(run.counts().helperCalls,0);
  await run.tick();
- assert.deepEqual(run.counts(),{spawnCalls:4,helperCalls:1,heartbeats:2},'the focus change is not consumed by a rejected spawn');
+ assert.deepEqual(run.counts(),{spawnCalls:4,helperCalls:1,heartbeats:1},'the focus change is not consumed by a rejected spawn');
  await run.tick();
  assert.equal(run.counts().helperCalls,1,'once the helper ran, the same focus is not sent again');
 });
@@ -74,6 +75,19 @@ test('a voice helper that started and failed is not retried for the same focus',
  const run=await voiceRun(()=>false,()=>{throw new Error('helper failed');});
  await run.tick();await run.tick();
  assert.equal(run.counts().helperCalls,1,'a tried action keeps the focus key consumed');
+});
+
+test('voice focus is written on change at once and otherwise only as a heartbeat inside the 2.5 s staleness window',async()=>{
+ assert.ok(heartbeatMs+500<2500,'the heartbeat plus one sample stays below the focus-queue staleness threshold');
+ const run=await voiceRun(()=>false,()=>({code:0}));
+ await run.tick();assert.equal(run.counts().heartbeats,1);
+ for(let elapsed=500;elapsed<heartbeatMs;elapsed+=500)await run.tick();
+ assert.equal(run.counts().heartbeats,1,'unchanged focus is not rewritten every sample');
+ await run.tick();assert.equal(run.counts().heartbeats,2,'the heartbeat is due');
+ run.focus.terminal='t-other';await run.tick();
+ assert.equal(run.counts().heartbeats,3,'a focus change is written on the next sample');
+ assert.equal(run.written.at(-1).terminal,'t-other');assert.equal(typeof run.written.at(-1).at,'number');
+ assert.equal(run.counts().helperCalls,2,'and announced to the helper');
 });
 
 test('collaborate drain runs every tick only while the ledger holds work, else on the 60 s fallback',async()=>{

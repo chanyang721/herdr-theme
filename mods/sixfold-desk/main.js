@@ -83,6 +83,10 @@ const FLOW_GAP_MS = 320, FLOW_REAL_GAP_MS = 1200, FLOW_MIN_GAP_MS = 90;
 const FLOW_CATCH_UP = 4, FLOW_BACKLOG = 12, FLOW_TRAVEL_MS = 1600;
 // Sends made while the sidebar was hidden: on return, at most this many, this recent.
 const FLOW_RESUME = 3, FLOW_RESUME_MS = 60000;
+// The focus-queue voice plugin uses voice-focus.json only while it is younger than 2.5 s
+// (app_backend.py focus(), rust voice/queue.rs app_focus). Unchanged focus is rewritten this
+// often, safely inside that window; a change is written on the next 500 ms sample.
+const VOICE_HEARTBEAT_MS = 1500;
 // Ledger states `collaborate drain` acts on (rust automation/collaboration.rs drain and
 // refresh_harness). With none of them it runs only on the fallback.
 const COLLABORATION_WORK = new Set(['pending','sending','sent','uncertain','harness_managed']);
@@ -374,25 +378,35 @@ export default class SixfoldDesk extends View {
       }});
     // Optional voice integration is opt-in and runs only from this one sidebar.
     // Focus is sampled by a timer, never changed by rendering background rows.
-    let voiceBusy=false, voiceActionBusy=false, voiceKey=null;
+    let voiceBusy=false, voiceActionBusy=false, voiceKey=null, voiceText=null, voiceAt=0;
     cx.timer.every(500,cx=>{
       const config=this.sidebarFiles?.voice;
       if(!config?.script&&!config?.command)return;
       if(voiceBusy)return;
+      let state,text;
+      try {
+        const f=focused(), facts=terminals(), current=facts.find(x=>x.address===f?.terminal);
+        state={active:window().active,terminal:f?.terminal,
+          source:current?.labels?.['sixfold.source-pane'],
+          panes:agents().filter(a=>!facts.find(x=>x.address===a.address)?.labels?.['sixfold.source-pane'])
+            .filter(a=>['claude','codex'].includes(a.program?.key))
+            .map(a=>({pane_id:`app:${a.address}`,agent:a.program.key,agent_status:a.status}))};
+        text=JSON.stringify(state);
+      } catch { return; }
+      const key=JSON.stringify([state.active,state.terminal,state.source]);
+      // Unchanged focus is only a heartbeat; nothing to do until it is due.
+      if(text===voiceText&&Date.now()-voiceAt<VOICE_HEARTBEAT_MS&&(key===voiceKey||voiceActionBusy))return;
       voiceBusy=true;
       spawnOrRelease(cx,()=>{voiceBusy=false;},async cx=>{
         try {
           if(!config?.script && !config?.command)return;
-          const f=focused(), facts=terminals(), current=facts.find(x=>x.address===f?.terminal);
-          const state={at:Date.now(),active:window().active,terminal:f?.terminal,
-            source:current?.labels?.['sixfold.source-pane'],
-            panes:agents().filter(a=>!facts.find(x=>x.address===a.address)?.labels?.['sixfold.source-pane'])
-              .filter(a=>['claude','codex'].includes(a.program?.key))
-              .map(a=>({pane_id:`app:${a.address}`,agent:a.program.key,agent_status:a.status}))};
-          const path=`${appHome()}/data/sixfold/voice-focus.json`;
-          const old=await readTextFile(path);
-          await writeTextFile(path,JSON.stringify(state),old);
-          const key=JSON.stringify([state.active,state.terminal,state.source]);
+          const at=Date.now();
+          if(text!==voiceText||at-voiceAt>=VOICE_HEARTBEAT_MS){
+            const path=`${appHome()}/data/sixfold/voice-focus.json`;
+            const old=await readTextFile(path);
+            await writeTextFile(path,JSON.stringify({at,...state}),old);
+            voiceText=text;voiceAt=at;
+          }
           if(key!==voiceKey && !voiceActionBusy){
             const lastKey=voiceKey;
             voiceKey=key;voiceActionBusy=true;
