@@ -42,3 +42,24 @@ test('one wake per holder redraws when the brief ends',()=>{
   wakeAtBriefEnd(holder,at,cx);timers[1].fn(cx);
   assert.equal(notified,1);assert.equal(holder.briefWake,null);
 });
+
+// Any forever motion drawn anywhere makes GPUI redraw the whole window every frame. Each one left
+// must be bounded: a brief window (motion.js) or an event phase the panel wakes out of.
+test('every remaining loop, spin and frame cycle is bounded',async()=>{
+  const {readFile,readdir}=await import('node:fs/promises');
+  const allowed={
+    'sixfold-desk/panel-view.js':/ROW_BLINK_MS/,               // the arrival blink, only during the ping phase
+    'sixfold-desk/pets.js':/runGate|options\.motion/,           // options.motion carries the caller's brief window
+    'session-pets/main.js':/walking\.has/,                      // petWalks: brief window
+    'sixfold-tabs/main.js':/spin\(900\)/,                       // not covered here yet (tabs mod)
+  };
+  const found=[];
+  for(const mod of ['sixfold-desk','session-pets','sixfold-tabs','week-timeline','project-docs-tabs']){
+    const dir=new URL(`../mods/${mod}/`,import.meta.url);
+    for(const name of (await readdir(dir)).filter(n=>n.endsWith('.js'))){
+      const lines=(await readFile(new URL(name,dir),'utf8')).split('\n').filter(line=>/\.(spin|loop|frames)\(/.test(line));
+      for(const line of lines)found.push([`${mod}/${name}`,line]);
+    }
+  }
+  for(const [file,line] of found)assert.ok(allowed[file]?.test(line),`${file}: unbounded motion: ${line.trim().slice(0,120)}`);
+});
