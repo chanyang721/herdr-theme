@@ -52,13 +52,14 @@ test('every remaining loop, spin and frame cycle is bounded',async()=>{
     'sixfold-desk/pets.js':/runGate|options\.motion/,           // options.motion carries the caller's brief window
     'session-pets/main.js':/walking\.has/,                      // petWalks: brief window
   };
-  const found=[];
-  for(const mod of ['sixfold-desk','session-pets','sixfold-tabs','week-timeline','project-docs-tabs']){
-    const dir=new URL(`../mods/${mod}/`,import.meta.url);
-    for(const name of (await readdir(dir)).filter(n=>n.endsWith('.js'))){
-      const lines=(await readFile(new URL(name,dir),'utf8')).split('\n').filter(line=>/\.(spin|loop|frames)\(/.test(line));
-      for(const line of lines)found.push([`${mod}/${name}`,line]);
-    }
+  // Every mod, nested folders included, so a new mod cannot add a spinner unseen.
+  const found=[],root=new URL('../mods/',import.meta.url);
+  for(const name of (await readdir(root,{recursive:true})).filter(n=>/\.m?js$/.test(n)).sort()){
+    const file=name.split('\\').join('/');
+    const lines=(await readFile(new URL(file,root),'utf8')).split('\n').filter(line=>/\.(spin|loop|frames)\(/.test(line));
+    for(const line of lines)found.push([file,line]);
   }
-  for(const [file,line] of found)assert.ok(allowed[file]?.test(line),`${file}: unbounded motion: ${line.trim().slice(0,120)}`);
+  assert.ok(found.length>0,'the scan reads the mods');
+  for(const [file,line] of found)assert.ok(allowed[file]?.test(line),
+    `${file}: unbounded motion: ${line.trim().slice(0,120)}\n    -> bound it with briefWindow/wakeAtBriefEnd (mods/sixfold-desk/motion.js) or an event phase the view wakes out of`);
 });
