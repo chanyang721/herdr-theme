@@ -63,7 +63,7 @@ test('the header cat gallops natively while working and rests otherwise',async()
   assert.equal(module.petRunning('working',key=>key!=='sixfold.pets'),false);
   const main=await readFile(new URL('../mods/sixfold-desk/main.js',import.meta.url),'utf8');
   assert.match(main,/\.child\(panePet\(p,t,shared,style\)\)\s*\.child\(this\.badge\(/,'the cat stands right before the status badge, on the header ground');
-  assert.match(main,/if \(role === 'pane'\) return this\.paneHeader\(all, t, w\);/,'headers skip the sidebar work');
+  assert.match(main,/if \(role === 'pane'\) return this\.paneHeader\(t, w\);/,'headers skip the sidebar work');
   assert.doesNotMatch(main,/RUN_FRAME_MS|petFrame/,'a pane header keeps no cat timer');
   assert.match(main,/if \(props\(\)\?\.role === 'pane'\) return;/,'a pane header starts no timers');
   for(const name of ['run-0','run-1','run-2','run-3','run-4','sit','sleep'])

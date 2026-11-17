@@ -576,12 +576,22 @@ export default class SixfoldDesk extends View {
   }
 
 
-  paneHeader(all, t, w) {
-    const p = all.find(p => p.pane === props()?.pane);
-    if (!p) return div();
-    const index = all.filter(x => x.tab === p.tab).findIndex(x => x.pane === p.pane) + 1;
+  // Each of the six headers looks up only its own pane: no copy of every pane
+  // and no per-pane terminal search on each redraw.
+  paneHeader(t, w) {
+    const id = props()?.pane, onlySpace = props()?.onlySpace, list = panes();
+    const own = list.find(x => x.pane === id);
+    if (!own) return div();
+    // Same scope as the sidebar list: the given space, or the focused space's computer.
+    const spaceList = spaces(), home = spaceList.find(s => s.tabs.some(tab => tab.id === own.tab));
+    const focusMachine = spaceList.find(s => s.id === focused()?.space)?.machine ?? null;
+    if (!home || (onlySpace ? home.id !== onlySpace : (home.machine ?? null) !== focusMachine)) return div();
+    const facts = terminals();
+    const p = { ...own, title: facts.find(x => x.address === own.terminal)?.labels?.['sixfold.title'] || own.title };
+    let index = 0;
+    for (const x of list) if (x.tab === p.tab) { index++; if (x.pane === p.pane) break; }
     // Microphone first, where the eye lands: which pane hears you, and why one does not.
-    const mic = paneMic(p, terminals(), shared(MIC_KEY));
+    const mic = paneMic(p, facts, shared(MIC_KEY));
     const style = paneHeaderStyle(p, t);
     // Agent icon, model, speed, effort and permission of the pane's confirmed session, after the title.
     const meta = paneMeta(p.terminal, shared), name = title(p), ask = paneAskButton(p, t, this.lang(), name);
@@ -614,6 +624,8 @@ export default class SixfoldDesk extends View {
     const role = props()?.role;
     // One pane's cards in a popup (asks.js). It needs none of the layout work below.
     if (role === 'ask') return askPopup(this, t, this.lang(), cx);
+    // A pane header needs none of the sidebar's routing work, and redraws often.
+    if (role === 'pane') return this.paneHeader(t, w);
     if(role==='sidebar'){
       const environment=JSON.stringify([t,shared('sixfold.motion'),window()?.visible??null]);
       if(environment!==this.panelEnvironment){this.panelEnvironment=environment;this.refreshPanelPreferences?.();}
@@ -639,9 +651,9 @@ export default class SixfoldDesk extends View {
       : (role !== 'sidebar' || !discoveryOnly) && (s.machine ?? null) === selectedMachine);
     const workspaceIds = new Set(workspaceList.map(space => space.id));
     const tabIds = new Set(workspaceList.flatMap(s=>s.tabs.map(tab=>tab.id)));
-    const all = panes().filter(p=>tabIds.has(p.tab)).map(p => ({...p, title: facts.find(x=>x.address===p.terminal)?.labels?.['sixfold.title'] || p.title}));
-    // A pane header needs none of the sidebar's routing work, and redraws often while its cat runs.
-    if (role === 'pane') return this.paneHeader(all, t, w);
+    const titles = new Map();
+    for (const x of facts) if (!titles.has(x.address)) titles.set(x.address, x.labels?.['sixfold.title']);
+    const all = panes().filter(p=>tabIds.has(p.tab)).map(p => ({...p, title: titles.get(p.terminal) || p.title}));
     // Task rows extend the native computer navigator. They never replace its
     // computer selection, workspace actions, documents or local card sections.
     const taskPanel=role==='sidebar'&&this.panelTrackingActive?this.panelRetained:null;

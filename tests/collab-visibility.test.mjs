@@ -51,7 +51,7 @@ async function sidebar(runtime) {
     .replace(/import .* from '.\/alert-inbox.js';/, 'const workspaceAlertsRow=()=>null, hasWorkspaceAlerts=()=>false;').replace(/import .* from '.\/alert-arrivals.js';/,"const startAlertArrivals=()=>()=>{},alertArrivalLayer=()=>[],alertCardSignature=()=>'';")
     .replace(/import \{ panePet \} from '.\/pets.js';/, 'const panePet=()=>null;')
     .replace(/import \{ paneUsage \} from '.\/session-usage.js';/, 'const paneUsage=()=>null;').replace(/import \{ paneWork, paneWorkChip \} from '.\/pane-work.js';/,'const paneWork=()=>null,paneWorkChip=()=>null;').replace(/import \{ paneMeta, paneMetaChip, showPaneIndex, showTitle \} from '.\/pane-meta.js';/, 'const paneMeta=()=>null,paneMetaChip=()=>null,showPaneIndex=()=>false,showTitle=()=>true;')
-    .replace(/import \{ watchBadges, workspaceBadges \} from '.\/badges.js';/, 'const watchBadges=()=>{},workspaceBadges=()=>null;').replace(/import \{ watchAsks[^}]*\} from '.\/asks.js';/,'const watchAsks=()=>{},askSection=()=>null,hasAsks=()=>false;').replace(/import \{ askFor \} from '.\/ask-model.js';/,'const askFor=()=>null;').replace(/import \{ watchReports[^}]*\} from '.\/session-reports.js';/,'const watchReports=()=>{},reportsSection=()=>null;');
+    .replace(/import \{ watchBadges, workspaceBadges \} from '.\/badges.js';/, 'const watchBadges=()=>{},workspaceBadges=()=>null;').replace(/import \{ watchAsks[^}]*\} from '.\/asks.js';/,'const watchAsks=()=>{},askSection=()=>null,hasAsks=()=>false,paneAskButton=()=>null,askPopup=()=>null;').replace(/import \{ askFor \} from '.\/ask-model.js';/,'const askFor=()=>null;').replace(/import \{ watchReports[^}]*\} from '.\/session-reports.js';/,'const watchReports=()=>{},reportsSection=()=>null;');
   source = source.replace("import { breathingBorder, borderComet } from './collab-flow-view.js';", 'const breathingBorder=o=>{(globalThis.__breathCalls??=[]).push(o);return div().absolute().top(-1).left(-1).right(-1).bottom(-1).rounded(7).border(2).border_color(o.color);},borderComet=o=>{(globalThis.__flowCalls??=[]).push(o);return null;};');
   for (const name of ['model', 'flow', 'workflow', 'sidebar-identity', 'collab', 'collab-flow', 'motion']) source = source.replace(`'./${name}.js'`, JSON.stringify(new URL(`../mods/sixfold-desk/${name}.js`, import.meta.url).href));
   source = source.replace(/import \{ pipeline \} from [^;]+;/, 'const pipeline=o=>{(globalThis.__pipelineCalls??=[]).push(o);return div();};');
@@ -355,4 +355,23 @@ test('the status badge is still: no spin or loop in the sidebar or pane headers'
     const unguarded = text.split('\n').filter(line => /\.(spin|loop)\(/.test(line) && !/motion/.test(line));
     assert.deepEqual(unguarded, [], 'every loop and spin is behind sixfold.motion');
   }
+});
+
+test('a pane header looks up only its own pane, its title label and its place in the tab', async () => {
+  const paneList = [
+    { pane: 'p1', tab: 'h', terminal: 't1', title: 'one', status: 'idle' },
+    { pane: 'p2', tab: 'h', terminal: 't2', title: 'two', status: 'working' },
+    { pane: 'p9', tab: 'worker/tw', terminal: 'worker/t1', title: 'remote', status: 'idle' },
+  ];
+  let termReads = 0;
+  const header = pane => ({ ...runtime([]), props: () => ({ role: 'pane', pane }), panes: () => paneList,
+    terminals: () => { termReads++; return [{ address: 't2', labels: { 'sixfold.title': 'Labelled' } }]; } });
+  try {
+    let found = rows(view(await sidebar(header('p2'))));
+    assert(found.has('sixfold-head-p2'));
+    assert(text(found.get('sixfold-head-p2')).includes('Labelled'), 'the session title label wins');
+    assert.equal(termReads, 1, 'one terminal read per header render');
+    found = rows(view(await sidebar(header('p9'))));
+    assert(!found.has('sixfold-head-p9'), 'a pane on another computer than the focused one draws nothing, as before');
+  } finally { delete globalThis.__visRuntime; }
 });
