@@ -201,6 +201,37 @@ fn stamps(c: &Value, home: &Path, env: &BTreeMap<String, String>) -> Value {
     }
     out
 }
+/// What `claude mcp list` / `codex mcp list` read, run from the home folder.
+/// ~/.claude.json is rewritten all the time, so only its server entries count.
+fn mcp_stamp(home: &Path, codex: bool) -> String {
+    let mut rows = vec![];
+    let claude = load(&home.join(".claude.json"), Value::Null).unwrap_or(Value::Null);
+    let project = &claude["projects"][home.to_string_lossy().as_ref()];
+    rows.push(
+        json!([
+            claude["mcpServers"],
+            project["mcpServers"],
+            project["enabledMcpjsonServers"],
+            project["disabledMcpjsonServers"]
+        ])
+        .to_string(),
+    );
+    let mut files = vec![home.join(".mcp.json")];
+    if codex {
+        files.push(home.join(".codex/config.toml"));
+    }
+    for path in files {
+        if let Ok(metadata) = fs::metadata(&path) {
+            let modified = metadata
+                .modified()
+                .ok()
+                .and_then(|m| m.duration_since(UNIX_EPOCH).ok())
+                .map_or(0, |m| m.as_nanos());
+            rows.push(format!("{}\0{}\0{}", path.display(), metadata.len(), modified));
+        }
+    }
+    take(&hash(rows.join("\n")), 16)
+}
 fn cached(path: &Path, key: &str) -> Option<Value> {
     let value = load(path, Value::Null).ok()?;
     if value.is_object() && value[key].is_array() {
@@ -324,7 +355,7 @@ fn number(args: &[String], key: &str, default: &str) -> Result<f64> {
 }
 pub fn cli_status(args: &[String]) -> Result<()> {
     if args.iter().any(|a| a == "--help" || a == "-h") {
-        crate::common::print_line("Sign-in state of account CLIs as JSON. --data DIR [--config FILE] [--stamps] [--max-age 200] [--timeout 15] | --copy TEXT")?;
+        crate::common::print_line("Sign-in state of account CLIs as JSON. --data DIR [--config FILE] [--stamps] [--max-age 1800] [--timeout 15] | --copy TEXT")?;
         return Ok(());
     }
     crate::observers::validate_args(
@@ -332,7 +363,9 @@ pub fn cli_status(args: &[String]) -> Result<()> {
         &["--data", "--config", "--max-age", "--timeout", "--copy"],
         &["--stamps"],
     )?;
-    let max_age = number(args, "--max-age", "200")?;
+    // Sign-in file stamps (aws, gh, kube, ~/.sfdx and ~/.sf) refresh the cache
+    // when they change, so the periodic read can keep it for 30 minutes.
+    let max_age = number(args, "--max-age", "1800")?;
     let timeout = number(args, "--timeout", "15")?;
     if let Some(text) = option(args, "--copy") {
         clipboard(&text)?;
@@ -394,7 +427,7 @@ pub fn cli_status(args: &[String]) -> Result<()> {
 }
 pub fn mcp_status(args: &[String]) -> Result<()> {
     if args.iter().any(|a| a == "--help" || a == "-h") {
-        crate::common::print_line("MCP server connection states as JSON. --data DIR [--codex] [--max-age 150] [--timeout 40] | --copy TEXT")?;
+        crate::common::print_line("MCP server connection states as JSON. --data DIR [--codex] [--max-age 1800] [--timeout 40] | --copy TEXT")?;
         return Ok(());
     }
     crate::observers::validate_args(
@@ -402,7 +435,9 @@ pub fn mcp_status(args: &[String]) -> Result<()> {
         &["--data", "--max-age", "--timeout", "--copy"],
         &["--codex"],
     )?;
-    let max_age = number(args, "--max-age", "150")?;
+    // MCP configuration stamps refresh the cache when servers change, so the
+    // periodic read keeps it for 30 minutes; a click still asks for --max-age 20.
+    let max_age = number(args, "--max-age", "1800")?;
     let timeout = number(args, "--timeout", "40")?;
     if let Some(text) = option(args, "--copy") {
         clipboard(&text)?;
@@ -415,8 +450,12 @@ pub fn mcp_status(args: &[String]) -> Result<()> {
     let data = PathBuf::from(data);
     let codex = args.iter().any(|a| a == "--codex");
     let last = cached(&data.join("last.json"), "servers");
+    let stamp = mcp_stamp(&home(), codex);
     if let Some(mut last) = last.clone() {
-        if last["codex"] == codex && clock() - num(&last["updated"], 0.) < max_age {
+        if last["codex"] == codex
+            && last["stamp"] == stamp
+            && clock() - num(&last["updated"], 0.) < max_age
+        {
             last["cached"] = json!(true);
             crate::common::print(&last)?;
             return Ok(());
@@ -436,6 +475,7 @@ pub fn mcp_status(args: &[String]) -> Result<()> {
     }
     let mut result = mcp_collect(codex, timeout, &mcp_run);
     result["codex"] = json!(codex);
+    result["stamp"] = json!(stamp);
     save(&data.join("last.json"), &result)?;
     crate::common::print(&result)?;
     Ok(())

@@ -7,6 +7,8 @@ use std::{
     fs,
     io::{Read, Seek, SeekFrom},
     path::{Path, PathBuf},
+    sync::{LazyLock, Mutex},
+    time::UNIX_EPOCH,
 };
 const FIELDS: &[&str] = &["input", "output", "cacheRead", "cacheWrite"];
 const MAX_SAFE: u64 = 9_007_199_254_740_991;
@@ -100,6 +102,61 @@ pub fn aggregate(store: &Value, since: &Value) -> Result<BTreeMap<(String, Strin
     }
     Ok(totals)
 }
+type Totals = BTreeMap<(String, String), Value>;
+/// Aggregated totals of one store state, kept beside the store so the panel's
+/// 15 s refresh parses the 14 MB store only after the collector rewrote it.
+fn store_totals(store_path: &Path, since: &Value) -> Result<(Totals, Value)> {
+    let fallback = week_start(chrono::Local::now().date_naive());
+    let starts = ["claude", "codex"].map(|kind| {
+        if since.is_object() {
+            since[kind].as_str()
+        } else {
+            since.as_str()
+        }
+        .filter(|s| !s.is_empty())
+        .unwrap_or(&fallback)
+        .to_owned()
+    });
+    let meta = fs::metadata(store_path)?;
+    let modified = meta
+        .modified()
+        .ok()
+        .and_then(|m| m.duration_since(UNIX_EPOCH).ok())
+        .map_or(0, |m| m.as_nanos() as u64);
+    let key = json!({"store":store_path,"size":meta.len(),"mtime":modified,"since":starts});
+    let cache_path = store_path.with_file_name("agent-usage-cache.json");
+    if let Ok(cached) = read_json(&cache_path) {
+        if cached["version"] == 1 && cached["key"] == key {
+            if let Some(rows) = cached["totals"].as_array() {
+                let totals = rows
+                    .iter()
+                    .filter_map(|row| {
+                        Some(((s(&row[0]).to_owned(), s(&row[1]).to_owned()), row[2].clone()))
+                    })
+                    .collect::<Totals>();
+                if totals.len() == rows.len() {
+                    return Ok((totals, cached["lastScanAt"].clone()));
+                }
+            }
+        }
+    }
+    let store = read_json(store_path)?;
+    let totals = aggregate(&store, since)?;
+    let rows = totals
+        .iter()
+        .map(|((kind, session), record)| json!([kind, session, record]))
+        .collect::<Vec<_>>();
+    let cache = json!({"version":1,"key":key,"lastScanAt":store["lastScanAt"],"totals":rows});
+    // Best effort: a cache that cannot be written only costs the next call a parse.
+    if let Some(dir) = cache_path.parent() {
+        if let Ok(mut file) = tempfile::NamedTempFile::new_in(dir) {
+            if std::io::Write::write_all(&mut file, cache.to_string().as_bytes()).is_ok() {
+                let _ = file.persist(&cache_path);
+            }
+        }
+    }
+    Ok((totals, store["lastScanAt"].clone()))
+}
 pub fn unknown(terminal: &Value, reason: &str) -> Value {
     let entry = json!({"terminal":terminal["address"],"agent":family(s(&terminal["agent"])),"known":false,"input":null,"output":null,"cacheRead":null,"cacheWrite":null,"total":null,"models":[],"reason":reason});
 
@@ -116,17 +173,14 @@ pub fn collect(store_path: &Path, resolver: &mut Resolver, since: &Value, meta: 
     };
     let mut week_totals: BTreeMap<String, f64> = BTreeMap::new();
     let mut totals = BTreeMap::new();
-    match read_json(store_path).and_then(|store| {
-        let aggregated = aggregate(&store, since)?;
-        Ok((store, aggregated))
-    }) {
-        Ok((store, aggregated)) => {
+    match store_totals(store_path, since) {
+        Ok((aggregated, last_scan)) => {
             totals = aggregated;
             for ((kind, _), record) in &totals {
                 *week_totals.entry(kind.clone()).or_default() +=
                     record["week"].as_f64().unwrap_or(0.)
             }
-            if let Some(time) = store["lastScanAt"]
+            if let Some(time) = last_scan
                 .as_str()
                 .and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok())
             {
@@ -215,14 +269,11 @@ pub fn model_name(model: &Value) -> Option<String> {
     let model = model
         .as_str()
         .filter(|s| !s.is_empty() && s.chars().count() <= 80)?;
-    let text = Regex::new(r"-\d{8}$")
-        .unwrap()
-        .replace(model, "")
-        .replace("[1m]", " 1M");
-    if let Some(c) = Regex::new(r"^claude-([a-z]+)-(\d+)(?:-(\d+))?( 1M)?$")
-        .unwrap()
-        .captures(&text)
-    {
+    static DATED: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"-\d{8}$").unwrap());
+    static CLAUDE: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(r"^claude-([a-z]+)-(\d+)(?:-(\d+))?( 1M)?$").unwrap());
+    let text = DATED.replace(model, "").replace("[1m]", " 1M");
+    if let Some(c) = CLAUDE.captures(&text) {
         let mut chars = c[1].chars();
         let family = chars
             .next()
@@ -428,11 +479,30 @@ pub fn codex_meta(path: &Path) -> Result<Value> {
         json!({"model":found["model"],"effort":found["effort"],"speed":speed(s(&found["tier"])),"permission":permission}),
     )
 }
+/// Transcript files under one root, listed once per process: `--meta` looks up
+/// every live terminal, and each lookup used to walk the whole tree again.
+fn transcript_files(root: &Path, depth: usize) -> Vec<(String, PathBuf)> {
+    static LISTED: LazyLock<Mutex<BTreeMap<(PathBuf, usize), Vec<(String, PathBuf)>>>> =
+        LazyLock::new(Default::default);
+    let mut listed = LISTED.lock().unwrap();
+    listed
+        .entry((root.to_owned(), depth))
+        .or_insert_with(|| {
+            walkdir::WalkDir::new(root)
+                .min_depth(depth)
+                .max_depth(depth)
+                .into_iter()
+                .filter_map(|e| e.ok())
+                .filter(|e| e.file_type().is_file())
+                .map(|e| (filename(e.path()), e.path().to_owned()))
+                .collect()
+        })
+        .clone()
+}
 pub fn transcript(kind: &str, session: &str, claude: &Path, codex: &Path) -> Option<PathBuf> {
-    if !Regex::new(r"^[0-9A-Za-z][0-9A-Za-z_-]{7,127}$")
-        .unwrap()
-        .is_match(session)
-    {
+    static SESSION: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(r"^[0-9A-Za-z][0-9A-Za-z_-]{7,127}$").unwrap());
+    if !SESSION.is_match(session) {
         return None;
     }
     let (root, depth) = if kind == "claude" {
@@ -440,21 +510,16 @@ pub fn transcript(kind: &str, session: &str, claude: &Path, codex: &Path) -> Opt
     } else {
         (codex.join("sessions"), 4)
     };
-    let mut matches = walkdir::WalkDir::new(root)
-        .min_depth(depth)
-        .max_depth(depth)
+    let mut matches = transcript_files(&root, depth)
         .into_iter()
-        .filter_map(|e| e.ok())
-        .filter(|e| e.file_type().is_file())
-        .filter_map(|e| {
-            let name = filename(e.path());
+        .filter_map(|(name, path)| {
             let matching = if kind == "claude" {
                 name == format!("{session}.jsonl")
             } else {
                 name.starts_with("rollout-")
                     && name.ends_with(&format!("-{}.jsonl", session.to_lowercase()))
             };
-            matching.then(|| e.path().to_owned())
+            matching.then_some(path)
         })
         .collect::<Vec<_>>();
     if matches.len() == 1 {
