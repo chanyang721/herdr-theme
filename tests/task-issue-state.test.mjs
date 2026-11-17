@@ -141,3 +141,12 @@ test('a Korean or custom status keeps its kind: provider type, same-named typed 
   assert.equal(rowStatus({status:'완료',status_type:'started'},known).type,'started','the provider type wins over the name');
   assert.equal(rowStatus({status:'진행 중'}).type,'started');assert.equal(rowStatus({status:'할 일'}).type,'unstarted');assert.equal(rowStatus({status:'백로그'}).type,'backlog');
 });
+
+test('a catalog made from the Linear ledger is never replaced by the timeline or the project cache', () => {
+  const ledgerSpace = {name: 'PeaceMinusOne', issue_catalog: {source: 'linear-ledger', week: [], milestone: [], all: [{key: 'LUK-7', title: '다른 담당자', state: 'waiting'}],
+    milestones: [{id: 'm1', name: 'R', due: '', progress: 10}], cache: {state: 'ready', at: '2026-11-16T09:00:00Z'}}};
+  const newer = parseTimelineFeed(JSON.stringify({v: 2, updated: '2026-11-16T18:59:00+09:00', week: {start: '2026-11-16', end: '2026-11-22'},
+    projects: [{workspace: 'PeaceMinusOne', milestones: [], issues: [{key: 'LUK-1', title: '내 이슈', state: 'started', due: '2026-11-18'}]}]}));
+  assert.equal(spaceWithTimeline(ledgerSpace, newer), ledgerSpace, 'the newer timeline does not take over');
+  assert.equal(milestoneSource(ledgerSpace, {at: '2026-11-16T10:00:00Z', milestones: [], issues: []}), null, 'nor the project cache');
+});

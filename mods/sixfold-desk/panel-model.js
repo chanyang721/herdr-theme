@@ -53,11 +53,20 @@ function cleanCatalogCache(value) {
 }
 const copyCatalogCache = value => value ? { state: value.state, at: value.at, scopes: Object.fromEntries(['week', 'milestone', 'all'].map(name => [name, { state: value.scopes[name].state, at: value.scopes[name].at }])) } : null;
 // Optional display extensions; absent properties keep the original v1 shape.
+// Linear's own status of a row (the harness ledger sends it, docs/panel-feed.md): a short name, a known
+// type and how the issue closed. Any other value is dropped, never guessed.
+const STATUS_TYPES = ['triage', 'backlog', 'unstarted', 'started', 'completed', 'canceled', 'duplicate'];
+const CLOSED = ['completed', 'canceled', 'duplicate'];
 const issueExtras = issue => ({
   ...(owns(issue, 'week') ? { week: issue.week === true } : {}),
   ...(owns(issue, 'pinned') ? { pinned: issue.pinned === true } : {}),
   ...(owns(issue, 'milestone_id') ? { milestone_id: id(issue.milestone_id) || null } : {}),
+  ...(typeof issue.status === 'string' && text(issue.status, 80) ? { status: text(issue.status, 80) } : {}),
+  ...(STATUS_TYPES.includes(issue.status_type) ? { status_type: issue.status_type } : {}),
+  ...(CLOSED.includes(issue.closed) ? { closed: issue.closed } : {}),
 });
+// Only the harness Linear ledger names a catalog's source; any other value is dropped.
+const catalogSource = value => value?.source === 'linear-ledger' ? { source: 'linear-ledger' } : {};
 // Optional producer row state (docs/panel-feed.md). Display only: the
 // panel never derives a state, a keep reason or a close deadline by itself.
 export const ROW_STATES = Object.freeze(['working', 'idle', 'needs_human', 'unseen_result', 'cleanup_wait', 'closing', 'closed']);
@@ -92,6 +101,7 @@ function cleanCatalog(value, spaceId) {
   const request = value.import_request;
   return {
     week: cleanIssues(value.week, 2048), milestone: cleanIssues(value.milestone, 2048), all: cleanIssues(value.all, 2048),
+    ...catalogSource(value),
     import_request: object(request) && request.path === 'panel-issue-requests' && request.space === spaceId
       ? { path: 'panel-issue-requests', space: spaceId } : null,
     ...(owns(value, 'milestones') ? { milestones: unique(list(value.milestones, 2048), item => object(item) && id(item.id) ? {
@@ -387,6 +397,7 @@ function copyDisplaySpace(space, agents) {
     memory: { proposals: space.memory.proposals }, agents,
     ...(owns(space, 'issue_catalog') ? { issue_catalog: space.issue_catalog ? {
       week: copyIssues(space.issue_catalog.week), milestone: copyIssues(space.issue_catalog.milestone), all: copyIssues(space.issue_catalog.all),
+      ...catalogSource(space.issue_catalog),
       import_request: space.issue_catalog.import_request ? { ...space.issue_catalog.import_request } : null,
       ...(owns(space.issue_catalog, 'milestones') ? { milestones: space.issue_catalog.milestones.map(item => ({ id: item.id, name: item.name,
         ...(owns(item, 'due') ? { due: item.due } : {}), ...(owns(item, 'progress') ? { progress: item.progress } : {}),

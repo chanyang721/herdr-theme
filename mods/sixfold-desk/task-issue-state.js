@@ -140,9 +140,15 @@ export function parseTimelineFeed(text) {
     })};
 }
 
+// A catalog the harness made from its Linear ledger (issue_catalog.source 'linear-ledger', 2026-11-16) is
+// the one copy: week-timeline.json and linear-cache/ are made from the same ledger or are older, so the
+// window never mixes them in (mixing flipped the lists every minute between the two copies).
+export const fromLedger = space => space?.issue_catalog?.source === 'linear-ledger';
+
 // The space with a catalog made from the timeline, or the same space when the timeline is missing,
 // has no project of that name, or is not newer than the catalog. The week list is the band's own.
 export function spaceWithTimeline(space, feed) {
+  if (fromLedger(space)) return space;
   const project = feed?.projects?.find(p => p.workspace === space.name);
   if (!project) return space;
   const old = space.issue_catalog, oldAt = Date.parse(old?.updated_at || old?.cache?.at || '');
@@ -160,6 +166,7 @@ export function spaceWithTimeline(space, feed) {
 // The Linear project cache feeds the milestone tab only while it is newer than a timeline-made catalog;
 // an older cache never overrides the newer timeline's milestones (names, progress).
 export function milestoneSource(space, project) {
+  if (fromLedger(space)) return null;   // the ledger catalog's own milestones
   if (space.issue_catalog?.from_timeline !== true || !project) return project;
   const at = Date.parse(project.at || ''), catalogAt = Date.parse(space.issue_catalog.updated_at || '');
   return Number.isFinite(at) && at > catalogAt ? project : null;
