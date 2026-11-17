@@ -7,6 +7,7 @@ use std::{
     fs,
     io::{Read, Seek, SeekFrom},
     path::{Path, PathBuf},
+    time::UNIX_EPOCH,
 };
 const FIELDS: &[&str] = &["input", "output", "cacheRead", "cacheWrite"];
 const MAX_SAFE: u64 = 9_007_199_254_740_991;
@@ -100,6 +101,61 @@ pub fn aggregate(store: &Value, since: &Value) -> Result<BTreeMap<(String, Strin
     }
     Ok(totals)
 }
+type Totals = BTreeMap<(String, String), Value>;
+/// Aggregated totals of one store state, kept beside the store so the panel's
+/// 15 s refresh parses the 14 MB store only after the collector rewrote it.
+fn store_totals(store_path: &Path, since: &Value) -> Result<(Totals, Value)> {
+    let fallback = week_start(chrono::Local::now().date_naive());
+    let starts = ["claude", "codex"].map(|kind| {
+        if since.is_object() {
+            since[kind].as_str()
+        } else {
+            since.as_str()
+        }
+        .filter(|s| !s.is_empty())
+        .unwrap_or(&fallback)
+        .to_owned()
+    });
+    let meta = fs::metadata(store_path)?;
+    let modified = meta
+        .modified()
+        .ok()
+        .and_then(|m| m.duration_since(UNIX_EPOCH).ok())
+        .map_or(0, |m| m.as_nanos() as u64);
+    let key = json!({"store":store_path,"size":meta.len(),"mtime":modified,"since":starts});
+    let cache_path = store_path.with_file_name("agent-usage-cache.json");
+    if let Ok(cached) = read_json(&cache_path) {
+        if cached["version"] == 1 && cached["key"] == key {
+            if let Some(rows) = cached["totals"].as_array() {
+                let totals = rows
+                    .iter()
+                    .filter_map(|row| {
+                        Some(((s(&row[0]).to_owned(), s(&row[1]).to_owned()), row[2].clone()))
+                    })
+                    .collect::<Totals>();
+                if totals.len() == rows.len() {
+                    return Ok((totals, cached["lastScanAt"].clone()));
+                }
+            }
+        }
+    }
+    let store = read_json(store_path)?;
+    let totals = aggregate(&store, since)?;
+    let rows = totals
+        .iter()
+        .map(|((kind, session), record)| json!([kind, session, record]))
+        .collect::<Vec<_>>();
+    let cache = json!({"version":1,"key":key,"lastScanAt":store["lastScanAt"],"totals":rows});
+    // Best effort: a cache that cannot be written only costs the next call a parse.
+    if let Some(dir) = cache_path.parent() {
+        if let Ok(mut file) = tempfile::NamedTempFile::new_in(dir) {
+            if std::io::Write::write_all(&mut file, cache.to_string().as_bytes()).is_ok() {
+                let _ = file.persist(&cache_path);
+            }
+        }
+    }
+    Ok((totals, store["lastScanAt"].clone()))
+}
 pub fn unknown(terminal: &Value, reason: &str) -> Value {
     let entry = json!({"terminal":terminal["address"],"agent":family(s(&terminal["agent"])),"known":false,"input":null,"output":null,"cacheRead":null,"cacheWrite":null,"total":null,"models":[],"reason":reason});
 
@@ -116,17 +172,14 @@ pub fn collect(store_path: &Path, resolver: &mut Resolver, since: &Value, meta: 
     };
     let mut week_totals: BTreeMap<String, f64> = BTreeMap::new();
     let mut totals = BTreeMap::new();
-    match read_json(store_path).and_then(|store| {
-        let aggregated = aggregate(&store, since)?;
-        Ok((store, aggregated))
-    }) {
-        Ok((store, aggregated)) => {
+    match store_totals(store_path, since) {
+        Ok((aggregated, last_scan)) => {
             totals = aggregated;
             for ((kind, _), record) in &totals {
                 *week_totals.entry(kind.clone()).or_default() +=
                     record["week"].as_f64().unwrap_or(0.)
             }
-            if let Some(time) = store["lastScanAt"]
+            if let Some(time) = last_scan
                 .as_str()
                 .and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok())
             {
