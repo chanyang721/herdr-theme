@@ -77,6 +77,7 @@ async function runtime(initialProps = {}) {
   }
   const lib = { ...model, ...summary, View: class {}, settings: () => ({ zoom: 1 }), div: element, h_flex: element, v_flex: element,
     initIssue() {}, renderIssue() {}, appHome: () => '/fake', exec: async () => ({ code: 0 }), readTextFile: async () => null,
+    watchFolder: () => Object.assign(Promise.resolve([]), { cancel() {} }), window: () => ({}),
     theme: () => ({ background: '#111821', foreground: '#d8e3eb', border: '#304050', canvas: '#0c121a', working: '#99b9f5', blocked: '#f5b56c', done: '#91cfaa' }),
     props: () => initialProps, isoDay: () => today,
     openOverlay: args => calls.push(['overlay', args]), closeOverlay: id => calls.push(['close', id]) };

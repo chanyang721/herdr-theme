@@ -1,6 +1,6 @@
 import { View, div } from 'gpui-kit';
 import { h_flex, v_flex } from 'gpui-base';
-import { appHome, exec, readTextFile, theme, props, settings, openOverlay, closeOverlay } from 'herdr';
+import { appHome, exec, readTextFile, watchFolder, window, theme, props, settings, openOverlay, closeOverlay } from 'herdr';
 import { initIssue, renderIssue } from './issue.js';
 import { KIND, parseFeed, bridgeFrom, weekRows, dayCells, projectRows, freshness, isoDay, daysBetween, md, mix } from './model.js';
 import { bandModel, fitCell, fitLine, textWidth, BAND } from './summary.js';
@@ -12,9 +12,11 @@ import { bandModel, fitCell, fitLine, textWidth, BAND } from './summary.js';
 // The feed is written by a user-owned producer (week-timeline-bridge.json); nothing here reads Linear.
 const FEED = 'data/sixfold/week-timeline.json';
 const BRIDGE = 'data/sixfold/week-timeline-bridge.json';
-// The producer may keep the feed current within seconds (its --live loop on the Linear API), so the
-// file is looked at often; an unchanged text is not parsed again.
-const READ_MS = 2 * 1000;
+// The producer may keep the feed current within seconds (its --live loop on the Linear API): a folder
+// watch reads the feed when it changes; the slow look catches a reclaimed watch. Nothing is read,
+// produced or redrawn while the window is hidden; it catches up when shown.
+const READ_MS = 30 * 1000;
+const SHOWN_MS = 2 * 1000;
 const PRODUCE_MS = 2 * 60 * 1000;      // a sync: one light look (API: issues changed since; claude: notifications)
 const PRODUCE_TIMEOUT = 9 * 60 * 1000;
 const FRESH_S = 90;
@@ -62,18 +64,39 @@ export default class WeekTimeline extends View {
     this.project = typeof p.project === 'string' ? p.project : null;
     this.feed = null; this.filter = 'all'; this.days = 7; this.open = {}; this.undated = false;
     this.busy = false; this.note = '';
-    this.load(cx);
-    this.timers.push(cx.timer.every(READ_MS, cx => this.load(cx)));
-    this.timers.push(cx.timer.every(60000, cx => cx.notify()));   // today's line and late marks follow the clock
+    this.load(cx); this.watchFeed(cx);
+    this.timers.push(cx.timer.every(READ_MS, cx => { this.watchFeed(cx); this.load(cx); }));
+    this.timers.push(cx.timer.every(SHOWN_MS, cx => { if (this.stale && !this.hidden()) this.load(cx); }));   // a change missed while hidden
+    this.timers.push(cx.timer.every(60000, cx => { if (!this.hidden()) cx.notify(); }));   // today's line and late marks follow the clock
     if (this.mode === 'band') {
       this.timers.push(cx.timer.after(5000, cx => this.produce(cx, FRESH_S)));
       this.timers.push(cx.timer.every(PRODUCE_MS, cx => this.produce(cx, FRESH_S)));
     }
   }
-  close() { this.closed = true; for (const timer of this.timers) timer?.cancel?.(); this.timers = []; }
+  close() { this.closed = true; this.watch?.cancel?.(); this.watch = null; for (const timer of this.timers) timer?.cancel?.(); this.timers = []; }
 
+  hidden() { return typeof window === 'function' && window()?.visible === false; }
+  // One watch on the feed's folder; any other file there is ignored. A watch that ends with
+  // nothing (released or reclaimed) is started again by the slow look, never in a loop here.
+  watchFeed(cx) {
+    if (this.closed || this.watch || typeof watchFolder !== 'function') return;
+    const folder = `${appHome()}/data/sixfold`, name = FEED.split('/').pop();
+    cx.spawn(async cx => {
+      try {
+        while (!this.closed) {
+          const watch = this.watch = watchFolder(folder);
+          const changed = await watch;
+          if (this.closed || this.watch !== watch || !changed?.length) break;
+          if (changed.some(path => path === folder || path.endsWith(`/${name}`))) this.load(cx);
+        }
+      } catch { /* The slow look keeps the band current. */ }
+      finally { if (!this.closed) this.watch = null; }
+    });
+  }
   load(cx) {
     if (this.closed) return;
+    if (this.hidden()) { this.stale = true; return; }
+    this.stale = false;
     cx.spawn(async cx => {
       const text = await readTextFile(`${appHome()}/${FEED}`).catch(() => null);
       if (this.closed || (text !== null && text === this.feedText)) return;
@@ -85,7 +108,7 @@ export default class WeekTimeline extends View {
   }
   // Runs the configured producer; it does nothing itself while its last attempt is younger than `fresh` s.
   produce(cx, fresh) {
-    if (this.closed || this.busy) return;
+    if (this.closed || this.busy || this.hidden()) return;
     this.busy = true;
     cx.spawn(async cx => {
       try {
