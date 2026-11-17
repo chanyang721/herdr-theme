@@ -1,7 +1,7 @@
 import { div } from 'gpui-kit';
 import { Popup } from 'gpui-base';
 import { settings, appHome, readTextFile, writeTextFile } from 'herdr';
-import { alertPopoverOpen, slackPeek } from './alert-popover.js';
+import { alertPopoverOpen, slackPeek, showPopover } from './alert-popover.js';
 import { hasWorkspaceAlerts, hasSlackAlerts, hasLinearAlerts, openInbox, openLinearInbox, alertSignature } from './alert-inbox.js';
 import { watchLinear } from './linear-feed.js';
 import { arrivals, setArrivalHost, clearArrivalHost, setPeekCheck, holdArrivals } from './arrival-store.js';
@@ -83,10 +83,16 @@ export function alertArrivalLayer(view, cx, {cards, motion, t, right}) {
   const redraw = () => { view.panelRetained?.alertsChanged?.(); view.invalidateSidebar ? view.invalidateSidebar() : cx.notify(); };
   // The peek surface: a Popup pinned to the card's right edge, beside where the issue search opens.
   // Resting the pointer on it holds it open; leaving restarts its time.
+  // Slack and Linear take the same way: the peek is the surface the card's own chip opens (the alert
+  // popover for Slack, the top of the issue search for Linear), and its title opens that popover.
+  // While a popover or an issue search is open the peek yields to it (false: no second surface and no
+  // small popup); its alerts fold into their chip as usual.
   const peek = ({space, source, arrivals: shown, anchor}) => {
-    const fresh = shown.map(a => a.id);
+    if (alertPopoverOpen() || view.panelRetained?.anyIssuesOpen?.()) return false;
+    const fresh = shown.map(a => a.id), card = at.get(projectKey(space));
     const body = source === 'linear' ? view.panelRetained?.peekIssues?.(space, fresh, t)
-      : slackPeek(space, t, fresh, () => openInbox({project: space}), shown.map(a => a.item).filter(Boolean));
+      : slackPeek(space, t, fresh, () => openInbox({project: space}), shown.map(a => a.item).filter(Boolean),
+        {hasLinear: !card?.merged && hasLinearAlerts(space), onOpen: source => { showPopover(space, source); redraw(); }});
     if (!body) return null;
     const key = `${projectKey(space)}-${source}`;
     return div().id(`sf-peek-${key}`).absolute().left(anchor.edge ?? anchor.badgeX).top(anchor.badgeY).size(2)

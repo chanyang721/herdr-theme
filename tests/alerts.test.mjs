@@ -7,7 +7,7 @@ const nativeParse=JSON.parse;
 const guardModule=await import(new URL('../mods/sixfold-desk/watch-guard.js',import.meta.url).href);
 const sharedPublish=await import(new URL('../mods/sixfold-desk/shared-publish.js',import.meta.url).href);
 const changeServices=new WeakMap();let watcherId=0;
-async function alertHarness(files,{lineEnding='\n',opens=[],home='/test',arrived=[],host={value:false}}={}){
+async function alertHarness(files,{lineEnding='\n',opens=[],home='/test',arrived=[],noted=[],host={value:false}}={}){
   const tasks=[],timers=new Set(),slowTimers=new Set(),callbacks=new Map(),shared=new Map(),writes=[];
   let notifications=0,typedHook=null,writeHook=null;
   const service=changeServices.get(files)??new Set();changeServices.set(files,service);
@@ -21,7 +21,7 @@ async function alertHarness(files,{lineEnding='\n',opens=[],home='/test',arrived
     subscribeFileChanges:(_cx,name,callback)=>{const listener={path:name,callback};service.add(listener);return()=>service.delete(listener);},
     readJsonSnapshot:async name=>{const value=snapshot(name);await typedHook?.(name,value);return value;},
     readTextFile:async name=>files.get(name.split('/').at(-1))??null,
-    createRetry:guardModule.createRetry,watchRecorder:guardModule.watchRecorder,setSpaceMentions:items=>shared.set('spaceMentions',items),
+    createRetry:guardModule.createRetry,watchRecorder:guardModule.watchRecorder,setSpaceMentions:items=>shared.set('spaceMentions',items),noteArrived:(space,item)=>noted.push([space,item?.id]),
     ...sharedPublish,
     writeTextFile:async(name,value,expected)=>{const key=name.split('/').at(-1),old=files.get(key)??null;if(old!==expected)throw Error('compare-and-swap conflict');writes.push({name,value,expected});files.set(key,value);change(name);await writeHook?.(name,value);},
   };
@@ -33,7 +33,7 @@ async function alertHarness(files,{lineEnding='\n',opens=[],home='/test',arrived
   delete globalThis[key];const view={alerts:[]},stop=module.watchAlerts(view,cx);
   const flush=async()=>{for(let count=0;count<30;count++){const pending=[...timers];timers.clear();for(const timer of pending)timer.callback(cx);await Promise.race([Promise.all(tasks.splice(0)),new Promise(r=>setTimeout(r,5))]);await Promise.resolve();if(!timers.size&&!tasks.length)return;}assert.fail('Alert batching did not settle');};
   const publish=(name=null)=>{for(const [file,callback] of callbacks)if(name===null||file===path(name))callback(snapshot(file));};
-  return {setWriteHook:hook=>{writeHook=hook;},slowTimers,view,cx,opens,arrived,host,writes,shared,stop,flush,publish,path,change,dismiss:module.testDismiss,setTypedHook:hook=>{typedHook=hook;},notifications:()=>notifications,refresh:async()=>{publish();await flush();}};
+  return {setWriteHook:hook=>{writeHook=hook;},slowTimers,view,cx,opens,arrived,noted,host,writes,shared,stop,flush,publish,path,change,dismiss:module.testDismiss,setTypedHook:hook=>{typedHook=hook;},notifications:()=>notifications,refresh:async()=>{publish();await flush();}};
 }
 
 test('initial snapshot barrier seeds existing mentions silently and changed callbacks never parse files on UI',async()=>{
@@ -146,7 +146,7 @@ test(`workflow updates never auto-open; new mentions open once across health tic
     assert.equal(opens.length,0,'an old source returning after a transient omission stays suppressed');
     files.set('slack-mentions.json','{"items":[{"id":"old"},{"id":"new"}]}');await refresh();
     assert.equal(opens.length,1,'a genuinely new mention opens once');
-    assert.equal(opens[0].props.review,false);
+    assert.deepEqual(opens[0].props,{window:true},'the Slack window opens with the same props as the Linear window');
     await refresh();assert.equal(opens.length,1);
 
     files.set('slack-workflows.json','{"jobs":{"job":{"id":"job","version":"source-v2","state":"needs_decision","summary":"Updated source review","artifacts":["/report.md"],"finished_at":"third"}}}');

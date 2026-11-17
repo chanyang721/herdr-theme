@@ -26,3 +26,18 @@ export const spaceMentions = project => mentionsBySpace.get(projectKey(project))
 // A new object on every load: alerts.js publishes sixfold.alertItems together with this call,
 // so it doubles as the tracked feed's version (alert-inbox.js reads that feed once per load).
 export const mentionsEpoch = () => mentionsBySpace;
+
+// The Slack mentions that arrived in this run, per space (newest last, bounded). A new Slack alert shows
+// in its card's own alert popover, as a Linear alert shows in its card's issue search: the peek draws
+// that popover's surface, and the chip opens the same popover with the arrived ones listed first.
+const ARRIVED_LIMIT = 20;
+let arrivedBySpace = new Map();
+export function noteArrived(space, item) {
+  if (!item || typeof item.id !== 'string') return;
+  const key = projectKey(space), list = (arrivedBySpace.get(key) ?? []).filter(other => other.id !== item.id);
+  const next = new Map(arrivedBySpace);
+  next.set(key, [...list, key === projectKey(item.project) ? item : {...item, project: space, project_raw: item.project ?? ''}].slice(-ARRIVED_LIMIT));
+  arrivedBySpace = next;
+}
+export const arrivedFor = project => arrivedBySpace.get(projectKey(project)) ?? [];
+export const clearArrived = () => { arrivedBySpace = new Map(); };

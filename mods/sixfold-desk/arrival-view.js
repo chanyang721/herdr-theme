@@ -25,7 +25,8 @@ export function arrivalLayer({list, now, motion, anchors, t, u = 1, onOpen, peek
     const anchor = anchors(current.space, current.source);
     const surface = anchor && peek ? peek({...current, anchor}) : null;
     if (surface) layer.push(surface);
-    else unseen = current.arrivals;   // no surface to open: the small popup instead, never silent
+    // false: the card's own popover (or issue search) is open and shows them already.
+    else if (surface !== false) unseen = current.arrivals;   // no surface to open: the small popup instead, never silent
   }
   for (const a of foldingPeeks(list, now, motion)) {
     const anchor = anchors(a.space, a.source);

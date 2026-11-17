@@ -6,7 +6,7 @@ import {readJsonSnapshot,subscribeJsonFile,subscribeFileChanges} from './panel-i
 import {addArrival,hasArrivalHost} from './arrival-store.js';
 import {arrivalTarget,ARRIVAL} from './arrival-model.js';
 import {createRetry,watchRecorder} from './watch-guard.js';
-import {setSpaceMentions} from './alert-mentions.js';
+import {setSpaceMentions,noteArrived} from './alert-mentions.js';
 import {createSharedPublisher,slackHealthView} from './shared-publish.js';
 
 const SHOWN = new Set(['needs-you']);  // Only what a person must decide; the rest stays in the project.
@@ -52,16 +52,26 @@ async function notifyNewPopupEvents(events,allowed=()=>true) {
   return firstRun ? [] : fresh.filter(event => event.popup);
 }
 
-// A new mention arrives into its space card when a sidebar draws arrivals;
-// otherwise the Slack window opens as before, so it is never dropped. The arrival carries the
-// mention itself: the peek lists it even when the tracked feed (project-alerts.json) does not,
-// as for unmapped mentions, DMs and thread replies that land in Share.
-function announceSlack(events){
+// A new mention takes the same way as a new Linear alert (linear-feed.js announceLinear): it arrives
+// into its space card when a sidebar draws arrivals, as a peek of that card's own alert popover (the
+// one its Slack chip opens); otherwise the Slack window opens, as the Linear window does, so it is never
+// dropped. The arrival carries the mention itself, and the card remembers it (noteArrived): the peek and
+// the chip's popover list it even when the tracked feed (project-alerts.json) does not, as for unmapped
+// mentions, DMs and thread replies that land in Share.
+export function announceSlack(events){
   if(!events.length)return;
-  if(!hasArrivalHost())return openOverlay({mod:'sixfold-slack-inbox',kind:'window',key:'slack-mentions',keep:true,width:1040,height:800,props:{window:true,review:Boolean(events[0].review)}});
+  if(!hasArrivalHost())return openSlackWindow();
   const names=(spaces()??[]).map(s=>s.name);
   // Mentions are newest first: the newest few, oldest of them first so the newest lands last.
-  for(const event of events.slice(0,ARRIVAL.visible).reverse())addArrival({key:event.key,id:event.id,source:'slack',space:arrivalTarget(event.project,names),title:event.title,line:event.author?`${event.author}: ${event.line}`:event.line,url:event.url,item:event.item});
+  for(const event of events.slice(0,ARRIVAL.visible).reverse()){
+    const space=arrivalTarget(event.project,names);
+    noteArrived(space,event.item);
+    addArrival({key:event.key,id:event.id,source:'slack',space,title:event.title,line:event.author?`${event.author}: ${event.line}`:event.line,url:event.url,item:event.item});
+  }
+}
+
+export function openSlackWindow(){
+  openOverlay({mod:'sixfold-slack-inbox',kind:'window',key:'slack-mentions',keep:true,width:1040,height:800,props:{window:true}});
 }
 
 // Tracked Slack, GitHub and pane requests, ordered by the watcher: needs-you first.

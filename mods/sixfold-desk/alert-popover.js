@@ -4,7 +4,7 @@ import { shared, setShared } from 'herdr';
 import { scopedAlerts, alertVersion, linearScoped, changeLines, linearCategory, popoverOpen, popoverRows, projectKey, alertKind, alertLine, kindTone, popoverChangeLines } from './alert-model.js';
 import { feedNames, namesFor, alertTitle, readable } from './alert-slack.js';
 import { fileChips, loadFileText, followFileText, localNames } from './alert-files.js';
-import { spaceMentions, setSpaceMentions } from './alert-mentions.js';
+import { spaceMentions, setSpaceMentions, arrivedFor } from './alert-mentions.js';
 export { spaceMentions, setSpaceMentions };
 
 // A small surface beside a space card: the newest Slack and Linear alerts of that
@@ -96,6 +96,48 @@ function linearRows(project, t) {
       .when(!changeLines(item).length && Boolean(alertLine(item)), e => e.child(line(alertLine(item), t.muted, 11))))};
 }
 
+// The surface of a card's alert popover: its title, the Slack/Linear tabs, the rows of `source` and
+// 전체 보기. The popover and the new-alert peek both draw it, so a new Slack alert shows in the very
+// popover its chip opens (as a new Linear alert shows the top of its card's issue search).
+// `peek`: drawn by the arrival layer (no focus taken): a 새 알림 mark instead of the close button,
+// and the title or a tab opens the card's popover itself.
+function surface({id, project, source, t, slack, linear, onAll, onTab, onClose = null, onHead = null, peek = false}) {
+  const current = source === 'linear' ? linear : slack;
+  const tab = (name, label, data) => h_flex().id(`sf-alert-pop-tab-${id}-${name}`).h(28).px(10).gap(5).items_center().rounded(6)
+    .bg(source === name ? t.selected : t.chrome).cursor_pointer()
+    .on_click((_e, cx) => { cx.stop_propagation(); onTab(name); cx.notify(); })
+    .child(image(`mods/sixfold-desk/icons/${name}.svg`).size(13))
+    .child(line(label, source === name ? t.foreground : t.muted, 12))
+    .child(line(data.unread ? `미확인 ${data.unread}` : '0', data.unread ? t.accent : t.dim, 10));
+  const head = h_flex().id(`sf-alert-pop-head-${id}`).gap(8).items_center()
+    .when(Boolean(onHead), e => e.cursor_pointer().tooltip('누르면 이 공간 알림 팝오버를 엽니다').on_click((_e, cx) => { cx.stop_propagation(); onHead(); cx.notify(); }))
+    .child(line(`${project} 알림`, t.foreground, 13).font_bold().flex_1());
+  if (peek) head.child(div().px(6).rounded(7).text_size(10).font_bold().bg(t.accent).text_color(t.accent_foreground || t.background).child('새 알림'));
+  else head.child(div().id(`sf-alert-pop-close-${id}`).size(26).rounded(6).text_size(13).text_color(t.muted).flex().items_center().justify_center()
+    .cursor_pointer().tooltip('닫기').on_click((_e, cx) => { cx.stop_propagation(); onClose?.(); cx.notify(); }).child('✕'));
+  return v_flex().id(`sf-alert-pop-body-${id}`).w(400).max_h(560).gap(8).p(12)
+    .rounded(10).border(1).border_color(peek ? t.accent : t.border).bg(t.popover || t.surface).text_color(t.foreground)
+    .child(head)
+    .child(h_flex().gap(4)
+      .when(Boolean(slack), e => e.child(tab('slack', 'Slack', slack)))
+      .when(Boolean(linear), e => e.child(tab('linear', 'Linear', linear))))
+    .child(v_flex().id(`sf-alert-pop-list-${id}`).max_h(420).overflow_y_scroll().gap(4)
+      .when(!current || !current.rows.length, e => e.child(line('표시할 알림이 없습니다.', t.muted, 12).p(8)))
+      .children(current ? current.rows : []))
+    .child(h_flex().gap(6).items_center()
+      .child(line(source === 'slack' ? 'Slack 앱 읽음 상태와 별도' : '읽음은 Linear 기준', t.dim, 10).flex_1())
+      .child(div().id(`sf-alert-pop-all-${id}`).px(10).py(5).rounded(5).text_size(12).font_semibold()
+        .bg(t.surface).text_color(t.accent).hover(s => s.bg(t.hover)).cursor_pointer()
+        .on_click((_e, cx) => { cx.stop_propagation(); hidePopover(); onAll?.(source); cx.notify(); }).child('전체 보기')));
+}
+
+// The Slack mentions that arrived for a space in this run and are still unread: the popover lists
+// them first and lit, so pressing the chip after a peek shows the alert that opened it.
+const arrivedUnread = project => {
+  const read = shared('sixfold.alertRead') ?? {};
+  return arrivedFor(project).filter(item => read[item.id] !== alertVersion(item));
+};
+
 // `trigger` is the whole alerts row of the card, so the surface opens beside the card.
 export function alertPopover({id, project, trigger, t, hasSlack, hasLinear, onAll}) {
   const state = popoverState();
@@ -109,44 +151,21 @@ export function alertPopover({id, project, trigger, t, hasSlack, hasLinear, onAl
       cx.notify();
     }).trigger(trigger);
   if (!source) return popover;
-  const slack = hasSlack ? slackRows(project, t) : null, linear = hasLinear ? linearRows(project, t) : null;
-  const current = source === 'linear' ? linear : slack;
-  const tab = (name, label, data) => h_flex().id(`sf-alert-pop-tab-${id}-${name}`).h(28).px(10).gap(5).items_center().rounded(6)
-    .bg(source === name ? t.selected : t.chrome).cursor_pointer()
-    .on_click((_e, cx) => { cx.stop_propagation(); showPopover(project, name); cx.notify(); })
-    .child(image(`mods/sixfold-desk/icons/${name}.svg`).size(13))
-    .child(line(label, source === name ? t.foreground : t.muted, 12))
-    .child(line(data.unread ? `미확인 ${data.unread}` : '0', data.unread ? t.accent : t.dim, 10));
-  return popover.content(v_flex().id(`sf-alert-pop-body-${id}`).w(400).ml(14).max_h(560).gap(8).p(12)
-    .rounded(10).border(1).border_color(t.border).bg(t.popover || t.surface).text_color(t.foreground)
-    .child(h_flex().gap(8).items_center()
-      .child(line(`${project} 알림`, t.foreground, 13).font_bold().flex_1())
-      .child(div().id(`sf-alert-pop-close-${id}`).size(26).rounded(6).text_size(13).text_color(t.muted).flex().items_center().justify_center()
-        .cursor_pointer().tooltip('닫기').on_click((_e, cx) => { cx.stop_propagation(); hidePopover(); cx.notify(); }).child('✕')))
-    .child(h_flex().gap(4)
-      .when(Boolean(slack), e => e.child(tab('slack', 'Slack', slack)))
-      .when(Boolean(linear), e => e.child(tab('linear', 'Linear', linear))))
-    .child(v_flex().id(`sf-alert-pop-list-${id}`).max_h(420).overflow_y_scroll().gap(4)
-      .when(!current || !current.rows.length, e => e.child(line('표시할 알림이 없습니다.', t.muted, 12).p(8)))
-      .children(current ? current.rows : []))
-    .child(h_flex().gap(6).items_center()
-      .child(line(source === 'slack' ? 'Slack 앱 읽음 상태와 별도' : '읽음은 Linear 기준', t.dim, 10).flex_1())
-      .child(div().id(`sf-alert-pop-all-${id}`).px(10).py(5).rounded(5).text_size(12).font_semibold()
-        .bg(t.surface).text_color(t.accent).hover(s => s.bg(t.hover)).cursor_pointer()
-        .on_click((_e, cx) => { cx.stop_propagation(); hidePopover(); onAll(source); cx.notify(); }).child('전체 보기'))));
+  const arrived = hasSlack ? arrivedUnread(project) : [];
+  const slack = hasSlack ? slackRows(project, t, new Set(arrived.map(item => item.id)), true, arrived) : null, linear = hasLinear ? linearRows(project, t) : null;
+  return popover.content(surface({id, project, source, t, slack, linear, onAll,
+    onTab: name => showPopover(project, name), onClose: hidePopover}).ml(14));
 }
 
-// A peek: the Slack alerts of a space opened by new alerts beside its card (the arrival layer
-// draws it in a Popup, which takes no focus); the ones just arrived are lit. Read-only.
-export function slackPeek(project, t, fresh = [], onAll = null, arrived = []) {
-  const data = slackRows(project, t, new Set(fresh), false, arrived);
-  if (!data.rows.length) return null;
-  return v_flex().id(`sf-alert-peek-${projectKey(project)}`).w(400).gap(8).p(12).rounded(10).border(1).border_color(t.ansi5 || t.accent)
-    .bg(t.popover || t.surface).text_color(t.foreground)
-    .child(h_flex().id(`sf-alert-peek-head-${projectKey(project)}`).gap(8).items_center()
-      .when(Boolean(onAll), e => e.cursor_pointer().tooltip('누르면 이 공간 Slack 알림을 엽니다').on_click((_e, cx) => { cx.stop_propagation(); onAll(); }))
-      .child(image('mods/sixfold-desk/icons/slack.svg').size(16))
-      .child(line(`${project} · Slack 알림`, t.foreground, 13).font_bold().flex_1())
-      .child(line(data.unread ? `미확인 ${data.unread}` : '0', data.unread ? t.accent : t.dim, 10)))
-    .child(v_flex().gap(4).children(data.rows));
+// A peek: the card's alert popover surface on its Slack tab, opened by new alerts beside the card (the
+// arrival layer draws it in a Popup, which takes no focus); the ones just arrived are lit and listed
+// first. Its rows are read-only; the title or a tab opens the card's popover itself (`onOpen`).
+export function slackPeek(project, t, fresh = [], onAll = null, arrived = [], {hasLinear = false, onOpen = null} = {}) {
+  const lit = new Set(fresh), known = new Set((arrived ?? []).map(item => item?.id));
+  const slack = slackRows(project, t, lit, false, [...(arrived ?? []), ...arrivedFor(project).filter(item => lit.has(item.id) && !known.has(item.id))]);
+  if (!slack.rows.length) return null;
+  const linear = hasLinear ? linearRows(project, t) : null;
+  const open = source => { if (onOpen) onOpen(source); else showPopover(project, source); };
+  return surface({id: `peek-${projectKey(project)}`, project, source: 'slack', t, slack, linear, onAll,
+    onTab: open, onHead: () => open('slack'), peek: true});
 }
