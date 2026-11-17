@@ -259,7 +259,7 @@ export default class SixfoldDesk extends View {
     this.startLiveMessages=()=>{
       if(this.stopLiveMessages||typeof herdrNative.messageEvents!=='function'||!this.sidebarVisible)return;
       this.deliverLiveMessages??=events=>{this.nativeMessages=events;refresh(cx);};
-      this.stopLiveMessages=subscribeLiveEvents({key:`${appHome()}:messages`,cx,read:()=>herdrNative.messageEvents(),onChange:events=>fileReceiver.enqueue(this.deliverLiveMessages,events),intervalMs:500});
+      this.stopLiveMessages=subscribeLiveEvents({key:`${appHome()}:messages`,cx,read:()=>herdrNative.messageEvents(),onChange:events=>fileReceiver.enqueue(this.deliverLiveMessages,events),intervalMs:1000});
     };
     this.startLiveMessages();refresh(cx);
     // The slow dot on a computer link turns at the ends of its pipe. A native loop
