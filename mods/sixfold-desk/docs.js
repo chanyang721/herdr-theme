@@ -1,17 +1,26 @@
-import {appHome,spaces,exec,window} from 'herdr';
+import {appHome,spaces,panes,exec,window} from 'herdr';
 import {subscribeJsonFile} from './panel-io.js';
 
 export function currentDocs(index){const space=spaces().find(s=>s.active);return index?.spaces?.[space?.id]||index?.spaces?.[space?.name]||null;}
-const COLLECT_MS=30000;
+// The collector spawns a process that walks every pinned folder: at most every two minutes,
+// and at once (after SHOWN_MIN_MS) when a document tab comes into view. CHECK_MS only reads
+// the host's in-memory model.
+const COLLECT_MS=120000,SHOWN_MIN_MS=10000,CHECK_MS=5000;
 const native = () => `${appHome()}/scripts/sixfold/herdr-theme${(typeof window==='function' && window()?.platform==='windows') || /^(?:[A-Za-z]:[\\/]|\\\\)/.test(appHome())?'.exe':''}`;
 const COLLECTORS='__sixfoldDocsCollectorsV1';
-function collectDocs(view){
+// The shown space shows a tab holding a project-docs-tabs pane.
+export function docsTabShown(){
+  if(typeof panes!=='function')return false;
+  const space=spaces().find(s=>s.active),tab=space?.tabs?.find(t=>t.active);
+  return Boolean(tab)&&panes().some(p=>p.tab===tab.id&&p.mod==='project-docs-tabs');
+}
+function collectDocs(view,min=COLLECT_MS){
   if(view.sidebarVisible===false)return;
   const collectors=globalThis[COLLECTORS]??(globalThis[COLLECTORS]=new Map());
   const key=appHome(),state=collectors.get(key)??{at:null,pending:false};
   collectors.set(key,state);
   const now=Date.now();
-  if(state.pending||(state.at!==null&&now-state.at<COLLECT_MS))return;
+  if(state.pending||(state.at!==null&&now-state.at<min))return;
   state.at=now;state.pending=true;
   // Collection discovers new/moved documents; file subscriptions only deliver
   // its output. Sidebar copies share one actual collection per app home.
@@ -35,8 +44,13 @@ export function watchDocs(view,cx){
     view.projectDocs=snapshot.value;view.docsIndexAt=Date.now();
     if(view.sidebarVisible!==false)cx.notify();
   });
+  let shown=docsTabShown();
   collectDocs(view);
-  const timer=cx.timer.every(COLLECT_MS,()=>{if(!disposed)collectDocs(view);});
+  const timer=cx.timer.every(CHECK_MS,()=>{
+    if(disposed)return;
+    const now=docsTabShown(),opened=now&&!shown;shown=now;
+    collectDocs(view,opened?SHOWN_MIN_MS:COLLECT_MS);
+  });
   const stop=()=>{if(disposed)return;disposed=true;unsubscribe();timer?.cancel?.();};
   view.stopDocs=stop;(view.fileSubscriptions??=[]).push(stop);
   return stop;
