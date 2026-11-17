@@ -375,3 +375,25 @@ test('a pane header looks up only its own pane, its title label and its place in
     assert(!found.has('sixfold-head-p9'), 'a pane on another computer than the focused one draws nothing, as before');
   } finally { delete globalThis.__visRuntime; }
 });
+
+test('a pane header animates only briefly after a status change, then one wake redraws it still', async () => {
+  const realNow = Date.now;let now = 500000;
+  const pane = { pane: 'p1', tab: 'h', terminal: 't1', title: 'one', status: 'idle' };
+  const timers = [], cx = { notify() {}, timer: { after(ms, fn) { const timer = { ms, fn, cancelled: false, cancel() { this.cancelled = true; } }; timers.push(timer); return timer; } } };
+  const rt = { ...runtime([]), props: () => ({ role: 'pane', pane: 'p1' }), panes: () => [pane], shared: key => key === 'sixfold.motion' ? true : undefined };
+  try {
+    Date.now = () => now;
+    const v = view(await sidebar(rt));
+    rows(v, cx);
+    assert.equal(timers.length, 0, 'first sight is still: no wake');
+    now += 5000; pane.status = 'working';
+    rows(v, cx);
+    assert.equal(timers.length, 1);
+    assert.equal(v.briefWakeAt, now + 8000, 'the wake is the end of the brief window');
+    rows(v, cx);
+    assert.equal(timers.length, 1, 'a redraw inside the window keeps the same wake');
+    now += 8000;
+    rows(v, cx);
+    assert(timers[0].cancelled || v.briefWakeAt === null, 'after the window nothing stays scheduled');
+  } finally { Date.now = realNow; delete globalThis.__visRuntime; }
+});

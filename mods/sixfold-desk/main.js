@@ -578,7 +578,7 @@ export default class SixfoldDesk extends View {
 
   // Each of the six headers looks up only its own pane: no copy of every pane
   // and no per-pane terminal search on each redraw.
-  paneHeader(t, w) {
+  paneHeader(t, w, cx) {
     const id = props()?.pane, onlySpace = props()?.onlySpace, list = panes();
     const own = list.find(x => x.pane === id);
     if (!own) return div();
@@ -597,6 +597,10 @@ export default class SixfoldDesk extends View {
     const meta = paneMeta(p.terminal, shared), name = title(p), ask = paneAskButton(p, t, this.lang(), name);
     // Task-list progress and running sub-agents of the same confirmed session.
     const work = paneWork(p.terminal, shared);
+    // The cat moves for a few seconds after a status change, then holds its pose.
+    this.paneBrief ??= briefWindow();
+    const animate = this.paneBrief.active(p.pane, p.status) && motionEnabled(shared) && window()?.visible !== false;
+    wakeAtBriefEnd(this, animate ? this.paneBrief.nextAt() : null, cx);
     return div().size_full().bg(style.base).child(h_flex().id(`sixfold-head-${p.pane}`).size_full().items_center().gap(7).px(9)
       .bg(style.background).text_size(11.5)
       .border(1).border_color(style.border)
@@ -614,7 +618,7 @@ export default class SixfoldDesk extends View {
       // A waiting question/permission opens here, over its own pane, on click only.
       .when(Boolean(ask), el => el.child(ask))
       // The cat is the status, so it stands beside the status badge.
-      .child(panePet(p,t,shared,style))
+      .child(panePet(p,t,shared,style,{animate}))
       .child(this.badge(p.status, p.status ? w[p.status] : '', t, 11, ['working', 'blocked'].includes(p.status) ? t.foreground : null)));
   }
 
@@ -625,7 +629,7 @@ export default class SixfoldDesk extends View {
     // One pane's cards in a popup (asks.js). It needs none of the layout work below.
     if (role === 'ask') return askPopup(this, t, this.lang(), cx);
     // A pane header needs none of the sidebar's routing work, and redraws often.
-    if (role === 'pane') return this.paneHeader(t, w);
+    if (role === 'pane') return this.paneHeader(t, w, cx);
     if(role==='sidebar'){
       const environment=JSON.stringify([t,shared('sixfold.motion'),window()?.visible??null]);
       if(environment!==this.panelEnvironment){this.panelEnvironment=environment;this.refreshPanelPreferences?.();}
