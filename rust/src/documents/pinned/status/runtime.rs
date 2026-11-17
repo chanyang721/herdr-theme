@@ -355,7 +355,7 @@ fn number(args: &[String], key: &str, default: &str) -> Result<f64> {
 }
 pub fn cli_status(args: &[String]) -> Result<()> {
     if args.iter().any(|a| a == "--help" || a == "-h") {
-        crate::common::print_line("Sign-in state of account CLIs as JSON. --data DIR [--config FILE] [--stamps] [--max-age 200] [--timeout 15] | --copy TEXT")?;
+        crate::common::print_line("Sign-in state of account CLIs as JSON. --data DIR [--config FILE] [--stamps] [--max-age 1800] [--timeout 15] | --copy TEXT")?;
         return Ok(());
     }
     crate::observers::validate_args(
@@ -363,7 +363,9 @@ pub fn cli_status(args: &[String]) -> Result<()> {
         &["--data", "--config", "--max-age", "--timeout", "--copy"],
         &["--stamps"],
     )?;
-    let max_age = number(args, "--max-age", "200")?;
+    // Sign-in file stamps (aws, gh, kube, ~/.sfdx and ~/.sf) refresh the cache
+    // when they change, so the periodic read can keep it for 30 minutes.
+    let max_age = number(args, "--max-age", "1800")?;
     let timeout = number(args, "--timeout", "15")?;
     if let Some(text) = option(args, "--copy") {
         clipboard(&text)?;
