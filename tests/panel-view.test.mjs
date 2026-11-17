@@ -130,6 +130,24 @@ test('card row geometry includes borders, issue headings and the hidden-row rema
   }
 });
 
+test('agents under an issue heading are indented and each later issue starts after a gap',async()=>{
+  const r=await renderer(false),view=viewFor(makePanelFixture({share:'agent',tool:'linear'}));
+  const tree=r.renderPanelTracking(view,t,r.cx);const layout=r.panelLayout(view.panelState.feed,view.panelEvents);
+  const grouped=layout.cards.filter(card=>card.rows.some(row=>row.kind==='issue'));
+  assert(grouped.length>0,'the fixture has an issue-grouped card');
+  assert(grouped.some(card=>card.rows.filter(row=>row.kind==='issue').length>=2),'at least one card has two issues, so a gap is drawn');
+  for(const card of grouped){
+    const issues=card.rows.filter(row=>row.kind==='issue'),gaps=card.rows.filter(row=>row.kind==='issue-gap');
+    assert.equal(gaps.length,issues.length-1,'one gap between consecutive issues, none before the first');
+    for(const gap of gaps)assert.equal(card.rows[card.rows.indexOf(gap)+1].kind,'issue');
+    for(const row of card.rows.filter(row=>row.kind==='agent')){
+      const wrap=byId(tree,`panel-issue-indent-${row.agent.id}`);
+      assert(wrap,'grouped agent rows sit in the indent wrapper');
+      assert.equal(call(wrap,'pl')[1],r.PANEL_GEOMETRY.issueIndent);
+    }
+  }
+});
+
 test('default 224px sidebar reserves space name and compact controls; wide panels retain full labels',async()=>{
   const r=await renderer(false),view=viewFor(makePanelFixture({share:'space',tool:'linear',slack:true}));
   view.panelWidth=224;const compact=r.renderPanelTracking(view,t,r.cx);
