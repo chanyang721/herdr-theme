@@ -1,7 +1,7 @@
 import {div, svg, image, PathBuilder} from 'gpui-kit';
 import {h_flex, v_flex} from 'gpui-base';
 import {spaces, panes, shared, setShared, run, settings} from 'herdr';
-import {agentGroups, panelEventStates, panelSpaces, panelSpacePartners, PANEL_TIMING, PANEL_LEGS, agentRowState, agentHasReason, agentReason, agentCleanupLabel, agentWaitLabel} from './panel-model.js';
+import {agentGroups, panelEventStates, panelSpaces, panelSpacePartners, PANEL_TIMING, PANEL_LEGS, agentRowState, agentHasReason, agentReason, agentCleanupLabel, agentWaitLabel, issueRowLabel, ROLE_LABELS, agentOtherIssues} from './panel-model.js';
 import {SESSION_STATES, sessionStatusGlyph} from './session-status.js';
 import {motionEnabled, motionToggled, motionLabel, briefWindow} from './motion.js';
 import {groupColors, paletteMode} from './collab-flow.js';
@@ -13,7 +13,6 @@ const MARK={working:'●',idle:'○',blocked:'!',done:'✓'};
 const STATUS_LABEL={working:'작업 중',idle:'쉬는 중',blocked:'막힘',done:'완료'};
 const STAGES=['배분','작업','검수','수락 대기'];
 const CLOSE=['보고 작성','경험·결정 저장','기억함 제안','닫힘'];
-const ISSUE={blocked:'막힘',working:'진행 중',review:'검수',waiting:'대기',done:'완료'};
 const RIGHT=PANEL_FLOW.gutter, ROW=24, REASON=0;
 // A row gets the done highlight when a task event (never a message) lands on it.
 export const rowArrival=(state,id)=>state.packets.some(event=>event.to===id&&event.phase==='ping'&&event.kind!=='message');
@@ -87,7 +86,16 @@ export function panelLayout(feed, eventState, nativeSpaces=[],groupMap=null) {
     anchors.set(space.id,{y:y+PANEL_GEOMETRY.border+PANEL_GEOMETRY.header/2,kind:'space',space:space.id,computer:space.computer});
     let row=y+PANEL_GEOMETRY.border+PANEL_GEOMETRY.header+metaHeight;
     const groupRows=groups.grouped?groups.groups:[{issue:null,agents:groups.agents,folds:groups.folds}];
+    // The folded 오늘 마무리 row (issues Linear finished today) comes after the working list; its
+    // issues follow it only while it is expanded.
+    let doneRow=false;
+    const pushDone=()=>{
+      if(doneRow||!groups.doneFold)return;doneRow=true;
+      if(card.rows.length){card.rows.push({kind:'issue-gap',y:row});row+=PANEL_GEOMETRY.issueGap;}
+      card.rows.push({kind:'done-more',count:groups.doneFold.count,expanded:groups.doneFold.expanded,y:row});row+=22;
+    };
     for(const group of groupRows){
+      if(group.section==='done')pushDone();
       // Each issue opens its own block: a small gap before every issue after the first,
       // and its agents sit indented under the heading (cardView).
       if(groups.grouped&&group!==groupRows[0]){card.rows.push({kind:'issue-gap',y:row});row+=PANEL_GEOMETRY.issueGap;}
@@ -99,10 +107,8 @@ export function panelLayout(feed, eventState, nativeSpaces=[],groupMap=null) {
         card.rows.push({kind:'agent',agent,y:row,height});row+=height;
         for(const fold of group.folds||[])if(fold.after===agent.id){card.rows.push({kind:'children-more',fold,y:row});row+=22;}
       }
-      if(groups.groupsExpandable&&group.issue&&group===groups.groups.filter(item=>item.issue).at(-1)){
-        card.rows.push({kind:'issues-more',count:groups.issueHidden,expanded:groups.issuesExpanded,y:row});row+=22;
-      }
     }
+    pushDone();
     if(!card.rows.length){card.rows.push({kind:'empty',y:row});row+=ROW;}
     card.height=row-y+5;cards.push(card);y+=card.height+10;
   }
@@ -173,6 +179,7 @@ export function agentRow(view,agent,space,tag,state,color,t,motion){
   const birthAge=state.active?.find(event=>(event.kind==='spawn'||event.allocation?.kind==='new')&&event.to===agent.id)?.elapsed||0;
   const ghost=born&&motion&&birthAge<PANEL_TIMING.packetMs;
   const stacked=false;
+  const others=agentOtherIssues(agent);
   const line=h_flex().id(`panel-agent-content-${agent.id}`).w_full().min_w(0).gap(5).items_center().opacity(ghost?0:1)
     .when(born&&motion,e=>e.transition('opacity',{duration:180,easing:'ease-out'}));
   const dimmed=rowState?rowState==='closed':status==='done';
@@ -184,7 +191,16 @@ export function agentRow(view,agent,space,tag,state,color,t,motion){
       .on_click((_event,cx)=>{cx.stop_propagation();navigatePanelAgent(agent);}));
   line
     .child(div().relative().size(13).flex_none().child(familyIcon(agent).text_color(agent.family==='codex'?CODEX_COLOR:t.foreground)).when(Boolean(detail.remoteBadge),e=>e.child(detail.remoteBadge)))
+    // Role chip (구현·검수·통합): a review task that kept its original title still reads as a review.
+    .when(Boolean(ROLE_LABELS[agent.role]),e=>e.child(div().id(`panel-role-${agent.id}`).flex_none().px(3).rounded(3).border(1)
+      .border_color(agent.role==='review'?(t.ansi5||t.border):agent.role==='integrate'?(t.ansi6||t.border):t.border)
+      .text_size(8).text_color(agent.role==='review'?(t.ansi5||t.muted):agent.role==='integrate'?(t.ansi6||t.muted):t.muted)
+      .accessibility_label(`역할 ${ROLE_LABELS[agent.role]}`).child(ROLE_LABELS[agent.role])))
     .child(text(agent.title||'Untitled task',t.foreground,11).flex_1())
+    // A session holding several issues sits under its current one; the others are counted, listed on hover.
+    .when(others.length>0,e=>e.child(div().id(`panel-issues-${agent.id}`).flex_none().px(3).rounded(3).bg(t.surface)
+      .text_size(8).text_color(t.muted).tooltip(`맡은 이슈 ${others.length+1}개\n지금: ${agent.own_issue||agent.issue||'이슈 미확인'}\n${others.join(', ')}`)
+      .accessibility_label(`다른 이슈 ${others.length}개: ${others.join(', ')}`).child(`+${others.length} 이슈`)))
     .when(Boolean(detail.unreadBadge),e=>e.child(detail.unreadBadge));
   if(child)row.child(div().id(`panel-child-branch-${agent.id}`).absolute().left(18+(depth-1)*16).top(0).w(8).h(PANEL_GEOMETRY.child/2)
     .border_l(1).border_b(1).border_color(t.border));
@@ -266,11 +282,20 @@ export function cardView(view,card,state,color,computerNames,t,motion,rowEntitie
     .child(alerts?.hasSlack&&view.slackAlerts?view.slackAlerts(space,slack,t):slack)
     .child(space.work&&view.issuePopover?view.issuePopover(space,tool,t):tool));
   for(const row of card.rows){
-    if(row.kind==='issue')box.child(h_flex().h(PANEL_GEOMETRY.issue).flex_none().px(7).gap(4).items_center().bg(t.surface).opacity(row.group.issue?.state==='done'?0.5:1)
-      .child(toolIcon(space.work.tool,t)).child(text(row.group.issue?.key||'이슈 없음',color,9).flex_none())
-      .child(text(row.group.issue?.title||'',t.muted,9).flex_1())
-      .when(row.group.issue&&(row.group.issue.pinned===true&&!row.group.issue.week||typeof row.group.issue.pinned!=='boolean'&&space.issue_catalog&&!space.issue_catalog.week.some(issue=>issue.key===row.group.issue.key)),e=>e.child(text('가져옴',t.ansi6||t.accent,8)))
-      .child(text(row.group.issue?(row.group.issue.state==='done'?'✓ ':'')+(ISSUE[row.group.issue.state]||'대기'):'',row.group.issue?.state==='blocked'?t.blocked:t.dim,8)));
+    if(row.kind==='issue'){
+      const issue=row.group.issue,finished=issue?.state==='done'||row.group.kind==='closed';
+      const status=issueRowLabel(row.group);
+      box.child(h_flex().id(`panel-issue-${space.id}-${issue?.key||'none'}`).h(PANEL_GEOMETRY.issue).flex_none().px(7).gap(4).items_center().bg(t.surface).opacity(finished?0.5:1)
+        .when(Boolean(issue?.status),e=>e.tooltip(`${issue.key} · Linear ${issue.status}`))
+        .child(toolIcon(space.work.tool,t)).child(text(issue?.key||'이슈 없음',color,9).flex_none())
+        .child(text(issue?.title||'',t.muted,9).flex_1())
+        .when(Boolean(issue)&&!issue.from_ledger&&(issue.pinned===true&&!issue.week||typeof issue.pinned!=='boolean'&&space.issue_catalog&&!space.issue_catalog.week.some(item=>item.key===issue.key)),e=>e.child(text('가져옴',t.ansi6||t.accent,8)))
+        .child(text(status,issue?.state==='blocked'?t.blocked:row.group.working>0?color:t.dim,8).flex_none()));
+    }
+    else if(row.kind==='done-more')box.child(h_flex().id(`panel-done-${space.id}`).h(22).flex_none().pl(8).pr(8).items_center().cursor_pointer()
+      .tooltip('Linear에서 오늘 끝난 이슈 (완료·취소·중복)')
+      .on_click((_event,cx)=>{cx.stop_propagation();view.toggleIssues?.(space.id);})
+      .child(text(`${row.expanded?'▾':'▸'} 오늘 마무리 ${row.count}`,t.dim,10)));
     else if(row.kind==='issue-gap')box.child(div().h(PANEL_GEOMETRY.issueGap).flex_none());
     else if(row.kind==='agent'){
       const agentView=rowEntities?.get(row.agent.id)||agentRow(view,row.agent,space,state.tags.get(row.agent.id),state,color,t,motion);
@@ -283,7 +308,8 @@ export function cardView(view,card,state,color,computerNames,t,motion,rowEntitie
     else if(row.kind==='children-more'||row.kind==='issues-more')box.child(h_flex().id(`panel-fold-${space.id}-${row.fold?.parent||'issues'}`).h(22).flex_none()
       .pl(row.fold?30+Math.min(6,view.rowMeta?.get(row.fold.parent)?.depth||0)*16:8).pr(8).items_center().cursor_pointer()
       .on_click((_event,cx)=>{cx.stop_propagation();row.fold?view.toggleChildren?.(row.fold.parent):view.toggleIssues?.(space.id);})
-      .child(text((row.fold?.expanded||row.expanded)?'접기':`+${row.fold?.hidden??row.count}${row.fold?' 하위 작업':'개 이슈'}`,t.dim,10)));
+      .when(Boolean(row.fold?.unknown),e=>e.tooltip(`이슈를 알 수 없는 하위 작업 ${row.fold.unknown}개 · 부모 작업 밑에 접어 둠`))
+      .child(text((row.fold?.expanded||row.expanded)?'접기':`+${row.fold?.hidden??row.count}${row.fold?(row.fold.unknown?' 하위 작업 · 이슈 미확인':' 하위 작업'):'개 이슈'}`,t.dim,10)));
     else box.child(h_flex().h(ROW).px(8).items_center().child(text('진행 중인 작업 없음',t.dim,10)));
   }
   return box.child(div().h(4).flex_none());

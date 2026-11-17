@@ -66,6 +66,37 @@ Issue groups and flat rows sort blocked, working, review, waiting and done.
 Within a state, producer ordering is preserved. Issue groups never fold: every
 issue the producer lists (all issues to work on) is drawn, each with its panes
 right under it, and there is no issue **+N** row. A space takes up to 512 issues.
+
+Only the issue tracker's own status hides an issue row; who sent the work never
+does. The kind comes from `status_type` first, then `closed`, then the `status`
+name (a space issue sent without any of them takes its catalog row's). A
+started issue (In Progress, In Review) stays in the list. A finished one
+(completed, canceled, duplicate) leaves it; when its optional `done_at` (a
+`YYYY-MM-DD` day or an ISO time) falls on this computer's current day it waits
+in a folded **오늘 마무리 N** row at the end of the card, which expands on a
+click, otherwise it is only hidden. A not-yet-started one (todo, backlog,
+triage) shows only while one of its panes works. A pane that is working,
+blocked or needs a person keeps its issue on screen whatever the status. An
+issue without a status stays visible, as before. The issue row's label counts
+the working panes under it (**작업 중 N**); with none it reads **쉬는 중**, even
+when the producer's issue `state` still says working.
+
+Optional agent fields place and describe a row. `own_issue` (string or `null`)
+is the issue the task owns itself rather than one borrowed from its parent task;
+a row sits under its `own_issue`, else under `issue`. A row whose `own_issue` is
+explicitly `null` and which has a `parent_id` stays under its parent, folded
+behind the parent's **+N 하위 작업 · 이슈 미확인** row until the parent is
+expanded. An issue an agent names that the space does not list is drawn from
+the `issue_catalog` row of the same key (title and status); an explicit
+`own_issue` the catalog does not know gets a key-only row, and a plain `issue`
+nothing knows keeps the earlier placement under 이슈 없음. `role`
+(`implement`, `review`, `integrate` or `null`) draws a **구현**, **검수** or
+**통합** chip before the title, so a review row that kept the original task
+title still reads as a review. `issues` (up to 20 keys, the shown one first)
+lists every issue the session holds: the row stays under its current issue and
+shows **+N 이슈**, with the full list in its tooltip; held issues the catalog
+knows also get their own issue rows under the same status rules. Without these
+fields the rows keep their earlier placement.
 Agents inside an issue are not truncated. Explicit
 `parent_id` relationships form trees within the same issue. More than three child
 branches show three and their own **+N**. Child rows use a compact status dot,

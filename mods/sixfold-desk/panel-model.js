@@ -66,7 +66,11 @@ const issueExtras = issue => ({
   ...(CLOSED.includes(issue.closed) ? { closed: issue.closed } : {}),
   // Optional parent issue key (the issue window's parent/child tree); a malformed or self key is dropped.
   ...(typeof issue.parent === 'string' && ISSUE_PARENT.test(issue.parent) && issue.parent !== (issue.key ?? issue.id) ? { parent: issue.parent } : {}),
+  // Optional time the issue was finished (a YYYY-MM-DD day or an ISO time); only the 오늘 마무리 fold reads it.
+  ...(doneAt(issue.done_at) ? { done_at: issue.done_at } : {}),
 });
+const doneAt = value => typeof value === 'string' && value.length <= 40
+  && (Boolean(dateOnly(value)) || /^\d{4}-\d{2}-\d{2}T/.test(value) && Number.isFinite(Date.parse(value)));
 const ISSUE_PARENT = /^[A-Z][A-Z0-9]{0,9}-\d{1,7}$/;
 // Only the harness Linear ledger names a catalog's source; any other value is dropped.
 const catalogSource = value => value?.source === 'linear-ledger' ? { source: 'linear-ledger' } : {};
@@ -93,7 +97,19 @@ const agentExtras = agent => ({
   ...(owns(agent, 'report_missing') ? { report_missing: agent.report_missing === true } : {}),
   ...(owns(agent, 'error') ? { error: text(agent.error, 300) || null } : {}),
   ...(owns(agent, 'usage') ? { usage: object(agent.usage) ? { label: text(agent.usage.label, 100), limited: agent.usage.limited === true } : null } : {}),
+  // The producer's role of the task, the issue the task owns itself (not one borrowed from a parent task)
+  // and every issue the session holds, the shown one first. Display only; absent keeps the older placement.
+  ...(owns(agent, 'role') ? { role: AGENT_ROLES.includes(agent.role) ? agent.role : null } : {}),
+  ...(owns(agent, 'own_issue') ? { own_issue: text(agent.own_issue, 80) || null } : {}),
+  ...(owns(agent, 'issues') ? { issues: [...new Set(list(agent.issues, 20).map(key => text(key, 80)).filter(Boolean))] } : {}),
 });
+export const AGENT_ROLES = Object.freeze(['implement', 'review', 'integrate']);
+export const ROLE_LABELS = Object.freeze({ implement: '구현', review: '검수', integrate: '통합' });
+// The issues a session holds besides the one its row sits under (its own issue, else its issue).
+export function agentOtherIssues(agent) {
+  const here = agent?.own_issue || agent?.issue || null;
+  return Array.isArray(agent?.issues) ? agent.issues.filter(key => key !== here) : [];
+}
 const cleanIssues = (value, limit) => unique(list(value, limit).map(issue => object(issue) ? { ...issue, id: issue.key } : null), issue => object(issue) && id(issue.id) ? {
   id: issue.id, key: issue.id, title: text(issue.title, 200), state: STATES.includes(issue.state) ? issue.state : 'waiting',
   ...issueExtras(issue),
@@ -347,11 +363,128 @@ function treeAgents(agents, expandedParents) {
   return { agents: tree.rows.map(row => row.entry), hidden: tree.hidden, folds: tree.folds,
     rowMeta: new Map(tree.rows.map(row => [row.entry.id, { depth: row.depth, parent: row.parent?.id ?? null, childCount: row.childCount }])) };
 }
-export function agentGroups(space, { includeClosedIds = new Set(), expandedIssueSpaces = new Set(), expandedParents = new Set() } = {}) {
-  const issues = (space?.issues ?? []).map((issue, index) => ({ ...issue, index })).sort(byState);
-  const assigned = new Set(issues.map(issue => issue.key));
+// Linear's own kind of an issue row (docs/panel-feed.md): 'started', 'closed' (completed, canceled,
+// duplicate) or 'unstarted' (todo, backlog, triage). The provider's status_type wins, then `closed`,
+// then the status name. null when the feed names no status: such a row stays visible as before.
+// The producer's `state` is never read here; it is the panel's own progress, not the issue's status.
+const CLOSED_TYPES = new Set(['completed', 'canceled', 'duplicate']);
+export function issueLinearKind(issue) {
+  const type = issue?.status_type;
+  if (type === 'started') return 'started';
+  if (CLOSED_TYPES.has(type)) return 'closed';
+  if (type === 'unstarted' || type === 'backlog' || type === 'triage') return 'unstarted';
+  if (CLOSED.includes(issue?.closed)) return 'closed';
+  const name = typeof issue?.status === 'string' ? issue.status : '', lower = name.toLowerCase();
+  if (!name) return null;
+  if (/cancel|duplicate|done|complete/.test(lower) || /취소|중복|완료/.test(name)) return 'closed';
+  if (/progress|review/.test(lower) || /진행|검토|리뷰/.test(name)) return 'started';
+  if (/backlog|todo|triage/.test(lower) || /백로그|할 ?일/.test(name)) return 'unstarted';
+  return null;
+}
+// This computer's calendar day, YYYY-MM-DD.
+export const localDay = (at = Date.now()) => {
+  const d = new Date(at), p = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+};
+const doneDay = issue => !issue?.done_at ? null : dateOnly(issue.done_at) || localDay(Date.parse(issue.done_at));
+// One row per key from the space's ledger catalog (week, then milestone, then all).
+function ledgerRows(space) {
+  const rows = new Map();
+  for (const scope of ['week', 'milestone', 'all']) for (const row of space?.issue_catalog?.[scope] ?? []) if (!rows.has(row.key)) rows.set(row.key, row);
+  return rows;
+}
+// A space issue sent without a status takes the ledger row's (status, type, how it closed), and its
+// finish time; a status the issue names itself is never mixed with another row's.
+function withLedger(issue, row) {
+  if (!row) return issue;
+  const extra = {};
+  if (!['status', 'status_type', 'closed'].some(field => owns(issue, field))) for (const field of ['status', 'status_type', 'closed']) if (owns(row, field)) extra[field] = row[field];
+  if (!owns(issue, 'done_at') && owns(row, 'done_at')) extra.done_at = row.done_at;
+  if (!issue.title && row.title) extra.title = row.title;
+  return Object.keys(extra).length ? { ...issue, ...extra } : issue;
+}
+// A row that keeps a hidden issue on screen: working, blocked or waiting for a person.
+const active = agent => agent.status === 'working' || agent.status === 'blocked' || agent.state === 'needs_human';
+const working = agent => agent.status === 'working' && agent.closing?.step !== 4;
+// The issue row's right-hand label: working panes are counted from the rows themselves, so an issue
+// whose panes all went idle never reads 작업 중 (the producer's issue state can lag behind).
+const ISSUE_LABELS = { blocked: '막힘', working: '쉬는 중', review: '검수', waiting: '대기', done: '✓ 완료' };
+export function issueRowLabel(group) {
+  const issue = group?.issue;
+  if (!issue) return '';
+  if (issue.state === 'blocked') return '막힘';
+  if (group.working > 0) return `작업 중 ${group.working}`;
+  if (group.kind === 'closed') return '✓ 마무리';
+  if (group.kind === 'started') return '쉬는 중';
+  return ISSUE_LABELS[issue.state] || '대기';
+}
+// Children of a visible parent whose own issue is unknown (own_issue sent as null) stay under that
+// parent, folded behind its +N row until the parent is expanded.
+function foldUnknown(agents, unknown, expandedParents) {
+  const byId = new Map(agents.map(agent => [agent.id, agent])), hidden = new Set();
+  for (let changed = true; changed;) {
+    changed = false;
+    for (const agent of agents) {
+      if (hidden.has(agent.id) || !byId.has(agent.parent_id) || agent.parent_id === agent.id) continue;
+      if (unknown.has(agent.id) && !expandedParents.has(agent.parent_id) || hidden.has(agent.parent_id)) { hidden.add(agent.id); changed = true; }
+    }
+  }
+  const tree = treeAgents(agents.filter(agent => !hidden.has(agent.id)), expandedParents);
+  const counts = new Map(), totals = new Map();
+  for (const agent of agents) {
+    if (unknown.has(agent.id) && byId.has(agent.parent_id)) totals.set(agent.parent_id, (totals.get(agent.parent_id) || 0) + 1);
+    if (!hidden.has(agent.id)) continue;
+    let up = agent.parent_id;
+    for (let guard = 0; hidden.has(up) && guard < agents.length; guard++) up = byId.get(up).parent_id;
+    counts.set(up, (counts.get(up) || 0) + 1);
+  }
+  for (const [parent, total] of totals) {
+    if (hidden.has(parent) || !tree.rowMeta.has(parent)) continue;
+    const count = counts.get(parent) || 0, folded = tree.folds.find(fold => fold.parent === parent);
+    if (folded) { Object.assign(folded, { hidden: folded.hidden + count, count: folded.count + count, unknown: total }); continue; }
+    const rows = tree.agents, at = rows.findIndex(row => row.id === parent), depth = tree.rowMeta.get(parent).depth;
+    let end = at;
+    while (end + 1 < rows.length && tree.rowMeta.get(rows[end + 1].id).depth > depth) end++;
+    tree.folds.push({ parent, after: rows[end].id, hidden: count, count, expanded: expandedParents.has(parent), unknown: total });
+  }
+  tree.hidden += hidden.size;
+  return tree;
+}
+export function agentGroups(space, { includeClosedIds = new Set(), expandedIssueSpaces = new Set(), expandedParents = new Set(), today = localDay() } = {}) {
+  const ledger = ledgerRows(space);
+  const listed = new Map((space?.issues ?? []).map(issue => [issue.key, withLedger(issue, ledger.get(issue.key))]));
   const input = space?.agents ?? [], parents = new Map(input.map(agent => [agent.id, agent]));
-  const bucket = agent => space?.work && assigned.has(agent.issue) ? agent.issue : null;
+  // Where a row belongs: its own issue when the producer names one, else the issue it carries. A row
+  // whose own issue is explicitly unknown (null) and that has a parent sits in its parent's bucket, folded.
+  const unknown = new Set();
+  const keyOf = agent => owns(agent, 'own_issue') && agent.own_issue ? agent.own_issue : agent.issue;
+  const resolved = new Map();
+  const resolve = (agent, seen = new Set()) => {
+    if (resolved.has(agent.id)) return resolved.get(agent.id);
+    const parent = parents.get(agent.parent_id);
+    let key = keyOf(agent);
+    if (owns(agent, 'own_issue') && !agent.own_issue && parent && parent !== agent && !seen.has(parent.id)) {
+      seen.add(agent.id);key = resolve(parent, seen);unknown.add(agent.id);
+    }
+    resolved.set(agent.id, key ?? null);
+    return key ?? null;
+  };
+  for (const agent of input) resolve(agent);
+  // Issues the space does not list but an agent row names (where it sits, or another issue the session
+  // holds): built from the ledger's title and status. An explicit own issue the ledger does not know still
+  // gets its key-only row; any other key that nothing knows keeps the older placement under 이슈 없음.
+  const extra = new Map();
+  for (const agent of input) {
+    const here = resolved.get(agent.id);
+    for (const key of [here, ...(agent.issues ?? [])]) {
+      if (!key || listed.has(key) || extra.has(key)) continue;
+      const row = ledger.get(key);
+      if (row) extra.set(key, { ...row, from_ledger: true });
+      else if (key === here && agent.own_issue === key) extra.set(key, { id: key, key, title: '', state: 'waiting', from_ledger: true });
+    }
+  }
+  const known = new Map([...listed, ...extra]);
+  const bucket = agent => space?.work && known.has(resolved.get(agent.id)) ? resolved.get(agent.id) : null;
   const agents = sortedAgents(input.filter(agent => {
     const parent = parents.get(agent.parent_id);
     // Only explicit children in this display bucket disappear on completion.
@@ -361,18 +494,34 @@ export function agentGroups(space, { includeClosedIds = new Set(), expandedIssue
     if (parent && parent !== agent && bucket(parent) === bucket(agent) && agentState(agent) === 'done') return false;
     return agent.closing?.step !== 4 || agent.closing.blocked_reason || includeClosedIds.has(agent.id);
   }));
-  if (!space?.work) return { grouped: false, groups: [], groupsHidden: 0, issueHidden: 0, issuesExpanded: false, groupsExpandable: false, ...treeAgents(agents, expandedParents) };
-  // Every issue to work on is always shown, each with its panes right under it (2026-11-12,
-  // "처리해야 하는 이슈를 접지 말고 전부"): there is no issue fold (no issues-more row).
-  // `expandedIssueSpaces` is accepted and ignored so older callers keep working.
-  void expandedIssueSpaces;
-  const groupsExpandable = false, issuesExpanded = false, visibleIssues = issues;
-  const groups = visibleIssues.map(issue => ({ issue, ...treeAgents(agents.filter(agent => agent.issue === issue.key), expandedParents) }));
-  const unassigned = agents.filter(agent => !assigned.has(agent.issue));
-  if (unassigned.length) groups.push({ issue: null, ...treeAgents(unassigned, expandedParents) });
-  const groupsHidden = issues.length - visibleIssues.length;
+  const empty = { groupsHidden: 0, issueHidden: 0, issuesExpanded: false, groupsExpandable: false, issuesFiltered: 0, doneFold: null };
+  if (!space?.work) return { grouped: false, groups: [], ...empty, ...treeAgents(agents, expandedParents) };
+  // Every issue to work on is shown, each with its panes right under it; Linear's status alone hides one
+  // (2026-11-17): a finished issue (completed, canceled, duplicate) leaves the list, and the ones finished
+  // today wait in the folded 오늘 마무리 row; a not-yet-started one shows only while a pane works on it.
+  // A row with a working, blocked or waiting-for-a-person pane always stays. Who sent the work never matters.
+  const doneExpanded = expandedIssueSpaces.has(space.id);
+  const main = [], done = [];
+  let filtered = 0;
+  [...known.values()].forEach((issue, index) => {
+    const own = agents.filter(agent => bucket(agent) === issue.key);
+    const kind = issueLinearKind(issue), count = own.filter(working).length, live = own.some(active);
+    // Sorted by what the panes do now: a 'working' issue without a working pane waits, a waiting one with one works.
+    const sortState = issue.state === 'working' && !count ? 'waiting' : issue.state === 'waiting' && count ? 'working' : issue.state;
+    const entry = { issue, own, kind, working: count, index, state: sortState };
+    if (kind === 'closed' && !live) { if (doneDay(issue) === today) done.push(entry);else filtered++; }
+    else if (kind === 'unstarted' && !live) filtered++;
+    else main.push(entry);
+  });
+  const build = (entry, section) => ({ issue: entry.issue, section, kind: entry.kind, working: entry.working,
+    ...foldUnknown(entry.own, unknown, expandedParents) });
+  const groups = main.sort(byState).map(entry => build(entry, 'main'));
+  const unassigned = agents.filter(agent => !bucket(agent));
+  if (unassigned.length) groups.push({ issue: null, section: 'main', kind: null, working: unassigned.filter(working).length, ...treeAgents(unassigned, expandedParents) });
+  if (doneExpanded) groups.push(...done.sort(byState).map(entry => build(entry, 'done')));
+  filtered += doneExpanded ? 0 : done.length;
   return { grouped: true, groups, agents: groups.flatMap(group => group.agents), hidden: groups.reduce((sum, group) => sum + group.hidden, 0),
-    groupsHidden, issueHidden: groupsHidden, issuesExpanded, groupsExpandable,
+    ...empty, issuesFiltered: filtered, doneFold: done.length ? { count: done.length, expanded: doneExpanded } : null,
     rowMeta: new Map(groups.flatMap(group => [...group.rowMeta])), folds: groups.flatMap(group => group.folds) };
 }
 
@@ -431,12 +580,14 @@ function copyDisplayMetadata(feed) {
 // signatures contain display content only; they never interpret an opaque ID.
 // Per-space groups are recomputed only for changed content or a changed final
 // closing-tag visibility, rather than on each redraw or animation boundary.
-export function projectPanelFeed(feed, previous = null, { includeClosedIds = new Set(), expandedIssueSpaces = new Set(), expandedParents = new Set() } = {}) {
+export function projectPanelFeed(feed, previous = null, { includeClosedIds = new Set(), expandedIssueSpaces = new Set(), expandedParents = new Set(), now = Date.now() } = {}) {
+  // The 오늘 마무리 fold depends on this computer's day, so a new day recomputes the groups.
+  const today = localDay(now);
   if (!feed) return null;
   const old = previous?._cache;
   const retainedKey = closedIds => JSON.stringify([...includeClosedIds].filter(id => closedIds.has(id)).sort());
   const expansionKey = (spaceIds, agentIds) => JSON.stringify([[...expandedIssueSpaces].filter(id => spaceIds.has(id)).sort(), [...expandedParents].filter(id => agentIds.has(id)).sort()]);
-  if (old?.input === feed && old.retained === retainedKey(old.closedIds) && old.expansion === expansionKey(old.spaceIds, old.agentIds)) {
+  if (old?.input === feed && old.today === today && old.retained === retainedKey(old.closedIds) && old.expansion === expansionKey(old.spaceIds, old.agentIds)) {
     return { ...previous, stats: { agentsChanged: 0, agentsReused: previous.agents.size, spacesChanged: 0, spacesReused: previous.spaces.length, groupsComputed: 0, groupsReused: previous.groups.size, signaturesComputed: 0 } };
   }
   const agents = new Map(), spaces = new Map(), groupEntries = [], agentEntries = [];
@@ -460,8 +611,8 @@ export function projectPanelFeed(feed, previous = null, { includeClosedIds = new
     const value = before?.signature === signature ? before.value : copyDisplaySpace(space, projectedAgents);
     stats[value === before?.value ? 'spacesReused' : 'spacesChanged']++;
     const retained = projectedAgents.filter(agent => agent.closing?.step === 4 && includeClosedIds.has(agent.id)).map(agent => agent.id).sort();
-    const visibility = JSON.stringify([retained, expandedIssueSpaces.has(space.id), projectedAgents.filter(agent => expandedParents.has(agent.id)).map(agent => agent.id).sort()]);
-    const groups = before?.value === value && before.visibility === visibility ? before.groups : agentGroups(value, { includeClosedIds, expandedIssueSpaces, expandedParents });
+    const visibility = JSON.stringify([retained, expandedIssueSpaces.has(space.id), projectedAgents.filter(agent => expandedParents.has(agent.id)).map(agent => agent.id).sort(), today]);
+    const groups = before?.value === value && before.visibility === visibility ? before.groups : agentGroups(value, { includeClosedIds, expandedIssueSpaces, expandedParents, today });
     stats[groups === before?.groups ? 'groupsReused' : 'groupsComputed']++;
     spaces.set(space.id, { signature, value, visibility, groups });
     groupEntries.push([space.id, groups]);
@@ -477,7 +628,7 @@ export function projectPanelFeed(feed, previous = null, { includeClosedIds = new
     feed: stableFeed, spaces: stableSpaces,
     agents: sameMapReferences(previous?.agents, agentEntries) ? previous.agents : new Map(agentEntries),
     groups: sameMapReferences(previous?.groups, groupEntries) ? previous.groups : new Map(groupEntries), stats,
-    _cache: { agents, spaces, metadata, input: feed, closedIds, retained: retainedKey(closedIds), spaceIds: new Set(spaces.keys()), agentIds: new Set(agents.keys()), expansion: expansionKey(new Set(spaces.keys()), new Set(agents.keys())) },
+    _cache: { agents, spaces, metadata, input: feed, today, closedIds, retained: retainedKey(closedIds), spaceIds: new Set(spaces.keys()), agentIds: new Set(agents.keys()), expansion: expansionKey(new Set(spaces.keys()), new Set(agents.keys())) },
   };
 }
 

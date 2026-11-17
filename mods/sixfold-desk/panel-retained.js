@@ -6,7 +6,7 @@ import {requestReads,checkReads,readPendingIds,lastReadError,READ_POLL_MS} from 
 import {autoView,autoSignature} from './linear-auto-model.js';
 import {approve,local,busyKeys,doneIds,autoError,checkApprovals,settleLedger,AUTO_POLL_MS} from './linear-auto.js';
 import {autoGroup} from './linear-auto-view.js';
-import {projectPanelFeed,panelEventStates,panelSpaces,panelSpacePartners,PANEL_TIMING,PANEL_LEGS,panelLeg,agentReason} from './panel-model.js';
+import {projectPanelFeed,panelEventStates,panelSpaces,panelSpacePartners,PANEL_TIMING,PANEL_LEGS,panelLeg,agentReason,issueRowLabel} from './panel-model.js';
 import {panelLayout,cardView,agentRow,panelFlowLayer,panelCounts,PANEL_GEOMETRY,toolIcon,panelReasonWake,agentRowHeight,panelMetaHeight,rowArrival,briefRows} from './panel-view.js';
 import {groupColors,paletteMode} from './collab-flow.js';
 import {issuePopover,alertedGroup} from './task-issues-view.js';
@@ -602,7 +602,7 @@ export function createRetainedPanel(cx,{macTitlebar=false,onClassic=null,onDispo
     const topology=c.feed.spaces.map(space=>{
       const group=c.projection.groups.get(space.id);
       // The meta line comes and goes with Slack / work-tool links and moves every row below it.
-      return [space.id,panelMetaHeight(space),group.grouped,group.grouped?group.groups.map(g=>[g.issue?.key,g.agents.map(a=>a.id),g.folds]):[group.agents.map(a=>a.id),group.folds],group.issueHidden,group.issuesExpanded];
+      return [space.id,panelMetaHeight(space),group.grouped,group.grouped?group.groups.map(g=>[g.issue?.key,g.section,g.agents.map(a=>a.id),g.folds]):[group.agents.map(a=>a.id),group.folds],group.issueHidden,group.issuesExpanded,group.doneFold];
     });
     // Row height depends on the parent relation (child rows are 20px) and on a
     // reason line, so both belong to the layout key even when order is unchanged.
@@ -625,7 +625,9 @@ export function createRetainedPanel(cx,{macTitlebar=false,onClassic=null,onDispo
       }
       if(!c.cards.has(space.id)){c.cards.set(space.id,make(PanelSpace,space.id));structure=true;}
       const nativeSpace=c.spaceMap.get(space.id);
-      const cardKey=signature([{...space,agents:undefined},panelSpacePartners(c.feed,space.id),topology.find(item=>item[0]===space.id),space.agents.filter(a=>a.status==='working'&&a.closing?.step!==4).length,
+      // Issue labels count working panes, which change without moving any row.
+      const issueLabels=(c.projection.groups.get(space.id)?.groups||[]).map(group=>issueRowLabel(group));
+      const cardKey=signature([{...space,agents:undefined},panelSpacePartners(c.feed,space.id),topology.find(item=>item[0]===space.id),issueLabels,space.agents.filter(a=>a.status==='working'&&a.closing?.step!==4).length,
         c.events.packets.some(event=>event.kind==='memory'&&event.to===space.id&&event.phase==='ping'),c.motion,panelWidthClass(c.panelWidth),nativeSpace?.native?.active||false,c.themeRevision]);
       if(c.cardKeys.get(space.id)!==cardKey){c.cardKeys.set(space.id,cardKey);c.notify(c.cards.get(space.id));}
       c.settleIssue(space.id);
