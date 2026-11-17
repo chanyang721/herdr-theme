@@ -51,7 +51,6 @@ test('every remaining loop, spin and frame cycle is bounded',async()=>{
     'sixfold-desk/panel-view.js':/ROW_BLINK_MS/,               // the arrival blink, only during the ping phase
     'sixfold-desk/pets.js':/runGate|options\.motion/,           // options.motion carries the caller's brief window
     'session-pets/main.js':/walking\.has/,                      // petWalks: brief window
-    'sixfold-tabs/main.js':/spin\(900\)/,                       // not covered here yet (tabs mod)
   };
   const found=[];
   for(const mod of ['sixfold-desk','session-pets','sixfold-tabs','week-timeline','project-docs-tabs']){
