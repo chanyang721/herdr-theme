@@ -80,6 +80,35 @@ test('one start per issue: none while running, none within three minutes',()=>{
     'unfolding, picking and each result change the redraw key');
 });
 
+test('a value cannot become an option, a long space is cut, and a grown argument is checked again',()=>{
+  // '{title}' alone (a template without '-'): a title starting with '-' would read as an option.
+  const alone=parseStartConfig({...CONFIG,args:['{space}','{title}','--agent','{provider}']});
+  assert.equal(startArgv(alone,{...params,title:'--force everything'}),null);
+  assert.equal(startArgv(alone,{...params,title:'  -x'}),null,'leading spaces are folded first');
+  assert.equal(startArgv(alone,{...params,space:'-rf'}),null,'the space name too');
+  assert.deepEqual(startArgv(alone,params).args,['Demo','Fix the login page','--agent','codex']);
+  // A template argument that is an option itself may carry a value: '--title={title}'.
+  const own=parseStartConfig({...CONFIG,args:['--title={title}']});
+  assert.deepEqual(startArgv(own,{...params,title:'-dash'}).args,['--title=-dash']);
+  // In '{issue} {title}' a dashed title is harmless: the argument starts with the issue key.
+  assert.equal(startArgv(config,{...params,title:'--force'}).args[2],'DEMO-12 --force');
+  assert.equal(startArgv(config,{...params,space:'가'.repeat(200)}).args[1],'가'.repeat(80));
+  const near=parseStartConfig({...CONFIG,args:['x'.repeat(1990)+'{title}']});
+  assert(near,'the template itself is within the limit');
+  assert.equal(startArgv(near,{...params,title:'short'}).args[0].length,1995);
+  assert.equal(startArgv(near,{...params,title:'y'.repeat(80)}),null,'over the limit after substitution');
+});
+
+test('only a surely-unsent answer releases the guard',()=>{
+  const out=stdout=>startResult({code:0,stdout});
+  assert.equal(out('{"outcome":"blocked","reason":"busy"}').release,true);
+  assert.equal(out('{"outcome":"failed"}').release,true);
+  assert.equal(out('{"outcome":"plan","reason":"dry run"}').release,true);
+  for(const kept of ['{"outcome":"sent","task_id":"t"}','{"outcome":"pending","task_id":"t"}','{"outcome":"unconfirmed"}','{"outcome":"sent"}','{}','no json'])
+    assert.equal(out(kept).release,false,kept);
+  assert.equal(startResult(null).release,false,'exec failed or timed out: maybe sent');
+});
+
 let loads=0;
 async function startIo(files={}){
   globalThis.__issueStartHost={appHome:()=>'/home/demo',exec:async()=>{throw new Error('use run');},
@@ -118,6 +147,19 @@ test('runStart execs the argv once and ignores a second press while running or w
   let ran=0;
   assert.deepEqual(shown(await io.runStart(config,{...params,issue:'bad'},{run:async()=>{ran++;},now:()=>clock})),{ok:false,text:'안 보냄 · 작업 시작 값 확인 실패'});
   assert.equal(ran,0);assert.equal(io.startGuarded('Demo','bad',clock),false);
+  io.resetStartGuards();
+});
+
+test('a blocked answer frees the issue at once; a timeout keeps it for three minutes',async()=>{
+  const io=await startIo(),clock=9_000_000;let runs=0;
+  const blocked=async()=>{runs++;return {code:1,stdout:'{"outcome":"blocked","reason":"no idle session"}'};};
+  assert.deepEqual(shown(await io.runStart(config,params,{run:blocked,now:()=>clock})),{ok:false,text:'안 보냄 · no idle session'});
+  assert.equal(io.startGuarded('Demo','DEMO-12',clock),false);assert.equal(io.startGuardLeft('Demo','DEMO-12',clock),0);
+  await io.runStart(config,params,{run:blocked,now:()=>clock});assert.equal(runs,2,'pressed again at once');
+  await io.runStart(config,params,{run:async()=>{throw new Error('timed out');},now:()=>clock});
+  assert.equal(io.startGuarded('Demo','DEMO-12',clock+START_GUARD_MS-1),true);
+  assert.equal(io.startGuardLeft('Demo','DEMO-12',clock+1000),START_GUARD_MS-1000);
+  assert.equal(await io.runStart(config,params,{run:blocked,now:()=>clock+1000}),null);assert.equal(runs,2);
   io.resetStartGuards();
 });
 
@@ -177,6 +219,9 @@ test('a row press unfolds its start strip; the detail stays one › press away',
 
 test('the strip shows sending, the result, the guard, and a missing setting',async()=>{
   const {issuePopover}=await view();let starts=0;
+  const tip=start=>call(byId(issuePopover({id:'d',open:true,trigger:element(),rows,onExpand(){},onStart(){},startKey:'DEMO-2',start},theme),'task-issue-start-go-d-DEMO-2'),'tooltip')?.[1];
+  assert.equal(tip({config,pick:config.defaults,entry:{running:false,ok:true,text:'보냄'},blocked:true}),'방금 시작 요청한 이슈입니다 · 3분 뒤 다시 누를 수 있습니다');
+  assert.equal(tip({config,pick:config.defaults,entry:null,blocked:false}),undefined);
   const at=start=>byId(issuePopover({id:'d',open:true,trigger:element(),rows,onExpand(){},onStart:()=>starts++,startKey:'DEMO-2',start},theme),'task-issue-start-d-DEMO-2');
   const sending=at({config,pick:config.defaults,entry:{running:true},blocked:true});
   assert(words(sending).includes('보내는 중…'));

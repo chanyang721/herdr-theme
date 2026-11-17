@@ -365,12 +365,39 @@ test('작업 시작: a row press unfolds its strip on the retained card, [작업
     tree=popup();
     assert.deepEqual(texts(byId(tree,`task-issue-start-result-${space.id}-DEMO-12`)),['보냄 · Demo · Codex · gpt']);
     assert(!byId(tree,`task-issue-start-go-${space.id}-DEMO-12`).calls.some(c=>c[0]==='on_click'),'guarded for three minutes');
+    // One redraw when the three-minute guard ends.
+    const guardTimer=r.timers.filter(timer=>!timer.cancelled&&timer.ms>170000&&timer.ms<=180100);
+    assert.equal(guardTimer.length,1);r.flush();assert(!card.dirty);guardTimer[0].fn();assert(card.dirty,'redrawn as the guard ends');r.flush();
     // The detail is still reachable from the row's › button.
     press(byId(tree,`task-issue-open-${space.id}-DEMO-12`));assert.equal(r.controller.issueStates.get(space.id).detail,'DEMO-12');
     // Closing drops the strip and its line; the guard stays.
     popup().calls.find(c=>c[0]==='on_open_change')[1](false,{});
     const state=r.controller.issueStates.get(space.id);assert.equal(state.startKey,null);assert.equal(state.starts.size,0);
     assert.equal(ran.length,1);
+  }finally{r.controller.dispose();delete globalThis.__retainedFiles;delete globalThis.__retainedExec;}
+});
+
+test('작업 시작: a blocked answer lets the issue be pressed again at once, with no guard timer',async()=>{
+  const config={v:1,command:'/opt/demo/start',args:['{issue} {title}'],providers:[{id:'claude'}],tiers:[{id:'high'}]};
+  globalThis.__retainedFiles={'/home/data/sixfold/issue-start.json':JSON.stringify(config)};
+  let runs=0;globalThis.__retainedExec=async()=>{runs++;return {code:1,stdout:'{"outcome":"blocked","reason":"no idle session"}'};};
+  const r=await runtime(),tasks=[],t=r.native.theme();
+  try{
+    r.controller.cx.spawn=fn=>{tasks.push(fn());};const settle=async()=>{while(tasks.length)await tasks.shift();};
+    const raw=makePanelFixture({tool:'linear'});raw.spaces[0].name='Demo';
+    r.controller.apply(cleanPanelFeed(raw),'ready');r.flush();
+    const space=r.controller.spaceMap.get(raw.spaces[0].id);
+    const walk=n=>[n,...[...(n.nodes||[]),...(n.calls||[]).filter(c=>c[0]==='content').map(c=>c[1])].filter(x=>x&&typeof x==='object').flatMap(walk)];
+    const byId=(tree,id)=>walk(tree).find(n=>n.calls?.some(c=>c[0]==='id'&&c[1]===id));
+    const press=node=>node.calls.find(c=>c[0]==='on_click')[1]({},{stop_propagation(){}});
+    const popup=()=>r.controller.issuePopover(r.controller.spaceMap.get(space.id),element(),t);
+    popup().calls.find(c=>c[0]==='on_open_change')[1](true,{});await settle();r.flush();
+    press(byId(popup(),`task-issue-${space.id}-DEMO-18`));r.flush();
+    const timers=r.timers.length;
+    press(byId(popup(),`task-issue-start-go-${space.id}-DEMO-18`));await settle();r.flush();
+    press(byId(popup(),`task-issue-start-go-${space.id}-DEMO-18`));await settle();
+    assert.equal(runs,2);
+    assert(!r.timers.slice(timers).some(timer=>timer.ms>170000),'no guard: no redraw timer');
   }finally{r.controller.dispose();delete globalThis.__retainedFiles;delete globalThis.__retainedExec;}
 });
 
