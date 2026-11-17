@@ -295,7 +295,7 @@ export default class SixfoldDesk extends View {
       this.cometTimer = cx.timer.after(Math.max(1, Math.ceil(at - Date.now())), cx => {
         if (this.cometWake !== at) return;
         this.cometWake = null;
-        if (this.collabFlowing && shared('sixfold.motion') !== false) cx.notify();
+        if (this.collabFlowing && motionEnabled(shared)) cx.notify();
       });
     };
     // Links also change with time alone: a send link ends five minutes after its last
