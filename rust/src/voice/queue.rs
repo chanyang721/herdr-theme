@@ -596,6 +596,10 @@ pub fn codex_sync() -> Result<()> {
     fs2::FileExt::lock_exclusive(&lock)?;
     let current = targets()?;
     let path = dir.join("codex-focus.json");
+    // Only a file that parses as written counts as unchanged; anything else is rewritten.
+    let previous = fs::read(&path)
+        .ok()
+        .and_then(|bytes| serde_json::from_slice::<Value>(&bytes).ok());
     let mut owned = settings::read_file(&path)
         .as_object()
         .cloned()
@@ -608,7 +612,12 @@ pub fn codex_sync() -> Result<()> {
     if let Err(e) = mic::update(|record| mic::replace_agent(record, "codex", &states, at)) {
         log(&format!("mic state not written for codex: {e}"));
     }
-    super::replace_json(&path, &path.with_extension("tmp"), &Value::Object(owned))
+    // The --serve loop runs this every 500 ms; rewrite the file only on change.
+    let owned = Value::Object(owned);
+    if previous.as_ref() == Some(&owned) {
+        return Ok(());
+    }
+    super::replace_json(&path, &path.with_extension("tmp"), &owned)
 }
 /// Codex footers: `voice ● listening` is recording, `voice ◌ muted` is paused.
 pub fn codex_mics(
