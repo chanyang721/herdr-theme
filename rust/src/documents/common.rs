@@ -73,6 +73,11 @@ pub fn resolved(p: impl AsRef<Path>) -> PathBuf {
         }
     }
     let absolute = absolute(p);
+    // An existing path resolves in one call to the same physical path the
+    // walk below builds; only a missing tail needs the per-segment walk.
+    if let Ok(canonical) = absolute.canonicalize() {
+        return ordinary(canonical);
+    }
     let mut result = PathBuf::new();
     for part in absolute.components() {
         match part {
