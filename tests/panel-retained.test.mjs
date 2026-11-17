@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {linearReadsUrl} from './linear-reads-url.mjs';
 import {readFile} from 'node:fs/promises';
-import {makePanelLoadFixture,makePanelFixture,eventSequence} from './panel-fixtures.mjs';
+import {makePanelLoadFixture,makePanelFixture,eventSequence,makeLedgerFieldFeed} from './panel-fixtures.mjs';
 import {cleanPanelFeed,PANEL_TIMING} from '../mods/sixfold-desk/panel-model.js';
 
 function element(){let value;value=new Proxy({nodes:[],calls:[]},{get(target,key){
@@ -827,4 +827,30 @@ test('result checks wait while the panel is hidden and resume when it is shown',
   c.setVisible(false);globalThis.__retainedHostVisible=true;c.setVisible(true);
   assert.equal(looks(),1,'shown: the look resumes');
   c.dispose();
+});
+
+test('field case: the 오늘 마무리 fold and issue labels redraw only their own card',async()=>{
+  const r=await runtime(),made=makeLedgerFieldFeed({now:Date.now()}),other=makePanelLoadFixture({spaces:2,agentsPerSpace:2,now:Date.now()}).spaces[1];
+  const raw=made.feed;raw.spaces.push(other);
+  r.controller.apply(cleanPanelFeed(raw),'ready');r.flush();
+  const space=raw.spaces[0],card=()=>r.controller.layout.cards.find(item=>item.space.id===space.id);
+  const fold=card().rows.find(row=>row.kind==='done-more');
+  assert.deepEqual([fold.count,fold.expanded],[1,false]);
+  assert(!card().rows.some(row=>row.kind==='issue'&&row.group.issue?.key==='DEMO-417'));
+  let before={...r.controller.stats.renders};
+  r.controller.toggleIssues(space.id);r.flush();
+  assert.equal(card().rows.find(row=>row.kind==='done-more').expanded,true);
+  assert(card().rows.some(row=>row.kind==='issue'&&row.group.issue?.key==='DEMO-417'));
+  assert.equal(r.controller.stats.renders[`space:${other.id}`],before[`space:${other.id}`]);
+  // One pane stops and another starts: no row moves, but both issue labels change, so the card redraws.
+  before={...r.controller.stats.renders};
+  const at=n=>raw.spaces[0].agents.find(agent=>agent.id===made.ids[n]);
+  at(3).status='idle';at(10).status='working';
+  r.controller.apply(cleanPanelFeed(raw),'ready');r.flush();
+  assert.notEqual(r.controller.stats.renders[`space:${space.id}`],before[`space:${space.id}`]);
+  const groups=r.controller.projection.groups.get(space.id).groups;
+  assert.equal(groups.find(group=>group.issue?.key==='DEMO-412').working,1);
+  assert.equal(groups.find(group=>group.issue?.key==='DEMO-490').working,0);
+  assert.equal(r.controller.stats.renders[`space:${other.id}`],before[`space:${other.id}`]);
+  r.controller.dispose();
 });

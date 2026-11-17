@@ -182,3 +182,53 @@ export function makePanelCompleteFixture({now=Date.now(),reduced_motion=null}={}
   feed.spaces.push(remote);feed.links=[];
   return feed;
 }
+
+// A measured field case (one project space, 9 issue rows, 16 agent rows, 3 working), with synthetic keys
+// and titles. `ledger: false` strips every field the producer feed added for it (Linear status, finish time,
+// own issue, role, held issues), which is what an older producer sends.
+export function makeLedgerFieldFeed({ now = Date.now(), ledger = true } = {}) {
+  const feed = makePanelFixture({ tool: 'linear', now });
+  const space = feed.spaces[0];
+  space.work = { tool: 'linear', key: 'DEMO', open: 9 };
+  const day = new Date(now), pad = n => String(n).padStart(2, '0');
+  const today = `${day.getFullYear()}-${pad(day.getMonth() + 1)}-${pad(day.getDate())}`;
+  const status = (name, type, extra = {}) => ledger ? { status: name, ...(type ? { status_type: type } : {}), ...extra } : {};
+  space.issues = [
+    { key: 'DEMO-417', title: 'Finished import', state: 'working', ...status('Done', 'completed', { done_at: new Date(day.getFullYear(), day.getMonth(), day.getDate(), 12).toISOString() }) },
+    { key: 'DEMO-502', title: 'Dropped export', state: 'waiting', ...status('Canceled', 'canceled') },
+    { key: 'DEMO-573', title: 'Repeated report', state: 'waiting', ...status('Duplicate') },
+    { key: 'DEMO-490', title: 'Restock flow', state: 'working', ...status('In Progress', 'started') },
+    { key: 'DEMO-412', title: 'Order screen', state: 'working', ...status('In Progress', 'started') },
+    { key: 'DEMO-393', title: 'Payment retry', state: 'working', ...status('In Review', 'started') },
+    { key: 'DEMO-610', title: 'Later idea', state: 'waiting', ...status('Backlog', 'backlog') },
+    { key: 'DEMO-611', title: 'Next search', state: 'waiting', ...status('Todo', 'unstarted') },
+    { key: 'DEMO-612', title: 'Unknown status', state: 'waiting' },
+  ];
+  space.issue_catalog = { source: 'linear-ledger', week: [], milestone: [], all: [
+    { key: 'DEMO-411', title: 'Merge approval', state: 'waiting', ...status('In Progress', 'started') },
+    { key: 'DEMO-503', title: 'Stock sync', state: 'waiting', ...status('In Review', 'started') },
+    { key: 'DEMO-504', title: 'Stock sync follow-up', state: 'waiting', ...status('Done', 'completed') },
+  ], import_request: null };
+  const id = n => opaque('a', 100 + n);
+  const row = (n, title, extra, fields = {}) => baseAgent(100 + n, title, { stage: 2, status: 'idle', ...extra, ...(ledger ? fields : {}) });
+  space.agents = [
+    row(1, 'Empty shell', { issue: 'DEMO-502', keep_reason: 'work left' }, { role: null, own_issue: 'DEMO-502', issues: ['DEMO-502'] }),
+    row(2, 'Empty shell', { issue: 'DEMO-573', keep_reason: 'input unchecked' }, { role: null, own_issue: 'DEMO-573', issues: ['DEMO-573'] }),
+    row(3, 'Restock flow', { issue: 'DEMO-490', status: 'working' }, { role: 'integrate', own_issue: 'DEMO-490', issues: ['DEMO-490', 'DEMO-503', 'DEMO-504', 'DEMO-393'] }),
+    row(4, 'Restock flow', { issue: 'DEMO-490' }, { role: 'review', own_issue: 'DEMO-490', issues: ['DEMO-490'] }),
+    row(5, 'DEMO-503+504 merge', { issue: 'DEMO-490', parent_id: id(3), subagent_kind: 'task' }, { own_issue: 'DEMO-503' }),
+    row(6, 'Prepare release command', { issue: 'DEMO-490', parent_id: id(3), subagent_kind: 'task' }, { own_issue: null }),
+    row(7, 'Runbook rebase and merge', { issue: 'DEMO-490', parent_id: id(3), subagent_kind: 'task' }, { own_issue: null }),
+    row(8, 'DEMO-393 rebase', { issue: 'DEMO-490', parent_id: id(3), subagent_kind: 'task' }, { own_issue: 'DEMO-393' }),
+    row(9, 'DEMO-490~492 restock merge', { issue: 'DEMO-490', parent_id: id(3), subagent_kind: 'task' }, { own_issue: 'DEMO-490' }),
+    row(10, 'Order screen', { issue: 'DEMO-412' }, { role: 'implement', own_issue: 'DEMO-412', issues: ['DEMO-412'] }),
+    row(11, 'Payment retry', { issue: 'DEMO-393' }, { role: 'implement', own_issue: 'DEMO-393', issues: ['DEMO-393'] }),
+    row(12, 'Stock sync', { issue: 'DEMO-490' }, { role: 'implement', own_issue: 'DEMO-503', issues: ['DEMO-503'] }),
+    row(13, 'Stock sync', { issue: 'DEMO-490' }, { role: 'review', own_issue: 'DEMO-503', issues: ['DEMO-503', 'DEMO-411'] }),
+    row(14, 'Next search', { issue: 'DEMO-611', status: 'working' }, { role: 'implement', own_issue: 'DEMO-611', issues: ['DEMO-611'] }),
+    row(15, 'Later idea', { issue: 'DEMO-610' }, { role: 'implement', own_issue: 'DEMO-610', issues: ['DEMO-610'] }),
+    row(16, '기록을 읽지 못한 작업', { issue: 'DEMO-612', status: 'working' }, { role: null, own_issue: 'DEMO-612', issues: ['DEMO-612'] }),
+  ];
+  feed.links = [];
+  return { feed, ids: Object.fromEntries(Array.from({ length: 16 }, (_, i) => [i + 1, id(i + 1)])), today };
+}

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
-import {makePanelMatrix,makePanelFixture,PANEL_IDS,eventSequence} from './panel-fixtures.mjs';
+import {makePanelMatrix,makePanelFixture,PANEL_IDS,eventSequence,makeLedgerFieldFeed} from './panel-fixtures.mjs';
 import {cleanPanelFeed,MESSAGE_TIMING,PANEL_TIMING,PANEL_LEGS} from '../mods/sixfold-desk/panel-model.js';
 
 function node(kind='div',value=null){
@@ -672,4 +672,44 @@ test('a status image animates for the brief window after a state change, then th
   now+=8000;
   assert.equal(r.briefRows(view,view.panelState.feed,true,now),null);assert(!view.animated.has(agent.id));
  }finally{Date.now=realNow;}
+});
+
+test('field case renders role chips, held-issue chips, issue labels and the folded 오늘 마무리 row',async()=>{
+  const r=await renderer(false),{feed,ids}=makeLedgerFieldFeed({now:Date.now()}),view=viewFor(feed);
+  const space=view.panelState.feed.spaces[0];
+  const tree=r.renderPanelTracking(view,t,r.cx);
+  assert.deepEqual(words(byId(tree,`panel-role-${ids[12]}`)),['구현']);
+  assert.deepEqual(words(byId(tree,`panel-role-${ids[13]}`)),['검수'],'a review row with the original title still reads 검수');
+  assert.deepEqual(words(byId(tree,`panel-role-${ids[3]}`)),['통합']);
+  assert.equal(byId(tree,`panel-role-${ids[16]}`),undefined,'no role, no chip');
+  const held=byId(tree,`panel-issues-${ids[13]}`);
+  assert.deepEqual(words(held),['+1 이슈']);assert.match(call(held,'tooltip')[1],/DEMO-411/);
+  assert.deepEqual(words(byId(tree,`panel-issues-${ids[3]}`)),['+3 이슈']);
+  assert.equal(byId(tree,`panel-issues-${ids[12]}`),undefined);
+  assert(words(byId(tree,`panel-issue-${space.id}-DEMO-412`)).includes('쉬는 중'));
+  assert(words(byId(tree,`panel-issue-${space.id}-DEMO-490`)).includes('작업 중 1'));
+  assert.equal(byId(tree,`panel-issue-${space.id}-DEMO-502`),undefined);
+  const done=byId(tree,`panel-done-${space.id}`);
+  assert.deepEqual(words(done),['▸ 오늘 마무리 1']);
+  assert.equal(byId(tree,`panel-issue-${space.id}-DEMO-417`),undefined,'folded by default');
+  call(done,'on_click')[1]({}, {stop_propagation(){}});
+  assert(view.expandedIssueSpaces.has(space.id));
+  const open=r.renderPanelTracking(view,t,r.cx);
+  assert.deepEqual(words(byId(open,`panel-done-${space.id}`)),['▾ 오늘 마무리 1']);
+  assert(words(byId(open,`panel-issue-${space.id}-DEMO-417`)).includes('✓ 마무리'));
+  const fold=byId(open,`panel-fold-${space.id}-${ids[3]}`);
+  assert.deepEqual(words(fold),['+2 하위 작업 · 이슈 미확인']);
+  const layout=r.panelLayout(view.panelState.feed,view.panelEvents,[],new Map([[space.id,(await import('../mods/sixfold-desk/panel-model.js')).agentGroups(space,{expandedIssueSpaces:view.expandedIssueSpaces})]]));
+  const kinds=layout.cards[0].rows.map(row=>row.kind);
+  assert.equal(kinds.filter(kind=>kind==='done-more').length,1);
+  assert(kinds.indexOf('done-more')<kinds.lastIndexOf('issue'),'today\'s issues follow their fold row');
+  for(const row of layout.cards[0].rows.filter(row=>row.kind==='agent'))assert.equal(layout.anchors.get(row.agent.id).y,row.y+row.height/2);
+});
+
+test('without the new fields no role, held-issue or 오늘 마무리 rows are drawn',async()=>{
+  const r=await renderer(false),{feed,ids}=makeLedgerFieldFeed({now:Date.now(),ledger:false}),view=viewFor(feed);
+  const tree=r.renderPanelTracking(view,t,r.cx),space=view.panelState.feed.spaces[0];
+  for(let n=1;n<=16;n++){assert.equal(byId(tree,`panel-role-${ids[n]}`),undefined);assert.equal(byId(tree,`panel-issues-${ids[n]}`),undefined);}
+  assert.equal(byId(tree,`panel-done-${space.id}`),undefined);
+  for(const issue of space.issues)assert(byId(tree,`panel-issue-${space.id}-${issue.key}`),issue.key);
 });
