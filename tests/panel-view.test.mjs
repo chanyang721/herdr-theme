@@ -29,7 +29,7 @@ async function renderer(motion=true,{nativeSpaces=[],nativePanes=[]}={}){
   globalThis.window={paint_path:(...args)=>{paths.push(args);return node('path',args[0]);}};
   let source=await readFile(new URL('../mods/sixfold-desk/panel-view.js',import.meta.url),'utf8');
   source=source.replace(/import \{([^}]+)\} from '(?:gpui-kit|gpui-base|herdr)';/g,'const {$1}=globalThis.__panelView;');
-  for(const name of ['panel-model','collab-flow','panel-host'])source=source.replace(`'./${name}.js'`,JSON.stringify(new URL(`../mods/sixfold-desk/${name}.js`,import.meta.url).href));
+  for(const name of ['panel-model','collab-flow','panel-host','motion'])source=source.replace(`'./${name}.js'`,JSON.stringify(new URL(`../mods/sixfold-desk/${name}.js`,import.meta.url).href));
   const details=(await readFile(new URL('../mods/sixfold-desk/task-row-details.js',import.meta.url),'utf8'))
     .replace(/import \{([^}]+)\} from 'gpui-kit';/,'const {$1}=globalThis.__panelView;');
   source=source.replace("'./task-row-details.js'",JSON.stringify(`data:text/javascript;base64,${Buffer.from(details).toString('base64')}#${serial}`));

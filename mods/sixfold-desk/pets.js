@@ -1,4 +1,5 @@
 import {div,svg} from 'gpui-kit';
+import {motionEnabled} from './motion.js';
 
 // A small cat in each pane header: it gallops while the agent works, sits when it needs you
 // or has finished, and sleeps when idle. Every motion runs natively and only while drawn, so a
@@ -16,7 +17,7 @@ export function panePetState(status){
 }
 
 export function petRunning(status,shared){
-  return status==='working'&&shared('sixfold.pets')!==false&&shared('sixfold.motion')!==false&&shared('sixfold.pets.motion')!==false;
+  return status==='working'&&shared('sixfold.pets')!==false&&motionEnabled(shared)&&shared('sixfold.pets.motion')!==false;
 }
 
 // `frames` can only change an element's text, so a run frame sits behind a gate whose width is
@@ -55,7 +56,7 @@ export function petGlyph(state,frame){
 
 // ground: the header's base and tinted background, so stacked run frames match it exactly.
 export function panePet(p,t,shared,ground={base:t.chrome,background:t.chrome}){
-  const options={enabled:shared('sixfold.pets')!==false,motion:shared('sixfold.motion')!==false&&shared('sixfold.pets.motion')!==false};
+  const options={enabled:shared('sixfold.pets')!==false,motion:motionEnabled(shared)&&shared('sixfold.pets.motion')!==false};
   if(!options.enabled)return div().w(PET_BOX.width).h(PET_BOX.height);
   const state=panePetState(p.status);
   const color=state.status==='working'?t.working:state.status==='blocked'?t.blocked:state.status==='done'?t.done||t.ansi2:t.accent;

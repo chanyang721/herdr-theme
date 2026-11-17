@@ -18,6 +18,7 @@ import { watchAlerts, alertSection, visibleAlerts } from './alerts.js';
 import { workspaceAlertsRow, hasWorkspaceAlerts, openInbox, cardAlertCounts, slackAlertsChip, alertsOnMetaLine } from './alert-inbox.js';
 import { startAlertArrivals, alertArrivalLayer, alertCardSignature } from './alert-arrivals.js';
 import { panePet } from './pets.js';
+import { motionEnabled, arrivalMotionEnabled, motionToggled, motionLabel, briefWindow, wakeAtBriefEnd } from './motion.js';
 import { paneUsage } from './session-usage.js';
 import { paneMeta, paneMetaChip, showPaneIndex, showTitle } from './pane-meta.js';
 import { paneWork, paneWorkChip } from './pane-work.js';
@@ -154,7 +155,8 @@ export default class SixfoldDesk extends View {
       onHostChange:()=>this.invalidateSidebar(),
       schedule:fn=>fileReceiver.enqueue(fn),
       // Counts on the meta line only when it carries the alerts; otherwise the alerts row has them (never both).
-      cardAlerts:(space,motion)=>alertsOnMetaLine(space,space.name)?cardAlertCounts(space.name,motion):null,slackAlerts:slackAlertsChip,
+      // Counted once landed: arrivals follow their own motion rule (motion.js), not the panel's.
+      cardAlerts:space=>alertsOnMetaLine(space,space.name)?cardAlertCounts(space.name,arrivalMotionEnabled(shared)&&window()?.visible!==false):null,slackAlerts:slackAlertsChip,
       cardBadges:metaBadges(this),
       onIssueRequest:(space,key,desired)=>{
         const serial=globalThis.__sixfoldIssueRequestSerial=(globalThis.__sixfoldIssueRequestSerial||0)+1;
@@ -653,7 +655,10 @@ export default class SixfoldDesk extends View {
     const palette = [t.accent, t.ansi6, t.ansi5, t.ansi3, t.ansi2, t.ansi4];
     const flows = this.activeFlows;
     const routes = simultaneousRoutes(flows);
-    const motion = shared('sixfold.motion') !== false&&window()?.visible!==false&&this.panelState?.feed?.reduced_motion!==true;
+    const still = window()?.visible===false||this.panelState?.feed?.reduced_motion===true;
+    const motion = motionEnabled(shared)&&!still;
+    // Alert arrivals keep their short popup unless motion was switched off (motion.js).
+    const arrivalMotion = arrivalMotionEnabled(shared)&&!still;
     const endpoint = address => flows.some(flow => flow.source === address || flow.target === address);
     const known = new Set(facts.map(x => x.address));
     const machineOf = address => terminalMachine(address, known);
@@ -685,7 +690,7 @@ export default class SixfoldDesk extends View {
         .child(this.button('sf-blocked', `! ${w.blocked}`, () => run('sixfold-desk.next-blocked'), t))
         .child(this.button('sf-done', `✓ ${w.done}`, () => run('sixfold-desk.next-done'), t))
         .child(this.button('sf-zoom', w.zoom, () => run('pane.zoom'), t))
-        .child(this.button('sf-motion', shared('sixfold.motion')===false?'Motion off':'Motion on',()=>setShared('sixfold.motion',shared('sixfold.motion')===false),t))
+        .child(this.button('sf-motion', motionLabel(motionEnabled(shared)),()=>setShared('sixfold.motion',motionToggled(shared)),t))
         .when(hasPanel(layout()),e=>e.child(this.button('sf-review', w.review, () => { run('layout.select', {stack:'panel-body',child:'changes'}); run('layout.toggle',{id:'panel'}); }, t)))
         .when(hasPanel(layout()),e=>e.child(this.button('sf-files', w.files, () => { run('layout.select', {stack:'panel-body',child:'files'}); run('layout.toggle',{id:'panel'}); }, t)));
     }
@@ -943,7 +948,7 @@ export default class SixfoldDesk extends View {
       const key=JSON.stringify([s,members,task?.id,Boolean(taskBody),Boolean(task?.slack||task?.work),task?.memory,task?.share,task?.agents.map(agent=>[agent.id,agent.status,agent.closing]),taskPanel?.names&&[...taskPanel.names],taskPanel?.feed?.links,t,w,motion,partner,mark,comets.comets.get(groupKey(partner?.group.name??mark?.lane.link.name)),
         this.boxSizes?.[s.id],partner?.partners.includes(this.hoverComputer)||false,this.dragSpace,this.overSpace,
         this.workspaceIcons[s.id]||this.workspaceIcons[s.name],workspaceColor(s),workspacePinned(s,this.workspacePins),
-        this.fileBadges?.[badgeKey],alertCardSignature(s.name,motion),shared('sixfold.workspace.badges')?.[badgeKey],this.projectDocs?.spaces?.[s.id]||this.projectDocs?.spaces?.[s.name],
+        this.fileBadges?.[badgeKey],alertCardSignature(s.name,arrivalMotion),shared('sixfold.workspace.badges')?.[badgeKey],this.projectDocs?.spaces?.[s.id]||this.projectDocs?.spaces?.[s.name],
         docsFinderSignature(this,s.id),
         members.map(p=>[unseen(p.terminal),endpoint(p.terminal),routeColor(p.terminal),askFor(this.asks,p.terminal),
           sessionChildren(this.workflowNodes,p.terminal,true),this.expandedAgents.has(p.terminal),list.find(a=>a.address===p.terminal)?.program])]);
@@ -1085,7 +1090,7 @@ export default class SixfoldDesk extends View {
     });
     // New-alert arrivals: a popup on the card's spot, then a pixel block steps into its badge.
     const arrivalCards=[];{let top=0;groups.forEach(({s},i)=>{arrivalCards.push({s,top,extra:extraHeight(s),merged:mergedAlerts(s),width:this.boxSizes?.[s.id]?.w||0});top+=taskEntries[i].height+12;});}
-    const arrivalViews=alertArrivalLayer(this,cx,{cards:arrivalCards,motion,t,right:LINK_MARGIN+4});
+    const arrivalViews=alertArrivalLayer(this,cx,{cards:arrivalCards,motion:arrivalMotion,t,right:LINK_MARGIN+4});
     const workspaceTree=v_flex().relative().flex_none().children(spaceRows)
       .when(Boolean(taskPanel?.feed),e=>e.child(taskPanel.hostFlows(taskEntries,
         taskComputerAnchors(taskPanel.feed,activeComputers,this.computerBlockHeight??(activeComputers.length*39+3),this.spaceSectionHeight??31),LINK_MARGIN)))
@@ -1116,7 +1121,7 @@ export default class SixfoldDesk extends View {
           .child(this.button('sf-language',w.language,()=>run('sixfold-desk.language'),t)))
         .child(h_flex().h(24).flex_none().px(8).items_center().gap(4)
           .when(Boolean(this.panelState?.feed),e=>e.child(this.button('sf-tracking',taskPanel?'작업 켜짐':'작업',()=>setShared('sixfold.panel.enabled',!this.panelTrackingActive),t)))
-          .child(this.button('sf-motion',motion?'Motion on':'Motion off',()=>setShared('sixfold.motion',shared('sixfold.motion')===false),t))))
+          .child(this.button('sf-motion',motionLabel(motion),()=>setShared('sixfold.motion',motionToggled(shared)),t))))
       .child(h_flex().px(12).py(11).gap(16).flex_none().justify_center().font_bold().children(['blocked','done','working'].map(s => this.badge(s,String(total[s]),t,14))))
       .child(v_flex().id('sf-scroll').flex_1().min_h(0).overflow_y_scroll()
         .child(computerSection)

@@ -14,6 +14,7 @@ import {issueScopeData,issueCacheLabel,parseTimelineFeed,spaceWithTimeline,rowSt
 import {ensure,cached,waiting,checkCaches,anyWaiting,CACHE_POLL_MS,LOOK_POLL_MS} from './linear-cache.js';
 import {statusIndex,teamStatuses,statusFilters,filterRows,foldedCount,milestoneList,detailData} from './issue-model.js';
 import {nativeTaskSpace,hostedTaskLayout,panelWidthClass} from './panel-host.js';
+import {motionEnabled,motionToggled,motionLabel} from './motion.js';
 
 // Each retained entity receives only a local controller key. Display data stays
 // in this generation's registry, not in persisted shared state (which refreshes
@@ -107,7 +108,7 @@ class PanelRoot extends View{
         .child(div().id('panel-workspaces').text_size(10).text_color(t.muted).cursor_pointer().tooltip('워크스페이스 목록')
           .on_click(()=>{setShared('sixfold.panel.enabled',false);c.onClassic?.();}).child('목록'))
         .child(div().id('panel-motion').text_size(10).text_color(t.dim).cursor_pointer()
-          .on_click(()=>{setShared('sixfold.motion',shared('sixfold.motion')===false);c.preferences();}).child(c.motion?'Motion on':'Motion off')))
+          .on_click(()=>{setShared('sixfold.motion',motionToggled(shared));c.preferences();}).child(motionLabel(c.motion))))
       .child(c.summary).child(div().id('panel-scroll').flex_1().min_h(0).overflow_y_scroll().child(c.list));
   }
 }
@@ -508,7 +509,7 @@ export function createRetainedPanel(cx,{macTitlebar=false,onClassic=null,onDispo
     }
     const themeChanged=nextTheme!==c.themeKey;
     if(themeChanged){c.themeKey=nextTheme;c.themeRevision=(c.themeRevision||0)+1;}
-    c.motion=c.visible&&c.hostVisible&&c.enabled&&shared('sixfold.motion')!==false&&input.reduced_motion!==true;
+    c.motion=c.visible&&c.hostVisible&&c.enabled&&motionEnabled(shared)&&input.reduced_motion!==true;
     c.events=panelEventStates(input,Date.now(),{previous:c.events,motion:c.motion});
     c.projection=projectPanelFeed(input,c.projection,{includeClosedIds:new Set(c.events.tags.keys()),expandedIssueSpaces:c.expandedIssueSpaces,expandedParents:c.expandedParents});
     c.stats.projections.push(c.projection.stats);if(c.stats.projections.length>32)c.stats.projections.shift();

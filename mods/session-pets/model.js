@@ -11,6 +11,7 @@ export function petSessions(agents, space) {
     .map(a => ({...a, ...(STATES[a.status] || {pose:'sit',label:'상태 미확인',token:'muted'})}));
 }
 export function petOptions(shared) {
-  return {enabled:shared('sixfold.pets') !== false, motion:shared('sixfold.motion') !== false && shared('sixfold.pets.motion') !== false};
+  // Same rule as sixfold-desk/motion.js (mods cannot import each other): motion is opt-in.
+  return {enabled:shared('sixfold.pets') !== false, motion:shared('sixfold.motion') === true && shared('sixfold.pets.motion') !== false};
 }
 export const petTooltip = a => `${a.space_name || ''} · ${a.title || a.program?.name || '세션'} · ${a.address} · ${a.label}`;

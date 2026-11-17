@@ -82,7 +82,7 @@ test('computer commands select the listed computer without moving focus, running
     .replace(/import \{ paneMeta[^}]*\} from '.\/pane-meta.js';/,'const paneMeta=()=>null,paneMetaChip=()=>null,showPaneIndex=()=>false,showTitle=()=>true;')
     .replace(/import \{ breathingBorder[^}]*\} from '.\/collab-flow-view.js';/,'const breathingBorder=()=>null,borderComet=()=>null;')
     .replace(/import \{ pipeline \} from [^;]+;/,'const pipeline=()=>null;');
-  for(const name of ['model','flow','workflow','sidebar-identity','collab','collab-flow'])source=source.replace(`'./${name}.js'`,JSON.stringify(new URL(`../mods/sixfold-desk/${name}.js`,import.meta.url).href));
+  for(const name of ['model','flow','workflow','sidebar-identity','collab','collab-flow','motion'])source=source.replace(`'./${name}.js'`,JSON.stringify(new URL(`../mods/sixfold-desk/${name}.js`,import.meta.url).href));
   try{
     const {default:Sidebar}=await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
     const view=new Sidebar();

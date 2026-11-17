@@ -3,6 +3,7 @@ import {h_flex, v_flex} from 'gpui-base';
 import {spaces, panes, shared, setShared, run, settings} from 'herdr';
 import {agentGroups, panelEventStates, panelSpaces, panelSpacePartners, PANEL_TIMING, PANEL_LEGS, agentRowState, agentHasReason, agentReason, agentCleanupLabel, agentWaitLabel} from './panel-model.js';
 import {SESSION_STATES, sessionStatusGlyph} from './session-status.js';
+import {motionEnabled, motionToggled, motionLabel} from './motion.js';
 import {groupColors, paletteMode} from './collab-flow.js';
 import {rowDetailParts} from './task-row-details.js';
 import {PACKET_PIXELS, pixelUnitFor, snap, centred, pixelBlock, pixelRoute as drawPixelRoute, pixelRing, pixelArrival, pixelLanding, ARRIVAL} from './pixel.js';
@@ -416,7 +417,7 @@ export function panelFlowLayer(feed,layout,state,color,t,motion,width,gutter=nul
 
 export function renderPanelTracking(view,t,cx,{macTitlebar=false}={}){
   const feed=view.panelState.feed;
-  const motion=shared('sixfold.motion')!==false&&feed.reduced_motion!==true&&view.panelReducedMotion!==true;
+  const motion=motionEnabled(shared)&&feed.reduced_motion!==true&&view.panelReducedMotion!==true;
   const now=Date.now();
   const state=panelEventStates(feed,now,{previous:view.panelEvents,motion});view.panelEvents=state;view.now=now;
   let nextAt=state.nextAt;
@@ -457,7 +458,7 @@ export function renderPanelTracking(view,t,cx,{macTitlebar=false}={}){
         .on_click(()=>setShared('sixfold.panel.enabled',false)).child('목록'))
       .child(div().id('panel-motion').text_size(10).text_color(t.dim).cursor_pointer()
         .tooltip(view.panelReducedMotion===true?'시스템 동작 줄이기 적용 중':'움직임 켜기/끄기')
-        .on_click(()=>setShared('sixfold.motion',shared('sixfold.motion')===false)).child(motion?'Motion on':'Motion off')))
+        .on_click(()=>setShared('sixfold.motion',motionToggled(shared))).child(motionLabel(motion))))
     .child(h_flex().h(32).px(12).gap(12).items_center().child(text(`◌ ${working}`,t.accent,12))
       .when(view.panelState.status!=='ready',e=>e.child(text(view.panelState.status==='stale'?'업데이트 대기':'최근 표시 유지',t.blocked,10))))
     .child(div().id('panel-scroll').flex_1().min_h(0).overflow_y_scroll().child(rows));

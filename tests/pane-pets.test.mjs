@@ -15,7 +15,8 @@ async function loadPets(){
  }});return proxy;}
  globalThis.__panePetRuntime={div:()=>element(),svg:path=>element(path)};
  const source=(await readFile(new URL('../mods/sixfold-desk/pets.js',import.meta.url),'utf8'))
-  .replace("import {div,svg} from 'gpui-kit';",'const {div,svg}=globalThis.__panePetRuntime;');
+  .replace("import {div,svg} from 'gpui-kit';",'const {div,svg}=globalThis.__panePetRuntime;')
+  .replace("'./motion.js'",JSON.stringify(new URL('../mods/sixfold-desk/motion.js',import.meta.url).href));
  const module=await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
  return {module,glyphs,loops,frames,sizes};
 }
