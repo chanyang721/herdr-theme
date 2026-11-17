@@ -21,6 +21,7 @@ async function runtime(motion=false,options={}){
   globalThis.__retainedRuntime={View:class{},div:element,svg:element,image:element,h_flex:element,v_flex:element,Popover:{new:element},Input:{new:state=>{if(state?.released)throw TypeError('this input state has been released and can no longer be rendered');const value=element();value.calls.push(['input',state]);return value;}},InputState:{new:(options={})=>{assert(!rendering,'InputState.new during render');const state={options,events:new Map(),text:options.value||'',released:false,on(name,callback){this.events.set(name,callback);},value(){if(this.released)throw TypeError('this input state has been released');return this.text;},set_value(next){if(this.released)throw TypeError('this input state has been released');this.text=next;},release(){const was=!this.released;this.released=true;return was;}};(globalThis.__retainedInputs??=[]).push(state);return state;}},PathBuilder:{stroke:path},
     theme:()=>({background:'#101318',chrome:'#14191f',surface:'#1b232d',border:'#39434f',selected:'#253249',foreground:'#e5edf5',muted:'#a6b0bf',dim:'#788594',accent:'#a9b8ff',ansi6:'#68c9bc',blocked:'#edac67',hover:'#253249',...globalThis.__retainedThemePatch}),
     window:()=>({active:false,visible:globalThis.__retainedHostVisible}),appHome:()=>'/home',
+    exec:async(...args)=>{if(!globalThis.__retainedExec)throw new Error('no exec here');return globalThis.__retainedExec(...args);},
     readTextFile:async path=>{const files=globalThis.__retainedFiles;const text=files?files[path]:globalThis.__retainedRead?.(path);if(text==null)throw new Error('missing');return text;},
     writeTextFile:async(path,text)=>{if(!globalThis.__retainedWrites)throw new Error('no writes here');globalThis.__retainedWrites.push([path,JSON.parse(text)]);},spaces:()=>globalThis.__retainedNativeSpaces,panes:()=>[],shared:key=>store.get(key),setShared:(key,value)=>store.set(key,value),run(){},settings:()=>({zoom:1})};
   globalThis.window={paint_path:element};
@@ -326,6 +327,51 @@ test('an open issue search asks again as its answer gets old (within a minute); 
     popup()(false,{});await look(66);
     assert.equal(writes.length,2);assert.equal(r.controller.lookTimer,null,'closed: no more looks');
   }finally{r.controller.dispose();Date.now=original;delete globalThis.__retainedWrites;delete globalThis.__retainedRead;}
+});
+
+test('작업 시작: a row press unfolds its strip on the retained card, [작업 시작] runs the set command once and shows its result',async()=>{
+  const config={v:1,command:'/opt/demo/start',args:['{space}','{issue} {title}','{provider}','{tier}'],
+    providers:[{id:'claude',label:'Claude'},{id:'codex',label:'Codex'}],tiers:[{id:'mid',label:'중간'},{id:'high',label:'높음'}],default:{provider:'claude',tier:'high'}};
+  globalThis.__retainedFiles={'/home/data/sixfold/issue-start.json':JSON.stringify(config)};
+  const ran=[];let answer;globalThis.__retainedExec=(command,args,options)=>{ran.push([command,args,options]);return new Promise(resolve=>{answer=resolve;});};
+  const r=await runtime(),tasks=[],t=r.native.theme();
+  try{
+    r.controller.cx.spawn=fn=>{tasks.push(fn());};const settle=async()=>{while(tasks.length)await tasks.shift();};
+    const raw=makePanelFixture({tool:'linear'});raw.spaces[0].name='Demo';
+    r.controller.apply(cleanPanelFeed(raw),'ready');r.flush();
+    const space=r.controller.spaceMap.get(raw.spaces[0].id),card=r.controller.cards.get(space.id);
+    // The popover's surface is passed to content(), not child(): walk both.
+    const walk=n=>[n,...[...(n.nodes||[]),...(n.calls||[]).filter(c=>c[0]==='content').map(c=>c[1])].filter(x=>x&&typeof x==='object').flatMap(walk)];
+    const byId=(tree,id)=>walk(tree).find(n=>n.calls?.some(c=>c[0]==='id'&&c[1]===id));
+    const texts=tree=>walk(tree).flatMap(n=>(n.nodes||[]).filter(x=>typeof x==='string'));
+    const press=node=>node.calls.find(c=>c[0]==='on_click')[1]({},{stop_propagation(){}});
+    const popup=()=>r.controller.issuePopover(r.controller.spaceMap.get(space.id),element(),t);
+    popup().calls.find(c=>c[0]==='on_open_change')[1](true,{});await settle();r.flush();
+    assert.equal(r.controller.startConfig.command,'/opt/demo/start','the setting is read when the search opens');
+    const before=r.controller.alertMark(space);
+    press(byId(popup(),`task-issue-${space.id}-DEMO-12`));
+    assert.equal(r.controller.issueStates.get(space.id).startKey,'DEMO-12');assert(card.dirty,'the card redraws');
+    assert.notEqual(r.controller.alertMark(space),before,'the redraw key follows the unfolded row');
+    r.flush();
+    let tree=popup();assert(byId(tree,`task-issue-start-${space.id}-DEMO-12`));assert(!byId(tree,`task-issue-start-${space.id}-DEMO-18`));
+    press(byId(tree,`task-issue-start-provider-${space.id}-DEMO-12-codex`));r.flush();
+    press(byId(popup(),`task-issue-start-go-${space.id}-DEMO-12`));
+    assert(texts(byId(popup(),`task-issue-start-${space.id}-DEMO-12`)).includes('보내는 중…'));
+    const pending=tasks.shift();await Promise.resolve();await Promise.resolve();
+    // A second press while it runs sends nothing.
+    const go=byId(popup(),`task-issue-start-go-${space.id}-DEMO-12`);assert(!go.calls.some(c=>c[0]==='on_click'));
+    assert.deepEqual(ran,[['/opt/demo/start',['Demo','DEMO-12 Workspace search','codex','high'],{timeout:300000}]]);
+    answer({code:0,stdout:'{"outcome":"sent","task_id":"t-1","target":"Demo · Codex","model":"gpt"}\n'});await pending;r.flush();
+    tree=popup();
+    assert.deepEqual(texts(byId(tree,`task-issue-start-result-${space.id}-DEMO-12`)),['보냄 · Demo · Codex · gpt']);
+    assert(!byId(tree,`task-issue-start-go-${space.id}-DEMO-12`).calls.some(c=>c[0]==='on_click'),'guarded for three minutes');
+    // The detail is still reachable from the row's › button.
+    press(byId(tree,`task-issue-open-${space.id}-DEMO-12`));assert.equal(r.controller.issueStates.get(space.id).detail,'DEMO-12');
+    // Closing drops the strip and its line; the guard stays.
+    popup().calls.find(c=>c[0]==='on_open_change')[1](false,{});
+    const state=r.controller.issueStates.get(space.id);assert.equal(state.startKey,null);assert.equal(state.starts.size,0);
+    assert.equal(ran.length,1);
+  }finally{r.controller.dispose();delete globalThis.__retainedFiles;delete globalThis.__retainedExec;}
 });
 
 test('opening another space closes the previous issue popup and only its retained card changes',async()=>{
