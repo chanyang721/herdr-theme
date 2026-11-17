@@ -368,6 +368,15 @@ test('작업 시작: a row press unfolds its strip on the retained card, [작업
     // One redraw when the three-minute guard ends.
     const guardTimer=r.timers.filter(timer=>!timer.cancelled&&timer.ms>170000&&timer.ms<=180100);
     assert.equal(guardTimer.length,1);r.flush();assert(!card.dirty);guardTimer[0].fn();assert(card.dirty,'redrawn as the guard ends');r.flush();
+    // Reopened while guarded: armed again for that issue; closed: that timer is cancelled.
+    popup().calls.find(c=>c[0]==='on_open_change')[1](false,{});await settle();
+    popup().calls.find(c=>c[0]==='on_open_change')[1](true,{});await settle();r.flush();
+    const again=r.timers.filter(timer=>!timer.cancelled&&timer.ms>170000&&timer.ms<=180100&&timer!==guardTimer[0]);
+    assert.equal(again.length,1,'reopening arms the guard timer again');
+    popup().calls.find(c=>c[0]==='on_open_change')[1](false,{});await settle();
+    assert(again[0].cancelled,'closing cancels the guard timer');
+    popup().calls.find(c=>c[0]==='on_open_change')[1](true,{});await settle();r.flush();
+    press(byId(popup(),`task-issue-${space.id}-DEMO-12`));r.flush();
     // The detail is still reachable from the row's › button.
     press(byId(tree,`task-issue-open-${space.id}-DEMO-12`));assert.equal(r.controller.issueStates.get(space.id).detail,'DEMO-12');
     // Closing drops the strip and its line; the guard stays.

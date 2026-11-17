@@ -99,6 +99,20 @@ test('a value cannot become an option, a long space is cut, and a grown argument
   assert.equal(startArgv(near,{...params,title:'y'.repeat(80)}),null,'over the limit after substitution');
 });
 
+test('the guard is released only for outcomes on the allow list (setting or the default)',()=>{
+  const out=(outcome,release)=>startResult({code:0,stdout:JSON.stringify(outcome===undefined?{}:{outcome})},release).release;
+  assert.deepEqual(config.release,['blocked','plan'],'default allow list');
+  for(const kept of ['unknown','queued','weird','failed','already_sent','awaiting_ack','deferred','running','intent','unclear','incomplete','planned','',undefined])
+    assert.equal(out(kept),false,`kept: ${kept}`);
+  for(const freed of ['blocked','plan'])assert.equal(out(freed),true,freed);
+  const own=parseStartConfig({...CONFIG,release_outcomes:['blocked','declined']});
+  assert.deepEqual(own.release,['blocked','declined']);
+  assert.equal(out('declined',own.release),true);assert.equal(out('plan',own.release),false,'the setting replaces the default');
+  assert.deepEqual(parseStartConfig({...CONFIG,release_outcomes:[]}).release,[],'an empty list never releases');
+  for(const bad of [['sent'],['pending'],['unconfirmed'],'blocked',[1],['Has Caps'],Array(21).fill('x')])
+    assert.equal(parseStartConfig({...CONFIG,release_outcomes:bad}),null,JSON.stringify(bad));
+});
+
 test('only a surely-unsent answer releases the guard',()=>{
   const out=stdout=>startResult({code:0,stdout});
   assert.equal(out('{"outcome":"blocked","reason":"busy"}').release,true);
@@ -147,6 +161,18 @@ test('runStart execs the argv once and ignores a second press while running or w
   let ran=0;
   assert.deepEqual(shown(await io.runStart(config,{...params,issue:'bad'},{run:async()=>{ran++;},now:()=>clock})),{ok:false,text:'안 보냄 · 작업 시작 값 확인 실패'});
   assert.equal(ran,0);assert.equal(io.startGuarded('Demo','bad',clock),false);
+  io.resetStartGuards();
+});
+
+test('a maybe-sent answer keeps the guard, and the space lists its guarded issues',async()=>{
+  const io=await startIo(),clock=12_000_000;let runs=0;
+  for(const outcome of ['unknown','queued','weird',''])
+    await io.runStart(config,{...params,issue:`DEMO-${20+runs}`},{run:async()=>{runs++;return {code:2,stdout:JSON.stringify({outcome})};},now:()=>clock});
+  for(let i=0;i<4;i++)assert.equal(io.startGuarded('Demo',`DEMO-${20+i}`,clock),true,`DEMO-${20+i}`);
+  assert.deepEqual(io.startGuardsOf('Demo',clock+1000).map(([key,left])=>[key,left]).sort(),
+    ['DEMO-20','DEMO-21','DEMO-22','DEMO-23'].map(key=>[key,START_GUARD_MS-1000]));
+  assert.deepEqual(io.startGuardsOf('Other',clock),[]);
+  assert.deepEqual(io.startGuardsOf('Demo',clock+START_GUARD_MS),[]);
   io.resetStartGuards();
 });
 
