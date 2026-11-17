@@ -6,9 +6,11 @@
 //   visible   () => boolean; a hidden tick is skipped and the job runs on return
 //   due       () => boolean; true runs on this tick (default: every tick)
 //   fallback  ms; runs at least this often while visible even when not due
+//   fallbackWhen () => boolean; the fallback counts only while true (a job that runs hidden when
+//             due can still keep its catch-up run for when the window is shown)
 //   backoff   {base, max} ms after consecutive failures
 //   spawn     run the job in cx.spawn (default); a refused spawn is not a run
-export function createPoll(cx,{every,job,visible=()=>true,due=()=>true,fallback=null,backoff=null,spawn=true,now=()=>Date.now()}){
+export function createPoll(cx,{every,job,visible=()=>true,due=()=>true,fallback=null,fallbackWhen=()=>true,backoff=null,spawn=true,now=()=>Date.now()}){
   if(!Number.isFinite(every)||every<=0)throw new RangeError('A positive poll interval is required');
   if(typeof job!=='function')throw new TypeError('A poll job is required');
   let busy=false,stopped=false,last=-Infinity,failures=0,retryAt=0,forced=false,missed=false;
@@ -22,7 +24,7 @@ export function createPoll(cx,{every,job,visible=()=>true,due=()=>true,fallback=
     if(!visible()){missed=true;return;}
     const at=now();
     if(at<retryAt)return;
-    if(!(forced||missed||due()||(fallback!==null&&at-last>=fallback)))return;
+    if(!(forced||missed||due()||(fallback!==null&&at-last>=fallback&&fallbackWhen())))return;
     const lastRun=last,wasForced=forced,wasMissed=missed;
     forced=false;missed=false;busy=true;last=at;
     const run=async c=>{let ok=true;try{ok=(await job(c))!==false;}catch{ok=false;}finally{settle(ok);}};

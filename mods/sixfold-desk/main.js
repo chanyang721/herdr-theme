@@ -313,7 +313,8 @@ export default class SixfoldDesk extends View {
     // Opt-in local status read only. These peers are not hc connections.
     let computersBusy=false, computersAt=0;
     cx.timer.every(1000,cx=>{
-      if(!this.computers?.tailscale || computersBusy || Date.now()-computersAt<15000)return;
+      // Only the sidebar shows peers: a hidden one asks nothing and catches up when shown.
+      if(!this.computers?.tailscale || this.sidebarVisible===false || computersBusy || Date.now()-computersAt<15000)return;
       const lastComputers=computersAt;
       computersBusy=true;computersAt=Date.now();
       // A rejected spawn is not a poll: the next tick may try again.
@@ -371,7 +372,8 @@ export default class SixfoldDesk extends View {
       this.collaborationWork=work;
       if(started)this.collaborationPoll?.kick(cx);
     }));
-    this.collaborationPoll=createPoll(cx,{every:2000,fallback:COLLABORATION_FALLBACK_MS,
+    // The fallback only catches a missed ledger event, so it waits while the sidebar is hidden.
+    this.collaborationPoll=createPoll(cx,{every:2000,fallback:COLLABORATION_FALLBACK_MS,fallbackWhen:()=>this.sidebarVisible!==false,
       due:()=>Boolean(this.collaborationScript)&&this.collaborationWork,
       job:async()=>{
         if(!this.collaborationScript)return;

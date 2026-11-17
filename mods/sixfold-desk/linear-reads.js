@@ -57,4 +57,4 @@ export async function checkReads({read = readTextFile, folder = `${appHome()}/da
   if (confirmed) confirmedHook?.();
   return changed;
 }
-export const READ_POLL_MS = 500;   // only while a mark is pending: the confirmed state shows within about a second
+export const READ_POLL_MS = 1000;   // only while a mark is pending and the panel is shown: the confirmed state shows within about a second
