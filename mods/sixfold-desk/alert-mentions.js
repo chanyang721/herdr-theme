@@ -23,3 +23,6 @@ export function setSpaceMentions(items, names = []) {
   mentionsBySpace = next;
 }
 export const spaceMentions = project => mentionsBySpace.get(projectKey(project)) ?? [];
+// A new object on every load: alerts.js publishes sixfold.alertItems together with this call,
+// so it doubles as the tracked feed's version (alert-inbox.js reads that feed once per load).
+export const mentionsEpoch = () => mentionsBySpace;
