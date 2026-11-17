@@ -269,6 +269,12 @@ export default class SixfoldDesk extends View {
     this.startLiveMessages=()=>{
       if(this.stopLiveMessages||typeof herdrNative.messageEvents!=='function'||!this.sidebarVisible)return;
       this.deliverLiveMessages??=events=>{this.nativeMessages=events;refresh(cx);};
+      // Read the log now, before the first refresh, which runs ahead of the sampler's
+      // first delivery. With an empty copy (on load) or the copy from before the window
+      // was hidden (a sidebar file changed meanwhile), that refresh set the watermark
+      // too low and the delivery replayed old sends together: up to twelve recent ones
+      // on load, every hidden send instead of the latest three on return.
+      try{const events=herdrNative.messageEvents();if(Array.isArray(events))this.nativeMessages=events;}catch{/* The sampler delivers it. */}
       this.stopLiveMessages=subscribeLiveEvents({key:`${appHome()}:messages`,cx,read:()=>herdrNative.messageEvents(),onChange:events=>fileReceiver.enqueue(this.deliverLiveMessages,events),intervalMs:1000});
     };
     this.startLiveMessages();refresh(cx);
