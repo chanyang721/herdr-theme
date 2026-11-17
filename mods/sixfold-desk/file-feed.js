@@ -140,7 +140,14 @@ export function createFileHub(adapter){
           metrics.lastPaths=(Array.isArray(batch)?batch:[]).filter(path=>typeof path==='string').slice(0,16).map(path=>path.slice(0,500));
           if(disposed||token!==watchToken){metrics.ignoredBatches++;return;}
           const paths=new Map();
-          for(const path of Array.isArray(batch)?batch:[]){if(typeof path==='string'&&path&&!paths.has(keyOf(path)))paths.set(keyOf(path),path);}
+          // Folders nobody subscribes to but that churn (adapter.ignore) are dropped first.
+          const ignored=(adapter.ignore??[]).map(keyOf);
+          for(const path of Array.isArray(batch)?batch:[]){
+            if(typeof path!=='string'||!path)continue;
+            const key=keyOf(path);
+            if(!paths.has(key)&&!ignored.some(prefix=>key===prefix||key.startsWith(prefix+'/')))paths.set(key,path);
+          }
+          if(!paths.size){metrics.ignoredBatches++;continue;}
           const affected=[...entries.values()].filter(entry=>[...paths.keys()].some(path=>path===rootKey||path===entry.key||entry.key.startsWith(path+'/')));
           metrics.matchedFiles+=affected.length;
           // Re-arm the native wait immediately. Other mods may share the same
