@@ -53,7 +53,7 @@ test('repair eligibility matches the native local-space rules and uses document 
   ], [documentPane('inactive-docs'), {tab: 'renamed-docs', mod: 'terminal'}]), ['missing']);
 });
 
-test('failed installs back off, a newly missing space retries immediately, and successful repairs retry if not yet reflected', async () => {
+test('failed installs back off, a newly missing space retries immediately, and a repair not yet reflected backs off', async () => {
   const h = runtime({spaces: [space('local')], panes: []});
   h.state.result = {code: 1}; h.create(); await h.settle();
   for (let at = 5000; at < 30000; at += 5000) await h.tick(at);
@@ -61,7 +61,10 @@ test('failed installs back off, a newly missing space retries immediately, and s
   await h.tick(30000); assert.equal(h.state.calls.length, 2);
   h.state.spaces.push(space('new')); h.state.result = {code: 0};
   await h.tick(35000); assert.equal(h.state.calls.length, 3, 'changed missing-space set bypasses a prior failure backoff');
-  await h.tick(40000); assert.equal(h.state.calls.length, 4, 'an unreflected successful repair is retried');
+  await h.tick(40000); assert.equal(h.state.calls.length, 3, 'an unreflected successful repair waits at least 30 s');
+  await h.tick(65000); assert.equal(h.state.calls.length, 4, 'and is retried');
+  await h.tick(120000); assert.equal(h.state.calls.length, 4, 'the same missing set waits twice as long');
+  await h.tick(125000); assert.equal(h.state.calls.length, 5);
 });
 
 test('a rejected spawn and thrown helper both release shared repair state', async () => {

@@ -95,7 +95,8 @@ test('new Linear alerts become arrivals into their space (Share otherwise); no s
     .replace("'./arrival-store.js'", `'${storeUrl}'`).replace("'./arrival-model.js'", `'${modelUrl}'`)
     .replace("'./alert-model.js'", `'${new URL('../mods/sixfold-desk/alert-model.js', import.meta.url).href}'`)
     .replace("'./linear-reads.js'", `'${await linearReadsUrl()}'`)
-    .replace("'./watch-guard.js'", `'${new URL('../mods/sixfold-desk/watch-guard.js', import.meta.url).href}'`);
+    .replace("'./watch-guard.js'", `'${new URL('../mods/sixfold-desk/watch-guard.js', import.meta.url).href}'`)
+    .replace("'./shared-publish.js'", `'${new URL('../mods/sixfold-desk/shared-publish.js', import.meta.url).href}'`);
   source = `const {${Object.keys(globalThis.__linearRuntime).join(',')}} = globalThis.__linearRuntime;\n` + source;
   const store = await import(storeUrl);
   const flush = async () => { for (let n = 0; n < 20; n++) { const due = [...timers]; timers.clear(); due.forEach(t => t.callback(cx)); await Promise.all(tasks.splice(0)); await Promise.resolve(); if (!timers.size && !tasks.length) return; } assert.fail('did not settle'); };

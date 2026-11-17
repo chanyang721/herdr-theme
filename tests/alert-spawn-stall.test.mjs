@@ -66,7 +66,8 @@ async function linearHarness() {
     .replace("'./arrival-model.js'", `'${new URL('../mods/sixfold-desk/arrival-model.js', import.meta.url).href}'`)
     .replace("'./alert-model.js'", `'${new URL('../mods/sixfold-desk/alert-model.js', import.meta.url).href}'`)
     .replace("'./linear-reads.js'", `'${await linearReadsUrl()}'`)
-    .replace("'./watch-guard.js'", `'${new URL('../mods/sixfold-desk/watch-guard.js', import.meta.url).href}'`);
+    .replace("'./watch-guard.js'", `'${new URL('../mods/sixfold-desk/watch-guard.js', import.meta.url).href}'`)
+    .replace("'./shared-publish.js'", `'${new URL('../mods/sixfold-desk/shared-publish.js', import.meta.url).href}'`);
   source = `const {${Object.keys(runtime).join(',')}} = globalThis[${JSON.stringify(key)}];\n` + source;
   const module = await import('data:text/javascript;base64,' + Buffer.from(source).toString('base64') + '#' + key);
   const store = await import(storeUrl);
@@ -119,10 +120,10 @@ test('Linear: a refresh whose native read never settles stops blocking after LOA
   try {
     h.health('a'); await h.flush();
     h.control.hang = 1;                                                       // the next ledger read never settles
-    h.health('b'); await h.flush();
-    assert.equal(h.shared['sixfold.linearHealth'].last_success, 'b', 'publishing runs before the hung ledger read');
+    h.feed([{id: 'n1', read: true, category: 'mentions', workspace: 'Alpha'}]); await h.flush();   // a feed change reads the ledger; health alone does not
+    assert.deepEqual(h.shared['sixfold.linearItems'].map(i => i.id), ['n1'], 'publishing runs before the hung ledger read');
     h.feed([{id: 'n2', read: false, category: 'mentions', workspace: 'Alpha'}]); await h.flush();
-    assert.deepEqual(h.shared['sixfold.linearItems'], [], 'still held by the hung refresh');
+    assert.deepEqual(h.shared['sixfold.linearItems'].map(i => i.id), ['n1'], 'still held by the hung refresh');
     now += h.module.LOAD_STUCK_MS + 1;
     h.health('d'); await h.flush();
     assert.deepEqual(h.shared['sixfold.linearItems'].map(i => i.id), ['n2'], 'a later change runs again');
@@ -156,16 +157,17 @@ test('Linear: restoring the last published inputs while a run is stuck keeps the
   const realNow = Date.now; let now = realNow(); Date.now = () => now;
   const stop = h.module.watchLinear({}, h.cx);
   try {
-    h.health('A'); await h.flush();
+    const seen = id => [{id, read: true, category: 'mentions', workspace: 'Alpha'}];   // read: no popup, so no ledger write
+    h.health('A'); h.feed(seen('a')); await h.flush();
     const read = gate(); h.control.holdRead = read.promise;
-    h.health('B'); await h.flush();                                           // no new alert, so no ledger write follows
-    assert.equal(h.shared['sixfold.linearHealth'].last_success, 'B', 'the stuck run published what it read');
+    h.feed(seen('b')); await h.flush();                                       // a feed change reads the (held) ledger
+    assert.deepEqual(h.shared['sixfold.linearItems'].map(i => i.id), ['b'], 'the stuck run published what it read');
     now += h.module.LOAD_STUCK_MS + 1;
-    h.health('A'); await h.flush();                                           // back to the published inputs
+    h.feed(seen('a')); await h.flush();                                       // back to the published inputs
     read.open(); await new Promise(r => setTimeout(r, 10)); await h.flush();
-    assert.equal(h.shared['sixfold.linearHealth'].last_success, 'A', 'the restored inputs are published again');
-    h.health('C'); await h.flush();
-    assert.equal(h.shared['sixfold.linearHealth'].last_success, 'C', 'later changes still publish');
+    assert.deepEqual(h.shared['sixfold.linearItems'].map(i => i.id), ['a'], 'the restored inputs are published again');
+    h.feed(seen('c')); await h.flush();
+    assert.deepEqual(h.shared['sixfold.linearItems'].map(i => i.id), ['c'], 'later changes still publish');
   } finally { Date.now = realNow; stop(); h.done(); }
 });
 
@@ -186,7 +188,8 @@ test('Slack alerts: after one refused spawn the next change still publishes', as
     readJsonSnapshot: async name => snapshot(name),
     readTextFile: async name => files.get(name.split('/').at(-1)) ?? null,
     writeTextFile: async (name, value, expected) => { const key = name.split('/').at(-1); if ((files.get(key) ?? null) !== expected) throw Error('conflict'); files.set(key, value); },
-    ...await import(new URL('../mods/sixfold-desk/watch-guard.js', import.meta.url).href)};
+    ...await import(new URL('../mods/sixfold-desk/watch-guard.js', import.meta.url).href),
+    ...await import(new URL('../mods/sixfold-desk/shared-publish.js', import.meta.url).href)};
   const key = `__alertStall${Math.random().toString(36).slice(2)}`;
   globalThis[key] = runtime;
   let source = (await readFile(new URL('../mods/sixfold-desk/alerts.js', import.meta.url), 'utf8')).replace(/\r?\n/g, '\n').replace(/^import .*;\n/gm, '');

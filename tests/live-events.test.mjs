@@ -84,3 +84,13 @@ test('closing the latest reader restores a surviving binding without another tim
   const reads=f.reads;f.set([{id:'surviving-reader'}]);f.sample();
   assert.equal(f.reads,reads+1);assert.equal(latestReads,1);assert.equal(f.timers.length,1);assert.equal(rows.at(-1)[0].id,'surviving-reader');first();
 });
+
+test('an equal fresh copy does not broadcast; a new event or a flipped started flag does',async()=>{
+  const f=setup(),rows=[],cx=f.context('shared');
+  f.set([{id:'a',seq:1,at:1,started:false}]);
+  const stop=subscribeLiveEvents({key:f.key,read:f.read,cx,onChange:value=>rows.push(value)});await tick();
+  f.set([{id:'a',seq:1,at:1,started:false}]);f.sample();assert.equal(rows.length,1);
+  f.set([{id:'a',seq:1,at:1,started:true}]);f.sample();assert.equal(rows.length,2,'a send confirmed in place');
+  f.set([{id:'a',seq:1,at:1,started:true},{id:'b',seq:2,at:2}]);f.sample();assert.equal(rows.length,3);
+  stop();
+});

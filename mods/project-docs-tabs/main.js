@@ -11,6 +11,9 @@ import { openView, viewAt, clampScale, clampView, toggleView, wheelStep, pinchSt
 import { listView, breadcrumb, icon } from './finder.js';
 
 const LIMIT = 400000;
+// No timed re-listing: folder watches and coming into view refresh the list. This
+// in-memory check only notices the tab coming into view (render does not run while hidden).
+const SHOWN_CHECK_MS = 2000;
 const STATE = 'sixfold.docs.selection.v1';
 // The native open_doc_tab helper writes the latest request; each space handles it once.
 const REQUEST = 'project-docs-open.json';
@@ -111,7 +114,19 @@ export default class ProjectDocuments extends View {
     // A 열람 tab's id carries its path, so it survives a reload of this mod.
     if (this.selected?.startsWith('opened-')) this.reveal(this.selected.slice('opened-'.length));
     this.refresh(cx);
-    cx.timer.every(5000, cx => this.refresh(cx));
+    this.shown = this.visible();
+    cx.timer.every(SHOWN_CHECK_MS, cx => {
+      const shown = this.visible();
+      if (shown && (!this.shown || this.stale)) { this.stale = false; this.refresh(cx); }
+      this.shown = shown;
+    });
+  }
+
+  // This space is shown with its document tab in front, in a visible window.
+  visible() {
+    if (typeof hostWindow === 'function' && hostWindow()?.visible === false) return false;
+    const space = spaces().find(s => s.id === this.spaceId), tab = space?.active ? space.tabs?.find(t => t.active) : null;
+    return Boolean(tab) && panes().some(p => p.mod === 'project-docs-tabs' && p.tab === tab.id);
   }
 
   invoke(args = []) { return invoke(this.resolverCommand, ['--config', this.config, '--space', this.spaceId, ...args]); }
@@ -177,7 +192,7 @@ export default class ProjectDocuments extends View {
             // Ignore our installer lock and unrelated generated data in this
             // folder; otherwise a refresh can trigger its own next refresh.
             if (root === dirname(this.config) && !changed.some(path => path === root || path.endsWith('/' + this.config.split('/').pop()) || path.endsWith('/' + REQUEST))) continue;
-            this.refresh(cx);
+            if (this.visible()) this.refresh(cx); else this.stale = true;   // a hidden tab refreshes when shown
           }
         } catch { this.watchers.delete(root); }
       });

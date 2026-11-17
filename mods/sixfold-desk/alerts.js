@@ -7,6 +7,7 @@ import {addArrival,hasArrivalHost} from './arrival-store.js';
 import {arrivalTarget,ARRIVAL} from './arrival-model.js';
 import {createRetry,watchRecorder} from './watch-guard.js';
 import {setSpaceMentions} from './alert-mentions.js';
+import {createSharedPublisher,slackHealthView} from './shared-publish.js';
 
 const SHOWN = new Set(['needs-you']);  // Only what a person must decide; the rest stays in the project.
 const MARKS = { 'needs-you': '!', info: '✓', processing: '●' };
@@ -73,7 +74,9 @@ export function watchAlerts(view, cx) {
   const base=`${appHome()}/data/sixfold`;
   const inputs=[['legacy','alerts.json',()=>({items:[]})],['tracked','project-alerts.json',()=>({items:[]})],['read','slack-alerts-read.json',()=>({})],['mentions','slack-mentions.json',()=>({items:[]})],['health','slack-live-health.json',()=>({})],['workflows','slack-workflows.json',()=>({jobs:{}})]];
   const cached=new Map(),subscriptions=[];
-  let loading=false,loadingAt=0,run=0,previous,disposed=false,scheduled=null,dirty=false,version=0;
+  let loading=false,loadingAt=0,run=0,previous,disposed=false,scheduled=null,dirty=false,version=0,popupSeen=null,legacyToken=null,mentionsKey=null;
+  // Each key is written only when it changed: a health heartbeat no longer rewrites the item arrays.
+  const publish=createSharedPublisher(setShared);
   const allowed=()=>!disposed&&view.sidebarVisible!==false;
   // A refresh whose native read or write never settles stops holding the next one after ALERT_LOAD_STUCK_MS.
   const busy=()=>loading&&Date.now()-loadingAt<ALERT_LOAD_STUCK_MS;
@@ -110,26 +113,37 @@ export function watchAlerts(view, cx) {
     // Release here; the next input change retries (no immediate retry against a refusing host).
     try{(context??cx).spawn(async cx => {
       try {
-        const get=key=>cached.get(key).value;
+        // Values and their tokens come from one snapshot, so a token never vouches for an older value.
+        const snapshot=new Map(inputs.map(([key])=>[key,cached.get(key)]));
+        const get=key=>snapshot.get(key).value,token=key=>snapshot.get(key).token;
+        // The popup ledger depends only on mentions and read state; a health or workflow change skips it.
+        const popupSignature=JSON.stringify([token('mentions'),token('read')]);
         const legacy=get('legacy'),feed=get('tracked'),read=get('read'),mentions=get('mentions'),health=get('health'),workflows=get('workflows');
         const items = feed.items ?? [];
         const tagged=mentions.items ?? [];
         const states=workflows.jobs ?? {};
         // Once the ledger write returns these mentions are seen for every run, so they are delivered
         // even when this run was replaced meanwhile (the replacement already saw them as seen).
-        held.push(...await notifyNewPopupEvents(popupEvents(tagged,read),live));
-        deliver(!live());
+        if(popupSignature!==popupSeen){
+          held.push(...await notifyNewPopupEvents(popupEvents(tagged,read),live));
+          deliver(!live());
+        }
         if(!live())return;
-        setShared('sixfold.slackHealth',health);
-        setShared('sixfold.slackWorkflows',states);
-        setShared('sixfold.alertItems',items);
-        setShared('sixfold.alertRead',read);
-        setShared('sixfold.alertProjects',feed.projects ?? []);
-        setSpaceMentions(tagged,(spaces?.()??[]).map(s=>s.name));   // a space's mentions count on its card too (alert-inbox.js; off-sidebar ones on Share); module state, not shared
-        view.alerts = legacy.items ?? [];
-        previous = signature;
-        cx.notify();
-        view.panelRetained?.alertsChanged?.();   // the cards' meta lines show the new counts
+        // Readers outside this file (alert-inbox.js, panel-retained.js, the Slack inbox mod) read
+        // these keys with shared(), so they stay in shared.json; only changed keys are written.
+        let changed=publish('sixfold.slackHealth',slackHealthView(health),token('health'));
+        changed=publish('sixfold.slackWorkflows',states,token('workflows'))||changed;
+        changed=publish('sixfold.alertItems',items,token('tracked'))||changed;
+        changed=publish('sixfold.alertRead',read,token('read'))||changed;
+        changed=publish('sixfold.alertProjects',feed.projects ?? [],token('tracked'))||changed;
+        const names=(spaces?.()??[]).map(s=>s.name),placed=JSON.stringify([token('mentions'),names]);
+        if(placed!==mentionsKey){setSpaceMentions(tagged,names);mentionsKey=placed;changed=true;}   // a space's mentions count on its card too (alert-inbox.js; off-sidebar ones on Share); module state, not shared
+        if(token('legacy')!==legacyToken){view.alerts = legacy.items ?? [];legacyToken=token('legacy');changed=true;}
+        previous = signature;popupSeen=popupSignature;
+        if(changed){
+          cx.notify();
+          view.panelRetained?.alertsChanged?.();   // the cards' meta lines show the new counts
+        }
         retry.ok();
       } catch(error) { if(mine===run)retry.fail(error); /* also retried on the next input/ledger change or activation */ }
       finally { if(mine===run){loading = false;if(dirty)schedule();} }

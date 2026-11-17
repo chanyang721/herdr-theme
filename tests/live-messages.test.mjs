@@ -7,7 +7,7 @@ import {createHash} from 'node:crypto';
 // Exercise the real sidebar lifecycle without a GUI. No filesystem change or
 // focus event is needed for native memory events. Legacy files arrive through
 // the same typed subscriptions as other sidebar state, not a read timer.
-for (const native of [false,true]) test(`background messages refresh through ${native?'native 500ms memory sampling':'typed legacy file subscriptions'} without focus changes`, async () => {
+for (const native of [false,true]) test(`background messages refresh through ${native?'native 1 s memory sampling':'typed legacy file subscriptions'} without focus changes`, async () => {
   let log = JSON.stringify({events:[]});
   let notifications = 0;
   let pinText='{}';
@@ -55,9 +55,9 @@ for (const native of [false,true]) test(`background messages refresh through ${n
   source=source.replace("'./panel-host.js'",JSON.stringify(new URL('../mods/sixfold-desk/panel-host.js',import.meta.url).href));
   source=classicPanelImports(source).replace("'./panel-model.js'",JSON.stringify(new URL('../mods/sixfold-desk/panel-model.js',import.meta.url).href));
   source=source.replace("import {createRetainedPanel} from './panel-retained.js';",'const createRetainedPanel=()=>null;');
-  for(const name of ['task-feed-source','task-issue-state'])source=source.replace(`'./${name}.js'`,JSON.stringify(new URL(`../mods/sixfold-desk/${name}.js`,import.meta.url).href));
+  for(const name of ['task-feed-source','task-issue-state','poll'])source=source.replace(`'./${name}.js'`,JSON.stringify(new URL(`../mods/sixfold-desk/${name}.js`,import.meta.url).href));
   source=source.replace("import {createRetainedCards} from './retained-cards.js';",'const createRetainedCards=()=>({begin(){},card(_id,_signature,build){return build();},end(){},dispose(){}});');
-  source=source.replace(/import .* from '.\/panel-io.js';/,'const {subscribeJsonFile,readJsonSnapshot,fileDelivery,FILE_CHANGED_COMMAND}=globalThis.__sixfoldTest;');
+  source=source.replace(/import .* from '.\/panel-io.js';/,'const {subscribeJsonFile,readJsonSnapshot,fileDelivery,FILE_CHANGED_COMMAND}=globalThis.__sixfoldTest,subscribeFileChanges=()=>()=>{};');
   let filesSource=(await readFile(new URL('../mods/sixfold-desk/sidebar-files.js',import.meta.url),'utf8')).replace(/import .* from '.\/panel-io.js';/,'const {subscribeJsonFile}=globalThis.__sixfoldTest;');
   filesSource+=`\n// native=${native}`;
   const filesUrl='data:text/javascript;base64,'+Buffer.from(filesSource).toString('base64');
@@ -92,7 +92,7 @@ for (const native of [false,true]) test(`background messages refresh through ${n
   const publishFiles=()=>{const previous=ownership;ownership='watcher';for(const [path,callback] of subscriptions)callback(snapshot(path));ownership=previous;};
   publishFiles();await settle();
   assert.deepEqual(view.messageEvents,[]);
-  const sampler=timers.find(item=>item.ms===500&&item.options?.owner===null);
+  const sampler=timers.find(item=>item.ms===1000&&item.options?.owner===null);
   assert.equal(Boolean(sampler),native,'only a native in-memory event source needs a sampler');
   assert.equal(subscriptions.has('/app/data/sixfold/messages.json'),!native);
   const enqueue=()=>{const previous=ownership;ownership='watcher';if(native)sampler.callback(cx);publishFiles();ownership=previous;};
@@ -148,7 +148,7 @@ for (const native of [false,true]) test(`background messages refresh through ${n
   await visibilityEvent(true);
   assert.equal(view.sidebarVisible,true);
   assert.deepEqual([...view.activeFlows,...view.pendingFlows].map(flow=>flow.id),hidden.slice(-3).map(flow=>flow.id),'showing replays only the latest three hidden sends, in order');
-  if(native)assert.equal(timers.filter(item=>item.ms===500&&item.options?.owner===null).at(-1).cancelled,false,'shown event resumes one native sampler');
+  if(native)assert.equal(timers.filter(item=>item.ms===1000&&item.options?.owner===null).at(-1).cancelled,false,'shown event resumes one native sampler');
   view.stopLiveMessages?.();for(const stop of view.fileSubscriptions)stop();assert.equal(subscriptions.size,0);
   delete globalThis.__sixfoldTest;
 });

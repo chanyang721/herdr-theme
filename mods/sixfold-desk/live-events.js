@@ -8,6 +8,14 @@ function immutable(value,seen=new Set()){
 }
 const done=task=>{try{return !task||(typeof task.is_done==='function'&&task.is_done());}catch{return true;}};
 const cancel=task=>{try{task?.cancel?.();}catch{/* A retired source may already have released the timer. */}};
+// The log only appends and flips `started` on a send: its length, newest entry and started
+// count tell a change without serialising every event on every sample.
+export function eventStamp(events){
+  let started=0;
+  for(const event of events)if(event?.started===true)started++;
+  const last=events.at(-1);
+  return `${events.length}|${last?.seq??''}|${last?.id??''}|${last?.at??''}|${last?.source??''}|${last?.target??''}|${started}`;
+}
 
 export function subscribeLiveEvents({key,read,cx,onChange,intervalMs=500}){
   if(typeof key!=='string'||!key)throw new TypeError('A live-event key is required');
@@ -40,7 +48,7 @@ export function subscribeLiveEvents({key,read,cx,onChange,intervalMs=500}){
     const sample=()=>{
       if(disposed||!subscribers.size)return;
       let next,stamp;
-      try{next=reader();if(!Array.isArray(next))return;stamp=JSON.stringify(next);}catch{return;}
+      try{next=reader();if(!Array.isArray(next))return;stamp=eventStamp(next);}catch{return;}
       if(stamp===signature)return;
       signature=stamp;value=immutable(next);
       for(const listener of [...subscribers])deliver(listener,value,signature);

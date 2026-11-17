@@ -32,13 +32,13 @@ import {TASK_FEED_FILE,createTaskFeedSource} from './task-feed-source.js';
 import {issueRequest,saveIssueRequest} from './task-issue-state.js';
 import {createRetainedPanel} from './panel-retained.js';
 import {taskComputerAnchors,taskComputerRecord} from './panel-host.js';
-import {subscribeJsonFile,readJsonSnapshot,fileDelivery,FILE_CHANGED_COMMAND} from './panel-io.js';
+import {subscribeJsonFile,subscribeFileChanges,fileDelivery,FILE_CHANGED_COMMAND} from './panel-io.js';
 import {watchSidebarFiles} from './sidebar-files.js';
 import {orderSpaceCards,spaceBadges,lineBadges,metaBadges} from './sidebar-meta.js';
 import {watchMic,paneMic,paneMicChip,MIC_KEY} from './mic.js';
 import {subscribeLiveEvents} from './live-events.js';
 import {createRetainedCards} from './retained-cards.js';
-import {createHash} from 'crypto';
+import {createPoll,changeGate} from './poll.js';
 
 const hasPanel=node=>node?.id==='panel'||(node?.children||[]).some(hasPanel);
 const native = () => `${appHome()}/scripts/sixfold/herdr-theme${(typeof window==='function' && window()?.platform==='windows') || /^(?:[A-Za-z]:[\\/]|\\\\)/.test(appHome())?'.exe':''}`;
@@ -84,6 +84,14 @@ const FLOW_GAP_MS = 320, FLOW_REAL_GAP_MS = 1200, FLOW_MIN_GAP_MS = 90;
 const FLOW_CATCH_UP = 4, FLOW_BACKLOG = 12, FLOW_TRAVEL_MS = 1600;
 // Sends made while the sidebar was hidden: on return, at most this many, this recent.
 const FLOW_RESUME = 3, FLOW_RESUME_MS = 60000;
+// The focus-queue voice plugin uses voice-focus.json only while it is younger than 2.5 s
+// (app_backend.py focus(), rust voice/queue.rs app_focus). Unchanged focus is rewritten this
+// often, safely inside that window; a change is written on the next 500 ms sample.
+const VOICE_HEARTBEAT_MS = 1500;
+// Ledger states `collaborate drain` acts on (rust automation/collaboration.rs drain and
+// refresh_harness). With none of them it runs only on the fallback.
+const COLLABORATION_WORK = new Set(['pending','sending','sent','uncertain','harness_managed']);
+const COLLABORATION_FALLBACK_MS = 60000;
 const flowOrder = (a, b) => (Number.isSafeInteger(a.seq) && Number.isSafeInteger(b.seq) && a.seq !== b.seq ? a.seq - b.seq : 0) || (a.at ?? 0) - (b.at ?? 0);
 function departureGap(event, next, waiting) {
   if (waiting > FLOW_CATCH_UP) return Math.max(FLOW_MIN_GAP_MS, Math.round(FLOW_GAP_MS * FLOW_CATCH_UP / waiting));
@@ -181,18 +189,20 @@ export default class SixfoldDesk extends View {
       if(changed&&(!this.panelRetained||first))cx.notify();
     });
     this.fileSubscriptions.push(subscribeJsonFile(cx,`${appHome()}/${TASK_FEED_FILE}`,snapshot=>receiveTaskFeed('task',snapshot)));
-    this.fileSubscriptions.push(subscribeJsonFile(cx,`${appHome()}/shared.json`,snapshot=>{
-      if(snapshot.status!=='ready')return;
-      this.panelTrackingActive=Boolean(this.panelState.feed)&&shared('sixfold.panel.enabled')!==false;
-      this.syncCardActivity?.();
+    // shared.json (~740 KB) is rewritten on every setShared. Only the change matters here: the few
+    // keys below are read from the host's own copy, never by reading and freezing the whole file.
+    this.fileSubscriptions.push(subscribeFileChanges(cx,`${appHome()}/shared.json`,()=>{
+      const tracking=Boolean(this.panelState.feed)&&shared('sixfold.panel.enabled')!==false;
+      if(tracking!==this.panelTrackingActive){
+        this.panelTrackingActive=tracking;
+        this.syncCardActivity?.();
+        this.panelRetained?.setEnabled(tracking);
+      }
       this.startLiveMessages?.();
-      this.panelRetained?.setEnabled(this.panelTrackingActive);
-      this.panelRetained?.preferences();
-      this.panelRetained?.alertsChanged?.();   // shared workspace badges sit on task meta lines
+      this.panelRetained?.preferences();       // compares its own key (motion, theme, width)
+      this.panelRetained?.alertsChanged?.();   // shared workspace badges sit on task meta lines; redraws only changed marks
     }));
-    this.fileSubscriptions.push(subscribeJsonFile(cx,`${appHome()}/settings.json`,snapshot=>{
-      if(snapshot.status==='ready')this.panelRetained?.preferences();
-    }));
+    this.fileSubscriptions.push(subscribeFileChanges(cx,`${appHome()}/settings.json`,()=>this.panelRetained?.preferences()));
     this.projectDocs=null;
     watchDocs(this,cx);
     this.alerts = [];
@@ -259,7 +269,7 @@ export default class SixfoldDesk extends View {
     this.startLiveMessages=()=>{
       if(this.stopLiveMessages||typeof herdrNative.messageEvents!=='function'||!this.sidebarVisible)return;
       this.deliverLiveMessages??=events=>{this.nativeMessages=events;refresh(cx);};
-      this.stopLiveMessages=subscribeLiveEvents({key:`${appHome()}:messages`,cx,read:()=>herdrNative.messageEvents(),onChange:events=>fileReceiver.enqueue(this.deliverLiveMessages,events),intervalMs:500});
+      this.stopLiveMessages=subscribeLiveEvents({key:`${appHome()}:messages`,cx,read:()=>herdrNative.messageEvents(),onChange:events=>fileReceiver.enqueue(this.deliverLiveMessages,events),intervalMs:1000});
     };
     this.startLiveMessages();refresh(cx);
     // The slow dot on a computer link turns at the ends of its pipe. A native loop
@@ -321,26 +331,28 @@ export default class SixfoldDesk extends View {
         } finally {computersBusy=false;cx.notify();}
       });
     });
-    // Kept on disk so a restart does not count the whole message log as unread.
-    let readBusy=false;
-    cx.timer.every(1000,cx=>{
-      if(this.sidebarVisible===false||!this.messageEvents?.length||readBusy)return;
-      readBusy=true;
-      spawnOrRelease(cx,()=>{readBusy=false;},async cx=>{
+    // Kept on disk so a restart does not count the whole message log as unread. Runs when the
+    // events, focus or finished agents change; the 5 s fallback covers reads due by time alone
+    // (HANDLED_AFTER_MS) and another copy's write.
+    const readInputs=changeGate();
+    this.readPoll=createPoll(cx,{every:1000,fallback:5000,
+      visible:()=>this.sidebarVisible!==false&&Boolean(this.messageEvents?.length),
+      due:()=>{
+        const events=this.messageEvents??[],last=events.at(-1);
+        return readInputs(`${events.length}|${last?.seq??''}|${last?.at??''}|${focused()?.terminal??''}|${agents().filter(a=>a.status==='idle'||a.status==='done').map(a=>a.address).join(',')}`);
+      },
+      job:async cx=>{
         try{
           const path=`${appHome()}/data/sixfold/messages-read.json`;
           const old=await readTextFile(path).catch(()=>null);
-          const ledger=await readJsonSnapshot(path);
-          if(old!==null&&ledger.hash!==createHash('sha256').update(old).digest('hex'))return;
-          const saved=ledger.status==='ready'?ledger.value||{}:{};
+          let saved={};
+          if(old!==null){const value=JSON.parse(old);if(value&&typeof value==='object'&&!Array.isArray(value))saved=value;}
           const next=readThrough(this.messageEvents??[],agents(),focused()?.terminal,{...this.readMessages,...saved},Date.now());
           const text=JSON.stringify(next);
           if(text!==old)await writeTextFile(path,text,old);
-          if(text!==JSON.stringify(this.readMessages)){this.readMessages=next;cx.notify();}
-        }catch{ /* Retry a partial or conflicting write on the next tick. */ }
-        finally{readBusy=false;}
-      });
-    });
+          if(text!==this.readMessagesText){this.readMessages=next;this.readMessagesText=text;cx.notify();}
+        }catch{ /* Retry a partial or conflicting write on the next change or fallback. */ }
+      }});
     cx.timer.every(2000, cx => {
       if (this.routeBusy || !this.routeScript || !this.queuedRoutes.some(item=>!item.hold)) return;
       this.routeBusy = true;
@@ -350,36 +362,53 @@ export default class SixfoldDesk extends View {
       });
     });
     // Registered work uses its own lease ledger; never infer tasks from speech or UI activity.
-    cx.timer.every(2000, cx => {
-      if (this.collaborationBusy || !this.collaborationScript) return;
-      this.collaborationBusy = true;
-      spawnOrRelease(cx, () => { this.collaborationBusy = false; }, async cx => {
+    // Drain runs every 2 s only while that ledger holds work it acts on, otherwise once a minute.
+    this.collaborationWork=true;   // until the ledger is read
+    this.fileSubscriptions.push(subscribeJsonFile(cx,`${appHome()}/data/sixfold/collaboration-tasks.json`,snapshot=>{
+      const tasks=snapshot.status==='ready'?snapshot.value?.tasks:null;
+      const work=snapshot.status==='missing'?false:!tasks||typeof tasks!=='object'||Object.values(tasks).some(task=>COLLABORATION_WORK.has(task?.state));
+      const started=work&&!this.collaborationWork;
+      this.collaborationWork=work;
+      if(started)this.collaborationPoll?.kick(cx);
+    }));
+    this.collaborationPoll=createPoll(cx,{every:2000,fallback:COLLABORATION_FALLBACK_MS,
+      due:()=>Boolean(this.collaborationScript)&&this.collaborationWork,
+      job:async()=>{
+        if(!this.collaborationScript)return;
         try { await invokeHelper(this.collaborationScript,'collaborate',['drain']); }
         catch { /* The durable lease prevents blind retry after ambiguous delivery. */ }
-        finally { this.collaborationBusy = false; }
-      });
-    });
+      }});
     // Optional voice integration is opt-in and runs only from this one sidebar.
     // Focus is sampled by a timer, never changed by rendering background rows.
-    let voiceBusy=false, voiceActionBusy=false, voiceKey=null;
+    let voiceBusy=false, voiceActionBusy=false, voiceKey=null, voiceText=null, voiceAt=0;
     cx.timer.every(500,cx=>{
       const config=this.sidebarFiles?.voice;
       if(!config?.script&&!config?.command)return;
       if(voiceBusy)return;
+      let state,text;
+      try {
+        const f=focused(), facts=terminals(), current=facts.find(x=>x.address===f?.terminal);
+        state={active:window().active,terminal:f?.terminal,
+          source:current?.labels?.['sixfold.source-pane'],
+          panes:agents().filter(a=>!facts.find(x=>x.address===a.address)?.labels?.['sixfold.source-pane'])
+            .filter(a=>['claude','codex'].includes(a.program?.key))
+            .map(a=>({pane_id:`app:${a.address}`,agent:a.program.key,agent_status:a.status}))};
+        text=JSON.stringify(state);
+      } catch { return; }
+      const key=JSON.stringify([state.active,state.terminal,state.source]);
+      // Unchanged focus is only a heartbeat; nothing to do until it is due.
+      if(text===voiceText&&Date.now()-voiceAt<VOICE_HEARTBEAT_MS&&(key===voiceKey||voiceActionBusy))return;
       voiceBusy=true;
       spawnOrRelease(cx,()=>{voiceBusy=false;},async cx=>{
         try {
           if(!config?.script && !config?.command)return;
-          const f=focused(), facts=terminals(), current=facts.find(x=>x.address===f?.terminal);
-          const state={at:Date.now(),active:window().active,terminal:f?.terminal,
-            source:current?.labels?.['sixfold.source-pane'],
-            panes:agents().filter(a=>!facts.find(x=>x.address===a.address)?.labels?.['sixfold.source-pane'])
-              .filter(a=>['claude','codex'].includes(a.program?.key))
-              .map(a=>({pane_id:`app:${a.address}`,agent:a.program.key,agent_status:a.status}))};
-          const path=`${appHome()}/data/sixfold/voice-focus.json`;
-          const old=await readTextFile(path);
-          await writeTextFile(path,JSON.stringify(state),old);
-          const key=JSON.stringify([state.active,state.terminal,state.source]);
+          const at=Date.now();
+          if(text!==voiceText||at-voiceAt>=VOICE_HEARTBEAT_MS){
+            const path=`${appHome()}/data/sixfold/voice-focus.json`;
+            const old=await readTextFile(path);
+            await writeTextFile(path,JSON.stringify({at,...state}),old);
+            voiceText=text;voiceAt=at;
+          }
           if(key!==voiceKey && !voiceActionBusy){
             const lastKey=voiceKey;
             voiceKey=key;voiceActionBusy=true;
@@ -466,6 +495,7 @@ export default class SixfoldDesk extends View {
     this.classicCards?.dispose();
     this.stopArrivals?.();
     this.linkFlowTimer?.cancel();this.linkWakeTimer?.cancel();this.cometTimer?.cancel();
+    this.readPoll?.stop();this.collaborationPoll?.stop();
     for(const stop of this.fileSubscriptions||[])stop();
     this.fileSubscriptions=[];this.stopLiveMessages?.();this.stopLiveMessages=null;this.panelRetained?.dispose();
   }
