@@ -99,16 +99,20 @@ function rootFor(path,directory=false){
   if(match)return match[1];
   throw new RangeError('External JSON subscriptions require an explicit directory subscription');
 }
-// Paths under these app-home folders never reach subscribers: the harness rewrites its local
-// state many times a minute. The watch itself stays on the app home because shared.json and
-// settings.json live at its root and a folder watch is always recursive.
-export const IGNORED_FOLDERS=['data/sixfold/harness-local'];
+// App-home folders whose paths never reach subscribers: settings `sixfold.watchIgnore`, a list of
+// folders relative to the app home, for local tools that rewrite their state many times a minute.
+// The watch itself stays on the app home because shared.json and settings.json live at its root
+// and a folder watch is always recursive.
+export function ignoredFolders(){
+  const list=native.settings?.()?.['sixfold.watchIgnore'];
+  return Array.isArray(list)?list.filter(folder=>typeof folder==='string'&&folder&&!folder.includes('..')):[];
+}
 function hubFor(root=native.appHome()){
   externalRoot(root); // Never turn a malformed configuration into a volume watch.
   const home=native.appHome();
   return getSharedFileHub({
     root,appHome:home,readJson,watch:folder=>native.watchFolder(folder),
-    ignore:root===home?IGNORED_FOLDERS.map(folder=>`${home}/${folder}`):[],
+    ignore:root===home?ignoredFolders().map(folder=>`${home}/${folder}`):[],
     start:(body,options,owner)=>owner.spawn(body,options),
     schedule:(ms,fn,owner)=>owner.timer.after(ms,fn,{owner:null}),
     onError:()=>{metrics.errors++;},
