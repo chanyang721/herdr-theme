@@ -219,8 +219,6 @@ export function cardView(view,card,state,color,computerNames,t,motion,rowEntitie
   const memory=state.packets.some(event=>event.kind==='memory'&&event.to===space.id&&event.phase==='ping');
   const box=v_flex().id(`panel-space-${space.id}`).relative().flex_none().min_w(0);
   if(!bodyOnly)box.ml(8).mr(RIGHT).mb(10).rounded(6).border(1).border_color(sharing?color:t.border).bg(t.chrome);
-  if(!bodyOnly&&sharing&&motion)box.child(div().id(`panel-breath-${space.id}`).absolute().top(0).left(0).right(0).bottom(0).rounded(6).border(1).border_color(color)
-    .loop('opacity',{from:0.35,to:1,period:2800,easing:'ease-in-out'}));
   if(!bodyOnly)box.child(h_flex().h(PANEL_GEOMETRY.header).flex_none().px(7).gap(4).items_center().rounded(5).bg(selected?t.selected:t.surface)
     .border_l(3).border_color(color).when(Boolean(space.native),e=>e.cursor_pointer().on_click(()=>run('space.select',{id:space.native.id})))
     .child(spaceIcon(t.muted)).child(text(space.name,t.foreground,compact?11:12).font_bold().flex_1().min_w(0).tooltip(space.name))
@@ -310,17 +308,14 @@ export function route(id,a,b,color,{dashed=false,packet=null,motion=false,relati
     return base;
   }
   if(dashed){
-    // Dashes remain visible for the lifetime of a connection. A short pulse,
-    // exactly as wide as the line, travels slowly down it and stops short of
-    // the far stub, so nothing sticks out of the pipe; it is not a message packet.
+    // Dashes remain visible for the lifetime of a connection. They carry no
+    // pulse: a forever loop kept GPUI redrawing the window every frame.
     const radius=Math.min(3,height/2);
     for(let y=radius;y<height-radius;y+=8)base.child(div().absolute().left(lane).top(y).w(1).h(Math.min(3,height-radius-y)).bg(color));
     for(const y of [0,height])for(let x=0;x<lane-radius;x+=7)base.child(div().absolute().left(x).top(y).w(Math.min(4,lane-radius-x)).h(2).bg(color));
     // Stepped pixel elbows join the dashes to the vertical run.
     const u=pixelUnit(),x=snap(lane,u);
     for(const [dx,y] of [[-3,0],[-2,1],[-1,2],[-3,height],[-2,height-1],[-1,height-2]])base.child(pixelBlock(x+dx*u,snap(y,u),u,u,color));
-    if(motion&&!relation&&height>LINK_PULSE)base.child(div().id(`panel-link-dot-${id}`).absolute().left(lane).w(1).h(LINK_PULSE).bg(color)
-      .loop('top',{from:0,to:height-LINK_PULSE,period:16000,easing:'linear'}));
   }else if(packet){
     base.child(pixelRoute(a.y-top,b.y-top,lane,startX,endX,color,undefined,`panel-line-${id}`)
       .opacity(packet.phase==='fade'?0.2:1).when(motion,e=>e.transition('opacity',900)));

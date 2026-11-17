@@ -1,14 +1,14 @@
 import { div, PathBuilder } from 'gpui-kit';
-import { FLOW, BREATH, borderPath, cometTarget } from './collab-flow.js';
+import { FLOW, borderPath, cometTarget } from './collab-flow.js';
 
 // ⑪ The collaborating box's border, drawn over the box (absolute: nothing moves or reflows).
 // Removing these layers from the render stops their loop/transition natively.
 
-// D: the group-coloured 2px border breathing (native opacity loop). Static without motion.
-export function breathingBorder({ id, color, period, motion, dim }) {
+// D: the group-coloured 2px border, drawn still: a forever opacity loop kept GPUI
+// redrawing the window every frame. `period` and `motion` stay for the caller's grouping.
+export function breathingBorder({ id, color, dim }) {
   const ring = div().id(`sf-breath-${id}`).absolute().top(-1).left(-1).right(-1).bottom(-1).rounded(7).border(2).border_color(color);
-  if (dim) return ring.opacity(FLOW.track);             // a comet runs on it: the faint track
-  return motion ? ring.loop('opacity', { from: BREATH.from, to: BREATH.to, period, easing: 'ease-in-out' }) : ring;
+  return dim ? ring.opacity(FLOW.track) : ring;         // dim: a comet runs on it, the faint track
 }
 
 // F: a comet around the border, like pipeline.js — each stage is a small clipping window that
