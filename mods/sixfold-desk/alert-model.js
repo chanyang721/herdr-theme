@@ -27,9 +27,19 @@ export function placeItems(items, names, fallback = 'Share') {
 // Issue fields the collector compares between runs; shown as "상태 Todo → Done".
 // (The Linear inbox mod keeps the same table: mods cannot import each other.)
 const CHANGE_LABEL = {issue_title: '제목', status: '상태', assignee: '담당', priority: '우선순위', due: '기한', project: '프로젝트'};
-export const changeLines = item => (Array.isArray(item?.changes) ? item.changes : [])
-  .filter(c => c && CHANGE_LABEL[c.field])
-  .map(c => `${CHANGE_LABEL[c.field]} ${c.from || '없음'} → ${c.to || '없음'}`);
+// A state-change notification's own before -> after, which the collector reads from Linear's issue
+// history (`state_change`). It wins over the between-runs diff; without it nothing earlier is guessed.
+export function stateChange(item) {
+  const c = item?.state_change;
+  return c && typeof c.to === 'string' && c.to ? {from: typeof c.from === 'string' ? c.from : '', to: c.to} : null;
+}
+const changeText = (label, from, to) => `${label} ${from || '없음'} → ${to || '없음'}`;
+export const changeLines = item => {
+  const own = stateChange(item);
+  return [...(own ? [changeText('상태', own.from, own.to)] : []),
+    ...(Array.isArray(item?.changes) ? item.changes : []).filter(c => c && CHANGE_LABEL[c.field] && !(own && c.field === 'status'))
+      .map(c => changeText(CHANGE_LABEL[c.field], c.from, c.to))];
+};
 const LINEAR_CATEGORY = {assignments: '배정', mentions: '멘션', comments: '댓글', commentsAndReplies: '댓글', reviews: '리뷰', documentChanges: '문서', statusChanges: '상태 변경', reminders: '알림', reactions: '반응', subscriptions: '구독', triage: '분류'};
 export const linearCategory = item => LINEAR_CATEGORY[item?.category] || '알림';
 
@@ -66,8 +76,8 @@ export const kindTone = (kind, t) => ({new: t.ansi2, comment: t.accent, reply: t
 export function alertLine(item) {
   const first = value => String(value ?? '').split('\n')[0].slice(0, 200);
   const subtitle = first(item?.subtitle), {kind} = alertKind(item);
-  const status = (Array.isArray(item?.changes) ? item.changes : []).find(c => c?.field === 'status');
-  if (kind === 'status' && status) return `상태 ${status.from || '없음'} → ${status.to || '없음'}`;
+  const status = stateChange(item) || (Array.isArray(item?.changes) ? item.changes : []).find(c => c?.field === 'status');
+  if (kind === 'status' && status) return changeText('상태', status.from, status.to);
   if (kind === 'assign') { const by = /^Assigned by (.+)$/i.exec(subtitle)?.[1]; if (by) return `${by} 님이 배정`; }
   if (kind === 'new') return [subtitle.replace(/^Created by /i, '만든 사람 ') || '새 이슈', item?.project].filter(Boolean).join(' · ');
   if (kind === 'due') {
@@ -129,7 +139,7 @@ export const groupReadTargets = (items, space, query = '') => alertedIssues(item
   .flatMap(entry => issueReadTargets(items, space, entry.key)).slice(0, READ_LIMIT);
 // Changes only when an issue's unread alerts change: part of the card key.
 export const issueAlertSignature = (items, space) => linearScoped(items, space).filter(i => !i.read && i.issue)
-  .map(i => JSON.stringify([i.issue, i.id, i.subtitle || '', i.changed_at || i.at || '', i.changes || [], i.comments?.[0]?.body || '', i.url || '', i.issue_title || '', i.title || ''])).sort().join(',');
+  .map(i => JSON.stringify([i.issue, i.id, i.subtitle || '', i.changed_at || i.at || '', i.changes || [], i.state_change || null, i.comments?.[0]?.body || '', i.url || '', i.issue_title || '', i.title || ''])).sort().join(',');
 
 // The issues of a space with unread Linear alerts, for the shared "알림 온 이슈"
 // group of the issue search: every tab shows the same group, whether or not the

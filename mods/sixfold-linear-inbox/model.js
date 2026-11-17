@@ -71,9 +71,19 @@ export function issueLine(item) {
 // Before→after of issue fields that changed between collector runs.
 // (Same table as sixfold-desk/alert-model.js: mods cannot import each other.)
 const CHANGE_LABEL = {issue_title: '제목', status: '상태', assignee: '담당', priority: '우선순위', due: '기한', project: '프로젝트'};
-export const changeLines = item => (Array.isArray(item?.changes) ? item.changes : [])
-  .filter(c => c && CHANGE_LABEL[c.field])
-  .map(c => `${CHANGE_LABEL[c.field]} ${c.from || '없음'} → ${c.to || '없음'}`);
+// A state-change notification's own before -> after (`state_change`, from Linear's issue history) wins
+// over the between-runs status diff. Same as sixfold-desk/alert-model.js.
+const stateChange = item => {
+  const c = item?.state_change;
+  return c && typeof c.to === 'string' && c.to ? {from: typeof c.from === 'string' ? c.from : '', to: c.to} : null;
+};
+const changeText = (label, from, to) => `${label} ${from || '없음'} → ${to || '없음'}`;
+export const changeLines = item => {
+  const own = stateChange(item);
+  return [...(own ? [changeText('상태', own.from, own.to)] : []),
+    ...(Array.isArray(item?.changes) ? item.changes : []).filter(c => c && CHANGE_LABEL[c.field] && !(own && c.field === 'status'))
+      .map(c => changeText(CHANGE_LABEL[c.field], c.from, c.to))];
+};
 export function requestId(now = Date.now(), random = Math.random) {
   return `${now.toString(36)}-${random().toString(36).slice(2, 10).padEnd(8, '0')}`;
 }
