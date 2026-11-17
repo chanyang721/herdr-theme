@@ -73,11 +73,11 @@ test('one start per issue: none while running, none within three minutes',()=>{
   assert.deepEqual(startPick(config,null),{provider:'claude',tier:'high'});
   assert.deepEqual(startPick(config,{provider:'codex',tier:'bogus'}),{provider:'codex',tier:'high'});
   assert.equal(startPick(null,{provider:'codex'}),null);
-  const a=startSignature({startKey:'DEMO-1',startPick:{provider:'codex',tier:'low'},starts:new Map()});
-  const b=startSignature({startKey:'DEMO-1',startPick:{provider:'codex',tier:'low'},starts:new Map([['DEMO-1',{running:true}]])});
-  const c=startSignature({startKey:'DEMO-1',startPick:{provider:'codex',tier:'low'},starts:new Map([['DEMO-1',{running:false,text:'보냄'}]])});
-  assert.equal(new Set([a,b,c,startSignature({startKey:'DEMO-2'}),startSignature({startKey:'DEMO-1',startPick:{provider:'claude',tier:'low'}})]).size,5,
-    'unfolding, picking and each result change the redraw key');
+  const a=startSignature({detail:'DEMO-1',startPick:{provider:'codex',tier:'low'},starts:new Map()});
+  const b=startSignature({detail:'DEMO-1',startPick:{provider:'codex',tier:'low'},starts:new Map([['DEMO-1',{running:true}]])});
+  const c=startSignature({detail:'DEMO-1',startPick:{provider:'codex',tier:'low'},starts:new Map([['DEMO-1',{running:false,text:'보냄'}]])});
+  assert.equal(new Set([a,b,c,startSignature({detail:'DEMO-2'}),startSignature({detail:'DEMO-1',startPick:{provider:'claude',tier:'low'}})]).size,5,
+    'the open detail, picking and each result change the redraw key');
 });
 
 test('a value cannot become an option, a long space is cut, and a grown argument is checked again',()=>{
@@ -217,3 +217,51 @@ async function view(){
   const source=(await local('task-issues-view')).replace("'./issue-detail-view.js'",JSON.stringify(detailView));
   return import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}#${loads++}`);
 }
+
+const detailOf=key=>({key,title:`Title of ${key}`,status:null,fields:[],alerts:[],description:'',loaded:true,error:null,comments:[],agents:[],url:''});
+const popoverWith=async extra=>{const {issuePopover}=await view();return issuePopover({id:'d',open:true,trigger:element(),scope:'week',rows,...extra},theme);};
+
+test('a row press opens the detail as before; the list has no start area or › button',async()=>{
+  const details=[];
+  const tree=await popoverWith({onDetail:key=>details.push(key),onStart(){},onStartPick(){}});
+  click(byId(tree,'task-issue-d-DEMO-1'));assert.deepEqual(details,['DEMO-1']);
+  assert(!byId(tree,'task-issue-open-d-DEMO-1'));assert(!byId(tree,'task-issue-start-d-DEMO-1'));
+  assert(!walk(tree).some(node=>String(call(node,'id')?.[1]||'').startsWith('task-issue-wrap-')));
+});
+
+test('the detail shows the start area right under its title, the rest below',async()=>{
+  const calls=[];
+  const tree=await popoverWith({detail:detailOf('DEMO-1'),onDetail(){},
+    start:{config,pick:{provider:'claude',tier:'high'},entry:null,blocked:false},
+    onStartPick:(kind,id)=>calls.push(['pick',kind,id]),onStart:key=>calls.push(['start',key])});
+  const body=byId(tree,'task-issue-detail-d'),area=byId(tree,'task-issue-start-d-DEMO-1');
+  assert(area,'start area in the detail');assert(!byId(tree,'task-issues-list-d'),'the detail replaces the list');
+  const order=body.nodes.filter(node=>typeof node==='object');
+  const title=order.findIndex(node=>node.nodes.includes('Title of DEMO-1'));
+  assert(title>=0);assert.equal(order[title+1],area,'right under the title');
+  assert(order.findIndex(node=>Boolean(byId(node,'task-issue-detail-open-d')))>title+1,'the detail buttons stay below');
+  for(const word of ['Claude','Codex','낮음','중간','높음','최고','작업 시작'])assert(words(area).includes(word),word);
+  const picked=byId(area,'task-issue-start-provider-d-DEMO-1-claude'),other=byId(area,'task-issue-start-provider-d-DEMO-1-codex');
+  assert.equal(call(picked,'border_color')[1],theme.accent);assert.equal(call(other,'border_color')[1],theme.border);
+  click(other);click(byId(area,'task-issue-start-tier-d-DEMO-1-max'));click(byId(area,'task-issue-start-go-d-DEMO-1'));
+  assert.deepEqual(calls,[['pick','provider','codex'],['pick','tier','max'],['start','DEMO-1']]);
+  const plain=await popoverWith({detail:detailOf('DEMO-1'),onDetail(){}});
+  assert(!byId(plain,'task-issue-start-d-DEMO-1'),'no start wiring: no area');
+});
+
+test('the detail start area shows sending, the result, the guard, and a missing setting',async()=>{
+  let starts=0;
+  const at=async start=>byId(await popoverWith({detail:detailOf('DEMO-2'),onDetail(){},onStart:()=>starts++,onStartPick(){},start}),'task-issue-start-d-DEMO-2');
+  const go=area=>byId(area,'task-issue-start-go-d-DEMO-2');
+  const sending=await at({config,pick:config.defaults,entry:{running:true},blocked:true});
+  assert(words(sending).includes('보내는 중…'));click(go(sending));
+  assert(!call(byId(sending,'task-issue-start-provider-d-DEMO-2-codex'),'on_click'),'no change while sending');
+  const sent=await at({config,pick:config.defaults,entry:{running:false,ok:true,text:'보냄 · Demo · opus'},blocked:true});
+  assert.deepEqual(words(byId(sent,'task-issue-start-result-d-DEMO-2')),['보냄 · Demo · opus']);
+  assert.equal(call(go(sent),'tooltip')?.[1],'방금 시작 요청한 이슈입니다 · 3분 뒤 다시 누를 수 있습니다');click(go(sent));
+  const free=await at({config,pick:config.defaults,entry:{running:false,ok:false,text:'안 보냄 · busy'},blocked:false});
+  assert(words(free).includes('안 보냄 · busy'));assert.equal(call(go(free),'tooltip'),undefined);click(go(free));
+  assert.equal(starts,1,'only the unguarded press starts');
+  const none=await at({config:null,pick:null,entry:null,blocked:false});
+  assert.deepEqual(words(none),['작업 시작 설정 없음']);assert(!go(none));
+});

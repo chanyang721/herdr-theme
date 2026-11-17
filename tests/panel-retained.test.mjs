@@ -329,6 +329,70 @@ test('an open issue search asks again as its answer gets old (within a minute); 
   }finally{r.controller.dispose();Date.now=original;delete globalThis.__retainedWrites;delete globalThis.__retainedRead;}
 });
 
+test('작업 시작: a row press opens the detail with the start area under its title, [작업 시작] runs the set command once and shows its result',async()=>{
+  const config={v:1,command:'/opt/demo/start',args:['{space}','{issue} {title}','{provider}','{tier}'],
+    providers:[{id:'claude',label:'Claude'},{id:'codex',label:'Codex'}],tiers:[{id:'mid',label:'중간'},{id:'high',label:'높음'}],default:{provider:'claude',tier:'high'}};
+  globalThis.__retainedFiles={'/home/data/sixfold/issue-start.json':JSON.stringify(config)};
+  const ran=[];let answer;globalThis.__retainedExec=(command,args,options)=>{ran.push([command,args,options]);return new Promise(resolve=>{answer=resolve;});};
+  const r=await runtime(),tasks=[],t=r.native.theme();
+  try{
+    r.controller.cx.spawn=fn=>{tasks.push(fn());};const settle=async()=>{while(tasks.length)await tasks.shift();};
+    const raw=makePanelFixture({tool:'linear'});raw.spaces[0].name='Demo';
+    r.controller.apply(cleanPanelFeed(raw),'ready');r.flush();
+    const space=r.controller.spaceMap.get(raw.spaces[0].id),card=r.controller.cards.get(space.id);
+    // The popover's surface is passed to content(), not child(): walk both.
+    const walk=n=>[n,...[...(n.nodes||[]),...(n.calls||[]).filter(c=>c[0]==='content').map(c=>c[1])].filter(x=>x&&typeof x==='object').flatMap(walk)];
+    const byId=(tree,id)=>walk(tree).find(n=>n.calls?.some(c=>c[0]==='id'&&c[1]===id));
+    const texts=tree=>walk(tree).flatMap(n=>(n.nodes||[]).filter(x=>typeof x==='string'));
+    const press=node=>node.calls.find(c=>c[0]==='on_click')[1]({},{stop_propagation(){}});
+    const popup=()=>r.controller.issuePopover(r.controller.spaceMap.get(space.id),element(),t);
+    popup().calls.find(c=>c[0]==='on_open_change')[1](true,{});await settle();r.flush();
+    assert.equal(r.controller.startConfig.command,'/opt/demo/start','the setting is read when the search opens');
+    const before=r.controller.alertMark(space);
+    press(byId(popup(),`task-issue-${space.id}-DEMO-12`));
+    assert.equal(r.controller.issueStates.get(space.id).detail,'DEMO-12');assert(card.dirty,'the card redraws');
+    assert.notEqual(r.controller.alertMark(space),before,'the redraw key follows the open detail');
+    r.flush();
+    let tree=popup();assert(byId(tree,`task-issue-detail-${space.id}`));assert(byId(tree,`task-issue-start-${space.id}-DEMO-12`));
+    assert(!byId(tree,`task-issues-list-${space.id}`),'the detail replaces the list');
+    press(byId(tree,`task-issue-start-provider-${space.id}-DEMO-12-codex`));r.flush();
+    press(byId(popup(),`task-issue-start-go-${space.id}-DEMO-12`));
+    assert(texts(byId(popup(),`task-issue-start-${space.id}-DEMO-12`)).includes('보내는 중…'));
+    const pending=tasks.shift();await Promise.resolve();await Promise.resolve();
+    // A second press while it runs sends nothing.
+    const go=byId(popup(),`task-issue-start-go-${space.id}-DEMO-12`);assert(!go.calls.some(c=>c[0]==='on_click'));
+    assert.deepEqual(ran,[['/opt/demo/start',['Demo','DEMO-12 Workspace search','codex','high'],{timeout:300000}]]);
+    answer({code:0,stdout:'{"outcome":"sent","task_id":"t-1","target":"Demo · Codex","model":"gpt"}\n'});await pending;r.flush();
+    tree=popup();
+    assert.deepEqual(texts(byId(tree,`task-issue-start-result-${space.id}-DEMO-12`)),['보냄 · Demo · Codex · gpt']);
+    assert(!byId(tree,`task-issue-start-go-${space.id}-DEMO-12`).calls.some(c=>c[0]==='on_click'),'guarded for three minutes');
+    // One redraw when the three-minute guard ends.
+    const guardTimer=r.timers.filter(timer=>!timer.cancelled&&timer.ms>170000&&timer.ms<=180100);
+    assert.equal(guardTimer.length,1);r.flush();assert(!card.dirty);guardTimer[0].fn();assert(card.dirty,'redrawn as the guard ends');r.flush();
+    // Reopened while guarded: armed again for that issue; closed: that timer is cancelled.
+    popup().calls.find(c=>c[0]==='on_open_change')[1](false,{});await settle();
+    popup().calls.find(c=>c[0]==='on_open_change')[1](true,{});await settle();r.flush();
+    const again=r.timers.filter(timer=>!timer.cancelled&&timer.ms>170000&&timer.ms<=180100&&timer!==guardTimer[0]);
+    assert.equal(again.length,1,'reopening arms the guard timer again');
+    popup().calls.find(c=>c[0]==='on_open_change')[1](false,{});await settle();
+    assert(again[0].cancelled,'closing cancels the guard timer');
+    popup().calls.find(c=>c[0]==='on_open_change')[1](true,{});await settle();r.flush();
+    // Another issue's detail: its own pick (the default) and no result line of the first.
+    press(byId(popup(),`task-issue-${space.id}-DEMO-12`));r.flush();
+    press(byId(popup(),`task-issue-start-provider-${space.id}-DEMO-12-codex`));r.flush();
+    press(byId(popup(),`task-issue-detail-back-${space.id}`));r.flush();
+    press(byId(popup(),`task-issue-${space.id}-DEMO-18`));r.flush();
+    tree=popup();
+    const claude=byId(tree,`task-issue-start-provider-${space.id}-DEMO-18-claude`);
+    assert(claude.calls.some(c=>c[0]==='border_color'&&c[1]===t.accent),'the default pick for a new detail');
+    assert.deepEqual(texts(byId(tree,`task-issue-start-result-${space.id}-DEMO-18`)).filter(Boolean),[],'no result line of the first issue');
+    // Closing drops the detail and its lines; the guard stays.
+    popup().calls.find(c=>c[0]==='on_open_change')[1](false,{});
+    const state=r.controller.issueStates.get(space.id);assert.equal(state.detail,null);assert.equal(state.startPick,null);assert.equal(state.starts.size,0);
+    assert.equal(ran.length,1);
+  }finally{r.controller.dispose();delete globalThis.__retainedFiles;delete globalThis.__retainedExec;}
+});
+
 test('작업 시작: a blocked answer lets the issue be pressed again at once, with no guard timer',async()=>{
   const config={v:1,command:'/opt/demo/start',args:['{issue} {title}'],providers:[{id:'claude'}],tiers:[{id:'high'}]};
   globalThis.__retainedFiles={'/home/data/sixfold/issue-start.json':JSON.stringify(config)};
