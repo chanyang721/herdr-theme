@@ -116,3 +116,16 @@ test('collaborate drain runs every tick only while the ledger holds work, else o
  view.sidebarVisible=true;await run(60000);assert.equal(drains,7,'shown again: the fallback resumes');
 });
 
+test('peer status is asked only while the sidebar is shown, and catches up when it is',async()=>{
+ const block=source.match(/    let computersBusy=false, computersAt=0;\n[\s\S]*?\n    \}\);\n/)[0];
+ let tick,calls=0,now=100000;const pending=[];
+ const view={computers:{tailscale:true},tailscalePeers:[],sidebarVisible:false};
+ const cx={timer:{every(_ms,fn){tick=fn;}},notify(){},spawn(task){pending.push(task(cx));}};
+ new Function('cx','spawnOrRelease','exec','native','Date',block).call(view,cx,spawnOrRelease,
+  async()=>{calls++;return {code:0,stdout:'{"peers":[]}'};},()=>'demo-helper',{now:()=>now});
+ const run=async ms=>{now+=ms;tick(cx);await Promise.all(pending.splice(0));};
+ await run(0);await run(20000);assert.equal(calls,0,'hidden: no helper run');
+ view.sidebarVisible=true;await run(1000);assert.equal(calls,1,'shown: asks at once');
+ await run(1000);assert.equal(calls,1,'then at most every 15 s');
+ await run(15000);assert.equal(calls,2);
+});
