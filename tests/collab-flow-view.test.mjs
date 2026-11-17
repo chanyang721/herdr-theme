@@ -29,10 +29,11 @@ const {breathingBorder, borderComet} = await import('data:text/javascript;base64
 delete globalThis.__borderRuntime;
 const value = (node, name) => node.calls.find(call => call[0] === name)?.[1];
 
-test('the real border uses a native opacity loop only while motion is enabled and no comet runs', () => {
+test('the real border is a still 2px ring, faint under a comet, and never loops', () => {
   const options = {id: 'game', color: '#A9B8FF', period: 2700, motion: true};
-  const loop = breathingBorder(options).calls.find(call => call[0] === 'loop');
-  assert.deepEqual(loop, ['loop', 'opacity', {from: BREATH.from, to: BREATH.to, period: 2700, easing: 'ease-in-out'}]);
+  const on = breathingBorder(options);
+  assert(!on.calls.some(call => call[0] === 'loop'), 'no forever loop even with motion on');
+  assert.equal(value(on, 'border'), 2);
   const off = breathingBorder({...options, motion: false});
   assert(!off.calls.some(call => call[0] === 'loop'));
   assert.equal(value(off, 'border'), 2);

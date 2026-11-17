@@ -34,10 +34,10 @@ async function runtime(motion=false,options={}){
   const statusSource=transform(await readFile(new URL('../mods/sixfold-desk/session-status.js',import.meta.url),'utf8'))
     .replace("'./collab-flow.js'",JSON.stringify(new URL('../mods/sixfold-desk/collab-flow.js',import.meta.url).href));
   view=view.replace("'./session-status.js'",JSON.stringify(`data:text/javascript;base64,${Buffer.from(statusSource).toString('base64')}#${loads++}`));
-  for(const name of ['panel-model','collab-flow','panel-host'])view=view.replace(`'./${name}.js'`,JSON.stringify(new URL(`../mods/sixfold-desk/${name}.js`,import.meta.url).href));
+  for(const name of ['panel-model','collab-flow','panel-host','motion'])view=view.replace(`'./${name}.js'`,JSON.stringify(new URL(`../mods/sixfold-desk/${name}.js`,import.meta.url).href));
   const viewUrl=`data:text/javascript;base64,${Buffer.from(view).toString('base64')}#${loads++}`;
   let source=transform(await readFile(new URL('../mods/sixfold-desk/panel-retained.js',import.meta.url),'utf8'));
-  for(const name of ['panel-model','collab-flow','panel-host'])source=source.replace(`'./${name}.js'`,JSON.stringify(new URL(`../mods/sixfold-desk/${name}.js`,import.meta.url).href));
+  for(const name of ['panel-model','collab-flow','panel-host','motion'])source=source.replace(`'./${name}.js'`,JSON.stringify(new URL(`../mods/sixfold-desk/${name}.js`,import.meta.url).href));
   source=source.replace("'./panel-view.js'",JSON.stringify(viewUrl));
   source=source.replace("'./alert-model.js'",JSON.stringify(new URL('../mods/sixfold-desk/alert-model.js',import.meta.url).href));
   source=source.replace("'./linear-reads.js'",JSON.stringify(await linearReadsUrl()));

@@ -3,6 +3,7 @@ import {h_flex, v_flex} from 'gpui-base';
 import {spaces, panes, shared, setShared, run, settings} from 'herdr';
 import {agentGroups, panelEventStates, panelSpaces, panelSpacePartners, PANEL_TIMING, PANEL_LEGS, agentRowState, agentHasReason, agentReason, agentCleanupLabel, agentWaitLabel} from './panel-model.js';
 import {SESSION_STATES, sessionStatusGlyph} from './session-status.js';
+import {motionEnabled, motionToggled, motionLabel, briefWindow} from './motion.js';
 import {groupColors, paletteMode} from './collab-flow.js';
 import {rowDetailParts} from './task-row-details.js';
 import {PACKET_PIXELS, pixelUnitFor, snap, centred, pixelBlock, pixelRoute as drawPixelRoute, pixelRing, pixelArrival, pixelLanding, ARRIVAL} from './pixel.js';
@@ -30,6 +31,18 @@ export function panelReasonWake(feed,now){
   let at=null;
   for(const agent of (feed?.spaces||[]).flatMap(space=>space.agents)){const next=agentReason(agent,now).nextAt;if(next!==null&&next>now&&(at===null||next<at))at=next;}
   return at;
+}
+// A row's animated status image plays only for the brief window after its state
+// changes (motion.js); otherwise the still PNG. Sets view.animated, returns the wake.
+export function briefRows(view,feed,motion,now=Date.now()){
+  view.statusBrief??=briefWindow();
+  const animated=new Set();
+  for(const agent of (feed?.spaces||[]).flatMap(space=>space.agents)){
+    const state=agentRowState(agent);
+    if(view.statusBrief.active(agent.id,state,now)&&motion&&state&&SESSION_STATES[state].animated)animated.add(agent.id);
+  }
+  view.animated=animated;
+  return animated.size?view.statusBrief.nextAt(now):null;
 }
 export function panelCounts(feed){
   const counts={working:0,idle:0,blocked:0,done:0,total:0};
@@ -177,7 +190,7 @@ export function agentRow(view,agent,space,tag,state,color,t,motion){
   const remembered=agent.closing?.memory;
   // Error and quota marks still take the slot; otherwise a producer state draws
   // its glyph, held still during an event tag on this row.
-  const glyph=!detail.statusMark&&rowState&&!child?sessionStatusGlyph({state:rowState,reason:reasonText},t,{id:agent.id,size:12,motion,eventActive:Boolean(tag)}):null;
+  const glyph=!detail.statusMark&&rowState&&!child?sessionStatusGlyph({state:rowState,reason:reasonText},t,{id:agent.id,size:12,motion:motion&&Boolean(view.animated?.has(agent.id)),eventActive:Boolean(tag)}):null;
   if(glyph)line.child(div().id(`panel-status-${agent.id}`).w(12).flex_none().child(glyph));
   else if(!child||detail.statusMark)line.child(div().id(`panel-status-${agent.id}`).w(9).flex_none().text_size(10)
     .text_color(detail.statusColor|| (status==='blocked'?t.blocked:status==='working'?color:t.dim))
@@ -206,8 +219,6 @@ export function cardView(view,card,state,color,computerNames,t,motion,rowEntitie
   const memory=state.packets.some(event=>event.kind==='memory'&&event.to===space.id&&event.phase==='ping');
   const box=v_flex().id(`panel-space-${space.id}`).relative().flex_none().min_w(0);
   if(!bodyOnly)box.ml(8).mr(RIGHT).mb(10).rounded(6).border(1).border_color(sharing?color:t.border).bg(t.chrome);
-  if(!bodyOnly&&sharing&&motion)box.child(div().id(`panel-breath-${space.id}`).absolute().top(0).left(0).right(0).bottom(0).rounded(6).border(1).border_color(color)
-    .loop('opacity',{from:0.35,to:1,period:2800,easing:'ease-in-out'}));
   if(!bodyOnly)box.child(h_flex().h(PANEL_GEOMETRY.header).flex_none().px(7).gap(4).items_center().rounded(5).bg(selected?t.selected:t.surface)
     .border_l(3).border_color(color).when(Boolean(space.native),e=>e.cursor_pointer().on_click(()=>run('space.select',{id:space.native.id})))
     .child(spaceIcon(t.muted)).child(text(space.name,t.foreground,compact?11:12).font_bold().flex_1().min_w(0).tooltip(space.name))
@@ -297,17 +308,14 @@ export function route(id,a,b,color,{dashed=false,packet=null,motion=false,relati
     return base;
   }
   if(dashed){
-    // Dashes remain visible for the lifetime of a connection. A short pulse,
-    // exactly as wide as the line, travels slowly down it and stops short of
-    // the far stub, so nothing sticks out of the pipe; it is not a message packet.
+    // Dashes remain visible for the lifetime of a connection. They carry no
+    // pulse: a forever loop kept GPUI redrawing the window every frame.
     const radius=Math.min(3,height/2);
     for(let y=radius;y<height-radius;y+=8)base.child(div().absolute().left(lane).top(y).w(1).h(Math.min(3,height-radius-y)).bg(color));
     for(const y of [0,height])for(let x=0;x<lane-radius;x+=7)base.child(div().absolute().left(x).top(y).w(Math.min(4,lane-radius-x)).h(2).bg(color));
     // Stepped pixel elbows join the dashes to the vertical run.
     const u=pixelUnit(),x=snap(lane,u);
     for(const [dx,y] of [[-3,0],[-2,1],[-1,2],[-3,height],[-2,height-1],[-1,height-2]])base.child(pixelBlock(x+dx*u,snap(y,u),u,u,color));
-    if(motion&&!relation&&height>LINK_PULSE)base.child(div().id(`panel-link-dot-${id}`).absolute().left(lane).w(1).h(LINK_PULSE).bg(color)
-      .loop('top',{from:0,to:height-LINK_PULSE,period:16000,easing:'linear'}));
   }else if(packet){
     base.child(pixelRoute(a.y-top,b.y-top,lane,startX,endX,color,undefined,`panel-line-${id}`)
       .opacity(packet.phase==='fade'?0.2:1).when(motion,e=>e.transition('opacity',900)));
@@ -416,11 +424,12 @@ export function panelFlowLayer(feed,layout,state,color,t,motion,width,gutter=nul
 
 export function renderPanelTracking(view,t,cx,{macTitlebar=false}={}){
   const feed=view.panelState.feed;
-  const motion=shared('sixfold.motion')!==false&&feed.reduced_motion!==true&&view.panelReducedMotion!==true;
+  const motion=motionEnabled(shared)&&feed.reduced_motion!==true&&view.panelReducedMotion!==true;
   const now=Date.now();
   const state=panelEventStates(feed,now,{previous:view.panelEvents,motion});view.panelEvents=state;view.now=now;
   let nextAt=state.nextAt;
   const reasonAt=panelReasonWake(feed,now);if(reasonAt!==null&&(nextAt===null||reasonAt<nextAt))nextAt=reasonAt;
+  const briefAt=briefRows(view,feed,motion,now);if(briefAt!==null&&(nextAt===null||briefAt<nextAt))nextAt=briefAt;
   for(const packet of state.packets)for(const offset of PANEL_LEGS.slice(1)){
     const at=packet.at+offset;if(at>now&&(nextAt===null||at<nextAt))nextAt=at;
   }
@@ -457,7 +466,7 @@ export function renderPanelTracking(view,t,cx,{macTitlebar=false}={}){
         .on_click(()=>setShared('sixfold.panel.enabled',false)).child('목록'))
       .child(div().id('panel-motion').text_size(10).text_color(t.dim).cursor_pointer()
         .tooltip(view.panelReducedMotion===true?'시스템 동작 줄이기 적용 중':'움직임 켜기/끄기')
-        .on_click(()=>setShared('sixfold.motion',shared('sixfold.motion')===false)).child(motion?'Motion on':'Motion off')))
+        .on_click(()=>setShared('sixfold.motion',motionToggled(shared))).child(motionLabel(motion))))
     .child(h_flex().h(32).px(12).gap(12).items_center().child(text(`◌ ${working}`,t.accent,12))
       .when(view.panelState.status!=='ready',e=>e.child(text(view.panelState.status==='stale'?'업데이트 대기':'최근 표시 유지',t.blocked,10))))
     .child(div().id('panel-scroll').flex_1().min_h(0).overflow_y_scroll().child(rows));

@@ -120,16 +120,20 @@ test('failed rereads keep the last successful same-file body and show a failure'
   assert.equal(h.view.bodyError, null); assert.equal(h.view.bodyText, 'recovered');
 });
 
-test('watcher events, five-second fallback and workspace tab activation reread documents', async t => {
+test('watcher events and coming into view reread documents; there is no timed re-listing', async t => {
   const h = await localViews(); t.after(() => h.view.close());
-  assert.ok(h.timer.has(5000)); assert.ok(h.watchers.has('/docs')); assert.ok(h.watchers.has('/app/data/sixfold'));
+  assert.ok(!h.timer.has(5000), 'no five-second resolver spawn'); assert.ok(h.timer.has(2000)); assert.ok(h.watchers.has('/docs')); assert.ok(h.watchers.has('/app/data/sixfold'));
   const initial = h.calls.length;
   h.watchers.get('/app/data/sixfold').resolve(['/app/data/sixfold/doc-tabs-install.lock']); await h.flush();
   assert.equal(h.calls.length, initial, 'installer locks must not trigger self-refresh loops');
   h.state.text = () => 'watch update'; h.watchers.get('/docs').resolve(['/docs/a.md']); await h.flush();
-  assert.equal(h.view.bodyText, 'watch update');
-  h.state.text = () => 'fallback update'; h.timer.get(5000)(h.cx); await h.flush(); assert.equal(h.view.bodyText, 'fallback update');
-  h.render(); const before = h.calls.length; h.state.active = true; h.render(); await h.flush(); assert.ok(h.calls.length > before);
+  assert.equal(h.calls.length, initial, 'a hidden tab only notes the change');
+  h.timer.get(2000)(h.cx); await h.flush(); assert.equal(h.calls.length, initial, 'still hidden: nothing runs');
+  h.state.active = true; h.timer.get(2000)(h.cx); await h.flush(); assert.equal(h.view.bodyText, 'watch update', 'shown: refreshed once');
+  const shown = h.calls.length; h.timer.get(2000)(h.cx); await h.flush(); assert.equal(h.calls.length, shown, 'staying shown runs nothing');
+  h.state.text = () => 'visible update'; h.watchers.get('/docs').resolve(['/docs/a.md']); await h.flush();
+  assert.equal(h.view.bodyText, 'visible update', 'a shown tab refreshes on the watch event');
+  h.state.active = false; h.render(); const before = h.calls.length; h.state.active = true; h.render(); await h.flush(); assert.ok(h.calls.length > before);
   const after = h.calls.length; h.render(); await h.flush(); assert.equal(h.calls.length, after);
 });
 

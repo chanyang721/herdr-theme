@@ -4,7 +4,7 @@ import {readFile} from 'node:fs/promises';
 
 test('project document index recovers after cold install and partial writes and follows active space', async()=>{
   let receive,active='Demo',notifications=0,unsubscribed=0,cancelled=0;const view={projectDocs:null};
-  const cx={notify(){notifications++;},timer:{every(ms){assert.equal(ms,30000);return {cancel(){cancelled++;}};}}};
+  const cx={notify(){notifications++;},timer:{every(ms){assert.equal(ms,5000);return {cancel(){cancelled++;}};}}};
   const collects=[];
   globalThis.__docsRuntime={appHome:()=>'/app',spaces:()=>[{id:active,name:active,active:true}],subscribeJsonFile:(context,path,callback)=>{assert.equal(context,cx);assert.equal(path,'/app/data/sixfold/project-docs-index.json');receive=callback;return()=>{unsubscribed++;};},exec:async(command,args)=>{collects.push([command,...args]);return {code:0};}};
   let source=await readFile(new URL('../mods/sixfold-desk/docs.js',import.meta.url),'utf8');
@@ -13,7 +13,7 @@ test('project document index recovers after cold install and partial writes and 
   try{
     const {watchDocs,currentDocs}=await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
     const stop=watchDocs(view,cx);await new Promise(resolve=>setImmediate(resolve));receive({status:'missing',hash:null,value:null});assert.equal(currentDocs(view.projectDocs),null);
-    assert.deepEqual(collects,[['/app/scripts/sixfold/herdr-theme','collect_docs']],'the index is rebuilt on start, then at most every 30 seconds');
+    assert.deepEqual(collects,[['/app/scripts/sixfold/herdr-theme','collect_docs']],'the index is rebuilt on start, then at most every two minutes');
     const data={version:1,spaces:{Demo:{folder:'/docs',files:[{name:'guide.md',path:'/docs/guide.md',mtime:12}]}}};
     const parse=JSON.parse;JSON.parse=()=>{throw Error('UI file parsing');};
     try{receive({status:'ready',hash:'first',value:data});receive({status:'ready',hash:'first',value:{...data}});receive({status:'invalid',hash:'partial',value:data});receive({status:'missing',hash:null,value:data});}finally{JSON.parse=parse;}
@@ -40,13 +40,35 @@ test('document collectors are shared per app home, never overlap and pause while
   const now=Date.now;Date.now=()=>at;
   try{
     for(let index=0;index<2;index++){
-      const view={projectDocs:null},cx={notify(){assert.fail('collector timer must not repaint');},timer:{every(ms,callback){assert.equal(ms,30000);timers.push(callback);return {cancel(){}};}}};views.push(view);tasks.push(watchDocs(view,cx));
+      const view={projectDocs:null},cx={notify(){assert.fail('collector timer must not repaint');},timer:{every(ms,callback){assert.equal(ms,5000);timers.push(callback);return {cancel(){}};}}};views.push(view);tasks.push(watchDocs(view,cx));
     }
     await new Promise(resolve=>setImmediate(resolve));assert.equal(collects.length,1);
-    at=30000;timers.forEach(callback=>callback());await new Promise(resolve=>setImmediate(resolve));assert.equal(collects.length,1,'a slow collector is not overlapped');
+    at=120000;timers.forEach(callback=>callback());await new Promise(resolve=>setImmediate(resolve));assert.equal(collects.length,1,'a slow collector is not overlapped');
     release();await new Promise(resolve=>setImmediate(resolve));
     views.forEach(view=>{view.panelTrackingActive=true;view.sidebarVisible=false;});timers.forEach(callback=>callback());await new Promise(resolve=>setImmediate(resolve));assert.equal(collects.length,1);
     views[1].sidebarVisible=true;timers.forEach(callback=>callback());await new Promise(resolve=>setImmediate(resolve));assert.equal(collects.length,2);
-    at=59999;timers.forEach(callback=>callback());await new Promise(resolve=>setImmediate(resolve));assert.equal(collects.length,2);
+    at=239999;timers.forEach(callback=>callback());await new Promise(resolve=>setImmediate(resolve));assert.equal(collects.length,2);
   }finally{Date.now=now;tasks.forEach(stop=>stop());delete globalThis.__docsCollectors;}
+});
+
+test('a document tab coming into view collects at once, at most every ten seconds',async()=>{
+  const timers=[],collects=[];let at=0,shown=false;
+  const runtime={appHome:()=>'/shown-demo',subscribeJsonFile:()=>()=>{},exec:async(...args)=>{collects.push(args);return {code:0};},
+    spaces:()=>[{id:'s',active:true,tabs:[{id:shown?'docs':'term',active:true}]}],panes:()=>[{tab:'docs',mod:'project-docs-tabs'},{tab:'term',terminal:'t'}]};
+  globalThis.__docsShown=runtime;
+  let source=(await readFile(new URL('../mods/sixfold-desk/docs.js',import.meta.url),'utf8')).replace(/\r\n/g,'\n').replace(/^import .*;\n/gm,'');
+  source='const {appHome,spaces,panes,exec,subscribeJsonFile}=globalThis.__docsShown;\n'+source;
+  const {watchDocs}=await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
+  const now=Date.now;Date.now=()=>at;
+  const settle=()=>new Promise(resolve=>setImmediate(resolve));
+  const tick=async ms=>{at=ms;timers.forEach(callback=>callback());await settle();};
+  try{
+    const stop=watchDocs({projectDocs:null},{notify(){},timer:{every(_ms,callback){timers.push(callback);return {cancel(){}};}}});await settle();
+    assert.equal(collects.length,1);
+    await tick(5000);await tick(10000);assert.equal(collects.length,1,'no tab shown: waits for two minutes');
+    shown=true;await tick(15000);assert.equal(collects.length,2,'the tab came into view');
+    shown=false;await tick(20000);shown=true;await tick(22000);assert.equal(collects.length,2,'shown again within ten seconds');
+    shown=false;await tick(30000);shown=true;await tick(35000);assert.equal(collects.length,3);
+    stop();
+  }finally{Date.now=now;delete globalThis.__docsShown;}
 });

@@ -26,22 +26,26 @@ export default class Tabs extends View {
     this.pressed = null;
     this.panels = JSON.parse(localStorage.getItem("panels") ?? "{}");
     // The model already tells us whether every local space has a document tab.
-    // Keep the five-second repair check, without launching a no-op installer on
-    // every tick. Copies of this mod share one in-flight repair per app home.
+    // Keep the five-second repair check (in-memory only), without launching a no-op
+    // installer on every tick. Copies of this mod share one in-flight repair per app home.
     const ensure = cx => {
       const missing = missingDocumentTabs(spaces(), panes());
       if (!missing.length) return;
       const key = appHome(), signature = JSON.stringify(missing);
       const ensurers = globalThis[ENSURERS] ?? (globalThis[ENSURERS] = new Map());
-      const state = ensurers.get(key) ?? { pending: false, signature: null, retryAt: 0 };
+      const state = ensurers.get(key) ?? { pending: false, signature: null, retryAt: 0, repeats: 0 };
       ensurers.set(key, state);
       if (state.pending || (state.signature === signature && Date.now() < state.retryAt)) return;
+      state.repeats = state.signature === signature && state.installed ? (state.repeats ?? 0) + 1 : 0;
       state.pending = true; state.signature = signature;
       const release = success => {
         state.pending = false;
-        // Older installations may not have enabled the document mod yet. Retry
-        // those failures less often; a newly missing space gets its own attempt.
-        state.retryAt = Date.now() + (success ? 5000 : 30000);
+        // Older installations may not have enabled the document mod yet: failures
+        // retry every 30 s. A successful install whose tab still does not show waits
+        // 30 s, then twice as long each time up to 5 min. A newly missing space gets
+        // its own attempt at once.
+        state.installed = success;
+        state.retryAt = Date.now() + (success ? Math.min(300000, 30000 * 2 ** Math.min(state.repeats, 4)) : 30000);
       };
       try {
         cx.spawn(async () => {
@@ -109,7 +113,7 @@ export default class Tabs extends View {
         .on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); if (!documents) openOverlay({ mod: "menu", kind: "popup", width: 200, props: { tab: "tab", target: { id: c.id, space: space.id } } }); })
         .when(Boolean(program?.icon), el => el.child(program.tint ? svg(program.icon).size(14).text_color(t.muted) : image(program.icon).size(14)))
         .child(div().max_w(170).truncate().child(c.zoomed ? `${name} Z` : name))
-        .when(c.status === "working", el => el.child(svg("mods/workspace-chrome/spinner.svg").size(12).flex_none().text_color(t.working).when(shared("sixfold.motion") !== false, e => e.spin(900))))
+        .when(c.status === "working", el => el.child(svg("mods/workspace-chrome/spinner.svg").size(12).flex_none().text_color(t.working)))
         .when(c.status === "blocked" || c.status === "done", el => el.child(div().size(6).rounded(3).bg(t[c.status])))
         .when(c.active && !documents, el => el.child(div().id(`close-${c.id}`).text_color(t.dim).on_mouse_down("left", stop).on_click((_e, cx) => { cx.stop_propagation(); run("tab.close", { id: c.id }); }).child(svg("mods/pane/close.svg").size(12))));
     };

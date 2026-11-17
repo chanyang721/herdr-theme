@@ -36,9 +36,9 @@ async function sidebar(runtime) {
   source=source.replace("'./panel-host.js'",JSON.stringify(new URL('../mods/sixfold-desk/panel-host.js',import.meta.url).href));
   source=classicPanelImports(source).replace("'./panel-model.js'",JSON.stringify(new URL('../mods/sixfold-desk/panel-model.js',import.meta.url).href));
   source=source.replace("import {createRetainedPanel} from './panel-retained.js';",'const createRetainedPanel=()=>null;');
-  for(const name of ['task-feed-source','task-issue-state'])source=source.replace(`'./${name}.js'`,JSON.stringify(new URL(`../mods/sixfold-desk/${name}.js`,import.meta.url).href));
+  for(const name of ['task-feed-source','task-issue-state','poll'])source=source.replace(`'./${name}.js'`,JSON.stringify(new URL(`../mods/sixfold-desk/${name}.js`,import.meta.url).href));
   source=source.replace("import {createRetainedCards} from './retained-cards.js';",'const createRetainedCards=()=>({begin(){},card(_id,_signature,build){return build();},end(){},dispose(){}});');
-  source=source.replace(/import .* from '.\/panel-io.js';/,'const subscribeJsonFile=()=>()=>{},readJsonSnapshot=async()=>({status:"missing",hash:null}),FILE_CHANGED_COMMAND="file-feed-changed",fileDelivery=()=>({enqueue:(callback,value)=>callback(value),flush(){}});')
+  source=source.replace(/import .* from '.\/panel-io.js';/,'const subscribeJsonFile=()=>()=>{},subscribeFileChanges=()=>()=>{},readJsonSnapshot=async()=>({status:"missing",hash:null}),FILE_CHANGED_COMMAND="file-feed-changed",fileDelivery=()=>({enqueue:(callback,value)=>callback(value),flush(){}});')
     .replace(/import .* from '.\/sidebar-files.js';/,'const watchSidebarFiles=()=>{};')
     .replace(/import .* from '.\/mic.js';/,"const watchMic=()=>{},paneMic=()=>null,paneMicChip=()=>null,MIC_KEY='sixfold.voice.mic';")
     .replace("'./live-events.js'",JSON.stringify(new URL('../mods/sixfold-desk/live-events.js',import.meta.url).href));
@@ -51,9 +51,9 @@ async function sidebar(runtime) {
     .replace(/import .* from '.\/alert-inbox.js';/, 'const workspaceAlertsRow=()=>null, hasWorkspaceAlerts=()=>false;').replace(/import .* from '.\/alert-arrivals.js';/,"const startAlertArrivals=()=>()=>{},alertArrivalLayer=()=>[],alertCardSignature=()=>'';")
     .replace(/import \{ panePet \} from '.\/pets.js';/, 'const panePet=()=>null;')
     .replace(/import \{ paneUsage \} from '.\/session-usage.js';/, 'const paneUsage=()=>null;').replace(/import \{ paneWork, paneWorkChip \} from '.\/pane-work.js';/,'const paneWork=()=>null,paneWorkChip=()=>null;').replace(/import \{ paneMeta, paneMetaChip, showPaneIndex, showTitle \} from '.\/pane-meta.js';/, 'const paneMeta=()=>null,paneMetaChip=()=>null,showPaneIndex=()=>false,showTitle=()=>true;')
-    .replace(/import \{ watchBadges, workspaceBadges \} from '.\/badges.js';/, 'const watchBadges=()=>{},workspaceBadges=()=>null;').replace(/import \{ watchAsks[^}]*\} from '.\/asks.js';/,'const watchAsks=()=>{},askSection=()=>null,hasAsks=()=>false;').replace(/import \{ askFor \} from '.\/ask-model.js';/,'const askFor=()=>null;').replace(/import \{ watchReports[^}]*\} from '.\/session-reports.js';/,'const watchReports=()=>{},reportsSection=()=>null;');
+    .replace(/import \{ watchBadges, workspaceBadges \} from '.\/badges.js';/, 'const watchBadges=()=>{},workspaceBadges=()=>null;').replace(/import \{ watchAsks[^}]*\} from '.\/asks.js';/,'const watchAsks=()=>{},askSection=()=>null,hasAsks=()=>false,paneAskButton=()=>null,askPopup=()=>null;').replace(/import \{ askFor \} from '.\/ask-model.js';/,'const askFor=()=>null;').replace(/import \{ watchReports[^}]*\} from '.\/session-reports.js';/,'const watchReports=()=>{},reportsSection=()=>null;');
   source = source.replace("import { breathingBorder, borderComet } from './collab-flow-view.js';", 'const breathingBorder=o=>{(globalThis.__breathCalls??=[]).push(o);return div().absolute().top(-1).left(-1).right(-1).bottom(-1).rounded(7).border(2).border_color(o.color);},borderComet=o=>{(globalThis.__flowCalls??=[]).push(o);return null;};');
-  for (const name of ['model', 'flow', 'workflow', 'sidebar-identity', 'collab', 'collab-flow']) source = source.replace(`'./${name}.js'`, JSON.stringify(new URL(`../mods/sixfold-desk/${name}.js`, import.meta.url).href));
+  for (const name of ['model', 'flow', 'workflow', 'sidebar-identity', 'collab', 'collab-flow', 'motion']) source = source.replace(`'./${name}.js'`, JSON.stringify(new URL(`../mods/sixfold-desk/${name}.js`, import.meta.url).href));
   source = source.replace(/import \{ pipeline \} from [^;]+;/, 'const pipeline=o=>{(globalThis.__pipelineCalls??=[]).push(o);return div();};');
   globalThis.__visRuntime = runtime;
   source += `\n// load ${++loads}`;
@@ -345,15 +345,50 @@ test('a single collaborating group keeps ⑨\'s colour', async () => {
   } finally { delete globalThis.__visRuntime; delete globalThis.__breathCalls; }
 });
 
-test('motion off stops the stock spinner and the idle breathing too', async () => {
+test('the status badge is still: no spin or loop in the sidebar, pane headers or tabs', async () => {
   const source = await readFile(new URL('../mods/sixfold-desk/main.js', import.meta.url), 'utf8');
-  assert.match(source, /when\(shared\('sixfold\.motion'\)!==false,e=>e\.spin\(900\)\)/);
-  assert.match(source, /when\(shared\('sixfold\.motion'\)!==false,e=>e\.loop\('opacity'/);
+  assert.deepEqual(source.match(/\.(?:spin|loop|frames)\(/g) ?? [], [], 'nothing in main.js animates forever');
   const tabs = await readFile(new URL('../mods/sixfold-tabs/main.js', import.meta.url), 'utf8');
-  assert.match(tabs, /shared\("sixfold\.motion"\) !== false, e => e\.spin\(900\)/);
-  for (const text of [source, tabs]) {
-    for (const call of text.match(/\.(?:spin|loop)\(/g) ?? []) assert.ok(call);   // every one below is guarded
-    const unguarded = text.split('\n').filter(line => /\.(spin|loop)\(/.test(line) && !/motion/.test(line));
-    assert.deepEqual(unguarded, [], 'every loop and spin is behind sixfold.motion');
-  }
+  assert.deepEqual(tabs.match(/\.(?:spin|loop|frames)\(/g) ?? [], [], 'the working tab spinner is drawn still');
+});
+
+test('a pane header looks up only its own pane, its title label and its place in the tab', async () => {
+  const paneList = [
+    { pane: 'p1', tab: 'h', terminal: 't1', title: 'one', status: 'idle' },
+    { pane: 'p2', tab: 'h', terminal: 't2', title: 'two', status: 'working' },
+    { pane: 'p9', tab: 'worker/tw', terminal: 'worker/t1', title: 'remote', status: 'idle' },
+  ];
+  let termReads = 0;
+  const header = pane => ({ ...runtime([]), props: () => ({ role: 'pane', pane }), panes: () => paneList,
+    terminals: () => { termReads++; return [{ address: 't2', labels: { 'sixfold.title': 'Labelled' } }]; } });
+  try {
+    let found = rows(view(await sidebar(header('p2'))));
+    assert(found.has('sixfold-head-p2'));
+    assert(text(found.get('sixfold-head-p2')).includes('Labelled'), 'the session title label wins');
+    assert.equal(termReads, 1, 'one terminal read per header render');
+    found = rows(view(await sidebar(header('p9'))));
+    assert(!found.has('sixfold-head-p9'), 'a pane on another computer than the focused one draws nothing, as before');
+  } finally { delete globalThis.__visRuntime; }
+});
+
+test('a pane header animates only briefly after a status change, then one wake redraws it still', async () => {
+  const realNow = Date.now;let now = 500000;
+  const pane = { pane: 'p1', tab: 'h', terminal: 't1', title: 'one', status: 'idle' };
+  const timers = [], cx = { notify() {}, timer: { after(ms, fn) { const timer = { ms, fn, cancelled: false, cancel() { this.cancelled = true; } }; timers.push(timer); return timer; } } };
+  const rt = { ...runtime([]), props: () => ({ role: 'pane', pane: 'p1' }), panes: () => [pane], shared: key => key === 'sixfold.motion' ? true : undefined };
+  try {
+    Date.now = () => now;
+    const v = view(await sidebar(rt));
+    rows(v, cx);
+    assert.equal(timers.length, 0, 'first sight is still: no wake');
+    now += 5000; pane.status = 'working';
+    rows(v, cx);
+    assert.equal(timers.length, 1);
+    assert.equal(v.briefWakeAt, now + 8000, 'the wake is the end of the brief window');
+    rows(v, cx);
+    assert.equal(timers.length, 1, 'a redraw inside the window keeps the same wake');
+    now += 8000;
+    rows(v, cx);
+    assert(timers[0].cancelled || v.briefWakeAt === null, 'after the window nothing stays scheduled');
+  } finally { Date.now = realNow; delete globalThis.__visRuntime; }
 });

@@ -20,7 +20,7 @@ async function inbox(){
   const popUrl=asUrl(transform(await readFile(new URL('alert-popover.js',base),'utf8')).replace("'./alert-model.js'",JSON.stringify(new URL('alert-model.js',base).href))
     .replace("'./alert-slack.js'",slackUrl).replace("'./alert-files.js'",JSON.stringify(filesUrl)).replace("'./alert-mentions.js'",JSON.stringify(new URL('alert-mentions.js',base).href))+`//${Math.random()}`);   // a fresh module per call: it reads this call's store
   const src=transform(await readFile(new URL('alert-inbox.js',base),'utf8')).replace("'./alert-model.js'",JSON.stringify(new URL('alert-model.js',base).href))
-    .replace("'./alert-popover.js'",JSON.stringify(popUrl)).replace("import { arrivals } from './arrival-store.js';",'const {arrivals}=globalThis.__alertInbox;')
+    .replace("'./alert-popover.js'",JSON.stringify(popUrl)).replace("'./alert-mentions.js'",JSON.stringify(new URL('alert-mentions.js',base).href)).replace("import { arrivals } from './arrival-store.js';",'const {arrivals}=globalThis.__alertInbox;')
     .replace("'./arrival-model.js'",JSON.stringify(new URL('arrival-model.js',base).href));
   const popover=await import(popUrl);popover.setSpaceMentions([]);   // module state outlives one test
   return {store,...await import(asUrl(src)+`#${Math.random()}`),popover};
@@ -76,4 +76,21 @@ test('mentions of a space not on the sidebar count on Share, as their arrival do
   assert.equal(hasSlackAlerts('미연결'),false,'no group under the unmapped name');
   popover.setSpaceMentions(items);
   assert.deepEqual(popover.spaceMentions('미연결').map(i=>i.id),['slack:C0TEST09:1.1'],'no sidebar names yet: each keeps its own space');
+});
+
+// shared() copies the whole value per read; the tracked feed is read once per load, not per card.
+test('the tracked feed is read once per alert load and again after the next load',async()=>{
+  const {store,cardAlertCounts,popover}=await inbox();
+  let reads=0;const get=store.get.bind(store);
+  store.set('sixfold.alertItems',[{id:'a1',project:'Alpha'}]);
+  store.get=k=>{if(k==='sixfold.alertItems')reads++;return get(k);};
+  try{
+    popover.setSpaceMentions([]);
+    for(let i=0;i<5;i++)assert.equal(cardAlertCounts('Alpha').slack,1);
+    assert.equal(reads,1,'one copy for every card and every count');
+    store.set('sixfold.alertItems',[{id:'a1',project:'Alpha'},{id:'a2',project:'Alpha'}]);
+    popover.setSpaceMentions([]);   // alerts.js publishes the feed and the mentions together
+    assert.equal(cardAlertCounts('Alpha').slack,2);
+    assert.equal(reads,2);
+  }finally{store.get=get;}
 });

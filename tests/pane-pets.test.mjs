@@ -15,7 +15,8 @@ async function loadPets(){
  }});return proxy;}
  globalThis.__panePetRuntime={div:()=>element(),svg:path=>element(path)};
  const source=(await readFile(new URL('../mods/sixfold-desk/pets.js',import.meta.url),'utf8'))
-  .replace("import {div,svg} from 'gpui-kit';",'const {div,svg}=globalThis.__panePetRuntime;');
+  .replace("import {div,svg} from 'gpui-kit';",'const {div,svg}=globalThis.__panePetRuntime;')
+  .replace("'./motion.js'",JSON.stringify(new URL('../mods/sixfold-desk/motion.js',import.meta.url).href));
  const module=await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
  return {module,glyphs,loops,frames,sizes};
 }
@@ -25,7 +26,7 @@ test('the header cat gallops natively while working and rests otherwise',async()
   const {module,glyphs,loops,frames,sizes}=await loadPets();
   const palette={working:'#11aaee',blocked:'#ee3344',done:'#44cc77',ansi2:'#44cc77',accent:'#eeeeee',canvas:'#000000'};
   const on=()=>true;
-  module.panePet({pane:'p1',terminal:'t1',status:'working',title:'session'},palette,on,{base:'#101010',background:'#11aaee24'});
+  module.panePet({pane:'p1',terminal:'t1',status:'working',title:'session'},palette,on,{base:'#101010',background:'#11aaee24'},{animate:true});
   assert.deepEqual(glyphs.map(g=>g.path.split('/').pop()),['run-0.svg','run-4.svg','run-3.svg','run-2.svg','run-1.svg'],'frame 0 at the bottom, then 4 to 1 stacked above it');
   assert.equal(new Set(glyphs.map(g=>g.id)).size,glyphs.length,'glyph ids stay unique');
   assert.equal(frames.length,module.RUN_LAYERS.length,'each stacked frame has a native gate');
@@ -49,7 +50,7 @@ test('the header cat gallops natively while working and rests otherwise',async()
   const poses={blocked:'sit.svg',done:'sit.svg',idle:'sleep.svg'};
   for(const [status,pose] of Object.entries(poses)){
    glyphs.length=0;
-   module.panePet({pane:'p1',terminal:'t1',status},palette,on);
+   module.panePet({pane:'p1',terminal:'t1',status},palette,on,undefined,{animate:true});
    assert.equal(glyphs[0].path.split('/').pop(),pose,status);
   }
   assert.ok(!loops.some(l=>l.axis==='top'),'idle sleeping is stationary and schedules no native redraw');
@@ -57,12 +58,18 @@ test('the header cat gallops natively while working and rests otherwise',async()
   module.panePet({pane:'p1',terminal:'t1',status:'working'},palette,key=>key!=='sixfold.motion');
   assert.deepEqual(glyphs.map(g=>g.path.split('/').pop()),['run-0.svg'],'motion off holds one frame');
   assert.equal(frames.length,0,'motion off runs no frame cycle');
+  glyphs.length=0;
+  module.panePet({pane:'p1',terminal:'t1',status:'working'},palette,on);
+  assert.deepEqual(glyphs.map(g=>g.path.split('/').pop()),['run-0.svg'],'outside the brief window the cat holds one frame');
+  assert.equal(frames.length,0,'and runs no frame cycle');
+  loops.length=0;module.panePet({pane:'p1',terminal:'t1',status:'blocked'},palette,on);
+  assert.equal(loops.length,0,'a blocked cat holds still outside the brief window');
   assert.equal(module.petRunning('working',on),true);
   assert.equal(module.petRunning('idle',on),false,'an idle pane never redraws for the cat');
   assert.equal(module.petRunning('working',key=>key!=='sixfold.pets'),false);
   const main=await readFile(new URL('../mods/sixfold-desk/main.js',import.meta.url),'utf8');
-  assert.match(main,/\.child\(panePet\(p,t,shared,style\)\)\s*\.child\(this\.badge\(/,'the cat stands right before the status badge, on the header ground');
-  assert.match(main,/if \(role === 'pane'\) return this\.paneHeader\(all, t, w\);/,'headers skip the sidebar work');
+  assert.match(main,/\.child\(panePet\(p,t,shared,style,\{animate\}\)\)\s*\.child\(this\.badge\(/,'the cat stands right before the status badge, on the header ground');
+  assert.match(main,/if \(role === 'pane'\) return this\.paneHeader\(t, w, cx\);/,'headers skip the sidebar work');
   assert.doesNotMatch(main,/RUN_FRAME_MS|petFrame/,'a pane header keeps no cat timer');
   assert.match(main,/if \(props\(\)\?\.role === 'pane'\) return;/,'a pane header starts no timers');
   for(const name of ['run-0','run-1','run-2','run-3','run-4','sit','sleep'])

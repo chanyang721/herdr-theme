@@ -294,3 +294,16 @@ test('generation replacement disposes every configured root of that application 
   assert.equal(a.starts[0].task.cancelled,true);assert.equal(b.starts[0].task.cancelled,true);assert.equal(other.starts[0].task.cancelled,false);
   next.dispose();unrelated.dispose();
 });
+
+test('ignored folders never reach file or change subscribers, even a subscribed prefix inside them',async()=>{
+  const f=fixture();f.adapter.ignore=['/demo/views/churn'];
+  const hub=createFileHub(f.adapter),rows=[],changes=[];
+  hub.subscribe('/demo/views/feed.json',value=>rows.push(value));
+  hub.subscribeChanges('/demo/views',batch=>changes.push(batch));await tick();
+  await f.batch(['/demo/views/churn/a.json','/demo/views/churn']);
+  assert.equal(f.reads.length,1);assert.deepEqual(changes,[]);
+  assert.equal(hub.diagnostics().ignoredBatches,1);
+  await f.batch(['/demo/views/churn/b.json','/demo/views/other.json']);
+  assert.deepEqual(changes,[['/demo/views/other.json']],'the rest of a mixed batch is delivered');
+  hub.dispose();
+});

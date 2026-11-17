@@ -18,6 +18,7 @@ import { watchAlerts, alertSection, visibleAlerts } from './alerts.js';
 import { workspaceAlertsRow, hasWorkspaceAlerts, openInbox, cardAlertCounts, slackAlertsChip, alertsOnMetaLine } from './alert-inbox.js';
 import { startAlertArrivals, alertArrivalLayer, alertCardSignature } from './alert-arrivals.js';
 import { panePet } from './pets.js';
+import { motionEnabled, arrivalMotionEnabled, motionToggled, motionLabel, briefWindow, wakeAtBriefEnd } from './motion.js';
 import { paneUsage } from './session-usage.js';
 import { paneMeta, paneMetaChip, showPaneIndex, showTitle } from './pane-meta.js';
 import { paneWork, paneWorkChip } from './pane-work.js';
@@ -31,13 +32,13 @@ import {TASK_FEED_FILE,createTaskFeedSource} from './task-feed-source.js';
 import {issueRequest,saveIssueRequest} from './task-issue-state.js';
 import {createRetainedPanel} from './panel-retained.js';
 import {taskComputerAnchors,taskComputerRecord} from './panel-host.js';
-import {subscribeJsonFile,readJsonSnapshot,fileDelivery,FILE_CHANGED_COMMAND} from './panel-io.js';
+import {subscribeJsonFile,subscribeFileChanges,fileDelivery,FILE_CHANGED_COMMAND} from './panel-io.js';
 import {watchSidebarFiles} from './sidebar-files.js';
 import {orderSpaceCards,spaceBadges,lineBadges,metaBadges} from './sidebar-meta.js';
 import {watchMic,paneMic,paneMicChip,MIC_KEY} from './mic.js';
 import {subscribeLiveEvents} from './live-events.js';
 import {createRetainedCards} from './retained-cards.js';
-import {createHash} from 'crypto';
+import {createPoll,changeGate} from './poll.js';
 
 const hasPanel=node=>node?.id==='panel'||(node?.children||[]).some(hasPanel);
 const native = () => `${appHome()}/scripts/sixfold/herdr-theme${(typeof window==='function' && window()?.platform==='windows') || /^(?:[A-Za-z]:[\\/]|\\\\)/.test(appHome())?'.exe':''}`;
@@ -83,6 +84,14 @@ const FLOW_GAP_MS = 320, FLOW_REAL_GAP_MS = 1200, FLOW_MIN_GAP_MS = 90;
 const FLOW_CATCH_UP = 4, FLOW_BACKLOG = 12, FLOW_TRAVEL_MS = 1600;
 // Sends made while the sidebar was hidden: on return, at most this many, this recent.
 const FLOW_RESUME = 3, FLOW_RESUME_MS = 60000;
+// The focus-queue voice plugin uses voice-focus.json only while it is younger than 2.5 s
+// (app_backend.py focus(), rust voice/queue.rs app_focus). Unchanged focus is rewritten this
+// often, safely inside that window; a change is written on the next 500 ms sample.
+const VOICE_HEARTBEAT_MS = 1500;
+// Ledger states `collaborate drain` acts on (rust automation/collaboration.rs drain and
+// refresh_harness). With none of them it runs only on the fallback.
+const COLLABORATION_WORK = new Set(['pending','sending','sent','uncertain','harness_managed']);
+const COLLABORATION_FALLBACK_MS = 60000;
 const flowOrder = (a, b) => (Number.isSafeInteger(a.seq) && Number.isSafeInteger(b.seq) && a.seq !== b.seq ? a.seq - b.seq : 0) || (a.at ?? 0) - (b.at ?? 0);
 function departureGap(event, next, waiting) {
   if (waiting > FLOW_CATCH_UP) return Math.max(FLOW_MIN_GAP_MS, Math.round(FLOW_GAP_MS * FLOW_CATCH_UP / waiting));
@@ -154,7 +163,8 @@ export default class SixfoldDesk extends View {
       onHostChange:()=>this.invalidateSidebar(),
       schedule:fn=>fileReceiver.enqueue(fn),
       // Counts on the meta line only when it carries the alerts; otherwise the alerts row has them (never both).
-      cardAlerts:(space,motion)=>alertsOnMetaLine(space,space.name)?cardAlertCounts(space.name,motion):null,slackAlerts:slackAlertsChip,
+      // Counted once landed: arrivals follow their own motion rule (motion.js), not the panel's.
+      cardAlerts:space=>alertsOnMetaLine(space,space.name)?cardAlertCounts(space.name,arrivalMotionEnabled(shared)&&window()?.visible!==false):null,slackAlerts:slackAlertsChip,
       cardBadges:metaBadges(this),
       onIssueRequest:(space,key,desired)=>{
         const serial=globalThis.__sixfoldIssueRequestSerial=(globalThis.__sixfoldIssueRequestSerial||0)+1;
@@ -179,18 +189,20 @@ export default class SixfoldDesk extends View {
       if(changed&&(!this.panelRetained||first))cx.notify();
     });
     this.fileSubscriptions.push(subscribeJsonFile(cx,`${appHome()}/${TASK_FEED_FILE}`,snapshot=>receiveTaskFeed('task',snapshot)));
-    this.fileSubscriptions.push(subscribeJsonFile(cx,`${appHome()}/shared.json`,snapshot=>{
-      if(snapshot.status!=='ready')return;
-      this.panelTrackingActive=Boolean(this.panelState.feed)&&shared('sixfold.panel.enabled')!==false;
-      this.syncCardActivity?.();
+    // shared.json (~740 KB) is rewritten on every setShared. Only the change matters here: the few
+    // keys below are read from the host's own copy, never by reading and freezing the whole file.
+    this.fileSubscriptions.push(subscribeFileChanges(cx,`${appHome()}/shared.json`,()=>{
+      const tracking=Boolean(this.panelState.feed)&&shared('sixfold.panel.enabled')!==false;
+      if(tracking!==this.panelTrackingActive){
+        this.panelTrackingActive=tracking;
+        this.syncCardActivity?.();
+        this.panelRetained?.setEnabled(tracking);
+      }
       this.startLiveMessages?.();
-      this.panelRetained?.setEnabled(this.panelTrackingActive);
-      this.panelRetained?.preferences();
-      this.panelRetained?.alertsChanged?.();   // shared workspace badges sit on task meta lines
+      this.panelRetained?.preferences();       // compares its own key (motion, theme, width)
+      this.panelRetained?.alertsChanged?.();   // shared workspace badges sit on task meta lines; redraws only changed marks
     }));
-    this.fileSubscriptions.push(subscribeJsonFile(cx,`${appHome()}/settings.json`,snapshot=>{
-      if(snapshot.status==='ready')this.panelRetained?.preferences();
-    }));
+    this.fileSubscriptions.push(subscribeFileChanges(cx,`${appHome()}/settings.json`,()=>this.panelRetained?.preferences()));
     this.projectDocs=null;
     watchDocs(this,cx);
     this.alerts = [];
@@ -257,7 +269,7 @@ export default class SixfoldDesk extends View {
     this.startLiveMessages=()=>{
       if(this.stopLiveMessages||typeof herdrNative.messageEvents!=='function'||!this.sidebarVisible)return;
       this.deliverLiveMessages??=events=>{this.nativeMessages=events;refresh(cx);};
-      this.stopLiveMessages=subscribeLiveEvents({key:`${appHome()}:messages`,cx,read:()=>herdrNative.messageEvents(),onChange:events=>fileReceiver.enqueue(this.deliverLiveMessages,events),intervalMs:500});
+      this.stopLiveMessages=subscribeLiveEvents({key:`${appHome()}:messages`,cx,read:()=>herdrNative.messageEvents(),onChange:events=>fileReceiver.enqueue(this.deliverLiveMessages,events),intervalMs:1000});
     };
     this.startLiveMessages();refresh(cx);
     // The slow dot on a computer link turns at the ends of its pipe. A native loop
@@ -283,7 +295,7 @@ export default class SixfoldDesk extends View {
       this.cometTimer = cx.timer.after(Math.max(1, Math.ceil(at - Date.now())), cx => {
         if (this.cometWake !== at) return;
         this.cometWake = null;
-        if (this.collabFlowing && shared('sixfold.motion') !== false) cx.notify();
+        if (this.collabFlowing && motionEnabled(shared)) cx.notify();
       });
     };
     // Links also change with time alone: a send link ends five minutes after its last
@@ -319,26 +331,28 @@ export default class SixfoldDesk extends View {
         } finally {computersBusy=false;cx.notify();}
       });
     });
-    // Kept on disk so a restart does not count the whole message log as unread.
-    let readBusy=false;
-    cx.timer.every(1000,cx=>{
-      if(this.sidebarVisible===false||!this.messageEvents?.length||readBusy)return;
-      readBusy=true;
-      spawnOrRelease(cx,()=>{readBusy=false;},async cx=>{
+    // Kept on disk so a restart does not count the whole message log as unread. Runs when the
+    // events, focus or finished agents change; the 5 s fallback covers reads due by time alone
+    // (HANDLED_AFTER_MS) and another copy's write.
+    const readInputs=changeGate();
+    this.readPoll=createPoll(cx,{every:1000,fallback:5000,
+      visible:()=>this.sidebarVisible!==false&&Boolean(this.messageEvents?.length),
+      due:()=>{
+        const events=this.messageEvents??[],last=events.at(-1);
+        return readInputs(`${events.length}|${last?.seq??''}|${last?.at??''}|${focused()?.terminal??''}|${agents().filter(a=>a.status==='idle'||a.status==='done').map(a=>a.address).join(',')}`);
+      },
+      job:async cx=>{
         try{
           const path=`${appHome()}/data/sixfold/messages-read.json`;
           const old=await readTextFile(path).catch(()=>null);
-          const ledger=await readJsonSnapshot(path);
-          if(old!==null&&ledger.hash!==createHash('sha256').update(old).digest('hex'))return;
-          const saved=ledger.status==='ready'?ledger.value||{}:{};
+          let saved={};
+          if(old!==null){const value=JSON.parse(old);if(value&&typeof value==='object'&&!Array.isArray(value))saved=value;}
           const next=readThrough(this.messageEvents??[],agents(),focused()?.terminal,{...this.readMessages,...saved},Date.now());
           const text=JSON.stringify(next);
           if(text!==old)await writeTextFile(path,text,old);
-          if(text!==JSON.stringify(this.readMessages)){this.readMessages=next;cx.notify();}
-        }catch{ /* Retry a partial or conflicting write on the next tick. */ }
-        finally{readBusy=false;}
-      });
-    });
+          if(text!==this.readMessagesText){this.readMessages=next;this.readMessagesText=text;cx.notify();}
+        }catch{ /* Retry a partial or conflicting write on the next change or fallback. */ }
+      }});
     cx.timer.every(2000, cx => {
       if (this.routeBusy || !this.routeScript || !this.queuedRoutes.some(item=>!item.hold)) return;
       this.routeBusy = true;
@@ -348,36 +362,53 @@ export default class SixfoldDesk extends View {
       });
     });
     // Registered work uses its own lease ledger; never infer tasks from speech or UI activity.
-    cx.timer.every(2000, cx => {
-      if (this.collaborationBusy || !this.collaborationScript) return;
-      this.collaborationBusy = true;
-      spawnOrRelease(cx, () => { this.collaborationBusy = false; }, async cx => {
+    // Drain runs every 2 s only while that ledger holds work it acts on, otherwise once a minute.
+    this.collaborationWork=true;   // until the ledger is read
+    this.fileSubscriptions.push(subscribeJsonFile(cx,`${appHome()}/data/sixfold/collaboration-tasks.json`,snapshot=>{
+      const tasks=snapshot.status==='ready'?snapshot.value?.tasks:null;
+      const work=snapshot.status==='missing'?false:!tasks||typeof tasks!=='object'||Object.values(tasks).some(task=>COLLABORATION_WORK.has(task?.state));
+      const started=work&&!this.collaborationWork;
+      this.collaborationWork=work;
+      if(started)this.collaborationPoll?.kick(cx);
+    }));
+    this.collaborationPoll=createPoll(cx,{every:2000,fallback:COLLABORATION_FALLBACK_MS,
+      due:()=>Boolean(this.collaborationScript)&&this.collaborationWork,
+      job:async()=>{
+        if(!this.collaborationScript)return;
         try { await invokeHelper(this.collaborationScript,'collaborate',['drain']); }
         catch { /* The durable lease prevents blind retry after ambiguous delivery. */ }
-        finally { this.collaborationBusy = false; }
-      });
-    });
+      }});
     // Optional voice integration is opt-in and runs only from this one sidebar.
     // Focus is sampled by a timer, never changed by rendering background rows.
-    let voiceBusy=false, voiceActionBusy=false, voiceKey=null;
+    let voiceBusy=false, voiceActionBusy=false, voiceKey=null, voiceText=null, voiceAt=0;
     cx.timer.every(500,cx=>{
       const config=this.sidebarFiles?.voice;
       if(!config?.script&&!config?.command)return;
       if(voiceBusy)return;
+      let state,text;
+      try {
+        const f=focused(), facts=terminals(), current=facts.find(x=>x.address===f?.terminal);
+        state={active:window().active,terminal:f?.terminal,
+          source:current?.labels?.['sixfold.source-pane'],
+          panes:agents().filter(a=>!facts.find(x=>x.address===a.address)?.labels?.['sixfold.source-pane'])
+            .filter(a=>['claude','codex'].includes(a.program?.key))
+            .map(a=>({pane_id:`app:${a.address}`,agent:a.program.key,agent_status:a.status}))};
+        text=JSON.stringify(state);
+      } catch { return; }
+      const key=JSON.stringify([state.active,state.terminal,state.source]);
+      // Unchanged focus is only a heartbeat; nothing to do until it is due.
+      if(text===voiceText&&Date.now()-voiceAt<VOICE_HEARTBEAT_MS&&(key===voiceKey||voiceActionBusy))return;
       voiceBusy=true;
       spawnOrRelease(cx,()=>{voiceBusy=false;},async cx=>{
         try {
           if(!config?.script && !config?.command)return;
-          const f=focused(), facts=terminals(), current=facts.find(x=>x.address===f?.terminal);
-          const state={at:Date.now(),active:window().active,terminal:f?.terminal,
-            source:current?.labels?.['sixfold.source-pane'],
-            panes:agents().filter(a=>!facts.find(x=>x.address===a.address)?.labels?.['sixfold.source-pane'])
-              .filter(a=>['claude','codex'].includes(a.program?.key))
-              .map(a=>({pane_id:`app:${a.address}`,agent:a.program.key,agent_status:a.status}))};
-          const path=`${appHome()}/data/sixfold/voice-focus.json`;
-          const old=await readTextFile(path);
-          await writeTextFile(path,JSON.stringify(state),old);
-          const key=JSON.stringify([state.active,state.terminal,state.source]);
+          const at=Date.now();
+          if(text!==voiceText||at-voiceAt>=VOICE_HEARTBEAT_MS){
+            const path=`${appHome()}/data/sixfold/voice-focus.json`;
+            const old=await readTextFile(path);
+            await writeTextFile(path,JSON.stringify({at,...state}),old);
+            voiceText=text;voiceAt=at;
+          }
           if(key!==voiceKey && !voiceActionBusy){
             const lastKey=voiceKey;
             voiceKey=key;voiceActionBusy=true;
@@ -464,6 +495,7 @@ export default class SixfoldDesk extends View {
     this.classicCards?.dispose();
     this.stopArrivals?.();
     this.linkFlowTimer?.cancel();this.linkWakeTimer?.cancel();this.cometTimer?.cancel();
+    this.readPoll?.stop();this.collaborationPoll?.stop();
     for(const stop of this.fileSubscriptions||[])stop();
     this.fileSubscriptions=[];this.stopLiveMessages?.();this.stopLiveMessages=null;this.panelRetained?.dispose();
   }
@@ -519,13 +551,13 @@ export default class SixfoldDesk extends View {
   }
 
   badge(status, text, t, size = 11, labelColor = null) {
-    // Working uses the stock Herdr spinner (same asset, color and speed as the default agents list).
+    // Still glyphs: six headers share this badge, and any spin or loop on one makes
+    // GPUI redraw the whole window every frame. Working is the stock spinner arc in
+    // the working colour; idle is the ring, dimmed.
     const mark = status === 'working'
-      ? svg('mods/workspace-chrome/spinner.svg').size(size+1).flex_none().text_color(t.working).when(shared('sixfold.motion')!==false,e=>e.spin(900))
-      // Idle: the same ring at rest, breathing slowly instead of turning.
+      ? svg('mods/workspace-chrome/spinner.svg').size(size+1).flex_none().text_color(t.working)
       : status === 'idle'
-      ? svg('mods/sixfold-desk/icons/idle.svg').size(size+1).flex_none().text_color(t.idle ?? t.dim)
-          .when(shared('sixfold.motion')!==false,e=>e.loop('opacity', { from: 0.35, to: 1, period: 2400 }))
+      ? svg('mods/sixfold-desk/icons/idle.svg').size(size+1).flex_none().text_color(t.idle ?? t.dim).opacity(0.6)
       : div().font_bold().child(marks[status] ?? '·');
     return h_flex().gap(5).items_center().text_size(size).text_color(t[status] ?? t.muted)
       .child(mark).child(labelColor ? div().text_color(labelColor).child(text) : text);
@@ -574,17 +606,31 @@ export default class SixfoldDesk extends View {
   }
 
 
-  paneHeader(all, t, w) {
-    const p = all.find(p => p.pane === props()?.pane);
-    if (!p) return div();
-    const index = all.filter(x => x.tab === p.tab).findIndex(x => x.pane === p.pane) + 1;
+  // Each of the six headers looks up only its own pane: no copy of every pane
+  // and no per-pane terminal search on each redraw.
+  paneHeader(t, w, cx) {
+    const id = props()?.pane, onlySpace = props()?.onlySpace, list = panes();
+    const own = list.find(x => x.pane === id);
+    if (!own) return div();
+    // Same scope as the sidebar list: the given space, or the focused space's computer.
+    const spaceList = spaces(), home = spaceList.find(s => s.tabs.some(tab => tab.id === own.tab));
+    const focusMachine = spaceList.find(s => s.id === focused()?.space)?.machine ?? null;
+    if (!home || (onlySpace ? home.id !== onlySpace : (home.machine ?? null) !== focusMachine)) return div();
+    const facts = terminals();
+    const p = { ...own, title: facts.find(x => x.address === own.terminal)?.labels?.['sixfold.title'] || own.title };
+    let index = 0;
+    for (const x of list) if (x.tab === p.tab) { index++; if (x.pane === p.pane) break; }
     // Microphone first, where the eye lands: which pane hears you, and why one does not.
-    const mic = paneMic(p, terminals(), shared(MIC_KEY));
+    const mic = paneMic(p, facts, shared(MIC_KEY));
     const style = paneHeaderStyle(p, t);
     // Agent icon, model, speed, effort and permission of the pane's confirmed session, after the title.
     const meta = paneMeta(p.terminal, shared), name = title(p), ask = paneAskButton(p, t, this.lang(), name);
     // Task-list progress and running sub-agents of the same confirmed session.
     const work = paneWork(p.terminal, shared);
+    // The cat moves for a few seconds after a status change, then holds its pose.
+    this.paneBrief ??= briefWindow();
+    const animate = this.paneBrief.active(p.pane, p.status) && motionEnabled(shared) && window()?.visible !== false;
+    wakeAtBriefEnd(this, animate ? this.paneBrief.nextAt() : null, cx);
     return div().size_full().bg(style.base).child(h_flex().id(`sixfold-head-${p.pane}`).size_full().items_center().gap(7).px(9)
       .bg(style.background).text_size(11.5)
       .border(1).border_color(style.border)
@@ -602,7 +648,7 @@ export default class SixfoldDesk extends View {
       // A waiting question/permission opens here, over its own pane, on click only.
       .when(Boolean(ask), el => el.child(ask))
       // The cat is the status, so it stands beside the status badge.
-      .child(panePet(p,t,shared,style))
+      .child(panePet(p,t,shared,style,{animate}))
       .child(this.badge(p.status, p.status ? w[p.status] : '', t, 11, ['working', 'blocked'].includes(p.status) ? t.foreground : null)));
   }
 
@@ -612,6 +658,8 @@ export default class SixfoldDesk extends View {
     const role = props()?.role;
     // One pane's cards in a popup (asks.js). It needs none of the layout work below.
     if (role === 'ask') return askPopup(this, t, this.lang(), cx);
+    // A pane header needs none of the sidebar's routing work, and redraws often.
+    if (role === 'pane') return this.paneHeader(t, w, cx);
     if(role==='sidebar'){
       const environment=JSON.stringify([t,shared('sixfold.motion'),window()?.visible??null]);
       if(environment!==this.panelEnvironment){this.panelEnvironment=environment;this.refreshPanelPreferences?.();}
@@ -637,9 +685,9 @@ export default class SixfoldDesk extends View {
       : (role !== 'sidebar' || !discoveryOnly) && (s.machine ?? null) === selectedMachine);
     const workspaceIds = new Set(workspaceList.map(space => space.id));
     const tabIds = new Set(workspaceList.flatMap(s=>s.tabs.map(tab=>tab.id)));
-    const all = panes().filter(p=>tabIds.has(p.tab)).map(p => ({...p, title: facts.find(x=>x.address===p.terminal)?.labels?.['sixfold.title'] || p.title}));
-    // A pane header needs none of the sidebar's routing work, and redraws often while its cat runs.
-    if (role === 'pane') return this.paneHeader(all, t, w);
+    const titles = new Map();
+    for (const x of facts) if (!titles.has(x.address)) titles.set(x.address, x.labels?.['sixfold.title']);
+    const all = panes().filter(p=>tabIds.has(p.tab)).map(p => ({...p, title: titles.get(p.terminal) || p.title}));
     // Task rows extend the native computer navigator. They never replace its
     // computer selection, workspace actions, documents or local card sections.
     const taskPanel=role==='sidebar'&&this.panelTrackingActive?this.panelRetained:null;
@@ -653,7 +701,10 @@ export default class SixfoldDesk extends View {
     const palette = [t.accent, t.ansi6, t.ansi5, t.ansi3, t.ansi2, t.ansi4];
     const flows = this.activeFlows;
     const routes = simultaneousRoutes(flows);
-    const motion = shared('sixfold.motion') !== false&&window()?.visible!==false&&this.panelState?.feed?.reduced_motion!==true;
+    const still = window()?.visible===false||this.panelState?.feed?.reduced_motion===true;
+    const motion = motionEnabled(shared)&&!still;
+    // Alert arrivals keep their short popup unless motion was switched off (motion.js).
+    const arrivalMotion = arrivalMotionEnabled(shared)&&!still;
     const endpoint = address => flows.some(flow => flow.source === address || flow.target === address);
     const known = new Set(facts.map(x => x.address));
     const machineOf = address => terminalMachine(address, known);
@@ -685,7 +736,7 @@ export default class SixfoldDesk extends View {
         .child(this.button('sf-blocked', `! ${w.blocked}`, () => run('sixfold-desk.next-blocked'), t))
         .child(this.button('sf-done', `✓ ${w.done}`, () => run('sixfold-desk.next-done'), t))
         .child(this.button('sf-zoom', w.zoom, () => run('pane.zoom'), t))
-        .child(this.button('sf-motion', shared('sixfold.motion')===false?'Motion off':'Motion on',()=>setShared('sixfold.motion',shared('sixfold.motion')===false),t))
+        .child(this.button('sf-motion', motionLabel(motionEnabled(shared)),()=>setShared('sixfold.motion',motionToggled(shared)),t))
         .when(hasPanel(layout()),e=>e.child(this.button('sf-review', w.review, () => { run('layout.select', {stack:'panel-body',child:'changes'}); run('layout.toggle',{id:'panel'}); }, t)))
         .when(hasPanel(layout()),e=>e.child(this.button('sf-files', w.files, () => { run('layout.select', {stack:'panel-body',child:'files'}); run('layout.toggle',{id:'panel'}); }, t)));
     }
@@ -767,7 +818,11 @@ export default class SixfoldDesk extends View {
     this.linkWake = wakes.length ? Math.min(...wakes) : null;
     this.scheduleLinkWake?.(this.linkWake);
     const lanes = tracked.lanes.map(entry => ({ ...entry, colors: linkColors[entry.slot % linkColors.length] }));
-    this.linkFlowing = motion && lanes.some(lane => lane.link.working && !lane.gone);
+    // The slow dot runs for the brief window after a link starts being worked on
+    // (motion.js), not for as long as the work lasts.
+    this.linkBrief ??= briefWindow();
+    const pulsing = new Set(lanes.filter(lane => this.linkBrief.active(lane.link.key, Boolean(lane.link.working)) && motion && lane.link.working && !lane.gone).map(lane => lane.link.key));
+    this.linkFlowing = pulsing.size > 0;
     this.scheduleLinkFlow?.();
     // A workspace inside a project link, with the other computers in it. `gone` while
     // the link fades: the border is back to normal and the ⇄ mark fades with the pipe.
@@ -943,7 +998,7 @@ export default class SixfoldDesk extends View {
       const key=JSON.stringify([s,members,task?.id,Boolean(taskBody),Boolean(task?.slack||task?.work),task?.memory,task?.share,task?.agents.map(agent=>[agent.id,agent.status,agent.closing]),taskPanel?.names&&[...taskPanel.names],taskPanel?.feed?.links,t,w,motion,partner,mark,comets.comets.get(groupKey(partner?.group.name??mark?.lane.link.name)),
         this.boxSizes?.[s.id],partner?.partners.includes(this.hoverComputer)||false,this.dragSpace,this.overSpace,
         this.workspaceIcons[s.id]||this.workspaceIcons[s.name],workspaceColor(s),workspacePinned(s,this.workspacePins),
-        this.fileBadges?.[badgeKey],alertCardSignature(s.name,motion),shared('sixfold.workspace.badges')?.[badgeKey],this.projectDocs?.spaces?.[s.id]||this.projectDocs?.spaces?.[s.name],
+        this.fileBadges?.[badgeKey],alertCardSignature(s.name,arrivalMotion),shared('sixfold.workspace.badges')?.[badgeKey],this.projectDocs?.spaces?.[s.id]||this.projectDocs?.spaces?.[s.name],
         docsFinderSignature(this,s.id),
         members.map(p=>[unseen(p.terminal),endpoint(p.terminal),routeColor(p.terminal),askFor(this.asks,p.terminal),
           sessionChildren(this.workflowNodes,p.terminal,true),this.expandedAgents.has(p.terminal),list.find(a=>a.address===p.terminal)?.program])]);
@@ -1085,7 +1140,7 @@ export default class SixfoldDesk extends View {
     });
     // New-alert arrivals: a popup on the card's spot, then a pixel block steps into its badge.
     const arrivalCards=[];{let top=0;groups.forEach(({s},i)=>{arrivalCards.push({s,top,extra:extraHeight(s),merged:mergedAlerts(s),width:this.boxSizes?.[s.id]?.w||0});top+=taskEntries[i].height+12;});}
-    const arrivalViews=alertArrivalLayer(this,cx,{cards:arrivalCards,motion,t,right:LINK_MARGIN+4});
+    const arrivalViews=alertArrivalLayer(this,cx,{cards:arrivalCards,motion:arrivalMotion,t,right:LINK_MARGIN+4});
     const workspaceTree=v_flex().relative().flex_none().children(spaceRows)
       .when(Boolean(taskPanel?.feed),e=>e.child(taskPanel.hostFlows(taskEntries,
         taskComputerAnchors(taskPanel.feed,activeComputers,this.computerBlockHeight??(activeComputers.length*39+3),this.spaceSectionHeight??31),LINK_MARGIN)))
@@ -1116,7 +1171,7 @@ export default class SixfoldDesk extends View {
           .child(this.button('sf-language',w.language,()=>run('sixfold-desk.language'),t)))
         .child(h_flex().h(24).flex_none().px(8).items_center().gap(4)
           .when(Boolean(this.panelState?.feed),e=>e.child(this.button('sf-tracking',taskPanel?'작업 켜짐':'작업',()=>setShared('sixfold.panel.enabled',!this.panelTrackingActive),t)))
-          .child(this.button('sf-motion',motion?'Motion on':'Motion off',()=>setShared('sixfold.motion',shared('sixfold.motion')===false),t))))
+          .child(this.button('sf-motion',motionLabel(motion),()=>setShared('sixfold.motion',motionToggled(shared)),t))))
       .child(h_flex().px(12).py(11).gap(16).flex_none().justify_center().font_bold().children(['blocked','done','working'].map(s => this.badge(s,String(total[s]),t,14))))
       .child(v_flex().id('sf-scroll').flex_1().min_h(0).overflow_y_scroll()
         .child(computerSection)
@@ -1139,7 +1194,7 @@ export default class SixfoldDesk extends View {
             const parts = [fade(div().id(`sf-link-${lane.link.key}`).absolute().right(right).top(top).w(2).h(bottom - top).border_r(1).border_dashed().border_color(color).tooltip(tip))];
             for (const row of rows) parts.push(fade(div().id(`sf-link-${lane.link.key}-${row}`).absolute().right(right).top(rowY(row)).w(LINK_MARGIN - right).h(2).border_t(1).border_dashed().border_color(color)));
             // A pulse as wide as the 1px pipe, kept between its two ends, so it never sticks out.
-            if (lane.link.working && motion && !lane.gone && bottom - top > LINK_PULSE) parts.push(div().id(`sf-link-flow-${lane.link.key}`).absolute().right(right).w(1).h(LINK_PULSE).bg(color)
+            if (pulsing.has(lane.link.key) && bottom - top > LINK_PULSE) parts.push(div().id(`sf-link-flow-${lane.link.key}`).absolute().right(right).w(1).h(LINK_PULSE).bg(color)
               .top(this.linkFlowEnd ? bottom - LINK_PULSE + 1 : top).transition('top', { duration: LINK_FLOW_MS - 200, easing: 'linear' }));
             return parts;
           }))

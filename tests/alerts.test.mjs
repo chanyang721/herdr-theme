@@ -5,6 +5,7 @@ import {createHash} from 'node:crypto';
 
 const nativeParse=JSON.parse;
 const guardModule=await import(new URL('../mods/sixfold-desk/watch-guard.js',import.meta.url).href);
+const sharedPublish=await import(new URL('../mods/sixfold-desk/shared-publish.js',import.meta.url).href);
 const changeServices=new WeakMap();let watcherId=0;
 async function alertHarness(files,{lineEnding='\n',opens=[],home='/test',arrived=[],host={value:false}}={}){
   const tasks=[],timers=new Set(),slowTimers=new Set(),callbacks=new Map(),shared=new Map(),writes=[];
@@ -21,6 +22,7 @@ async function alertHarness(files,{lineEnding='\n',opens=[],home='/test',arrived
     readJsonSnapshot:async name=>{const value=snapshot(name);await typedHook?.(name,value);return value;},
     readTextFile:async name=>files.get(name.split('/').at(-1))??null,
     createRetry:guardModule.createRetry,watchRecorder:guardModule.watchRecorder,setSpaceMentions:items=>shared.set('spaceMentions',items),
+    ...sharedPublish,
     writeTextFile:async(name,value,expected)=>{const key=name.split('/').at(-1),old=files.get(key)??null;if(old!==expected)throw Error('compare-and-swap conflict');writes.push({name,value,expected});files.set(key,value);change(name);await writeHook?.(name,value);},
   };
   const key=`__alertWatch${watcherId++}`;globalThis[key]=runtime;
@@ -241,17 +243,19 @@ test('a late-committed mention arriving into a card redraws the sidebar when the
 // returns it cannot publish the older inputs it read.
 test('restoring the last published inputs while a run is stuck keeps them published when the stuck run returns',async()=>{
   const realNow=Date.now;let now=realNow();Date.now=()=>now;
-  const files=new Map([['slack-live-health.json',JSON.stringify({last_success:'A'})]]),h=await alertHarness(files);let release;
+  // Read state feeds the popup ledger, so its change reaches the (held) ledger read; health alone skips it.
+  const read=value=>files.set('slack-alerts-read.json',JSON.stringify({x:value}));
+  const files=new Map(),h=await alertHarness(files);let release;read('A');
   try{
     await h.refresh();let once=true;
     h.setTypedHook(async name=>{if(once&&name.endsWith('/slack-popup-events.json')){once=false;await new Promise(r=>release=r);}});
-    files.set('slack-live-health.json',JSON.stringify({last_success:'B'}));await h.refresh();
+    read('B');await h.refresh();
     now+=120001;
-    files.set('slack-live-health.json',JSON.stringify({last_success:'A'}));await h.refresh();
+    read('A');await h.refresh();
     release();await new Promise(r=>setTimeout(r,10));await h.flush();
-    assert.equal(h.shared.get('sixfold.slackHealth').last_success,'A');
-    files.set('slack-live-health.json',JSON.stringify({last_success:'C'}));await h.refresh();
-    assert.equal(h.shared.get('sixfold.slackHealth').last_success,'C','later changes still publish');
+    assert.equal(h.shared.get('sixfold.alertRead').x,'A');
+    read('C');await h.refresh();
+    assert.equal(h.shared.get('sixfold.alertRead').x,'C','later changes still publish');
   }finally{Date.now=realNow;h.stop();}
 });
 
@@ -282,5 +286,23 @@ test('mentions reach the cards through module state, never as a shared value',as
     await h.refresh();
     assert.deepEqual(h.shared.get('spaceMentions'),[{id:'m1',project:'Share'}]);
     assert.equal([...h.shared.keys()].some(k=>/mention/i.test(k)&&k!=='spaceMentions'),false);
+  }finally{h.stop();}
+});
+
+test('a health heartbeat writes only the shown health fields and skips the popup ledger',async()=>{
+  const files=new Map([['project-alerts.json','{"items":[{"id":"a","status":"needs-you"}],"projects":["Alpha"]}'],['slack-live-health.json','{"state":"ok","last_success":"1","duration_seconds":1}']]);
+  const h=await alertHarness(files);
+  try{
+    await h.refresh();
+    const writes=[],set=h.shared.set.bind(h.shared);h.shared.set=(key,value)=>{writes.push(key);return set(key,value);};
+    let ledgerReads=0;h.setTypedHook(name=>{if(name.endsWith('/slack-popup-events.json'))ledgerReads++;});
+    const notified=h.notifications();
+    files.set('slack-live-health.json','{"state":"ok","last_success":"1","duration_seconds":2}');await h.refresh();
+    assert.deepEqual(writes,[],'an unshown timing change writes nothing');
+    assert.equal(h.notifications(),notified,'and repaints nothing');
+    files.set('slack-live-health.json','{"state":"ok","last_success":"2","duration_seconds":3}');await h.refresh();
+    assert.deepEqual(writes,['sixfold.slackHealth'],'only the health key is rewritten');
+    assert.deepEqual(h.shared.get('sixfold.slackHealth'),{state:'ok',last_success:'2'});
+    assert.equal(ledgerReads,0,'health never reads the popup ledger');
   }finally{h.stop();}
 });

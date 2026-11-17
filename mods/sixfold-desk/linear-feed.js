@@ -6,6 +6,7 @@ import { arrivalTarget, ARRIVAL } from './arrival-model.js';
 import { placeItems, alertKind, alertLine } from './alert-model.js';
 import { withLocalReads, onReadConfirmed } from './linear-reads.js';
 import { createRetry, watchRecorder } from './watch-guard.js';
+import { createSharedPublisher, linearHealthView } from './shared-publish.js';
 
 // Linear inbox feed for the sidebar: data/sixfold/linear-alerts.json and
 // linear-live-health.json, written by a machine-local collector. Kept apart from
@@ -61,15 +62,19 @@ async function announce(events, allowed = () => true) {
   return fresh.filter(event => event.popup).slice(0, ARRIVAL.visible).reverse();
 }
 
-export function publishLinear(feed, health, names = []) {
-  onReadConfirmed(() => publishLinear(feed, health, names));   // a confirmed read is shown before the next collection
+// Readers outside this file (panel-retained.js, alert-inbox.js, alert-popover.js) read these keys with
+// shared(), so they stay in shared.json; a key is written only when its value changed (shared-publish.js).
+// Returns whether anything was written.
+export function publishLinear(feed, health, names = [], publish = createSharedPublisher(setShared)) {
+  onReadConfirmed(() => publishLinear(feed, health, names, publish));   // a confirmed read is shown before the next collection
   const items = withLocalReads(placeItems(feed.items ?? [], names));
-  setShared('sixfold.linearItems', items);
-  setShared('sixfold.linearSpaces', names.length ? [...new Set(items.map(i => i.workspace).filter(Boolean))] : feed.spaces ?? []);
-  setShared('sixfold.linearStatuses', feed.statuses ?? {});
-  setShared('sixfold.linearHealth', health ?? {});
+  let changed = publish('sixfold.linearItems', items);
+  changed = publish('sixfold.linearSpaces', names.length ? [...new Set(items.map(i => i.workspace).filter(Boolean))] : feed.spaces ?? []) || changed;
+  changed = publish('sixfold.linearStatuses', feed.statuses ?? {}) || changed;
+  changed = publish('sixfold.linearHealth', linearHealthView(health)) || changed;
   // Writes the collector accepts on this computer (an opened row marks read only when mark_read is on).
-  setShared('sixfold.linearWrites', Array.isArray(feed.writes) ? feed.writes : []);
+  changed = publish('sixfold.linearWrites', Array.isArray(feed.writes) ? feed.writes : []) || changed;
+  return changed;
 }
 
 
@@ -96,7 +101,8 @@ export function watchLinear(view, cx) {
   const inputs = [['feed', 'linear-alerts.json', () => ({items: []})], ['health', 'linear-live-health.json', () => ({})],
                   ['auto', 'linear-auto.json', () => ({entries: []})]];   // Linear auto work: the issue search's '자동 작업'
   const cached = new Map(), subscriptions = [];
-  let loading = false, loadingAt = 0, run = 0, previous, disposed = false, scheduled = null, dirty = false, version = 0;
+  let loading = false, loadingAt = 0, run = 0, previous, disposed = false, scheduled = null, dirty = false, version = 0, announced = null;
+  const publish = createSharedPublisher(setShared);
   const allowed = () => !disposed && view.sidebarVisible !== false;
   // A refresh whose native read or write never settles stops holding the next one after LOAD_STUCK_MS.
   const busy = () => loading && Date.now() - loadingAt < LOAD_STUCK_MS;
@@ -133,18 +139,25 @@ export function watchLinear(view, cx) {
     const release = () => { if (mine !== run) return; loading = false; if (dirty) schedule(); };
     try { (context ?? cx).spawn(async cx => {
       try {
-        const feed = cached.get('feed').value, health = cached.get('health').value;
+        const feedEntry = cached.get('feed'), autoEntry = cached.get('auto');
+        const feed = feedEntry.value, health = cached.get('health').value;
         const names = (spaces() ?? []).map(s => s.name);
-        publishLinear(feed, health, names);
-        setShared('sixfold.linearAuto', cached.get('auto').value);
-        cx.notify();
-        view.panelRetained?.alertsChanged?.();   // an open issue search shows its issues' new alerts
+        let changed = publishLinear(feed, health, names, publish);
+        changed = publish('sixfold.linearAuto', autoEntry.value, autoEntry.token) || changed;
+        if (changed) {
+          cx.notify();
+          view.panelRetained?.alertsChanged?.();   // an open issue search shows its issues' new alerts
+        }
+        // The popup ledger depends only on the feed and space names; a health heartbeat skips it.
+        const popups = JSON.stringify([feedEntry.token, names]);
         // Once the ledger write returns these alerts are seen for every run, so they are delivered even
         // when this run was replaced meanwhile (the replacement already saw them as seen).
-        held.push(...await announce(linearPopupEvents(placeItems(feed.items ?? [], names)), live));
-        deliver();
+        if (popups !== announced) {
+          held.push(...await announce(linearPopupEvents(placeItems(feed.items ?? [], names)), live));
+          deliver();
+        }
         if (!live()) return;
-        previous = signature;   // after the ledger write, so a failed write is retried
+        previous = signature; announced = popups;   // after the ledger write, so a failed write is retried
         retry.ok();
       } catch (error) { if (mine === run) retry.fail(error); /* a partial collector write keeps the last valid list */ }
       finally { release(); }

@@ -146,6 +146,123 @@ fn windows_sample(interval: f64) -> Result<Value> {
         json!({"cpu":round1(cpu),"memory":m.total-m.available,"total":m.total,"memoryDefinition":"physical memory in use (total - available)"}),
     )
 }
+/// In-process macOS reading with the numbers `top`, `vm_stat` and `sysctl` print,
+/// without spawning them. CPU is busy time since the previous call (ticks kept in
+/// `state`); with no usable previous reading it samples twice 200 ms apart.
+#[cfg(target_os = "macos")]
+mod mac {
+    use super::round1;
+    use crate::common::Result;
+    use serde_json::{json, Value};
+    use std::{fs, path::Path};
+    #[allow(deprecated)]
+    fn host() -> libc::mach_port_t {
+        unsafe { libc::mach_host_self() }
+    }
+    pub fn ticks(host: libc::mach_port_t) -> Result<[u64; 4]> {
+        let mut info = libc::host_cpu_load_info {
+            cpu_ticks: [0; libc::CPU_STATE_MAX as usize],
+        };
+        let mut count = libc::HOST_CPU_LOAD_INFO_COUNT;
+        let code = unsafe {
+            libc::host_statistics(
+                host,
+                libc::HOST_CPU_LOAD_INFO,
+                &mut info as *mut _ as libc::host_info_t,
+                &mut count,
+            )
+        };
+        if code != libc::KERN_SUCCESS {
+            return Err(format!("host_statistics failed: {code}").into());
+        }
+        Ok(info.cpu_ticks.map(u64::from))
+    }
+    /// Busy percent between two readings, or None when no tick elapsed.
+    pub fn busy(before: [u64; 4], after: [u64; 4]) -> Option<f64> {
+        if after.iter().zip(&before).any(|(a, b)| a < b) {
+            return None;
+        }
+        let total: u64 = after.iter().zip(&before).map(|(a, b)| a - b).sum();
+        let idle = after[libc::CPU_STATE_IDLE as usize] - before[libc::CPU_STATE_IDLE as usize];
+        (total > 0).then(|| 100. - 100. * idle as f64 / total as f64)
+    }
+    fn used_memory(host: libc::mach_port_t) -> Result<u64> {
+        let mut vm: libc::vm_statistics64 = unsafe { std::mem::zeroed() };
+        let mut count = libc::HOST_VM_INFO64_COUNT;
+        let code = unsafe {
+            libc::host_statistics64(
+                host,
+                libc::HOST_VM_INFO64,
+                &mut vm as *mut _ as libc::host_info64_t,
+                &mut count,
+            )
+        };
+        if code != libc::KERN_SUCCESS {
+            return Err(format!("host_statistics64 failed: {code}").into());
+        }
+        // vm_stat's "Pages active", "Pages wired down" and "Pages occupied by compressor".
+        let pages = vm.active_count as u64 + vm.wire_count as u64 + vm.compressor_page_count as u64;
+        Ok(pages * unsafe { libc::vm_page_size } as u64)
+    }
+    fn memsize() -> Result<u64> {
+        let mut value = 0u64;
+        let mut size = std::mem::size_of::<u64>();
+        let code = unsafe {
+            libc::sysctlbyname(
+                c"hw.memsize".as_ptr(),
+                &mut value as *mut _ as *mut libc::c_void,
+                &mut size,
+                std::ptr::null_mut(),
+                0,
+            )
+        };
+        if code != 0 || value == 0 {
+            return Err(format!("hw.memsize unavailable: {}", std::io::Error::last_os_error()).into());
+        }
+        Ok(value)
+    }
+    fn previous(state: &Path, now_ms: f64) -> Option<[u64; 4]> {
+        let value: Value = serde_json::from_slice(&fs::read(state).ok()?).ok()?;
+        let age = now_ms - value["at"].as_f64()?;
+        if !(100. ..=120_000.).contains(&age) {
+            return None;
+        }
+        let ticks = value["ticks"].as_array()?;
+        let mut out = [0u64; 4];
+        for (slot, tick) in out.iter_mut().zip(ticks) {
+            *slot = tick.as_u64()?;
+        }
+        (ticks.len() == 4).then_some(out)
+    }
+    fn remember(state: &Path, ticks: [u64; 4], now_ms: f64) {
+        let Some(dir) = state.parent() else { return };
+        let _ = fs::create_dir_all(dir);
+        let Ok(mut file) = tempfile::NamedTempFile::new_in(dir) else {
+            return;
+        };
+        let text = json!({"at":now_ms,"ticks":ticks}).to_string();
+        if std::io::Write::write_all(&mut file, text.as_bytes()).is_ok() {
+            let _ = file.persist(state);
+        }
+    }
+    pub fn sample(state: &Path) -> Result<Value> {
+        let host = host();
+        let now_ms = crate::common::now() * 1000.;
+        let mut after = ticks(host)?;
+        let mut cpu = previous(state, now_ms).and_then(|before| busy(before, after));
+        if cpu.is_none() {
+            let before = after;
+            std::thread::sleep(std::time::Duration::from_millis(200));
+            after = ticks(host)?;
+            cpu = busy(before, after);
+        }
+        remember(state, after, crate::common::now() * 1000.);
+        let cpu = cpu.ok_or("CPU sample unavailable")?;
+        Ok(
+            json!({"cpu":round1(cpu.clamp(0., 100.)),"memory":used_memory(host)?,"total":memsize()?,"memoryDefinition":"active + wired + compressed physical pages"}),
+        )
+    }
+}
 fn sample() -> Result<Value> {
     #[cfg(windows)]
     {
@@ -153,15 +270,7 @@ fn sample() -> Result<Value> {
     }
     #[cfg(target_os = "macos")]
     {
-        let top = output(
-            "/usr/bin/top",
-            &strings(&["-l", "2", "-s", "1", "-n", "0"]),
-            6.,
-        )?;
-        let vm = output("/usr/bin/vm_stat", &[], 6.)?;
-        let total = output("/usr/sbin/sysctl", &strings(&["-n", "hw.memsize"]), 6.)?;
-        parse_macos(&format!("MAC\n{top}\n{vm}\n{total}"))
-            .ok_or_else(|| "CPU sample unavailable".into())
+        mac::sample(&app_home().join("data/system-metrics/cpu-ticks.json"))
     }
     #[cfg(not(any(windows, target_os = "macos")))]
     {
@@ -191,5 +300,21 @@ mod tests {
         assert_eq!(parse_macos(text).unwrap()["cpu"], 25.);
         assert!(parse_macos("No stats").is_none());
         assert_eq!(remote("bad/name"), json!({"error":"Invalid machine name"}));
+    }
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn local_mac_reading_uses_tick_deltas_and_keeps_its_shape() {
+        assert_eq!(mac::busy([10, 10, 80, 0], [30, 15, 155, 0]), Some(25.));
+        assert_eq!(mac::busy([1, 1, 1, 1], [1, 1, 1, 1]), None);
+        assert_eq!(mac::busy([5, 1, 1, 1], [4, 1, 1, 1]), None);
+        let t = tempfile::tempdir().unwrap();
+        let state = t.path().join("cpu-ticks.json");
+        let first = mac::sample(&state).unwrap();
+        assert!(state.exists());
+        let keys = first.as_object().unwrap().keys().collect::<Vec<_>>();
+        assert_eq!(keys, ["cpu", "memory", "total", "memoryDefinition"]);
+        let cpu = first["cpu"].as_f64().unwrap();
+        assert!((0. ..=100.).contains(&cpu));
+        assert!(first["memory"].as_u64().unwrap() < first["total"].as_u64().unwrap());
     }
 }

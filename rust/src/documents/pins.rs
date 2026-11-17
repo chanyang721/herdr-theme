@@ -11,7 +11,18 @@ pub fn documents(
     warnings: &mut Vec<String>,
     include_archived: bool,
 ) -> Vec<Value> {
+    let (all, current) = documents_split(folders, warnings);
+    if include_archived {
+        all
+    } else {
+        current
+    }
+}
+/// One walk for both views: every matched document, and the ones outside
+/// archive folders (what `documents(.., false)` returns).
+pub fn documents_split(folders: &[Value], warnings: &mut Vec<String>) -> (Vec<Value>, Vec<Value>) {
     let mut found: BTreeMap<String, Value> = BTreeMap::new();
+    let mut current: BTreeMap<String, Value> = BTreeMap::new();
     for entry in folders {
         let root = expand(if entry.is_string() {
             s(entry)
@@ -45,6 +56,7 @@ pub fn documents(
                 .map(|v| fold(s(v)))
                 .collect::<Vec<_>>()
         };
+        let source_root = resolved(&root);
         let mut walk = walkdir::WalkDir::new(&root).follow_links(false);
         if let Some(depth) = entry["depth"].as_u64().filter(|x| *x > 0) {
             walk = walk.max_depth(depth as usize)
@@ -78,36 +90,46 @@ pub fn documents(
             // `herdr-doc` uses to pick a space, so `보고서/프로젝트/세부/가이드.md`
             // belongs to a `프로젝트` rule even when the file name omits it.
             let relative = path.strip_prefix(&root).unwrap_or(path);
-            if !filters.is_empty()
-                && !filters
-                    .iter()
-                    .any(|t| fold(&relative.to_string_lossy()).contains(t))
-            {
-                continue;
+            if !filters.is_empty() {
+                let folded = fold(&relative.to_string_lossy());
+                if !filters.iter().any(|t| folded.contains(t)) {
+                    continue;
+                }
             }
             matched += 1;
             let archived = is_archived(path);
-            if archived && !include_archived {
-                continue;
-            }
             let Ok(meta) = fs::metadata(path) else {
                 continue;
             };
+            let modified = meta
+                .modified()
+                .ok()
+                .and_then(|x| x.duration_since(std::time::UNIX_EPOCH).ok())
+                .map(|x| x.as_millis() as u64)
+                .unwrap_or(0);
             let source = resolved(path);
-            found.insert(source.to_string_lossy().into_owned(),json!({"path":source,"name":name,"mtime":mtime(path),"size":meta.len(),"archived":archived,"folder":source.parent(),"sourceRoot":resolved(&root),"relativePath":relative}));
+            let key = source.to_string_lossy().into_owned();
+            let item = json!({"path":source,"name":name,"mtime":modified,"size":meta.len(),"archived":archived,"folder":source.parent(),"sourceRoot":source_root,"relativePath":relative});
+            if !archived {
+                current.insert(key.clone(), item.clone());
+            }
+            found.insert(key, item);
         }
         if matched == 0 && complete {
             warnings.push(format!("source_empty:{}", root.display()));
         }
     }
-    let mut values = found.into_values().collect::<Vec<_>>();
-    values.sort_by(|a, b| {
-        b["mtime"]
-            .as_u64()
-            .cmp(&a["mtime"].as_u64())
-            .then_with(|| s(&a["path"]).cmp(s(&b["path"])))
-    });
-    values
+    let sorted = |found: BTreeMap<String, Value>| {
+        let mut values = found.into_values().collect::<Vec<_>>();
+        values.sort_by(|a, b| {
+            b["mtime"]
+                .as_u64()
+                .cmp(&a["mtime"].as_u64())
+                .then_with(|| s(&a["path"]).cmp(s(&b["path"])))
+        });
+        values
+    };
+    (sorted(found), sorted(current))
 }
 fn source_problem(error: &std::io::Error) -> &'static str {
     match error.kind() {
@@ -284,6 +306,10 @@ pub fn checked_path(value: &str, root: Option<&str>) -> Result<PathBuf> {
     Ok(path)
 }
 pub fn scan(folders: &[Value], warnings: &mut Vec<String>) -> Vec<Value> {
+    let approved = approved_folders(folders, warnings);
+    eligible(documents(&approved, warnings, false))
+}
+fn approved_folders(folders: &[Value], warnings: &mut Vec<String>) -> Vec<Value> {
     let mut approved = vec![];
     for entry in folders {
         let root = expand(if entry.is_string() {
@@ -297,7 +323,10 @@ pub fn scan(folders: &[Value], warnings: &mut Vec<String>) -> Vec<Value> {
         }
         approved.push(entry.clone())
     }
-    documents(&approved, warnings, false)
+    approved
+}
+fn eligible(items: Vec<Value>) -> Vec<Value> {
+    items
         .into_iter()
         .filter(|item| checked_path(s(&item["path"]), item["sourceRoot"].as_str()).is_ok())
         .collect()
@@ -386,9 +415,10 @@ fn rule_document_with_probe(
             rule["depth"].as_u64()
         };
         let mut matches = vec![];
+        let resolved_root = resolved(expand(&root));
         for item in candidates {
             let relative = Path::new(s(&item["path"]))
-                .strip_prefix(resolved(expand(&root)))
+                .strip_prefix(&resolved_root)
                 .unwrap_or(Path::new(""));
             if depth.is_some_and(|n| relative.components().count() > n as usize) {
                 continue;
@@ -444,6 +474,17 @@ pub fn resolve_with_file_probe(
     day: NaiveDate,
     file_probe: &dyn Fn(&Path) -> Result<bool>,
 ) -> Result<Value> {
+    resolve_scanned(config, space, day, file_probe, None)
+}
+/// `scanned` carries a folder scan the caller already made (eligible current
+/// documents plus its warnings), so `catalog()` walks the folders only once.
+fn resolve_scanned(
+    config: &Value,
+    space: &str,
+    day: NaiveDate,
+    file_probe: &dyn Fn(&Path) -> Result<bool>,
+    scanned: Option<(Vec<Value>, Vec<String>)>,
+) -> Result<Value> {
     if config["version"] != 1 || !config["spaces"].is_object() {
         return Err("Expected version:1 and spaces mapping".into());
     }
@@ -489,7 +530,18 @@ pub fn resolve_with_file_probe(
     let excluded = arr(&settings["excluded"]);
     let mut groups: BTreeMap<String, Vec<(NaiveDate, Value, String, Option<NaiveDate>)>> =
         BTreeMap::new();
-    for item in scan(&arr(&settings["folders"]), &mut warnings) {
+    let items = match scanned {
+        Some((items, found)) => {
+            warnings.extend(found);
+            items
+        }
+        None => scan(&arr(&settings["folders"]), &mut warnings),
+    };
+    let latest_roots = pins
+        .iter()
+        .map(|p| (p["kind"] == "latest").then(|| resolved(expand(s(&p["root"])))))
+        .collect::<Vec<_>>();
+    for item in items {
         let (stamp, topic) = dated_topic(s(&item["name"]));
         if !keywords.iter().any(|t| fold(s(&item["name"])).contains(t)) {
             continue;
@@ -503,11 +555,11 @@ pub fn resolve_with_file_probe(
         if excluded.contains(&json!(id)) {
             continue;
         }
-        if pins.iter().any(|p| {
+        if pins.iter().zip(&latest_roots).any(|(p, root)| {
             p["path"] == item["path"]
-                || (p["kind"] == "latest"
-                    && nfc(s(&p["topic"])) == topic
-                    && Path::new(s(&item["path"])).starts_with(resolved(expand(s(&p["root"])))))
+                || root.as_ref().is_some_and(|root| {
+                    nfc(s(&p["topic"])) == topic && Path::new(s(&item["path"])).starts_with(root)
+                })
         }) {
             continue;
         }
@@ -586,30 +638,27 @@ pub fn catalog(
     app: &Path,
     routing: &Value,
 ) -> Result<Value> {
-    let base = resolve(config, space, day)?;
     let settings = &config["spaces"][space];
+    let mut found = vec![];
+    let approved = approved_folders(&arr(&settings["folders"]), &mut found);
+    let (mut scanned, current) = documents_split(&approved, &mut found);
+    let base = resolve_scanned(
+        config,
+        space,
+        day,
+        &pin_is_file,
+        Some((eligible(current), found)),
+    )?;
     let kinds = kinds_for(config, settings);
     let days = settings["recent"]["highlightDays"].as_i64().unwrap_or(7);
     let mut warnings = arr(&base["warnings"])
         .iter()
         .map(|w| s(w).to_owned())
         .collect::<Vec<_>>();
-    let approved = arr(&settings["folders"])
-        .into_iter()
-        .filter(|entry| {
-            let root = expand(if entry.is_string() {
-                s(entry)
-            } else {
-                s(&entry["path"])
-            });
-            root.is_absolute() && !symlink(&root) && !is_archived(root)
-        })
-        .collect::<Vec<_>>();
     let mut pins = arr(&base["documents"])
         .into_iter()
         .filter(|d| d["pinned"] == true)
         .collect::<Vec<_>>();
-    let mut scanned = documents(&approved, &mut warnings, true);
     for item in routing::routed(routing, s(&settings["name"]), &mut warnings) {
         if !scanned.iter().any(|i| i["path"] == item["path"]) {
             scanned.push(item)

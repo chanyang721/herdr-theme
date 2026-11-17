@@ -6,6 +6,7 @@ use std::{
     collections::{BTreeMap, HashMap, HashSet},
     fs,
     path::{Path, PathBuf},
+    sync::LazyLock,
 };
 pub const EXTENSIONS: &[&str] = &[".md", ".html", ".htm", ".pdf", ".docx", ".xlsx"];
 pub fn is_archived(path: impl AsRef<Path>) -> bool {
@@ -14,9 +15,20 @@ pub fn is_archived(path: impl AsRef<Path>) -> bool {
         .iter()
         .any(|term| p.contains(term))
 }
+// Compiled once per process: a catalog runs these for every document.
 fn rx(pattern: &str) -> Regex {
     Regex::new(pattern).unwrap()
 }
+static DATE: LazyLock<Regex> = LazyLock::new(|| rx(r"^(\d{8}|\d{4}-\d{2}-\d{2})(?:[_\- ]+|$)"));
+static BEFORE: LazyLock<Regex> =
+    LazyLock::new(|| rx(r"(?i)[._\- ](?:v\d+[._\-])?before(?:[._\-].*)?$"));
+static COPY: LazyLock<Regex> = LazyLock::new(|| rx(r"(?i)\s*\((?:\d+|사본|copy)\)$"));
+static VERSION: LazyLock<Regex> = LazyLock::new(|| rx(r"(?i)[._\- ]v\d+$"));
+static VARIANT: LazyLock<Regex> = LazyLock::new(|| {
+    rx(r"(?i)[._\- ](최신본|수정본|공유본|revised|shared|최종|final|draft|초안|사본|copy)$")
+});
+static PIN_PREFIX: LazyLock<Regex> = LazyLock::new(|| rx(r"^(?:pin|topic)-[0-9a-f]{8,}-"));
+static HASH_SUFFIX: LazyLock<Regex> = LazyLock::new(|| rx(r"[._\-]([0-9a-f]{7,40})$"));
 pub fn today() -> NaiveDate {
     Local::now().date_naive()
 }
@@ -29,8 +41,7 @@ pub fn modified(ms: u64) -> NaiveDate {
 }
 pub fn parse_date(text: &str) -> Option<NaiveDate> {
     let text = nfc(text);
-    let re = rx(r"^(\d{8}|\d{4}-\d{2}-\d{2})(?:[_\- ]+|$)");
-    let caps = re.captures(&text)?;
+    let caps = DATE.captures(&text)?;
     NaiveDate::parse_from_str(
         &caps[1],
         if caps[1].contains('-') {
@@ -44,8 +55,7 @@ pub fn parse_date(text: &str) -> Option<NaiveDate> {
 pub fn strip_date(text: &str) -> String {
     let text = nfc(text);
     if parse_date(&text).is_some() {
-        let re = rx(r"^(\d{8}|\d{4}-\d{2}-\d{2})(?:[_\- ]+|$)");
-        if let Some(m) = re.find(&text) {
+        if let Some(m) = DATE.find(&text) {
             if m.end() < text.len() {
                 return text[m.end()..].to_owned();
             }
@@ -65,17 +75,12 @@ pub fn dated_topic(name: &str) -> (Option<NaiveDate>, String) {
 }
 pub fn family_key(name: &str) -> (String, bool, Option<String>) {
     let mut name = stem(strip_date(name));
-    let before_re = rx(r"(?i)[._\- ](?:v\d+[._\-])?before(?:[._\-].*)?$");
-    let before = before_re.is_match(&name);
-    name = before_re.replace(&name, "").into_owned();
-    let copy = rx(r"(?i)\s*\((?:\d+|사본|copy)\)$");
-    let version = rx(r"(?i)[._\- ]v\d+$");
-    let variant_re =
-        rx(r"(?i)[._\- ](최신본|수정본|공유본|revised|shared|최종|final|draft|초안|사본|copy)$");
+    let before = BEFORE.is_match(&name);
+    name = BEFORE.replace(&name, "").into_owned();
     let mut variant = None;
     loop {
-        let mut changed = copy.replace(&version.replace(&name, ""), "").into_owned();
-        if let Some(caps) = variant_re.captures(&changed) {
+        let mut changed = COPY.replace(&VERSION.replace(&name, ""), "").into_owned();
+        if let Some(caps) = VARIANT.captures(&changed) {
             if variant.is_none() {
                 variant = Some(fold(&caps[1]))
             }
@@ -90,9 +95,7 @@ pub fn family_key(name: &str) -> (String, bool, Option<String>) {
 }
 pub fn label_of(name: &str, prefix: Option<&str>) -> String {
     let mut name_stem = stem(strip_date(name));
-    name_stem = rx(r"^(?:pin|topic)-[0-9a-f]{8,}-")
-        .replace(&name_stem, "")
-        .into_owned();
+    name_stem = PIN_PREFIX.replace(&name_stem, "").into_owned();
     if parse_date(&name_stem).is_some() {
         name_stem = stem(strip_date(&name_stem))
     }
@@ -108,7 +111,7 @@ pub fn label_of(name: &str, prefix: Option<&str>) -> String {
                 .to_owned()
         }
     }
-    if let Some(caps) = rx(r"[._\-]([0-9a-f]{7,40})$").captures(&name_stem) {
+    if let Some(caps) = HASH_SUFFIX.captures(&name_stem) {
         let found = caps.get(0).unwrap();
         if caps[1].chars().any(|c| c.is_ascii_digit()) && found.start() > 0 {
             name_stem = format!("{} #{}", &name_stem[..found.start()], &caps[1][..6])

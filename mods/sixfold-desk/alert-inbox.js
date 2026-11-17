@@ -1,16 +1,33 @@
 import { div, image } from 'gpui-kit';
 import { h_flex } from 'gpui-base';
 import { shared, openOverlay } from 'herdr';
-import { scopedAlerts, linearScoped, slackCopyDelay } from './alert-model.js';
+import { scopedAlerts, linearScoped, slackCopyDelay, projectKey } from './alert-model.js';
 import { alertPopover, showPopover, popoverState, spaceMentions } from './alert-popover.js';
+import { mentionsEpoch } from './alert-mentions.js';
 import { arrivals } from './arrival-store.js';
 import { flyingIds } from './arrival-model.js';
 
 // An alert still flying in from its popup is counted once it lands.
 const landedOnly = (items, scope) => { const flying = flyingIds(arrivals(), Date.now(), scope.motion !== false); return flying.size ? items.filter(i => !flying.has(i.id)) : items; };
+// shared() copies the whole value on every read (the tracked feed is hundreds of KB), and every
+// card asks several times per render. The feed is read and grouped by space once per load
+// instead: alerts.js sets it together with the mentions, whose epoch is the version key.
+let slackIndex = { epoch: undefined, bySpace: new Map(), ids: new Set() };
+const trackedIndex = () => {
+  const epoch = mentionsEpoch();
+  if (slackIndex.epoch === epoch) return slackIndex;
+  const bySpace = new Map(), ids = new Set();
+  for (const item of shared('sixfold.alertItems') ?? []) {
+    ids.add(item.id);
+    const key = projectKey(item.project);
+    if (!bySpace.has(key)) bySpace.set(key, []);
+    bySpace.get(key).push(item);
+  }
+  return slackIndex = { epoch, bySpace, ids };
+};
 // The space's tracked Slack alerts plus the mentions routed to it that the tracked feed does not list.
-const slackItems = project => { const tracked = shared('sixfold.alertItems') ?? [], ids = new Set(tracked.map(i => i.id));
-  return [...tracked, ...spaceMentions(project).filter(i => !ids.has(i.id))]; };
+const slackItems = project => { const { bySpace, ids } = trackedIndex();
+  return [...(bySpace.get(projectKey(project)) ?? []), ...spaceMentions(project).filter(i => !ids.has(i.id))]; };
 const slackUnread = scope => landedOnly(scopedAlerts(slackItems(scope.project),{...scope,read:shared('sixfold.alertRead') ?? {},unread:true}),scope).length;
 const linearUnreadNow = scope => landedOnly(linearScoped(shared('sixfold.linearItems') ?? [],scope.project).filter(i=>!i.read),scope).length;
 // What the card's alerts row shows; part of the retained card's signature so the row redraws when it changes.
