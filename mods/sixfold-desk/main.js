@@ -31,7 +31,7 @@ import {TASK_FEED_FILE,createTaskFeedSource} from './task-feed-source.js';
 import {issueRequest,saveIssueRequest} from './task-issue-state.js';
 import {createRetainedPanel} from './panel-retained.js';
 import {taskComputerAnchors,taskComputerRecord} from './panel-host.js';
-import {subscribeJsonFile,readJsonSnapshot,fileDelivery,FILE_CHANGED_COMMAND} from './panel-io.js';
+import {subscribeJsonFile,subscribeFileChanges,readJsonSnapshot,fileDelivery,FILE_CHANGED_COMMAND} from './panel-io.js';
 import {watchSidebarFiles} from './sidebar-files.js';
 import {orderSpaceCards,spaceBadges,lineBadges,metaBadges} from './sidebar-meta.js';
 import {watchMic,paneMic,paneMicChip,MIC_KEY} from './mic.js';
@@ -179,18 +179,20 @@ export default class SixfoldDesk extends View {
       if(changed&&(!this.panelRetained||first))cx.notify();
     });
     this.fileSubscriptions.push(subscribeJsonFile(cx,`${appHome()}/${TASK_FEED_FILE}`,snapshot=>receiveTaskFeed('task',snapshot)));
-    this.fileSubscriptions.push(subscribeJsonFile(cx,`${appHome()}/shared.json`,snapshot=>{
-      if(snapshot.status!=='ready')return;
-      this.panelTrackingActive=Boolean(this.panelState.feed)&&shared('sixfold.panel.enabled')!==false;
-      this.syncCardActivity?.();
+    // shared.json (~740 KB) is rewritten on every setShared. Only the change matters here: the few
+    // keys below are read from the host's own copy, never by reading and freezing the whole file.
+    this.fileSubscriptions.push(subscribeFileChanges(cx,`${appHome()}/shared.json`,()=>{
+      const tracking=Boolean(this.panelState.feed)&&shared('sixfold.panel.enabled')!==false;
+      if(tracking!==this.panelTrackingActive){
+        this.panelTrackingActive=tracking;
+        this.syncCardActivity?.();
+        this.panelRetained?.setEnabled(tracking);
+      }
       this.startLiveMessages?.();
-      this.panelRetained?.setEnabled(this.panelTrackingActive);
-      this.panelRetained?.preferences();
-      this.panelRetained?.alertsChanged?.();   // shared workspace badges sit on task meta lines
+      this.panelRetained?.preferences();       // compares its own key (motion, theme, width)
+      this.panelRetained?.alertsChanged?.();   // shared workspace badges sit on task meta lines; redraws only changed marks
     }));
-    this.fileSubscriptions.push(subscribeJsonFile(cx,`${appHome()}/settings.json`,snapshot=>{
-      if(snapshot.status==='ready')this.panelRetained?.preferences();
-    }));
+    this.fileSubscriptions.push(subscribeFileChanges(cx,`${appHome()}/settings.json`,()=>this.panelRetained?.preferences()));
     this.projectDocs=null;
     watchDocs(this,cx);
     this.alerts = [];

@@ -57,7 +57,7 @@ for (const native of [false,true]) test(`background messages refresh through ${n
   source=source.replace("import {createRetainedPanel} from './panel-retained.js';",'const createRetainedPanel=()=>null;');
   for(const name of ['task-feed-source','task-issue-state'])source=source.replace(`'./${name}.js'`,JSON.stringify(new URL(`../mods/sixfold-desk/${name}.js`,import.meta.url).href));
   source=source.replace("import {createRetainedCards} from './retained-cards.js';",'const createRetainedCards=()=>({begin(){},card(_id,_signature,build){return build();},end(){},dispose(){}});');
-  source=source.replace(/import .* from '.\/panel-io.js';/,'const {subscribeJsonFile,readJsonSnapshot,fileDelivery,FILE_CHANGED_COMMAND}=globalThis.__sixfoldTest;');
+  source=source.replace(/import .* from '.\/panel-io.js';/,'const {subscribeJsonFile,readJsonSnapshot,fileDelivery,FILE_CHANGED_COMMAND}=globalThis.__sixfoldTest,subscribeFileChanges=()=>()=>{};');
   let filesSource=(await readFile(new URL('../mods/sixfold-desk/sidebar-files.js',import.meta.url),'utf8')).replace(/import .* from '.\/panel-io.js';/,'const {subscribeJsonFile}=globalThis.__sixfoldTest;');
   filesSource+=`\n// native=${native}`;
   const filesUrl='data:text/javascript;base64,'+Buffer.from(filesSource).toString('base64');
