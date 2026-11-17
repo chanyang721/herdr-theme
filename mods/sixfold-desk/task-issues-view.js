@@ -85,14 +85,9 @@ export function issuePopover(model,t){
     const enabled=model.canImport===true&&!busy&&Boolean(label);
     // An issue with new alerts gets a small count here; what changed is in the shared group above the tabs.
     const alerts=model.alertsFor?.(issue.key)||null;
-    // With "작업 시작" wired (onExpand), a row press unfolds its start strip and the detail moves to the
-    // small › button at the row's end; without it a row press opens the detail as before.
-    const expandable=Boolean(model.onExpand),expanded=expandable&&model.startKey===issue.key;
     const row=h_flex().id(`task-issue-${id}-${issue.key}`).h(34).px(8).gap(8).items_center().rounded(6)
       .opacity(issue.state==='done'&&!alerts?0.5:1)
-      .when(expandable,row=>row.cursor_pointer().on_click(change(model.onExpand,issue.key)))
-      .when(!expandable&&Boolean(model.onDetail),row=>row.cursor_pointer().on_click(change(model.onDetail,issue.key)))
-      .when(expanded,row=>row.bg(t.selected))
+      .when(Boolean(model.onDetail),row=>row.cursor_pointer().on_click(change(model.onDetail,issue.key)))
       .when(Boolean(model.onHover),row=>row.on_hover((hovered,cx)=>model.onHover(hovered?issue.key:null,issue.key,cx)))
       .when(hover,row=>row.bg(t.selected))
       .when(included,row=>row.bg((t.ansi6||t.accent).slice(0,7)+'0F'))
@@ -109,12 +104,8 @@ export function issuePopover(model,t){
         .border_color(issue.pinned?(t.ansi6||t.accent).slice(0,7)+'55':t.border)
         .text_color(issue.pinned?t.ansi6||t.accent:t.muted).text_size(10).font_bold()
         .when(enabled,button=>button.cursor_pointer().on_click(change(model.onPull,issue.key,!issue.pinned)))
-        .child(label)))
-      .when(expandable&&Boolean(model.onDetail),row=>row.child(div().id(`task-issue-open-${id}-${issue.key}`).size(22).flex_none().rounded(5)
-        .flex().items_center().justify_center().text_size(13).text_color(t.muted).cursor_pointer().hover(s=>s.bg(t.hover||t.selected))
-        .tooltip('이슈 상세 보기').on_click(change(model.onDetail,issue.key)).child('›')));
-    if(!expanded)return row;
-    return v_flex().id(`task-issue-wrap-${id}-${issue.key}`).flex_none().gap(2).child(row).child(startStrip(model,issue.key,t,change));
+        .child(label)));
+    return row;
   };
   if(scope==='milestone'&&model.milestones?.length)list.child(milestoneRows(model,t));
   else if(scope==='milestone'){
@@ -143,38 +134,6 @@ export function issuePopover(model,t){
     .cursor_pointer().on_click(change(model.onExternal)));
   // No project link given for this space: nothing to open, so nothing is shown (an issue still opens from its detail).
   return popover.content(body.child(footer));
-}
-
-// The strip under an unfolded row: agent and tier chips, [작업 시작] and one result line.
-// `model.start` = {config:{providers,tiers}|null, pick:{provider,tier}, entry:{running,text,ok}|null, blocked}.
-export function startStrip(model,key,t,change){
-  const {id}=model,start=model.start||{},config=start.config,entry=start.entry||null;
-  const strip=v_flex().id(`task-issue-start-${id}-${key}`).flex_none().mx(8).mb(4).p(8).gap(6).rounded(6)
-    .border(1).border_color(t.border).bg(t.chrome||t.surface);
-  if(!config)return strip.child(text('작업 시작 설정 없음',t.dim,10).id(`task-issue-start-none-${id}-${key}`));
-  const running=entry?.running===true,enabled=!running&&start.blocked!==true&&Boolean(model.onStart);
-  const chips=(kind,list,picked)=>h_flex().gap(4).items_center().flex_wrap()
-    .child(text(kind==='provider'?'에이전트':'난이도',t.dim,10).w(44).flex_none())
-    .children(list.map(item=>{
-      const on=item.id===picked;
-      return div().id(`task-issue-start-${kind}-${id}-${key}-${item.id}`).h(22).px(8).rounded(11).flex().items_center()
-        .border(1).border_color(on?t.accent:t.border).bg(on?t.selected:t.popover||t.surface)
-        .text_size(10).text_color(on?t.foreground:t.muted)
-        .when(!running&&Boolean(model.onStartPick),e=>e.cursor_pointer().on_click(change(model.onStartPick,kind,item.id)))
-        .child(item.label);
-    }));
-  strip.child(chips('provider',config.providers,start.pick?.provider)).child(chips('tier',config.tiers,start.pick?.tier));
-  const line=running?'보내는 중…':entry?.text||'';
-  strip.child(h_flex().gap(8).items_center()
-    .child(div().id(`task-issue-start-go-${id}-${key}`).h(24).px(12).flex_none().rounded(12).flex().items_center()
-      .bg(enabled?t.accent:t.popover||t.surface).border(1).border_color(enabled?t.accent:t.border)
-      .text_size(10).font_bold().text_color(enabled?t.accent_foreground||t.background:t.dim)
-      .when(enabled,e=>e.cursor_pointer().on_click(change(model.onStart,key)))
-      .when(!enabled&&start.blocked===true&&!running,e=>e.tooltip('방금 시작 요청한 이슈입니다 · 3분 뒤 다시 누를 수 있습니다'))
-      .child(running?'보내는 중…':'작업 시작'))
-    .child(text(line,running?t.muted:entry?.ok?t.ansi2||t.accent:entry?t.blocked:t.dim,10).flex_1()
-      .id(`task-issue-start-result-${id}-${key}`).tooltip(line||'결과가 여기에 표시됩니다')));
-  return strip;
 }
 
 // The shared "알림 온 이슈" group: in the issue search above its tabs, and alone in a peek

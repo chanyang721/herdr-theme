@@ -261,6 +261,7 @@ export function createRetainedPanel(cx,{macTitlebar=false,onClassic=null,onDispo
     const milestones=milestoneList(milestoneSource(space,project),space.issue_catalog,unreadKeys);
     const writes=shared('sixfold.linearWrites')??[];
     const onDetail=key=>{
+      if((key||null)!==(state.detail||null))state.startPick=null;
       state.detail=key||null;state.menu=null;state.writeNote='';state.hoverKey=null;
       if(key)c.askLinear('issue',key);
       c.notify(c.cards.get(space.id));
@@ -298,7 +299,7 @@ export function createRetainedPanel(cx,{macTitlebar=false,onClassic=null,onDispo
       },
     };
   };
-  // "작업 시작": a row press unfolds one issue's strip (agent, tier, [작업 시작], one result line).
+  // "작업 시작": an issue's detail shows, right under its title, agent and tier chips, [작업 시작] and one result line.
   // The setting file is read when a search opens; without a valid one the strip says so and runs nothing.
   // Results stay while this search is open; the send guard (issue-start.js) outlives it.
   c.startConfig=null;
@@ -318,16 +319,13 @@ export function createRetainedPanel(cx,{macTitlebar=false,onClassic=null,onDispo
     }));
   };
   c.startExtra=(space,state)=>{
-    const starts=state.starts||(state.starts=new Map()),key=state.startKey||null,config=c.startConfig;
+    // The open detail's issue is the one a start applies to; its pick resets when the detail changes.
+    const starts=state.starts||(state.starts=new Map()),key=state.detail||null,config=c.startConfig;
     const pick=startPick(config,state.startPick);
-    return {startKey:key,
+    return {
       start:key?{config,pick,entry:starts.get(key)||null,blocked:startGuarded(space.name,key)}:null,
-      onExpand:issue=>{
-        if(state.startKey===issue)state.startKey=null;else{state.startKey=issue;state.startPick=null;}
-        c.notify(c.cards.get(space.id));
-      },
       onStartPick:(kind,id)=>{
-        if(!config||!state.startKey||starts.get(state.startKey)?.running)return;
+        if(!config||!state.detail||starts.get(state.detail)?.running)return;
         const now=startPick(config,state.startPick);
         if(kind!=='provider'&&kind!=='tier')return;
         state.startPick={...now,[kind]:id};c.notify(c.cards.get(space.id));
@@ -335,7 +333,7 @@ export function createRetainedPanel(cx,{macTitlebar=false,onClassic=null,onDispo
       onStart:issue=>{
         if(!config||starts.get(issue)?.running||startGuarded(space.name,issue)||typeof c.cx.spawn!=='function')return;
         const row=['week','milestone','all'].flatMap(scope=>space.issue_catalog?.[scope]||[]).find(item=>item.key===issue)||(space.issues||[]).find(item=>item.key===issue);
-        const chosen=startPick(config,state.startKey===issue?state.startPick:null),before=starts.get(issue)||null;
+        const chosen=startPick(config,state.detail===issue?state.startPick:null),before=starts.get(issue)||null;
         starts.set(issue,{running:true});c.notify(c.cards.get(space.id));
         c.cx.spawn(async()=>{
           let result=null;
@@ -533,7 +531,7 @@ export function createRetainedPanel(cx,{macTitlebar=false,onClassic=null,onDispo
         if(open)c.ensureInputs(space.id);
         if(open)for(const [id,other] of c.issueStates)if(id!==space.id&&other.open){other.open=false;c.notify(c.cards.get(id));}
         current.open=open;
-        if(!open){current.detail=null;current.menu=null;current.hoverKey=null;current.startKey=null;current.startPick=null;current.starts=new Map();for(const timer of current.startTimers?.values()||[])timer?.cancel?.();current.startTimers=new Map();}
+        if(!open){current.detail=null;current.menu=null;current.hoverKey=null;current.startPick=null;current.starts=new Map();for(const timer of current.startTimers?.values()||[])timer?.cancel?.();current.startTimers=new Map();}
         else{c.askLinear('project',space.name);c.loadTimeline();c.loadStartConfig();
           for(const [issue,left] of startGuardsOf(space.name))c.armStartTimer(space,current,issue,left);}
         c.notify(c.cards.get(space.id));

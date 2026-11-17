@@ -123,6 +123,6 @@ export function startPick(config, pick) {
 // What the popover's redraw depends on from this feature (for retained-render keys and tests).
 export function startSignature(state) {
   if (!state) return '';
-  return JSON.stringify([state.startKey || null, state.startPick || null,
+  return JSON.stringify([state.detail || null, state.startPick || null,
     [...(state.starts || new Map())].map(([key, entry]) => [key, entry.running === true, entry.text || ''])]);
 }

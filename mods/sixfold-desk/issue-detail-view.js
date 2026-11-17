@@ -31,6 +31,8 @@ export function issueDetail(model,t){
     .child(div().flex_1())
     .child(statusChip(d.status,t,`task-issue-detail-status-${id}`)));
   body.child(wrap(d.title,t.foreground,13).font_bold());
+  // Start work on this issue (shown when the caller wires it); the rest of the detail follows below.
+  if(model.start)body.child(startArea(model,d.key,t));
   if(d.fields.length)body.child(h_flex().flex_wrap().gap(10).children(d.fields.map(([label,value],i)=>h_flex().id(`task-issue-detail-field-${id}-${i}`).gap(4)
     .child(text(label,t.dim,10)).child(text(value,t.foreground,10)))));
   // What the alerts say changed: highlighted, on top.
@@ -115,4 +117,37 @@ export function milestoneRows(model,t){
   }
   if(model.milestonesCounted)list.child(text('일부 값은 Linear가 주지 않아 이슈 상태로 계산했습니다(계산값)',t.dim,9).pt(4));
   return list;
+}
+
+// "작업 시작" right under the detail's title: agent and tier chips, [작업 시작] and one result line.
+// `model.start` = {config:{providers,tiers}|null, pick:{provider,tier}, entry:{running,text,ok}|null, blocked}.
+export function startArea(model,key,t){
+  const change=press;
+  const {id}=model,start=model.start||{},config=start.config,entry=start.entry||null;
+  const strip=v_flex().id(`task-issue-start-${id}-${key}`).flex_none().p(8).gap(6).rounded(7)
+    .border(1).border_color(t.border).bg(t.chrome||t.surface);
+  if(!config)return strip.child(text('작업 시작 설정 없음',t.dim,10).id(`task-issue-start-none-${id}-${key}`));
+  const running=entry?.running===true,enabled=!running&&start.blocked!==true&&Boolean(model.onStart);
+  const chips=(kind,list,picked)=>h_flex().gap(4).items_center().flex_wrap()
+    .child(text(kind==='provider'?'에이전트':'난이도',t.dim,10).w(44).flex_none())
+    .children(list.map(item=>{
+      const on=item.id===picked;
+      return div().id(`task-issue-start-${kind}-${id}-${key}-${item.id}`).h(22).px(8).rounded(11).flex().items_center()
+        .border(1).border_color(on?t.accent:t.border).bg(on?t.selected:t.popover||t.surface)
+        .text_size(10).text_color(on?t.foreground:t.muted)
+        .when(!running&&Boolean(model.onStartPick),e=>e.cursor_pointer().on_click(change(model.onStartPick,kind,item.id)))
+        .child(item.label);
+    }));
+  strip.child(chips('provider',config.providers,start.pick?.provider)).child(chips('tier',config.tiers,start.pick?.tier));
+  const line=running?'보내는 중…':entry?.text||'';
+  strip.child(h_flex().gap(8).items_center()
+    .child(div().id(`task-issue-start-go-${id}-${key}`).h(24).px(12).flex_none().rounded(12).flex().items_center()
+      .bg(enabled?t.accent:t.popover||t.surface).border(1).border_color(enabled?t.accent:t.border)
+      .text_size(10).font_bold().text_color(enabled?t.accent_foreground||t.background:t.dim)
+      .when(enabled,e=>e.cursor_pointer().on_click(change(model.onStart,key)))
+      .when(!enabled&&start.blocked===true&&!running,e=>e.tooltip('방금 시작 요청한 이슈입니다 · 3분 뒤 다시 누를 수 있습니다'))
+      .child(running?'보내는 중…':'작업 시작'))
+    .child(text(line,running?t.muted:entry?.ok?t.ansi2||t.accent:entry?t.blocked:t.dim,10).flex_1()
+      .id(`task-issue-start-result-${id}-${key}`).tooltip(line||'결과가 여기에 표시됩니다')));
+  return strip;
 }
