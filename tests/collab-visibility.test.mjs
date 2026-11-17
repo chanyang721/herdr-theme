@@ -345,10 +345,9 @@ test('a single collaborating group keeps ⑨\'s colour', async () => {
   } finally { delete globalThis.__visRuntime; delete globalThis.__breathCalls; }
 });
 
-test('motion off stops the stock spinner and the idle breathing too', async () => {
+test('the status badge is still: no spin or loop in the sidebar or pane headers', async () => {
   const source = await readFile(new URL('../mods/sixfold-desk/main.js', import.meta.url), 'utf8');
-  assert.match(source, /when\(shared\('sixfold\.motion'\)!==false,e=>e\.spin\(900\)\)/);
-  assert.match(source, /when\(shared\('sixfold\.motion'\)!==false,e=>e\.loop\('opacity'/);
+  assert.deepEqual(source.match(/\.(?:spin|loop|frames)\(/g) ?? [], [], 'nothing in main.js animates forever');
   const tabs = await readFile(new URL('../mods/sixfold-tabs/main.js', import.meta.url), 'utf8');
   assert.match(tabs, /shared\("sixfold\.motion"\) !== false, e => e\.spin\(900\)/);
   for (const text of [source, tabs]) {

@@ -521,13 +521,13 @@ export default class SixfoldDesk extends View {
   }
 
   badge(status, text, t, size = 11, labelColor = null) {
-    // Working uses the stock Herdr spinner (same asset, color and speed as the default agents list).
+    // Still glyphs: six headers share this badge, and any spin or loop on one makes
+    // GPUI redraw the whole window every frame. Working is the stock spinner arc in
+    // the working colour; idle is the ring, dimmed.
     const mark = status === 'working'
-      ? svg('mods/workspace-chrome/spinner.svg').size(size+1).flex_none().text_color(t.working).when(shared('sixfold.motion')!==false,e=>e.spin(900))
-      // Idle: the same ring at rest, breathing slowly instead of turning.
+      ? svg('mods/workspace-chrome/spinner.svg').size(size+1).flex_none().text_color(t.working)
       : status === 'idle'
-      ? svg('mods/sixfold-desk/icons/idle.svg').size(size+1).flex_none().text_color(t.idle ?? t.dim)
-          .when(shared('sixfold.motion')!==false,e=>e.loop('opacity', { from: 0.35, to: 1, period: 2400 }))
+      ? svg('mods/sixfold-desk/icons/idle.svg').size(size+1).flex_none().text_color(t.idle ?? t.dim).opacity(0.6)
       : div().font_bold().child(marks[status] ?? '·');
     return h_flex().gap(5).items_center().text_size(size).text_color(t[status] ?? t.muted)
       .child(mark).child(labelColor ? div().text_color(labelColor).child(text) : text);
