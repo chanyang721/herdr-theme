@@ -77,7 +77,11 @@ export function alertLine(item) {
   const first = value => String(value ?? '').split('\n')[0].slice(0, 200);
   const subtitle = first(item?.subtitle), {kind} = alertKind(item);
   const status = stateChange(item) || (Array.isArray(item?.changes) ? item.changes : []).find(c => c?.field === 'status');
-  if (kind === 'status' && status) return changeText('상태', status.from, status.to);
+  if (kind === 'status' && status) {
+    // Who changed it, from Linear's own line ("Marked as completed by Kim").
+    const by = /\bby (.{1,60})$/i.exec(subtitle)?.[1];
+    return [changeText('상태', status.from, status.to), by].filter(Boolean).join(' · ');
+  }
   if (kind === 'assign') { const by = /^Assigned by (.+)$/i.exec(subtitle)?.[1]; if (by) return `${by} 님이 배정`; }
   if (kind === 'new') return [subtitle.replace(/^Created by /i, '만든 사람 ') || '새 이슈', item?.project].filter(Boolean).join(' · ');
   if (kind === 'due') {
@@ -85,6 +89,11 @@ export function alertLine(item) {
     return [/overdue/i.test(subtitle) ? '기한 지남' : /soon|approach/i.test(subtitle) ? '기한 임박' : subtitle, when].filter(Boolean).join(' · ');
   }
   return subtitle || first(item?.comments?.[0]?.body) || changeLines(item)[0] || first(item?.title);
+}
+// The popover's change lines: for a status notification its state line also says who changed it.
+export function popoverChangeLines(item) {
+  const lines = changeLines(item), at = lines.findIndex(l => l.startsWith('상태 '));
+  return alertKind(item).kind === 'status' && at >= 0 ? lines.map((l, j) => j === at ? alertLine(item) : l) : lines;
 }
 
 // The space card popover: which card and source is open, set by a badge press

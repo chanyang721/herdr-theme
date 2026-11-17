@@ -1,7 +1,7 @@
 import { div, image } from 'gpui-kit';
 import { h_flex, v_flex, Popover } from 'gpui-base';
 import { shared, setShared } from 'herdr';
-import { scopedAlerts, alertVersion, linearScoped, changeLines, linearCategory, popoverOpen, popoverRows, projectKey, alertKind, alertLine, kindTone } from './alert-model.js';
+import { scopedAlerts, alertVersion, linearScoped, changeLines, linearCategory, popoverOpen, popoverRows, projectKey, alertKind, alertLine, kindTone, popoverChangeLines } from './alert-model.js';
 import { feedNames, namesFor, alertTitle, readable } from './alert-slack.js';
 import { fileChips, loadFileText, followFileText, localNames } from './alert-files.js';
 import { spaceMentions, setSpaceMentions } from './alert-mentions.js';
@@ -92,7 +92,7 @@ function linearRows(project, t) {
         .child(line(item.issue || '', t.muted, 11).flex_none().font_bold())
         .child(line(item.issue_title || item.title || '', t.foreground, 12).flex_1())
         .child(line(short(item.changed_at || item.at), t.dim, 10).flex_none()))
-      .children(changeLines(item).map((change, j) => line(change, t.ansi4 || t.accent, 11).id(`sf-alert-pop-change-${i}-${j}`)))
+      .children(popoverChangeLines(item).map((change, j) => line(change, t.ansi4 || t.accent, 11).id(`sf-alert-pop-change-${i}-${j}`)))
       .when(!changeLines(item).length && Boolean(alertLine(item)), e => e.child(line(alertLine(item), t.muted, 11))))};
 }
 
