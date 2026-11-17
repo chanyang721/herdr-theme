@@ -21,7 +21,7 @@ export const rowArrival=(state,id)=>state.packets.some(event=>event.to===id&&eve
 const ROW_BLINK_MS=Math.round(PANEL_TIMING.pingMs/2);
 // A flow pulse on a 1px pipe: as wide as the line, this long (px).
 export const LINK_PULSE=5;
-export const PANEL_GEOMETRY=Object.freeze({header:34,meta:20,issue:18,row:ROW,reason:REASON,child:20,border:1,bottom:4,gap:4,padding:7,rightGutter:RIGHT,popoverGap:10});
+export const PANEL_GEOMETRY=Object.freeze({header:34,meta:20,issue:18,issueGap:6,issueIndent:12,row:ROW,reason:REASON,child:20,border:1,bottom:4,gap:4,padding:7,rightGutter:RIGHT,popoverGap:10});
 // Compact rows keep reasons in the tooltip; geometry and rendered height agree.
 // The Slack / work-tool line is drawn, and takes height, only when one is connected.
 export const panelMetaHeight=space=>space.slack||space.work?PANEL_GEOMETRY.meta:0;
@@ -88,6 +88,9 @@ export function panelLayout(feed, eventState, nativeSpaces=[],groupMap=null) {
     let row=y+PANEL_GEOMETRY.border+PANEL_GEOMETRY.header+metaHeight;
     const groupRows=groups.grouped?groups.groups:[{issue:null,agents:groups.agents,folds:groups.folds}];
     for(const group of groupRows){
+      // Each issue opens its own block: a small gap before every issue after the first,
+      // and its agents sit indented under the heading (cardView).
+      if(groups.grouped&&group!==groupRows[0]){card.rows.push({kind:'issue-gap',y:row});row+=PANEL_GEOMETRY.issueGap;}
       if(groups.grouped){card.rows.push({kind:'issue',group,y:row});row+=PANEL_GEOMETRY.issue;}
       for(const agent of group.agents){
         const child=Boolean(groups.rowMeta?.get(agent.id)?.parent),height=agentRowHeight(agent,child);
@@ -268,7 +271,15 @@ export function cardView(view,card,state,color,computerNames,t,motion,rowEntitie
       .child(text(row.group.issue?.title||'',t.muted,9).flex_1())
       .when(row.group.issue&&(row.group.issue.pinned===true&&!row.group.issue.week||typeof row.group.issue.pinned!=='boolean'&&space.issue_catalog&&!space.issue_catalog.week.some(issue=>issue.key===row.group.issue.key)),e=>e.child(text('가져옴',t.ansi6||t.accent,8)))
       .child(text(row.group.issue?(row.group.issue.state==='done'?'✓ ':'')+(ISSUE[row.group.issue.state]||'대기'):'',row.group.issue?.state==='blocked'?t.blocked:t.dim,8)));
-    else if(row.kind==='agent')box.child(rowEntities?.get(row.agent.id)||agentRow(view,row.agent,space,state.tags.get(row.agent.id),state,color,t,motion));
+    else if(row.kind==='issue-gap')box.child(div().h(PANEL_GEOMETRY.issueGap).flex_none());
+    else if(row.kind==='agent'){
+      const agentView=rowEntities?.get(row.agent.id)||agentRow(view,row.agent,space,state.tags.get(row.agent.id),state,color,t,motion);
+      // Under an issue heading the agents are indented, with a thin guide line, so each
+      // issue reads as its own group. Ungrouped cards keep the flat rows.
+      box.child(groups?.grouped?div().id(`panel-issue-indent-${row.agent.id}`).relative().flex_none().pl(PANEL_GEOMETRY.issueIndent)
+        .child(div().absolute().left(7).top(0).bottom(0).w(1).bg(t.border))
+        .child(agentView):agentView);
+    }
     else if(row.kind==='children-more'||row.kind==='issues-more')box.child(h_flex().id(`panel-fold-${space.id}-${row.fold?.parent||'issues'}`).h(22).flex_none()
       .pl(row.fold?30+Math.min(6,view.rowMeta?.get(row.fold.parent)?.depth||0)*16:8).pr(8).items_center().cursor_pointer()
       .on_click((_event,cx)=>{cx.stop_propagation();row.fold?view.toggleChildren?.(row.fold.parent):view.toggleIssues?.(space.id);})
