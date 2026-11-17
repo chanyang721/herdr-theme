@@ -83,6 +83,10 @@ const FLOW_GAP_MS = 320, FLOW_REAL_GAP_MS = 1200, FLOW_MIN_GAP_MS = 90;
 const FLOW_CATCH_UP = 4, FLOW_BACKLOG = 12, FLOW_TRAVEL_MS = 1600;
 // Sends made while the sidebar was hidden: on return, at most this many, this recent.
 const FLOW_RESUME = 3, FLOW_RESUME_MS = 60000;
+// Ledger states `collaborate drain` acts on (rust automation/collaboration.rs drain and
+// refresh_harness). With none of them it runs only on the fallback.
+const COLLABORATION_WORK = new Set(['pending','sending','sent','uncertain','harness_managed']);
+const COLLABORATION_FALLBACK_MS = 60000;
 const flowOrder = (a, b) => (Number.isSafeInteger(a.seq) && Number.isSafeInteger(b.seq) && a.seq !== b.seq ? a.seq - b.seq : 0) || (a.at ?? 0) - (b.at ?? 0);
 function departureGap(event, next, waiting) {
   if (waiting > FLOW_CATCH_UP) return Math.max(FLOW_MIN_GAP_MS, Math.round(FLOW_GAP_MS * FLOW_CATCH_UP / waiting));
@@ -352,15 +356,22 @@ export default class SixfoldDesk extends View {
       });
     });
     // Registered work uses its own lease ledger; never infer tasks from speech or UI activity.
-    cx.timer.every(2000, cx => {
-      if (this.collaborationBusy || !this.collaborationScript) return;
-      this.collaborationBusy = true;
-      spawnOrRelease(cx, () => { this.collaborationBusy = false; }, async cx => {
+    // Drain runs every 2 s only while that ledger holds work it acts on, otherwise once a minute.
+    this.collaborationWork=true;   // until the ledger is read
+    this.fileSubscriptions.push(subscribeJsonFile(cx,`${appHome()}/data/sixfold/collaboration-tasks.json`,snapshot=>{
+      const tasks=snapshot.status==='ready'?snapshot.value?.tasks:null;
+      const work=snapshot.status==='missing'?false:!tasks||typeof tasks!=='object'||Object.values(tasks).some(task=>COLLABORATION_WORK.has(task?.state));
+      const started=work&&!this.collaborationWork;
+      this.collaborationWork=work;
+      if(started)this.collaborationPoll?.kick(cx);
+    }));
+    this.collaborationPoll=createPoll(cx,{every:2000,fallback:COLLABORATION_FALLBACK_MS,
+      due:()=>Boolean(this.collaborationScript)&&this.collaborationWork,
+      job:async()=>{
+        if(!this.collaborationScript)return;
         try { await invokeHelper(this.collaborationScript,'collaborate',['drain']); }
         catch { /* The durable lease prevents blind retry after ambiguous delivery. */ }
-        finally { this.collaborationBusy = false; }
-      });
-    });
+      }});
     // Optional voice integration is opt-in and runs only from this one sidebar.
     // Focus is sampled by a timer, never changed by rendering background rows.
     let voiceBusy=false, voiceActionBusy=false, voiceKey=null;
@@ -468,7 +479,7 @@ export default class SixfoldDesk extends View {
     this.classicCards?.dispose();
     this.stopArrivals?.();
     this.linkFlowTimer?.cancel();this.linkWakeTimer?.cancel();this.cometTimer?.cancel();
-    this.readPoll?.stop();
+    this.readPoll?.stop();this.collaborationPoll?.stop();
     for(const stop of this.fileSubscriptions||[])stop();
     this.fileSubscriptions=[];this.stopLiveMessages?.();this.stopLiveMessages=null;this.panelRetained?.dispose();
   }

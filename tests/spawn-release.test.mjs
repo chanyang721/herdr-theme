@@ -42,7 +42,7 @@ test('every busy-flag job starts through spawnOrRelease',()=>{
  const lines=source.split('\n');
  const starts=lines.flatMap((line,i)=>/Busy\s*=\s*true/.test(line)?[i]:[]);
  assert(starts.length>=5,'the periodic jobs are all found');
- for(const name of ['readPoll'])assert.match(source,new RegExp(`this\\.${name}=createPoll\\(cx,`),`${name} runs through createPoll`);
+ for(const name of ['readPoll','collaborationPoll'])assert.match(source,new RegExp(`this\\.${name}=createPoll\\(cx,`),`${name} runs through createPoll`);
  for(const i of starts){
   const next=lines.slice(i+1,i+10).find(line=>line.trim()&&!line.trim().startsWith('//'));
   assert.match(next,/spawnOrRelease\(cx,/,`line ${i+1} starts its job without a release on spawn failure`);
@@ -74,4 +74,25 @@ test('a voice helper that started and failed is not retried for the same focus',
  const run=await voiceRun(()=>false,()=>{throw new Error('helper failed');});
  await run.tick();await run.tick();
  assert.equal(run.counts().helperCalls,1,'a tried action keeps the focus key consumed');
+});
+
+test('collaborate drain runs every tick only while the ledger holds work, else on the 60 s fallback',async()=>{
+ const block=source.match(/    this\.collaborationWork=true;[\s\S]*?\n      \}\}\);\n/)[0];
+ const work=new Set(JSON.parse(source.match(/const COLLABORATION_WORK = new Set\((\[[^\]]*\])\)/)[1].replace(/'/g,'"')));
+ let tick,deliver,now=0,drains=0;const pending=[];
+ const view={collaborationScript:['demo'],fileSubscriptions:[]};
+ const cx={timer:{every(_ms,fn){tick=fn;return {cancel(){}};}},spawn(task){pending.push(task(cx));}};
+ new Function('cx','createPoll','subscribeJsonFile','appHome','invokeHelper','COLLABORATION_WORK','COLLABORATION_FALLBACK_MS',block).call(view,cx,
+  (c,options)=>createPoll(c,{...options,now:()=>now}),(_cx,_path,callback)=>{deliver=callback;return()=>{};},()=>'/demo-app',async()=>{drains++;},work,60000);
+ const run=async ms=>{now+=ms;tick(cx);await Promise.all(pending.splice(0));};
+ deliver({status:'ready',value:{tasks:{a:{state:'completed'}}}});
+ await run(0);assert.equal(drains,1,'the first tick is past the fallback');
+ for(let i=0;i<10;i++)await run(2000);
+ assert.equal(drains,1,'no pending work: no drain every 2 s');
+ deliver({status:'ready',value:{tasks:{a:{state:'pending'}}}});await Promise.all(pending.splice(0));
+ assert.equal(drains,2,'new work drains at once');
+ await run(2000);await run(2000);assert.equal(drains,4,'and every tick while it lasts');
+ deliver({status:'ready',value:{tasks:{a:{state:'completed'}}}});
+ await run(2000);assert.equal(drains,4);
+ await run(60000);assert.equal(drains,5,'the fallback still drains once a minute');
 });
