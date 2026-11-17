@@ -217,7 +217,11 @@ mod mac {
             )
         };
         if code != 0 || value == 0 {
-            return Err(format!("hw.memsize unavailable: {}", std::io::Error::last_os_error()).into());
+            return Err(format!(
+                "hw.memsize unavailable: {}",
+                std::io::Error::last_os_error()
+            )
+            .into());
         }
         Ok(value)
     }

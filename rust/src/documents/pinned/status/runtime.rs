@@ -227,7 +227,12 @@ fn mcp_stamp(home: &Path, codex: bool) -> String {
                 .ok()
                 .and_then(|m| m.duration_since(UNIX_EPOCH).ok())
                 .map_or(0, |m| m.as_nanos());
-            rows.push(format!("{}\0{}\0{}", path.display(), metadata.len(), modified));
+            rows.push(format!(
+                "{}\0{}\0{}",
+                path.display(),
+                metadata.len(),
+                modified
+            ));
         }
     }
     take(&hash(rows.join("\n")), 16)

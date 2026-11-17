@@ -131,7 +131,10 @@ fn store_totals(store_path: &Path, since: &Value) -> Result<(Totals, Value)> {
                 let totals = rows
                     .iter()
                     .filter_map(|row| {
-                        Some(((s(&row[0]).to_owned(), s(&row[1]).to_owned()), row[2].clone()))
+                        Some((
+                            (s(&row[0]).to_owned(), s(&row[1]).to_owned()),
+                            row[2].clone(),
+                        ))
                     })
                     .collect::<Totals>();
                 if totals.len() == rows.len() {
