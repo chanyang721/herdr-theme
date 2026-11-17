@@ -75,11 +75,21 @@ started issue (In Progress, In Review) stays in the list. A finished one
 `YYYY-MM-DD` day or an ISO time) falls on this computer's current day it waits
 in a folded **오늘 마무리 N** row at the end of the card, which expands on a
 click, otherwise it is only hidden. A not-yet-started one (todo, backlog,
-triage) shows only while one of its panes works. A pane that is working,
-blocked or needs a person keeps its issue on screen whatever the status. An
-issue without a status stays visible, as before. The issue row's label counts
-the working panes under it (**작업 중 N**); with none it reads **쉬는 중**, even
-when the producer's issue `state` still says working.
+triage) shows only while one of its panes works. A pane that is working, drawn
+as blocked (blocked status, missing report, error, blocked closing) or waiting
+for a person (`needs_human`, `unseen_result`, `wait_kind: input`) keeps its
+issue on screen whatever the status, and is never folded away. An issue without
+a status stays visible, as before. The issue row's label counts the working
+panes under it (**작업 중 N**); with none it reads **쉬는 중**, even when the
+producer's issue `state` still says working. The fold is recomputed just after
+local midnight.
+
+Two changes reach feeds without any of the new fields too. Issues sort by what
+their panes do now: one whose `state` is working but has no working pane sorts
+with the waiting issues, and a waiting one with a working pane sorts with the
+working ones. A pane whose `issue` the space does not list but whose
+`issue_catalog` has that key sits under its own issue row, built from the
+catalog, instead of under 이슈 없음.
 
 Optional agent fields place and describe a row. `own_issue` (string or `null`)
 is the issue the task owns itself rather than one borrowed from its parent task;
@@ -95,8 +105,10 @@ nothing knows keeps the earlier placement under 이슈 없음. `role`
 title still reads as a review. `issues` (up to 20 keys, the shown one first)
 lists every issue the session holds: the row stays under its current issue and
 shows **+N 이슈**, with the full list in its tooltip; held issues the catalog
-knows also get their own issue rows under the same status rules. Without these
-fields the rows keep their earlier placement.
+knows also get their own issue rows under the same status rules. Below 300px
+the role and held-issue count share one shrinkable chip (**검+1**) and the title
+keeps a minimum width; the full role and list stay in the tooltips. Without
+these fields the rows keep their earlier placement.
 Agents inside an issue are not truncated. Explicit
 `parent_id` relationships form trees within the same issue. More than three child
 branches show three and their own **+N**. Child rows use a compact status dot,

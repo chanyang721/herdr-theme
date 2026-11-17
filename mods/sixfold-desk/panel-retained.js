@@ -655,6 +655,11 @@ export function createRetainedPanel(cx,{macTitlebar=false,onClassic=null,onDispo
       // Countdown text changes once a minute at most; only rows with a timer wake.
       const reasonAt=panelReasonWake(c.feed,now);if(reasonAt!==null&&(at===null||reasonAt<at))at=reasonAt;
       if(briefAt!==null&&(at===null||briefAt<at))at=briefAt;
+      // A 오늘 마무리 fold belongs to today: wake once just after the next local midnight to drop it.
+      if([...c.projection.groups.values()].some(group=>group.doneFold)){
+        const d=new Date(now),midnight=new Date(d.getFullYear(),d.getMonth(),d.getDate()+1).getTime()+1000;
+        if(at===null||midnight<at)at=midnight;
+      }
       for(const packet of c.events.packets)for(const offset of PANEL_LEGS.slice(1)){
         const boundary=packet.at+offset;if(boundary>now&&(at===null||boundary<at))at=boundary;
       }

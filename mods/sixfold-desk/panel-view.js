@@ -14,6 +14,8 @@ const STATUS_LABEL={working:'작업 중',idle:'쉬는 중',blocked:'막힘',done
 const STAGES=['배분','작업','검수','수락 대기'];
 const CLOSE=['보고 작성','경험·결정 저장','기억함 제안','닫힘'];
 const RIGHT=PANEL_FLOW.gutter, ROW=24, REASON=0;
+// The least a row title keeps in a narrow panel when chips share its line.
+export const TITLE_MIN=28;
 // A row gets the done highlight when a task event (never a message) lands on it.
 export const rowArrival=(state,id)=>state.packets.some(event=>event.to===id&&event.phase==='ping'&&event.kind!=='message');
 // Two blinks of the arrival row highlight fit in the ping phase.
@@ -179,27 +181,33 @@ export function agentRow(view,agent,space,tag,state,color,t,motion){
   const birthAge=state.active?.find(event=>(event.kind==='spawn'||event.allocation?.kind==='new')&&event.to===agent.id)?.elapsed||0;
   const ghost=born&&motion&&birthAge<PANEL_TIMING.packetMs;
   const stacked=false;
-  const others=agentOtherIssues(agent);
+  const others=agentOtherIssues(agent),role=ROLE_LABELS[agent.role]||'',narrow=(view.panelWidth||224)<300;
+  const roleTone=agent.role==='review'?t.ansi5:agent.role==='integrate'?t.ansi6:null;
+  const heldTip=others.length?`맡은 이슈 ${others.length+1}개\n지금: ${agent.own_issue||agent.issue||'이슈 미확인'}\n${others.join(', ')}`:'';
+  const tagTip=[role&&`역할 ${role}`,heldTip].filter(Boolean).join('\n');
   const line=h_flex().id(`panel-agent-content-${agent.id}`).w_full().min_w(0).gap(5).items_center().opacity(ghost?0:1)
     .when(born&&motion,e=>e.transition('opacity',{duration:180,easing:'ease-out'}));
   const dimmed=rowState?rowState==='closed':status==='done';
   const row=h_flex().id(`panel-agent-${agent.id}`).relative().h(child?PANEL_GEOMETRY.child:ROW).flex_none().pl(child?30+(depth-1)*16:7).pr(7).gap(5).items_center().rounded(3)
     .opacity(dimmed||agent.report_missing?0.52:1)
     .when(born,e=>e.border(1).border_dashed().border_color(color))
-    .tooltip([agent.title,agent.tooltip_addr,agent.closing?.blocked_reason,reasonLine,detail.tooltip].filter(Boolean).join('\n'))
+    .tooltip([agent.title,tagTip,agent.tooltip_addr,agent.closing?.blocked_reason,reasonLine,detail.tooltip].filter(Boolean).join('\n'))
     .when(Boolean(agent.nav)&&agent.closing?.step!==4,e=>e.cursor_pointer().hover(h=>h.bg(t.hover))
       .on_click((_event,cx)=>{cx.stop_propagation();navigatePanelAgent(agent);}));
   line
     .child(div().relative().size(13).flex_none().child(familyIcon(agent).text_color(agent.family==='codex'?CODEX_COLOR:t.foreground)).when(Boolean(detail.remoteBadge),e=>e.child(detail.remoteBadge)))
     // Role chip (구현·검수·통합): a review task that kept its original title still reads as a review.
-    .when(Boolean(ROLE_LABELS[agent.role]),e=>e.child(div().id(`panel-role-${agent.id}`).flex_none().px(3).rounded(3).border(1)
-      .border_color(agent.role==='review'?(t.ansi5||t.border):agent.role==='integrate'?(t.ansi6||t.border):t.border)
-      .text_size(8).text_color(agent.role==='review'?(t.ansi5||t.muted):agent.role==='integrate'?(t.ansi6||t.muted):t.muted)
-      .accessibility_label(`역할 ${ROLE_LABELS[agent.role]}`).child(ROLE_LABELS[agent.role])))
-    .child(text(agent.title||'Untitled task',t.foreground,11).flex_1())
+    .when(!narrow&&Boolean(role),e=>e.child(div().id(`panel-role-${agent.id}`).flex_none().px(3).rounded(3).border(1)
+      .border_color(roleTone||t.border).text_size(8).text_color(roleTone||t.muted)
+      .accessibility_label(`역할 ${role}`).child(role)))
+    // A narrow panel keeps the title readable: one shrinkable chip (검+1) and a minimum title width.
+    .when(narrow&&Boolean(role||others.length),e=>e.child(div().id(`panel-tags-${agent.id}`).min_w(0).truncate().px(2).rounded(3).border(1)
+      .border_color(roleTone||t.border).text_size(8).text_color(roleTone||t.muted).tooltip(tagTip)
+      .accessibility_label(tagTip).child(`${role?role[0]:''}${others.length?`+${others.length}`:''}`)))
+    .child(text(agent.title||'Untitled task',t.foreground,11).id(`panel-title-${agent.id}`).flex_1().when(narrow&&Boolean(role||others.length),e=>e.min_w(TITLE_MIN)))
     // A session holding several issues sits under its current one; the others are counted, listed on hover.
-    .when(others.length>0,e=>e.child(div().id(`panel-issues-${agent.id}`).flex_none().px(3).rounded(3).bg(t.surface)
-      .text_size(8).text_color(t.muted).tooltip(`맡은 이슈 ${others.length+1}개\n지금: ${agent.own_issue||agent.issue||'이슈 미확인'}\n${others.join(', ')}`)
+    .when(!narrow&&others.length>0,e=>e.child(div().id(`panel-issues-${agent.id}`).flex_none().px(3).rounded(3).bg(t.surface)
+      .text_size(8).text_color(t.muted).tooltip(heldTip)
       .accessibility_label(`다른 이슈 ${others.length}개: ${others.join(', ')}`).child(`+${others.length} 이슈`)))
     .when(Boolean(detail.unreadBadge),e=>e.child(detail.unreadBadge));
   if(child)row.child(div().id(`panel-child-branch-${agent.id}`).absolute().left(18+(depth-1)*16).top(0).w(8).h(PANEL_GEOMETRY.child/2)

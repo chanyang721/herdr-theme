@@ -676,7 +676,7 @@ test('a status image animates for the brief window after a state change, then th
 
 test('field case renders role chips, held-issue chips, issue labels and the folded 오늘 마무리 row',async()=>{
   const r=await renderer(false),{feed,ids}=makeLedgerFieldFeed({now:Date.now()}),view=viewFor(feed);
-  const space=view.panelState.feed.spaces[0];
+  const space=view.panelState.feed.spaces[0];view.panelWidth=540;
   const tree=r.renderPanelTracking(view,t,r.cx);
   assert.deepEqual(words(byId(tree,`panel-role-${ids[12]}`)),['구현']);
   assert.deepEqual(words(byId(tree,`panel-role-${ids[13]}`)),['검수'],'a review row with the original title still reads 검수');

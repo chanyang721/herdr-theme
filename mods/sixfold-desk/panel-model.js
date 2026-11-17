@@ -403,8 +403,10 @@ function withLedger(issue, row) {
   if (!issue.title && row.title) extra.title = row.title;
   return Object.keys(extra).length ? { ...issue, ...extra } : issue;
 }
-// A row that keeps a hidden issue on screen: working, blocked or waiting for a person.
-const active = agent => agent.status === 'working' || agent.status === 'blocked' || agent.state === 'needs_human';
+// A row that keeps a hidden issue on screen and is never folded away: working, drawn as blocked (status,
+// report missing, error, blocked closing), or waiting for a person (needs_human, an unseen result, input).
+const active = agent => agent.status === 'working' || agentState(agent) === 'blocked'
+  || agent.state === 'needs_human' || agent.state === 'unseen_result' || agent.wait_kind === 'input';
 const working = agent => agent.status === 'working' && agent.closing?.step !== 4;
 // The issue row's right-hand label: working panes are counted from the rows themselves, so an issue
 // whose panes all went idle never reads 작업 중 (the producer's issue state can lag behind).
@@ -426,13 +428,14 @@ function foldUnknown(agents, unknown, expandedParents) {
     changed = false;
     for (const agent of agents) {
       if (hidden.has(agent.id) || !byId.has(agent.parent_id) || agent.parent_id === agent.id) continue;
+      if (active(agent)) continue;
       if (unknown.has(agent.id) && !expandedParents.has(agent.parent_id) || hidden.has(agent.parent_id)) { hidden.add(agent.id); changed = true; }
     }
   }
   const tree = treeAgents(agents.filter(agent => !hidden.has(agent.id)), expandedParents);
   const counts = new Map(), totals = new Map();
   for (const agent of agents) {
-    if (unknown.has(agent.id) && byId.has(agent.parent_id)) totals.set(agent.parent_id, (totals.get(agent.parent_id) || 0) + 1);
+    if (unknown.has(agent.id) && !active(agent) && byId.has(agent.parent_id)) totals.set(agent.parent_id, (totals.get(agent.parent_id) || 0) + 1);
     if (!hidden.has(agent.id)) continue;
     let up = agent.parent_id;
     for (let guard = 0; hidden.has(up) && guard < agents.length; guard++) up = byId.get(up).parent_id;
