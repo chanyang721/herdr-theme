@@ -24,17 +24,20 @@ export function liveEventDiagnostics(){
   return [...(globalThis[REGISTRY]?.entries()??[])].map(([key,service])=>({key,...service.inspect()}));
 }
 
-export function subscribeLiveEvents({key,read,cx,onChange,onError,intervalMs=500}){
+export function subscribeLiveEvents({key,read,cx,onChange,onError,generation=null,intervalMs=500}){
   if(typeof key!=='string'||!key)throw new TypeError('A live-event key is required');
   if(typeof read!=='function'||typeof onChange!=='function')throw new TypeError('read and onChange callbacks are required');
   if(!Number.isFinite(intervalMs)||intervalMs<=0)throw new RangeError('A positive sampling interval is required');
   if(typeof cx?.timer?.every!=='function')throw new TypeError('An async timer context is required');
   const registry=globalThis[REGISTRY]??(globalThis[REGISTRY]=new Map());
   let service=registry.get(key);
-  // Native reload retires an application's tasks without calling view.close().
-  // A cancelled sampler marks that generation's listeners as retired too; never
-  // bind its old callbacks or contexts into a new application's sampler.
-  if(service&&!service.inspect().sampling){service.dispose();service=null;}
+  // The native host initializes a changed root module before cancelling old
+  // application tasks. Its named class identity separates source generations
+  // early enough for the new timer to belong to the new native application.
+  // Different views of the same root class still share one sampler. A same-code
+  // cache hit has no new identity; an already-cancelled timer remains a separate
+  // recovery signal when its next subscription arrives.
+  if(service&&(service.generation!==generation||!service.inspect().sampling)){service.dispose();service=null;}
   if(!service){
     const subscribers=new Set();
     let reader=read,owner=cx,period=intervalMs,timer=null,token=0,value=null,signature=null,disposed=false,round=0;
@@ -107,6 +110,7 @@ export function subscribeLiveEvents({key,read,cx,onChange,onError,intervalMs=500
     };
     service={
       protocol:2,
+      generation,
       dispose(){
         if(disposed)return;
         disposed=true;stop();

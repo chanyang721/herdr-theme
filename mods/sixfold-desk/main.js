@@ -283,7 +283,7 @@ export default class SixfoldDesk extends View {
       // too low and the delivery replayed old sends together: up to twelve recent ones
       // on load, every hidden send instead of the latest three on return.
       try{const events=herdrNative.messageEvents();if(Array.isArray(events))this.nativeMessages=events;}catch{/* The sampler delivers it. */}
-      this.stopLiveMessages=subscribeLiveEvents({key:`${appHome()}:messages`,cx,read:()=>herdrNative.messageEvents(),
+      this.stopLiveMessages=subscribeLiveEvents({key:`${appHome()}:messages`,generation:SixfoldDesk,cx,read:()=>herdrNative.messageEvents(),
         onChange:events=>fileReceiver.enqueue(this.deliverLiveMessages,events,{awaitDelivery:true}),
         onError:error=>{this.liveMessageError={...error,at:Date.now()};},intervalMs:1000});
     };
