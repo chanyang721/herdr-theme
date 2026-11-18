@@ -6,6 +6,28 @@ import {filePathKey} from '../mods/sixfold-desk/file-feed.js';
 import {touchesCards} from '../mods/sixfold-desk/ask-model.js';
 
 const tick=()=>new Promise(resolve=>setImmediate(resolve)),nativeParse=JSON.parse;let serial=0;
+
+test('a failed wake scheduling attempt rearms the latest queued delivery on retry',async()=>{
+  const f=await fixture(),cx=f.context(),receiver=f.io.fileDelivery(cx),values=[];
+  const schedule=cx.timer.after;let fail=true;
+  cx.timer.after=(...args)=>{if(fail){fail=false;throw Error('fixture schedule failure');}return schedule(...args);};
+  const deliver=value=>values.push(value);
+  assert.throws(()=>receiver.enqueue(deliver,'old'),/fixture schedule failure/);
+  receiver.enqueue(deliver,'latest');await f.pump();
+  assert.deepEqual(values,['latest']);assert.equal(f.commands.length,1);
+});
+
+test('delivery acknowledgements wait for the owned flush and explicit removal rejects only the removed callback',async()=>{
+  const f=await fixture(),cx=f.context(),receiver=f.io.fileDelivery(cx),values=[];
+  const retired=value=>values.push(value),active=value=>values.push(value);
+  const cancelled=assert.rejects(receiver.enqueue(retired,'retired',{awaitDelivery:true}),/file_delivery_cancelled/);
+  let delivered=false;
+  const completed=receiver.enqueue(active,'active',{awaitDelivery:true}).then(()=>{delivered=true;});
+  receiver.remove(retired);await cancelled;assert.equal(delivered,false);
+  await f.wakeOnly();assert.equal(delivered,false,'posting a native command is not the owned callback delivery');
+  receiver.flush();await completed;
+  assert.equal(delivered,true);assert.deepEqual(values,['active']);
+});
 async function fixture({home=`/panel-io-${serial}/app`,nativeJson=true}={}){
   const key=`__panelIoRuntime${serial++}`,reads=[],watchCalls=[],waiting=new Map(),contexts=[],starts=[],commands=[],raw=new Map(),opens=[],writes=[];
   let reader=async path=>({status:'ok',hash:`hash:${path}`,changed:true,value:{path}});

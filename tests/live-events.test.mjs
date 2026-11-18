@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {subscribeLiveEvents} from '../mods/sixfold-desk/live-events.js';
+import {subscribeLiveEvents,liveEventDiagnostics} from '../mods/sixfold-desk/live-events.js';
 
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
 let seq=0;
@@ -71,9 +71,10 @@ test('malformed/throwing reads retain the last typed array without notifying',as
 
 test('a failing asynchronous consumer cannot stop another consumer',async()=>{
   const f=setup(),cx=f.context('shared'),rows=[];
-  subscribeLiveEvents({key:f.key,read:f.read,cx,onChange:async()=>{throw new Error('closed context');}});
+  const broken=subscribeLiveEvents({key:f.key,read:f.read,cx,onChange:async()=>{throw new Error('closed context');}});
   const stop=subscribeLiveEvents({key:f.key,read:f.read,cx,onChange:value=>rows.push(value)});await tick();
-  f.set([{id:'still-live'}]);f.sample();assert.equal(rows.length,2);stop();
+  f.set([{id:'still-live'}]);f.sample();assert.equal(rows.length,2);await tick();
+  f.sample();await tick();assert.equal(broken.is_active(),false);stop();assert(f.timers[0].closed);
 });
 
 test('closing the latest reader restores a surviving binding without another timer',async()=>{
@@ -93,4 +94,80 @@ test('an equal fresh copy does not broadcast; a new event or a flipped started f
   f.set([{id:'a',seq:1,at:1,started:true}]);f.sample();assert.equal(rows.length,2,'a send confirmed in place');
   f.set([{id:'a',seq:1,at:1,started:true},{id:'b',seq:2,at:2}]);f.sample();assert.equal(rows.length,3);
   stop();
+});
+
+test('middle-event rendering corrections are delivered without serializing message text',async()=>{
+  const f=setup(),rows=[],cx=f.context('corrections');
+  const first={id:'first',seq:1,at:1,source:'source',target:'old',started:true,animate:true,status:'held'};
+  const last={id:'last',seq:2,at:2,source:'source',target:'target',started:true};
+  f.set([first,last]);
+  const stop=subscribeLiveEvents({key:f.key,read:f.read,cx,onChange:value=>rows.push(value)});await tick();
+  for(const change of [{target:'corrected'},{animate:false},{status:'confirmed'}]){
+    f.set([{...first,...change},last]);f.sample();
+  }
+  assert.equal(rows.length,4);
+  f.set([{...first,status:'confirmed',text:{toJSON(){throw Error('private body must not be serialized');}}},last]);f.sample();
+  assert.equal(rows.length,4,'message bodies are outside the typed rendering fingerprint');
+  stop();
+});
+
+test('a sole consumer retries the same snapshot after one synchronous delivery failure',async()=>{
+  const f=setup(),rows=[],failures=[];let broken=true;
+  const stop=subscribeLiveEvents({key:f.key,read:f.read,cx:f.context('recover'),
+    onChange:value=>{if(broken)throw Error('private error text');rows.push(value);},onError:value=>failures.push(value)});
+  await tick();
+  assert.equal(failures.length,1,'one attempt per sampling round');
+  assert.equal(stop.is_active(),true);
+  broken=false;f.sample();assert.equal(rows.length,1);
+  f.set([{id:'after-recovery'}]);f.sample();assert.equal(rows.length,2);
+  assert(!JSON.stringify(failures).includes('private error text'));
+  const diagnostics=liveEventDiagnostics().find(item=>item.key===f.key);
+  assert.equal(diagnostics.deliveryFailures,1);assert.equal(diagnostics.retries,1);
+  assert.equal(diagnostics.subscribers,1);assert.equal(diagnostics.sampling,true);
+  assert.equal(stop.diagnostics().totalFailures,1);
+  stop();assert.equal(stop.is_active(),false);assert(f.timers[0].closed);
+});
+
+test('async rejection recovers without overlapping deliveries, but permanent failures stop after three attempts',async()=>{
+  const f=setup(),cx=f.context('async'),rows=[];let attempts=0;
+  const stop=subscribeLiveEvents({key:f.key,read:f.read,cx,onChange:async value=>{if(++attempts===1)throw Error('transient');rows.push(value);}});
+  await tick();f.sample();await tick();assert.equal(rows.length,1);stop();
+  const dead=setup(),errors=[];let failed=0;
+  const ended=subscribeLiveEvents({key:dead.key,read:dead.read,cx:dead.context('dead'),onChange:async()=>{failed++;throw Error('permanent');},onError:error=>errors.push(error)});
+  await tick();dead.sample();await tick();dead.sample();await tick();
+  assert.equal(failed,3);assert.equal(ended.is_active(),false);
+  assert(dead.timers[0].closed);assert.equal(errors.at(-1).retrying,false);
+  dead.timers[0].fn();await tick();assert.equal(failed,3,'retired callbacks cannot retry forever');
+});
+
+test('a never-settling consumer has bounded attempts and late resolution cannot revive a disposed subscription',async()=>{
+  const f=setup(),resolves=[],errors=[];
+  const stop=subscribeLiveEvents({key:f.key,read:f.read,cx:f.context('hung'),onChange:()=>new Promise(resolve=>resolves.push(resolve)),onError:error=>errors.push(error)});
+  await tick();
+  for(let count=0;count<9;count++)if(!f.timers[0].closed)f.sample();
+  assert.equal(resolves.length,3);assert.equal(stop.is_active(),false);assert(f.timers[0].closed);
+  resolves.forEach(resolve=>resolve());await tick();
+  assert.equal(stop.is_active(),false);assert.equal(errors.at(-1).kind,'delivery_timeout');
+});
+
+test('an asynchronous delivery never overlaps and the next sample delivers the newest snapshot once',async()=>{
+  const f=setup(),resolves=[],rows=[];
+  const stop=subscribeLiveEvents({key:f.key,read:f.read,cx:f.context('serial'),onChange:value=>{rows.push(value);return new Promise(resolve=>resolves.push(resolve));}});
+  await tick();f.set([{id:'newest'}]);f.sample();assert.equal(rows.length,1);
+  resolves[0]();await tick();f.sample();assert.equal(rows.length,2);assert.equal(rows[1][0].id,'newest');
+  stop();resolves[1]();await tick();assert.equal(stop.is_active(),false);
+  assert(!liveEventDiagnostics().some(item=>item.key===f.key));
+});
+
+test('disposing a V2 service cancels owner-null sampling and late completions cannot revive it or delete its replacement',async()=>{
+  const f=setup(),resolves=[];
+  const a=subscribeLiveEvents({key:f.key,read:f.read,cx:f.context('dispose-a'),onChange:()=>new Promise(resolve=>resolves.push(resolve))});
+  const b=subscribeLiveEvents({key:f.key,read:f.read,cx:f.context('dispose-b'),onChange:()=>{}});await tick();
+  const registry=globalThis.__sixfoldLiveEventSamplesV2,service=registry.get(f.key);
+  assert.equal(service.protocol,2);assert.deepEqual(f.timers[0].options,{owner:null});
+  service.dispose();assert(f.timers[0].closed);assert.equal(a.is_active(),false);assert.equal(b.is_active(),false);
+  const reads=f.reads;f.timers[0].fn();resolves.forEach(resolve=>resolve());await tick();
+  assert.equal(f.reads,reads);assert(!registry.has(f.key));
+  const next=subscribeLiveEvents({key:f.key,read:f.read,cx:f.context('replacement'),onChange:()=>{}});await tick();
+  service.dispose();assert.equal(next.is_active(),true);assert(registry.has(f.key));next();
 });

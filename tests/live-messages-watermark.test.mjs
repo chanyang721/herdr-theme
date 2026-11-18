@@ -15,7 +15,7 @@ async function sidebar(log){
     notify(){},
     spawn(task){return task(cx);},
     timer:{every(ms,callback,options){const timer={ms,callback,options,cancelled:false,cancel(){this.cancelled=true;},is_done(){return this.cancelled;}};timers.push(timer);return timer;},
-      after(ms,callback){const timer={cancelled:false,cancel(){this.cancelled=true;}};if(ms===0)wakeTimers.push({timer,callback});return timer;}},
+      after(ms,callback){if(ms===0&&state.failWake){state.failWake=false;throw Error('fixture wake failure');}const timer={cancelled:false,cancel(){this.cancelled=true;}};if(ms===0)wakeTimers.push({timer,callback});return timer;}},
   };
   const snapshot=path=>{
     const raw=path.endsWith('/workflow.json')?state.workflow:null;
@@ -31,7 +31,7 @@ async function sidebar(log){
     readTextFile:async()=>{throw Error('no raw reads');},
     subscribeJsonFile:(context,path,callback)=>{let live=true;subscriptions.set(path,value=>runtime.fileDelivery(context).enqueue(value=>{if(live)callback(value);},value));return()=>{live=false;subscriptions.delete(path);};},
     readJsonSnapshot:async path=>snapshot(path),
-    run:()=>deliver('file-feed-changed'),
+    run:()=>{if(state.failCommand){state.failCommand=false;throw Error('fixture command failure');}deliver('file-feed-changed');},
     nextCommand:()=>commandQueue.length?Promise.resolve(commandQueue.shift()):new Promise(resolve=>{waitingCommand=resolve;}),
     focused:()=>null,panes:()=>[],agents:()=>[],spaces:()=>[],shared:()=>undefined,setShared(){},
   };
@@ -44,9 +44,69 @@ async function sidebar(log){
   const flows=()=>[...view.activeFlows,...view.pendingFlows].map(flow=>flow.id);
   const stop=()=>{view.stopLiveMessages?.();for(const release of view.fileSubscriptions)release();delete globalThis.__sixfoldTest;};
   view.init({},cx);publishFiles();await settle();
-  return {state,view,settle,publishFiles,sample,visibility,flows,stop};
+  return {state,view,settle,publishFiles,sample,visibility,flows,stop,timers};
 }
 const send=(seq,at=Date.now())=>({id:`send-${seq}`,source:'source',target:'target',at,seq});
+
+test('a failed delivery wake recovers on the next native sample without a UI or focus event',async()=>{
+  const s=await sidebar([]);
+  try{
+    s.state.failWake=true;s.state.log=[send(1)];s.sample();await s.settle();
+    assert.deepEqual(s.flows(),[]);
+    assert.equal(s.view.stopLiveMessages.is_active(),true);
+    s.sample();await s.settle();assert.deepEqual(s.flows(),['send-1']);
+    s.state.log=[...s.state.log,send(2)];s.sample();await s.settle();
+    assert.deepEqual(s.flows(),['send-1','send-2']);
+    assert.equal(s.view.liveMessageError?.kind,'delivery_failed');
+  }finally{s.stop();}
+});
+
+test('closing the actual sidebar explicitly cancels its owner-null sampler',async()=>{
+  const s=await sidebar([]);
+  const sampler=s.timers.find(timer=>timer.ms===1000&&timer.options?.owner===null&&!timer.cancelled);
+  try{s.view.close();assert(sampler.cancelled);assert.equal(s.view.stopLiveMessages,null);}
+  finally{s.stop();}
+});
+
+test('a retired sampler handle cannot block explicit sidebar re-subscription or replay history',async()=>{
+  const s=await sidebar([send(1)]);
+  try{
+    const first=s.view.stopLiveMessages;
+    s.timers.find(timer=>timer.ms===1000&&timer.options?.owner===null&&!timer.cancelled).cancel();
+    assert.equal(first.is_active(),false);
+    s.view.startLiveMessages();await s.settle();
+    assert.notEqual(s.view.stopLiveMessages,first);
+    assert.equal(s.view.stopLiveMessages.is_active(),true);assert.deepEqual(s.flows(),[]);
+    s.state.log=[...s.state.log,send(2)];s.sample();await s.settle();assert.deepEqual(s.flows(),['send-2']);
+  }finally{s.stop();}
+});
+
+test('a failed native command wake retries the same last message without another event or UI action',async()=>{
+  const s=await sidebar([]);
+  try{
+    s.state.failCommand=true;s.state.log=[send(1)];s.sample();await s.settle();
+    assert.deepEqual(s.flows(),[]);
+    s.sample();await s.settle();assert.deepEqual(s.flows(),['send-1']);
+    assert.equal(s.view.stopLiveMessages.is_active(),true);
+    assert.equal(s.view.liveMessageError?.kind,'delivery_failed');
+  }finally{s.stop();}
+});
+
+test('permanent wake failures stop after three attempts despite shared-file churn and reset only on a new visibility lifetime',async()=>{
+  const s=await sidebar([]);
+  try{
+    s.state.log=[send(1)];
+    for(let count=0;count<3;count++){s.state.failWake=true;s.sample();await s.settle();}
+    assert.equal(s.view.stopLiveMessages.is_active(),false);
+    assert.equal(s.view.liveMessageError.retrying,false);
+    const timers=s.timers.length;
+    for(let count=0;count<20;count++)s.view.startLiveMessages();
+    assert.equal(s.timers.length,timers,'unrelated shared changes do not restart a dead receiver forever');
+    await s.visibility(false);await s.visibility(true);
+    assert.equal(s.view.stopLiveMessages.is_active(),true);assert.deepEqual(s.flows(),[]);
+    s.state.log=[...s.state.log,send(2)];s.sample();await s.settle();assert.deepEqual(s.flows(),['send-2']);
+  }finally{s.stop();}
+});
 
 test('loading the sidebar never replays sends already in the native log', async () => {
   // A mod save reloads the sidebar: the newest sends were made minutes ago.
