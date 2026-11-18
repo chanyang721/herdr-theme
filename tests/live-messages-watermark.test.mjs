@@ -8,7 +8,7 @@ import {loadSidebar} from './live-sidebar-loader.mjs';
 // an empty or older copy it set the watermark too low, and the delivery then replayed
 // old sends all at once, long after they were made.
 let loads=0;
-async function sidebar(log){
+async function sidebar(log,{home=null}={}){
   const state={log,visible:true,workflow:JSON.stringify({nodes:[],events:[]})};
   const timers=[],wakeTimers=[],commandQueue=[],heldCommands=[],subscriptions=new Map();let waitingCommand=null;
   const cx={
@@ -25,7 +25,7 @@ async function sidebar(log){
   const deliver=command=>{if(waitingCommand){const resolve=waitingCommand;waitingCommand=null;resolve(command);}else commandQueue.push(command);};
   const runtime={
     messageEvents:()=>state.log,
-    props:()=>({role:'sidebar'}),appHome:()=>`/watermark-${loads}`,
+    props:()=>({role:'sidebar'}),appHome:()=>home??`/watermark-${loads}`,
     window:()=>({active:false,visible:state.visible}),
     terminals:()=>[{address:'source'},{address:'target'}],
     readTextFile:async()=>{throw Error('no raw reads');},
@@ -68,6 +68,22 @@ test('closing the actual sidebar explicitly cancels its owner-null sampler',asyn
   const sampler=s.timers.find(timer=>timer.ms===1000&&timer.options?.owner===null&&!timer.cancelled);
   try{s.view.close();assert(sampler.cancelled);assert.equal(s.view.stopLiveMessages,null);}
   finally{s.stop();}
+});
+
+test('a newly evaluated sidebar root owns its sampler before the host cancels the previous root tasks',async()=>{
+  const home='/fixture-native-root-reload-order',old=await sidebar([send(1)],{home});
+  let fresh;
+  try{
+    const oldTimer=old.timers.find(timer=>timer.ms===1000&&timer.options?.owner===null&&!timer.cancelled);
+    fresh=await sidebar([send(1)],{home});
+    assert(oldTimer.cancelled,'new root initialization retires the old root service before native retirement');
+    assert.equal(old.view.stopLiveMessages.is_active(),false);
+    assert.equal(fresh.timers.filter(timer=>timer.ms===1000&&timer.options?.owner===null&&!timer.cancelled).length,1);
+    oldTimer.cancel();oldTimer.callback();
+    fresh.state.log=[send(1),send(2)];fresh.sample();await fresh.settle();
+    assert.deepEqual(old.flows(),[]);assert.deepEqual(fresh.flows(),['send-2']);
+    old.view.stopLiveMessages();assert.equal(fresh.view.stopLiveMessages.is_active(),true);
+  }finally{old.stop();fresh?.stop();}
 });
 
 test('a retired sampler handle cannot block explicit sidebar re-subscription or replay history',async()=>{

@@ -185,3 +185,23 @@ test('a cancelled application generation discards its listeners before a fresh c
   assert.equal(retiredStarts,0);assert.equal(f.timers.filter(timer=>!timer.closed).length,0);
   oldStop();fresh();
 });
+
+test('new application init before old-generation cancellation owns a fresh sampler while same-generation views still share',async()=>{
+  const f=setup(),oldGeneration={},nextGeneration={},oldRows=[],newRows=[];
+  const old=subscribeLiveEvents({key:f.key,generation:oldGeneration,cx:f.context('old-a'),read:f.read,onChange:rows=>oldRows.push(rows)});
+  const peer=subscribeLiveEvents({key:f.key,generation:oldGeneration,cx:f.context('old-b'),read:f.read,onChange:()=>{}});
+  await tick();assert.equal(f.timers.length,1);
+  const oldTimer=f.timers[0];
+  // The native host initializes the new root before it retires old tasks.
+  const fresh=subscribeLiveEvents({key:f.key,generation:nextGeneration,cx:f.context('new-a'),read:f.read,onChange:rows=>newRows.push(rows)});
+  const freshPeer=subscribeLiveEvents({key:f.key,generation:nextGeneration,cx:f.context('new-b'),read:f.read,onChange:()=>{}});
+  await tick();
+  assert.equal(f.timers.length,2);assert(oldTimer.closed);assert.equal(f.timers[1].owner,'new-a');
+  oldTimer.closed=true;oldTimer.fn();
+  f.set([{id:'after-native-retirement'}]);f.sample();
+  assert.equal(oldRows.length,1);assert.equal(newRows.length,2);
+  assert.equal(old.is_active(),false);assert.equal(peer.is_active(),false);
+  old();peer();assert.equal(fresh.is_active(),true,'late old release cannot cancel the new generation');
+  fresh();assert.equal(freshPeer.is_active(),true,'same-generation owner handoff remains valid');
+  assert.equal(f.timers.filter(timer=>!timer.closed).length,1);freshPeer();
+});
