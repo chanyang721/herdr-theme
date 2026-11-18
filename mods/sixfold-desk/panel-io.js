@@ -16,17 +16,38 @@ export function fileDelivery(cx){
   let state=deliveries.get(cx);
   if(!state){state={queue:[],wake:null,signaled:false};deliveries.set(cx,state);}
   else if(typeof state.signaled!=='boolean')state.signaled=Boolean(state.queue.length||state.wake);
+  state.acks??=[];
+  const rejectWake=()=>{for(const waiter of state.acks.splice(0))waiter.reject(new Error('file_delivery_wake_failed'));};
   return {
-    enqueue(callback,value){
+    enqueue(callback,value,{awaitDelivery=false}={}){
       const pending=state.queue.findIndex(([deliver])=>deliver===callback);
       if(pending<0)state.queue.push([callback,value]);else state.queue[pending][1]=value;
       // A hidden receiver may not consume a native command until it resumes.
       // Keep one signal outstanding and only the latest value per subscriber.
-      if(!state.signaled){state.signaled=true;state.wake=cx.timer.after(0,()=>{state.wake=null;native.run(`sixfold-desk.${FILE_CHANGED_COMMAND}`);},{owner:null});}
+      if(!state.signaled){
+        state.signaled=true;
+        try{
+          state.wake=cx.timer.after(0,()=>{
+            state.wake=null;
+            try{native.run(`sixfold-desk.${FILE_CHANGED_COMMAND}`);}
+            catch{state.signaled=false;metrics.errors++;metrics.lastErrorKind='delivery_command_failed';rejectWake();}
+          },{owner:null});
+        }catch(error){
+          // Keep the latest queued value, but allow the subscriber's next bounded
+          // delivery attempt to schedule a wake rather than remaining signaled forever.
+          state.wake=null;state.signaled=false;metrics.errors++;metrics.lastErrorKind='delivery_schedule_failed';rejectWake();
+          throw error;
+        }
+      }
+      // Only callers needing delivery acknowledgement opt in. Their existing
+      // sampler owns retries; the file receiver creates no retry timer itself.
+      if(awaitDelivery)return new Promise((resolve,reject)=>state.acks.push({callback,resolve,reject}));
     },
     remove(callback){
       const pending=state.queue.findIndex(([deliver])=>deliver===callback);
       if(pending>=0)state.queue.splice(pending,1);
+      for(const waiter of state.acks.filter(item=>item.callback===callback))waiter.reject(new Error('file_delivery_cancelled'));
+      state.acks=state.acks.filter(item=>item.callback!==callback);
       if(!state.queue.length){
         try{state.wake?.cancel?.();}catch{/* The source generation may already be gone. */}
         state.wake=null;state.signaled=false;
@@ -36,8 +57,13 @@ export function fileDelivery(cx){
       try{state.wake?.cancel?.();}catch{/* An already retired generation may have released its timer. */}
       state.wake=null;
       const queued=state.queue.splice(0);
+      const acknowledgements=state.acks.splice(0);
       state.signaled=false;
-      for(const [callback,value] of queued)try{callback(value);}catch(error){metrics.errors++;metrics.lastError=String(error?.stack||error);}
+      for(const [callback,value] of queued){
+        const waiters=acknowledgements.filter(item=>item.callback===callback);
+        try{callback(value);for(const waiter of waiters)waiter.resolve();}
+        catch(error){metrics.errors++;metrics.lastError=String(error?.stack||error);for(const waiter of waiters)waiter.reject(new Error('file_delivery_callback_failed'));}
+      }
     },
   };
 }

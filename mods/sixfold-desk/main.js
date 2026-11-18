@@ -267,7 +267,15 @@ export default class SixfoldDesk extends View {
     // The voice plugin's per-pane microphone state, shared so every pane header can draw its own badge.
     watchMic(this,cx,`${appHome()}/data/sixfold`,setShared);
     this.startLiveMessages=()=>{
-      if(this.stopLiveMessages||typeof herdrNative.messageEvents!=='function'||!this.sidebarVisible)return;
+      if(this.stopLiveMessages){
+        if(typeof this.stopLiveMessages.is_active!=='function'||this.stopLiveMessages.is_active())return;
+        // A permanently failing receiver has exhausted this visible lifetime's
+        // bounded attempts. Shared-file churn must not continually reopen it;
+        // an explicit hide/show lifecycle clears the handle and can try anew.
+        if(this.stopLiveMessages.diagnostics?.().failures>=3)return;
+        this.stopLiveMessages();this.stopLiveMessages=null;
+      }
+      if(typeof herdrNative.messageEvents!=='function'||!this.sidebarVisible)return;
       this.deliverLiveMessages??=events=>{this.nativeMessages=events;refresh(cx);};
       // Read the log now, before the first refresh, which runs ahead of the sampler's
       // first delivery. With an empty copy (on load) or the copy from before the window
@@ -275,7 +283,9 @@ export default class SixfoldDesk extends View {
       // too low and the delivery replayed old sends together: up to twelve recent ones
       // on load, every hidden send instead of the latest three on return.
       try{const events=herdrNative.messageEvents();if(Array.isArray(events))this.nativeMessages=events;}catch{/* The sampler delivers it. */}
-      this.stopLiveMessages=subscribeLiveEvents({key:`${appHome()}:messages`,cx,read:()=>herdrNative.messageEvents(),onChange:events=>fileReceiver.enqueue(this.deliverLiveMessages,events),intervalMs:1000});
+      this.stopLiveMessages=subscribeLiveEvents({key:`${appHome()}:messages`,cx,read:()=>herdrNative.messageEvents(),
+        onChange:events=>fileReceiver.enqueue(this.deliverLiveMessages,events,{awaitDelivery:true}),
+        onError:error=>{this.liveMessageError={...error,at:Date.now()};},intervalMs:1000});
     };
     this.startLiveMessages();refresh(cx);
     // The slow dot on a computer link turns at the ends of its pipe. A native loop
