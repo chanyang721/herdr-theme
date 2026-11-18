@@ -10,6 +10,31 @@ const agent = (id, extra = {}) => ({ id, family: 'codex', title: `Task ${id}`, s
 const space = (id, extra = {}) => ({ id, name: `Space ${id}`, computer: 'studio', bundle: 'violet', share: null, slack: null, work: null, issues: [], memory: { proposals: 0 }, agents: [agent(`${id}-agent`)], ...extra });
 const feed = extra => ({ v: 1, at: stamp(NOW), computers: [{ id: 'studio', name: 'Studio', local: true }, { id: 'worker', name: 'Worker', linked: true }], spaces: [space('one')], links: [], events: [], ...extra });
 const normalize = extra => cleanPanelFeed(feed(extra));
+
+test('optional producer profession survives normalization and retained projection without a role catalog', () => {
+  const input=feed();input.spaces[0].agents[0].profession={id:'custom-discipline',label:'QA'};
+  const cleaned=cleanPanelFeed(input),projection=projectPanelFeed(cleaned);
+  const actual=projection.spaces[0].agents[0];
+  assert.deepEqual(actual.profession,{id:'custom-discipline',label:'QA'});
+  assert.notEqual(actual.profession,input.spaces[0].agents[0].profession);
+  const changed=structuredClone(input);changed.spaces[0].agents[0].profession.label='Design';
+  const next=projectPanelFeed(cleanPanelFeed(changed),projection);
+  assert.equal(next.spaces[0].agents[0].profession.label,'Design');
+  assert.notEqual(next.spaces[0].agents[0],actual);
+  delete changed.spaces[0].agents[0].profession;
+  assert.equal(Object.hasOwn(projectPanelFeed(cleanPanelFeed(changed),next).spaces[0].agents[0],'profession'),false);
+});
+
+test('invalid or unbounded profession metadata is dropped and keeps the operational role', () => {
+  for(const profession of [null,[],{}, {id:'x'}, {id:'x',label:' '}, {id:'x y',label:'QA'},
+    {id:'x'.repeat(81),label:'QA'}, {id:'x',label:'Q'.repeat(49)}, {id:'x',label:'QA\nreview'},
+    {id:'x',label:42}, {id:'x\0',label:'QA'}, {id:'x',label:' QA'}, {id:'x',label:'QA '}, {id:'x',label:'QA',extra:'ignored?'}]){
+    const input=feed();Object.assign(input.spaces[0].agents[0],{role:'review',profession});
+    const actual=cleanPanelFeed(input).spaces[0].agents[0];
+    assert.equal(Object.hasOwn(actual,'profession'),false,JSON.stringify(profession));
+    assert.equal(actual.role,'review');
+  }
+});
 const boot = value => panelEventStates(value, NOW);
 const advance = (value, previous, delta, motion = true) => panelEventStates(value, NOW + delta, { previous, motion });
 

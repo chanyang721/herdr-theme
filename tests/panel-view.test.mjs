@@ -45,6 +45,24 @@ async function renderer(motion=true,{nativeSpaces=[],nativePanes=[]}={}){
 }
 const viewFor=feed=>({panelState:{feed:cleanPanelFeed(feed),status:'ready'},panelEvents:null,panelReducedMotion:false});
 
+test('profession and operational role render together as literal bounded text in wide and narrow rows',async()=>{
+  const r=await renderer(false),feed=makePanelFixture(),agent=feed.spaces[0].agents[0];
+  Object.assign(agent,{role:'review',profession:{id:'custom-discipline',label:'QA'}});
+  for(const width of [224,360]){
+    const tree=r.renderPanelTracking({...viewFor(feed),panelWidth:width},t,r.cx);
+    const chip=byId(tree,`${width<300?'panel-tags':'panel-role'}-${agent.id}`);
+    assert.deepEqual(words(chip),['QA · 검수']);
+    assert.match(call(chip,'accessibility_label')[1],/QA/);
+    assert.match(call(byId(tree,`panel-agent-${agent.id}`),'tooltip')[1],/직무 QA/);
+    assert(call(chip,'truncate'),'producer label cannot crowd out the title');
+  }
+  agent.profession.label='<b>QA & review</b>';
+  const literal=r.renderPanelTracking({...viewFor(feed),panelWidth:360},t,r.cx);
+  assert.deepEqual(words(byId(literal,`panel-role-${agent.id}`)),['<b>QA & review</b> · 검수']);
+  delete agent.profession;
+  assert.deepEqual(words(byId(r.renderPanelTracking({...viewFor(feed),panelWidth:360},t,r.cx),`panel-role-${agent.id}`)),['검수']);
+});
+
 test('brand SVG assets use full-color images while the space grid remains a tinted mask',async()=>{
   const r=await renderer(false);
   for(const tool of ['linear','jira']){
