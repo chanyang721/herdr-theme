@@ -4,6 +4,7 @@ import {readFile} from 'node:fs/promises';
 import {createHash} from 'node:crypto';
 import {filePathKey} from '../mods/sixfold-desk/file-feed.js';
 import {touchesCards} from '../mods/sixfold-desk/ask-model.js';
+import {subscribeLiveEvents} from '../mods/sixfold-desk/live-events.js';
 
 const tick=()=>new Promise(resolve=>setImmediate(resolve)),nativeParse=JSON.parse;let serial=0;
 
@@ -27,6 +28,17 @@ test('delivery acknowledgements wait for the owned flush and explicit removal re
   await f.wakeOnly();assert.equal(delivered,false,'posting a native command is not the owned callback delivery');
   receiver.flush();await completed;
   assert.equal(delivered,true);assert.deepEqual(values,['active']);
+});
+
+test('the existing I/O diagnostics expose safe live-event delivery state',async()=>{
+  const f=await fixture(),cx=f.context();
+  cx.timer.every=()=>({cancel(){},is_done(){return false;}});
+  const stop=subscribeLiveEvents({key:'diagnostic-fixture',cx,read:()=>[],onChange:()=>{throw Error('private fixture text');}});
+  try{
+    const diagnostics=f.io.panelIoDiagnostics();
+    assert(diagnostics.liveEvents.some(item=>item.deliveryFailures===1&&item.subscribers===1&&item.sampling));
+    assert(!JSON.stringify(diagnostics.liveEvents).includes('private fixture text'));
+  }finally{stop();}
 });
 async function fixture({home=`/panel-io-${serial}/app`,nativeJson=true}={}){
   const key=`__panelIoRuntime${serial++}`,reads=[],watchCalls=[],waiting=new Map(),contexts=[],starts=[],commands=[],raw=new Map(),opens=[],writes=[];

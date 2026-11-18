@@ -102,12 +102,13 @@ test('middle-event rendering corrections are delivered without serializing messa
   const last={id:'last',seq:2,at:2,source:'source',target:'target',started:true};
   f.set([first,last]);
   const stop=subscribeLiveEvents({key:f.key,read:f.read,cx,onChange:value=>rows.push(value)});await tick();
-  for(const change of [{target:'corrected'},{animate:false},{status:'confirmed'}]){
-    f.set([{...first,...change},last]);f.sample();
+  let current=first;
+  for(const change of [{target:'corrected'},{animate:false},{status:'confirmed'},{external:true}]){
+    current={...current,...change};f.set([current,last]);f.sample();
   }
-  assert.equal(rows.length,4);
-  f.set([{...first,status:'confirmed',text:{toJSON(){throw Error('private body must not be serialized');}}},last]);f.sample();
-  assert.equal(rows.length,4,'message bodies are outside the typed rendering fingerprint');
+  assert.equal(rows.length,5);
+  f.set([{...current,text:{toJSON(){throw Error('private body must not be serialized');}}},last]);f.sample();
+  assert.equal(rows.length,5,'message bodies are outside the typed rendering fingerprint');
   stop();
 });
 
@@ -170,4 +171,17 @@ test('disposing a V2 service cancels owner-null sampling and late completions ca
   assert.equal(f.reads,reads);assert(!registry.has(f.key));
   const next=subscribeLiveEvents({key:f.key,read:f.read,cx:f.context('replacement'),onChange:()=>{}});await tick();
   service.dispose();assert.equal(next.is_active(),true);assert(registry.has(f.key));next();
+});
+
+test('a cancelled application generation discards its listeners before a fresh context can sample or hand off',async()=>{
+  const f=setup(),old=f.context('old-generation');let retired=false,oldCalls=0,retiredStarts=0;
+  const every=old.timer.every;
+  old.timer.every=(...args)=>{if(retired){retiredStarts++;throw Error('retired context');}return every(...args);};
+  const oldStop=subscribeLiveEvents({key:f.key,cx:old,read:f.read,onChange:()=>oldCalls++});await tick();
+  retired=true;f.timers[0].closed=true;f.set([{id:'new-generation'}]);
+  const fresh=subscribeLiveEvents({key:f.key,cx:f.context('new-generation'),read:f.read,onChange:()=>{throw Error('transient delivery');}});
+  await tick();f.sample();f.sample();
+  assert.equal(oldCalls,1);assert.equal(oldStop.is_active(),false);assert.equal(fresh.is_active(),false);
+  assert.equal(retiredStarts,0);assert.equal(f.timers.filter(timer=>!timer.closed).length,0);
+  oldStop();fresh();
 });

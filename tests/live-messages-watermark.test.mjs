@@ -10,7 +10,7 @@ import {loadSidebar} from './live-sidebar-loader.mjs';
 let loads=0;
 async function sidebar(log){
   const state={log,visible:true,workflow:JSON.stringify({nodes:[],events:[]})};
-  const timers=[],wakeTimers=[],commandQueue=[],subscriptions=new Map();let waitingCommand=null;
+  const timers=[],wakeTimers=[],commandQueue=[],heldCommands=[],subscriptions=new Map();let waitingCommand=null;
   const cx={
     notify(){},
     spawn(task){return task(cx);},
@@ -31,7 +31,7 @@ async function sidebar(log){
     readTextFile:async()=>{throw Error('no raw reads');},
     subscribeJsonFile:(context,path,callback)=>{let live=true;subscriptions.set(path,value=>runtime.fileDelivery(context).enqueue(value=>{if(live)callback(value);},value));return()=>{live=false;subscriptions.delete(path);};},
     readJsonSnapshot:async path=>snapshot(path),
-    run:()=>{if(state.failCommand){state.failCommand=false;throw Error('fixture command failure');}deliver('file-feed-changed');},
+    run:()=>{if(state.failCommand){state.failCommand=false;throw Error('fixture command failure');}if(state.holdCommands){heldCommands.push('file-feed-changed');return;}deliver('file-feed-changed');},
     nextCommand:()=>commandQueue.length?Promise.resolve(commandQueue.shift()):new Promise(resolve=>{waitingCommand=resolve;}),
     focused:()=>null,panes:()=>[],agents:()=>[],spaces:()=>[],shared:()=>undefined,setShared(){},
   };
@@ -44,7 +44,9 @@ async function sidebar(log){
   const flows=()=>[...view.activeFlows,...view.pendingFlows].map(flow=>flow.id);
   const stop=()=>{view.stopLiveMessages?.();for(const release of view.fileSubscriptions)release();delete globalThis.__sixfoldTest;};
   view.init({},cx);publishFiles();await settle();
-  return {state,view,settle,publishFiles,sample,visibility,flows,stop,timers};
+  return {state,view,settle,publishFiles,sample,visibility,flows,stop,timers,
+    releaseCommands(){state.holdCommands=false;for(const command of heldCommands.splice(0))deliver(command);},
+    heldCommands,delivery:()=>runtime.fileDelivery(cx).diagnostics()};
 }
 const send=(seq,at=Date.now())=>({id:`send-${seq}`,source:'source',target:'target',at,seq});
 
@@ -89,6 +91,33 @@ test('a failed native command wake retries the same last message without another
     s.sample();await s.settle();assert.deepEqual(s.flows(),['send-1']);
     assert.equal(s.view.stopLiveMessages.is_active(),true);
     assert.equal(s.view.liveMessageError?.kind,'delivery_failed');
+  }finally{s.stop();}
+});
+
+test('ten delayed native samples are not delivery errors and a late flush preserves the next send',async()=>{
+  const s=await sidebar([]);
+  try{
+    s.state.holdCommands=true;s.state.log=[send(1)];s.sample();await s.settle();
+    for(let i=0;i<10;i++){s.sample();await s.settle();}
+    assert.equal(s.view.stopLiveMessages.is_active(),true);
+    assert.equal(s.view.stopLiveMessages.diagnostics().failures,0);
+    assert.equal(s.delivery().acknowledgements,1);assert.equal(s.heldCommands.length,1);
+    s.releaseCommands();await s.settle();assert.deepEqual(s.flows(),['send-1']);
+    s.view.startLiveMessages();s.state.log=[...s.state.log,send(2)];s.sample();await s.settle();
+    assert.deepEqual(s.flows(),['send-1','send-2']);
+  }finally{s.stop();}
+});
+
+test('a permanently delayed valid command keeps one waiter and explicit stop clears it without extra wakes',async()=>{
+  const s=await sidebar([]);
+  try{
+    s.state.holdCommands=true;s.state.log=[send(1)];s.sample();await s.settle();
+    for(let i=0;i<100;i++){s.sample();await s.settle();}
+    assert.equal(s.view.stopLiveMessages.is_active(),true);assert.equal(s.delivery().acknowledgements,1);
+    assert.equal(s.heldCommands.length,1);assert.equal(s.view.stopLiveMessages.diagnostics().waitingForDelivery,true);
+    s.view.stopLiveMessages();await s.settle();
+    assert.equal(s.delivery().acknowledgements,0);assert.equal(s.delivery().queued,0);
+    s.releaseCommands();await s.settle();assert.deepEqual(s.flows(),[]);
   }finally{s.stop();}
 });
 
