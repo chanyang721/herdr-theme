@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "herdr-theme/panel-feed.schema.json",
+  "title": "Local panel display feed v1",
+  "description": "Compatible envelope and optional display extensions. Other existing feed fields remain open; see docs/panel-feed.md.",
+  "type": "object",
+  "required": ["v", "at", "computers", "spaces"],
+  "properties": {
+    "v": {"const": 1},
+    "at": {"type": ["string", "number"]},
+    "computers": {"type": "array", "items": {"type": "object"}},
+    "spaces": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {"agents": {"type": "array", "items": {"$ref": "#/$defs/agent"}}}
+      }
+    }
+  },
+  "$defs": {
+    "agent": {
+      "type": "object",
+      "properties": {"profession": {"$ref": "#/$defs/profession"}}
+    },
+    "profession": {
+      "type": "object",
+      "required": ["id", "label"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {"type": "string", "minLength": 1, "maxLength": 80, "pattern": "^[^\\s\u0000-\u001f\u007f]+(?![\\s\\S])"},
+        "label": {"type": "string", "minLength": 1, "maxLength": 48, "pattern": "^[^\\s\u0000-\u001f\u007f](?:[^\u0000-\u001f\u007f]*[^\\s\u0000-\u001f\u007f])?(?![\\s\\S])"}
+      }
+    }
+  }
+}

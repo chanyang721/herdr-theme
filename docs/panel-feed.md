@@ -109,6 +109,26 @@ knows also get their own issue rows under the same status rules. Below 300px
 the role and held-issue count share one shrinkable chip (**검+1**) and the title
 keeps a minimum width; the full role and list stay in the tooltips. Without
 these fields the rows keep their earlier placement.
+
+An agent may also supply `profession: {"id":"custom-discipline","label":"QA"}`.
+This is generic display metadata, independent of the operational `role`; no
+profession catalog or implied role exists in the theme. `id` is an opaque
+1–80 character string without whitespace or ASCII control characters. `label`
+is 1–48 characters of plain text, without leading/trailing whitespace or ASCII
+control characters. Extra fields or malformed values drop the whole extension.
+The label is rendered through a text child, never interpreted as markup or code.
+It shares the existing role chip (`QA · 검수`) in both wide and narrow panels;
+long text truncates, the tooltip retains the complete label, and the narrow task
+title keeps its minimum width. Without valid metadata, existing role rendering
+is unchanged. The theme does not infer profession from titles or read any other
+source. Updates/removal follow the existing feed normalization and retained
+projection; there is no additional timer or data collection.
+
+[`schemas/herdr/panel-feed.schema.json`](../schemas/herdr/panel-feed.schema.json)
+describes the compatible feed envelope and this optional `$defs.agent` extension.
+Other existing fields remain open in that schema and retain this document's
+display contract. Invalid optional metadata is discarded by the consumer rather
+than invalidating otherwise usable rows.
 Agents inside an issue are not truncated. Explicit
 `parent_id` relationships form trees within the same issue. More than three child
 branches show three and their own **+N**. Child rows use a compact status dot,

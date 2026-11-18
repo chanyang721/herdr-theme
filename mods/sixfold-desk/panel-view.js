@@ -182,9 +182,10 @@ export function agentRow(view,agent,space,tag,state,color,t,motion){
   const ghost=born&&motion&&birthAge<PANEL_TIMING.packetMs;
   const stacked=false;
   const others=agentOtherIssues(agent),role=ROLE_LABELS[agent.role]||'',narrow=(view.panelWidth||224)<300;
+  const profession=agent.profession?.label||'',roleText=[profession,role].filter(Boolean).join(' · ');
   const roleTone=agent.role==='review'?t.ansi5:agent.role==='integrate'?t.ansi6:null;
   const heldTip=others.length?`맡은 이슈 ${others.length+1}개\n지금: ${agent.own_issue||agent.issue||'이슈 미확인'}\n${others.join(', ')}`:'';
-  const tagTip=[role&&`역할 ${role}`,heldTip].filter(Boolean).join('\n');
+  const tagTip=[profession&&`직무 ${profession}`,role&&`역할 ${role}`,heldTip].filter(Boolean).join('\n');
   const line=h_flex().id(`panel-agent-content-${agent.id}`).w_full().min_w(0).gap(5).items_center().opacity(ghost?0:1)
     .when(born&&motion,e=>e.transition('opacity',{duration:180,easing:'ease-out'}));
   const dimmed=rowState?rowState==='closed':status==='done';
@@ -197,14 +198,14 @@ export function agentRow(view,agent,space,tag,state,color,t,motion){
   line
     .child(div().relative().size(13).flex_none().child(familyIcon(agent).text_color(agent.family==='codex'?CODEX_COLOR:t.foreground)).when(Boolean(detail.remoteBadge),e=>e.child(detail.remoteBadge)))
     // Role chip (구현·검수·통합): a review task that kept its original title still reads as a review.
-    .when(!narrow&&Boolean(role),e=>e.child(div().id(`panel-role-${agent.id}`).flex_none().px(3).rounded(3).border(1)
+    .when(!narrow&&Boolean(roleText),e=>e.child(div().id(`panel-role-${agent.id}`).flex_none().when(Boolean(profession),e=>e.max_w(120).truncate()).px(3).rounded(3).border(1)
       .border_color(roleTone||t.border).text_size(8).text_color(roleTone||t.muted)
-      .accessibility_label(`역할 ${role}`).child(role)))
+      .accessibility_label(tagTip).child(roleText)))
     // A narrow panel keeps the title readable: one shrinkable chip (검+1) and a minimum title width.
-    .when(narrow&&Boolean(role||others.length),e=>e.child(div().id(`panel-tags-${agent.id}`).min_w(0).truncate().px(2).rounded(3).border(1)
+    .when(narrow&&Boolean(roleText||others.length),e=>e.child(div().id(`panel-tags-${agent.id}`).min_w(0).truncate().px(2).rounded(3).border(1)
       .border_color(roleTone||t.border).text_size(8).text_color(roleTone||t.muted).tooltip(tagTip)
-      .accessibility_label(tagTip).child(`${role?role[0]:''}${others.length?`+${others.length}`:''}`)))
-    .child(text(agent.title||'Untitled task',t.foreground,11).id(`panel-title-${agent.id}`).flex_1().when(narrow&&Boolean(role||others.length),e=>e.min_w(TITLE_MIN)))
+      .accessibility_label(tagTip).child(`${profession?roleText:role?role[0]:''}${others.length?`+${others.length}`:''}`)))
+    .child(text(agent.title||'Untitled task',t.foreground,11).id(`panel-title-${agent.id}`).flex_1().when(narrow&&Boolean(roleText||others.length),e=>e.min_w(TITLE_MIN)))
     // A session holding several issues sits under its current one; the others are counted, listed on hover.
     .when(!narrow&&others.length>0,e=>e.child(div().id(`panel-issues-${agent.id}`).flex_none().px(3).rounded(3).bg(t.surface)
       .text_size(8).text_color(t.muted).tooltip(heldTip)

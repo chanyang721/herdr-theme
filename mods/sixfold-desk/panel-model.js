@@ -80,13 +80,24 @@ export const ROW_STATES = Object.freeze(['working', 'idle', 'needs_human', 'unse
 export const WAIT_KINDS = Object.freeze(['active', 'status', 'conversation', 'last_pane', 'pinned', 'in_use', 'review_pending', 'report_delivery', 'identity', 'review', 'acceptance', 'report', 'input', 'cleanup']);
 const WAIT_LABELS = Object.freeze({status:'상태 확인',conversation:'대화 보호',last_pane:'마지막 칸',pinned:'고정 유지',in_use:'사용 중',review_pending:'검수 대기',report_delivery:'보고전달대기',identity:'신원 확인',review:'검수 확인',acceptance:'수락 대기',report:'보고 확인',input:'입력 확인',cleanup:'정리 확인'});
 const MAX_CLEANUP_S = 7 * 24 * 3600;
+// Optional producer text, independent of operational role. No profession catalog
+// or inferred fallback: malformed metadata leaves the original row unchanged.
+function cleanProfession(value) {
+  if (!object(value) || typeof value.id !== 'string' || value.id.length < 1 || value.id.length > 80
+      || /[\s\u0000-\u001f\u007f]/.test(value.id) || typeof value.label !== 'string'
+      || value.label.length > 48 || !value.label || value.label !== value.label.trim()
+      || /[\u0000-\u001f\u007f]/.test(value.label) || Object.keys(value).some(key => key !== 'id' && key !== 'label')) return null;
+  return { id: value.id, label: value.label };
+}
 function cleanCleanup(value) {
   if (!object(value)) return null;
   const since = time(value.idle_since), due = time(value.due_at), limit = value.limit_s;
   if (since === null || due === null || !Number.isInteger(limit) || limit <= 0 || limit > MAX_CLEANUP_S || due < since) return null;
   return { idle_since: since, limit_s: limit, due_at: due };
 }
-const agentExtras = agent => ({
+const agentExtras = agent => {
+  const profession = cleanProfession(agent.profession);
+  return ({
   // An unknown state is dropped, not kept as null, so the row falls back to the
   // four-status mark exactly as an older feed does.
   ...(ROW_STATES.includes(agent.state) ? { state: agent.state } : {}),
@@ -100,9 +111,11 @@ const agentExtras = agent => ({
   // The producer's role of the task, the issue the task owns itself (not one borrowed from a parent task)
   // and every issue the session holds, the shown one first. Display only; absent keeps the older placement.
   ...(owns(agent, 'role') ? { role: AGENT_ROLES.includes(agent.role) ? agent.role : null } : {}),
+  ...(profession ? { profession } : {}),
   ...(owns(agent, 'own_issue') ? { own_issue: text(agent.own_issue, 80) || null } : {}),
   ...(owns(agent, 'issues') ? { issues: [...new Set(list(agent.issues, 20).map(key => text(key, 80)).filter(Boolean))] } : {}),
-});
+  });
+};
 export const AGENT_ROLES = Object.freeze(['implement', 'review', 'integrate']);
 export const ROLE_LABELS = Object.freeze({ implement: '구현', review: '검수', integrate: '통합' });
 // The issues a session holds besides the one its row sits under (its own issue, else its issue).
