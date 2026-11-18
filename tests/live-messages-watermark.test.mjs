@@ -103,7 +103,7 @@ test('ten delayed native samples are not delivery errors and a late flush preser
     assert.equal(s.view.stopLiveMessages.diagnostics().failures,0);
     assert.equal(s.delivery().acknowledgements,1);assert.equal(s.heldCommands.length,1);
     s.releaseCommands();await s.settle();assert.deepEqual(s.flows(),['send-1']);
-    s.view.startLiveMessages();s.state.log=[...s.state.log,send(2)];s.sample();await s.settle();
+    s.state.log=[...s.state.log,send(2)];s.sample();await s.settle();
     assert.deepEqual(s.flows(),['send-1','send-2']);
   }finally{s.stop();}
 });
