@@ -10,11 +10,13 @@ function immutable(value,seen=new Set()){
 }
 const done=task=>{try{return !task||(typeof task.is_done==='function'&&task.is_done());}catch{return true;}};
 const cancel=task=>{try{task?.cancel?.();}catch{/* A retired source may already have released the timer. */}};
+const queued=delivery=>{try{return delivery?.is_pending?.()===true;}catch{return false;}};
+const releaseDelivery=listener=>{const delivery=listener.delivery;listener.delivery=null;cancel(delivery);};
 // Fingerprint the bounded typed log's rendering metadata, including corrections
 // to older entries. Message bodies and arbitrary nested objects are never read.
 export function eventStamp(events){
   const scalar=value=>['string','number','boolean'].includes(typeof value)?value:null;
-  return JSON.stringify(events.map(event=>['id','seq','at','source','target','started','animate','status','state'].map(key=>scalar(event?.[key]))));
+  return JSON.stringify(events.map(event=>['id','seq','at','source','target','started','animate','status','state','external'].map(key=>scalar(event?.[key]))));
 }
 
 const FAILURE_LIMIT=3,IN_FLIGHT_ROUNDS=3;
@@ -29,6 +31,10 @@ export function subscribeLiveEvents({key,read,cx,onChange,onError,intervalMs=500
   if(typeof cx?.timer?.every!=='function')throw new TypeError('An async timer context is required');
   const registry=globalThis[REGISTRY]??(globalThis[REGISTRY]=new Map());
   let service=registry.get(key);
+  // Native reload retires an application's tasks without calling view.close().
+  // A cancelled sampler marks that generation's listeners as retired too; never
+  // bind its old callbacks or contexts into a new application's sampler.
+  if(service&&!service.inspect().sampling){service.dispose();service=null;}
   if(!service){
     const subscribers=new Set();
     let reader=read,owner=cx,period=intervalMs,timer=null,token=0,value=null,signature=null,disposed=false,round=0;
@@ -37,6 +43,7 @@ export function subscribeLiveEvents({key,read,cx,onChange,onError,intervalMs=500
     const remove=listener=>{
       subscribers.delete(listener);
       listener.attemptToken++;listener.inFlight=false;
+      releaseDelivery(listener);
       if(!subscribers.size){disposed=true;stop();if(registry.get(key)===service)registry.delete(key);return;}
       reader=[...subscribers].at(-1).read;
       if(owner===listener.cx){
@@ -47,6 +54,7 @@ export function subscribeLiveEvents({key,read,cx,onChange,onError,intervalMs=500
     const failed=(listener,attempt,kind)=>{
       if(disposed||!subscribers.has(listener)||listener.attemptToken!==attempt)return;
       listener.attemptToken++;listener.inFlight=false;listener.failures++;listener.totalFailures++;
+      releaseDelivery(listener);
       listener.lastErrorKind=kind;metrics.deliveryFailures++;metrics.lastErrorKind=kind;
       const retrying=listener.failures<FAILURE_LIMIT;
       if(!retrying){metrics.retiredListeners++;remove(listener);}
@@ -60,11 +68,14 @@ export function subscribeLiveEvents({key,read,cx,onChange,onError,intervalMs=500
       if(listener.failures)metrics.retries++;
       const success=()=>{
         if(disposed||!subscribers.has(listener)||listener.attemptToken!==attempt)return;
-        listener.inFlight=false;listener.failures=0;listener.signature=stamp;
+        listener.delivery=null;listener.inFlight=false;listener.failures=0;listener.signature=stamp;
       };
       try{
         const result=listener.onChange(snapshot);
-        if(result&&typeof result.then==='function')Promise.resolve(result).then(success,()=>failed(listener,attempt,'delivery_failed'));
+        if(result&&typeof result.then==='function'){
+          listener.delivery=result;
+          Promise.resolve(result).then(success,()=>failed(listener,attempt,'delivery_failed'));
+        }
         else success();
       }catch{failed(listener,attempt,'delivery_failed');}
     };
@@ -79,7 +90,10 @@ export function subscribeLiveEvents({key,read,cx,onChange,onError,intervalMs=500
         }else metrics.readFailures++;
       }catch{metrics.readFailures++;}
       for(const listener of [...subscribers]){
-        if(listener.inFlight&&round-listener.startedRound>=IN_FLIGHT_ROUNDS)failed(listener,listener.attemptToken,'delivery_timeout');
+        // A posted command with a live queue acknowledgement is delayed, not
+        // failed. Keep its one waiter and await the owned flush; arbitrary hung
+        // consumers still have a finite timeout and attempt limit.
+        if(listener.inFlight&&!queued(listener.delivery)&&round-listener.startedRound>=IN_FLIGHT_ROUNDS)failed(listener,listener.attemptToken,'delivery_timeout');
         // An unchanged source can still have an undelivered snapshot. Retries use
         // this existing sampler, never a new timer or a synchronous retry loop.
         if(value!==null)deliver(listener,value,signature);
@@ -96,15 +110,15 @@ export function subscribeLiveEvents({key,read,cx,onChange,onError,intervalMs=500
       dispose(){
         if(disposed)return;
         disposed=true;stop();
-        for(const listener of subscribers){listener.attemptToken++;listener.inFlight=false;}
+        for(const listener of subscribers){listener.attemptToken++;listener.inFlight=false;releaseDelivery(listener);}
         subscribers.clear();
         if(registry.get(key)===service)registry.delete(key);
       },
-      inspect(){return {...metrics,subscribers:subscribers.size,sampling:!disposed&&!done(timer)};},
+      inspect(){return {...metrics,subscribers:subscribers.size,sampling:!disposed&&!done(timer),waitingForDelivery:[...subscribers].filter(listener=>queued(listener.delivery)).length};},
       subscribe(readerNext,context,callback,error,interval){
         reader=readerNext;
         if(period!==interval){period=interval;stop();}
-        const listener={cx:context,read:readerNext,onChange:callback,onError:error,signature:null,inFlight:false,startedRound:0,
+        const listener={cx:context,read:readerNext,onChange:callback,onError:error,signature:null,inFlight:false,delivery:null,startedRound:0,
           attempts:0,attemptToken:0,failures:0,totalFailures:0,lastErrorKind:null};subscribers.add(listener);
         const retired=Boolean(timer&&done(timer));
         ensure(context);
@@ -113,7 +127,7 @@ export function subscribeLiveEvents({key,read,cx,onChange,onError,intervalMs=500
         const stop=()=>{if(subscribers.has(listener))remove(listener);};
         stop.is_active=()=>!disposed&&subscribers.has(listener)&&!done(timer);
         stop.diagnostics=()=>({active:stop.is_active(),attempts:listener.attempts,failures:listener.failures,
-          totalFailures:listener.totalFailures,inFlight:listener.inFlight,lastErrorKind:listener.lastErrorKind});
+          totalFailures:listener.totalFailures,inFlight:listener.inFlight,waitingForDelivery:queued(listener.delivery),lastErrorKind:listener.lastErrorKind});
         return stop;
       },
     };

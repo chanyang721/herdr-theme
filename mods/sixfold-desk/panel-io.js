@@ -17,8 +17,18 @@ export function fileDelivery(cx){
   if(!state){state={queue:[],wake:null,signaled:false};deliveries.set(cx,state);}
   else if(typeof state.signaled!=='boolean')state.signaled=Boolean(state.queue.length||state.wake);
   state.acks??=[];
-  const rejectWake=()=>{for(const waiter of state.acks.splice(0))waiter.reject(new Error('file_delivery_wake_failed'));};
+  const finish=(waiter,error)=>{waiter.active=false;error?waiter.reject(new Error(error)):waiter.resolve();};
+  const rejectWake=()=>{for(const waiter of state.acks.splice(0))finish(waiter,'file_delivery_wake_failed');};
+  const removeQueued=callback=>{
+    const pending=state.queue.findIndex(([deliver])=>deliver===callback);
+    if(pending>=0)state.queue.splice(pending,1);
+    if(!state.queue.length){
+      try{state.wake?.cancel?.();}catch{/* A retired generation may have released it. */}
+      state.wake=null;state.signaled=false;
+    }
+  };
   return {
+    diagnostics(){return {queued:state.queue.length,acknowledgements:state.acks.length,signaled:state.signaled,wakeScheduled:Boolean(state.wake)};},
     enqueue(callback,value,{awaitDelivery=false}={}){
       const pending=state.queue.findIndex(([deliver])=>deliver===callback);
       if(pending<0)state.queue.push([callback,value]);else state.queue[pending][1]=value;
@@ -41,12 +51,21 @@ export function fileDelivery(cx){
       }
       // Only callers needing delivery acknowledgement opt in. Their existing
       // sampler owns retries; the file receiver creates no retry timer itself.
-      if(awaitDelivery)return new Promise((resolve,reject)=>state.acks.push({callback,resolve,reject}));
+      if(awaitDelivery){
+        const waiter={callback,active:true};
+        const promise=new Promise((resolve,reject)=>{waiter.resolve=resolve;waiter.reject=reject;state.acks.push(waiter);});
+        promise.is_pending=()=>waiter.active&&state.acks.includes(waiter);
+        promise.cancel=()=>{
+          if(!promise.is_pending())return;
+          state.acks=state.acks.filter(item=>item!==waiter);finish(waiter,'file_delivery_cancelled');
+          if(!state.acks.some(item=>item.callback===callback))removeQueued(callback);
+        };
+        return promise;
+      }
     },
     remove(callback){
-      const pending=state.queue.findIndex(([deliver])=>deliver===callback);
-      if(pending>=0)state.queue.splice(pending,1);
-      for(const waiter of state.acks.filter(item=>item.callback===callback))waiter.reject(new Error('file_delivery_cancelled'));
+      removeQueued(callback);
+      for(const waiter of state.acks.filter(item=>item.callback===callback))finish(waiter,'file_delivery_cancelled');
       state.acks=state.acks.filter(item=>item.callback!==callback);
       if(!state.queue.length){
         try{state.wake?.cancel?.();}catch{/* The source generation may already be gone. */}
@@ -61,8 +80,8 @@ export function fileDelivery(cx){
       state.signaled=false;
       for(const [callback,value] of queued){
         const waiters=acknowledgements.filter(item=>item.callback===callback);
-        try{callback(value);for(const waiter of waiters)waiter.resolve();}
-        catch(error){metrics.errors++;metrics.lastError=String(error?.stack||error);for(const waiter of waiters)waiter.reject(new Error('file_delivery_callback_failed'));}
+        try{callback(value);for(const waiter of waiters)finish(waiter);}
+        catch(error){metrics.errors++;metrics.lastError=String(error?.stack||error);for(const waiter of waiters)finish(waiter,'file_delivery_callback_failed');}
       }
     },
   };
@@ -172,4 +191,5 @@ function ownedSubscription(cx,subscribe,callback,prefix=null){
 export function subscribeJsonFile(cx,path,callback){const root=rootFor(path);return ownedSubscription(cx,send=>hubFor(root).subscribe(path,send,cx),callback);}
 export function subscribeFileChanges(cx,prefix,callback){const root=rootFor(prefix,true);return ownedSubscription(cx,send=>hubFor(root).subscribeChanges(prefix,send,cx),callback,prefix);}
 
-export function panelIoDiagnostics(){return {...metrics,backgroundJson:typedFileReadsAvailable()};}
+export function panelIoDiagnostics(){return {...metrics,backgroundJson:typedFileReadsAvailable(),
+  liveEvents:[...(globalThis.__sixfoldLiveEventSamplesV2?.values()??[])].map(service=>service.inspect())};}
