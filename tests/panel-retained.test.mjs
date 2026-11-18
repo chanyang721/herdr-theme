@@ -516,7 +516,7 @@ test('one meta line carries both tools: Slack unread on its part, Linear unread 
     const texts=()=>walk(card.tree).flatMap(n=>(n.nodes||[]).filter(x=>typeof x==='string'));
     const byId=id=>walk(card.tree).find(n=>n.calls?.some(c=>c[0]==='id'&&c[1]===id));
     assert(byId(`panel-tool-${raw.spaces[0].id}`),'issue chip');
-    assert(!byId(`panel-tool-unread-${raw.spaces[0].id}`),'no unread: the chip is key · issues only');
+    assert(!byId(`panel-tool-unread-${raw.spaces[0].id}`),'no unread: the chip is the project name only');
     assert(chips.includes(raw.spaces[0].id),'the Slack part opens the Slack alerts');
     const before=r.objects.filter(o=>o.dirty).length;
     r.controller.alertsChanged();

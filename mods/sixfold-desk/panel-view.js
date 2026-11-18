@@ -279,15 +279,16 @@ export function cardView(view,card,state,color,computerNames,t,motion,rowEntitie
     .when(metrics.hasMemory,e=>e.child(div().id(`panel-memory-${space.id}`).w(memoryWidth).flex_none().px(compact?1:4).h(16).truncate().rounded(3).bg(memory?color:t.selected)
       .text_color(memory?t.background:t.ansi6||t.accent).text_size(compact&&space.memory.proposals>9?8:9).tooltip(`기억 제안${space.memory.proposals?` ${space.memory.proposals}`:''}`).child(compact?`◈${space.memory.proposals?` ${space.memory.proposals}`:''}`:`기억 제안${space.memory.proposals?` ${space.memory.proposals}`:''}`)))
     .when(count>0,e=>e.child(text(`◌ ${count}`,t.muted,compact?8:10).w(countWidth).flex_none())));
-  // One line for both tools: Slack (channel · unread) and the work tool (key · issues · unread).
+  // One line for both tools: Slack (channel · unread) and the work tool (project name · unread).
   // Linear alerts sit on its chip, which opens the issue search with the alerted issues on top.
   const alerts=view.cardAlerts?.(space)||null,linearUnread=space.work?.tool==='linear'?alerts?.linear||0:0;
-  const tool=h_flex().id(`panel-tool-${space.id}`).gap(5).items_center().min_w(0).flex_none()
+  // A long project name is cut so the Slack channel keeps room on the same line.
+  const tool=h_flex().id(`panel-tool-${space.id}`).gap(5).items_center().min_w(0).flex_none().max_w(Math.round((view.panelWidth||224)*0.55))
     .when(Boolean(space.work),e=>e.child(toolIcon(space.work.tool,t)))
-    .child(text(space.work?`${space.work.key} · 이슈 ${space.work.open}`:'',space.work?t.muted:t.dim,9))
+    .child(text(space.work?space.work.name||space.work.key:'',space.work?t.muted:t.dim,9))
     .when(linearUnread>0,e=>e.child(text(`미확인 ${linearUnread}`,t.accent_foreground||t.background,9).px(4).rounded(3).bg(t.accent).font_bold()
       .id(`panel-tool-unread-${space.id}`)))
-    .when(Boolean(space.work),e=>e.cursor_pointer().tooltip(linearUnread?`새 알림 ${linearUnread}건 · 이번 주 · 마일스톤 · 전체 이슈`:'이번 주 · 마일스톤 · 전체 이슈'));
+    .when(Boolean(space.work),e=>e.cursor_pointer().tooltip(`${space.work.key}\n${linearUnread?`새 알림 ${linearUnread}건 · `:''}이번 주 · 마일스톤 · 전체 이슈`));
   const slackUnread=alerts?.slack||0,slackShown=Boolean(space.slack)||Boolean(alerts?.hasSlack);
   // The Slack mark and its unread count are one chip (as the Linear chip is), the channel after it.
   const slack=h_flex().id(`panel-slack-${space.id}`).gap(5).items_center().min_w(0).flex_1()

@@ -95,6 +95,7 @@ test('a state badge joins the Slack · Linear meta line; no badge row, no empty 
   assert(ids(bodyTree).includes('sf-badge-sp-local-harness-memory'),'the badge is on the task meta line');
   assert(texts(bodyTree).includes('확인 대기 6'),"'! 6' says what it means");
   assert(ids(bodyTree).includes(`panel-tool-${id}`)&&ids(bodyTree).includes(`panel-slack-${id}`),'Slack and Linear stay on the same line');
+  assert(!texts(bodyTree).some(x=>/· 이슈 \d/.test(x)),'no issue count on the Linear chip');
   // A badge change redraws only that task card.
   s.notified.length=0;
   s.store.set('sixfold.workspace.badges',{'|sp-local':[{id:'harness-memory',text:'! 2',tone:'blocked'}]});
@@ -103,6 +104,21 @@ test('a state badge joins the Slack · Linear meta line; no badge row, no empty 
   assert(texts(s.body(id).view.render()).includes('확인 대기 2'));
   s.notified.length=0;s.c.alertsChanged();
   assert.equal(s.notified.length,0,'nothing redraws when nothing changed');
+  s.done();
+});
+
+test('the Linear chip shows the project name, or the key when the feed has no name',async()=>{
+  const raw=makePanelFixture({tool:'linear',slack:true,nav:{space_id:'sp-local',machine:null}});
+  const id=raw.spaces[0].id;
+  raw.spaces[0].work={...raw.spaces[0].work,key:'P-LUK-49',name:'메디홈즈 Commerce Cloud 구축'};
+  let s=await sidebar({native:[nativeSpace('sp-local','Demo workspace')],feed:raw});
+  let shown=texts(s.body(id).view.render());
+  assert(shown.includes('메디홈즈 Commerce Cloud 구축')&&!shown.includes('P-LUK-49'),'the name, not the key');
+  s.done();
+  delete raw.spaces[0].work.name;
+  s=await sidebar({native:[nativeSpace('sp-local','Demo workspace')],feed:raw});
+  shown=texts(s.body(id).view.render());
+  assert(shown.includes('P-LUK-49'),'no name: the key');
   s.done();
 });
 

@@ -205,6 +205,7 @@ export function cleanPanelFeed(raw) {
     const agents = unique(list(value.agents, MAX.agents), agent => cleanAgent(agent, knownAgents));
     const issues = cleanIssues(value.issues, MAX.issues);
     const work = object(value.work) && text(value.work.tool, 40) ? { tool: text(value.work.tool, 40).toLowerCase(), key: text(value.work.key, 80), open: integer(value.work.open),
+      ...(text(value.work.name, 120)?{name:text(value.work.name, 120)}:{}),
       ...(owns(value.work,'url')?{url:toolUrl(value.work.url)}:{}) } : null;
     const share = object(value.share) && knownComputers.has(value.computer) && knownComputers.has(value.share.computer) && value.share.computer !== value.computer && ['space', 'agent'].includes(value.share.kind)
       && (value.share.kind !== 'agent' || agents.some(agent => agent.id === value.share.agent_id))
@@ -580,7 +581,7 @@ function copyDisplaySpace(space, agents) {
     id: space.id, name: space.name, bundle: space.bundle, computer: space.computer, nav: copyNavigation(space.nav, 'space_id'),
     share: space.share ? { computer: space.share.computer, kind: space.share.kind, ...(space.share.kind === 'agent' ? { agent_id: space.share.agent_id } : {}) } : null,
     slack: space.slack ? { channel: space.slack.channel } : null,
-    work: space.work ? { tool: space.work.tool, key: space.work.key, open: space.work.open,...(owns(space.work,'url')?{url:space.work.url}:{}) } : null,
+    work: space.work ? { tool: space.work.tool, key: space.work.key, open: space.work.open,...(owns(space.work,'name')?{name:space.work.name}:{}),...(owns(space.work,'url')?{url:space.work.url}:{}) } : null,
     issues: copyIssues(space.issues),
     memory: { proposals: space.memory.proposals }, agents,
     ...(owns(space, 'issue_catalog') ? { issue_catalog: space.issue_catalog ? {
