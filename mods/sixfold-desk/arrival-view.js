@@ -4,6 +4,11 @@ import { PACKET_PIXELS, centred, pixelBlock, pixelLanding } from './pixel.js';
 import { ARRIVAL, arrivalPhase, visibleArrivals, justLanded, flightPath, flightStep, activePeek, foldingPeeks } from './arrival-model.js';
 import { projectKey, linearCategory } from './alert-model.js';
 
+// Each source's colour, mark and popup title (GitHub: its kind, e.g. 'GitHub 내 PR · owner/repo#12').
+const toneOf = (a, t) => (a.source === 'linear' ? t.ansi4 : a.source === 'github' ? t.ansi2 : t.ansi5) || t.accent;
+const iconOf = a => a.source === 'linear' ? 'linear' : a.source === 'github' ? 'github' : 'slack';
+const headOf = a => a.source === 'linear' ? `Linear ${a.label || linearCategory(a)}` : a.source === 'github' ? `GitHub ${a.label || '알림'}` : 'Slack 멘션';
+
 // New-alert arrivals drawn over the workspace list (absolutely placed, so the
 // cards never move): a small popup on the card's own spot for ARRIVAL.showMs,
 // then a 3x3 pixel block steps from the popup into the card's alert badge in
@@ -31,7 +36,7 @@ export function arrivalLayer({list, now, motion, anchors, t, u = 1, onOpen, peek
   for (const a of foldingPeeks(list, now, motion)) {
     const anchor = anchors(a.space, a.source);
     if (!anchor) continue;
-    const tone = a.source === 'linear' ? (t.ansi4 || t.accent) : (t.ansi5 || t.accent);
+    const tone = toneOf(a, t);
     const from = {x: (anchor.edge ?? anchor.badgeX + 24), y: anchor.badgeY}, to = {x: anchor.badgeX, y: anchor.badgeY};
     const path = flightPath(from, to), side = PACKET_PIXELS * u, offset = centred(PACKET_PIXELS, u);
     const at = path[Math.min(path.length - 1, flightStep(a, now))], ms = ARRIVAL.flyMs / ARRIVAL.steps;
@@ -47,7 +52,7 @@ export function arrivalLayer({list, now, motion, anchors, t, u = 1, onOpen, peek
     const phase = arrivalPhase(a, now, motion);
     const top = Math.max(0, (anchor ? anchor.badgeY - 13 : 0) - (index + 1) * (POPUP.h + POPUP.gap));
     const left = anchor?.left ?? 11, right = anchor?.right ?? 11;
-    const tone = a.source === 'linear' ? (t.ansi4 || t.accent) : (t.ansi5 || t.accent);
+    const tone = toneOf(a, t);
     layer.push(v_flex().id(`sf-arrival-${a.key}`).absolute().top(top).left(left).right(right).h(POPUP.h).px(8).py(6).gap(2)
       .rounded(6).border(1).border_color(tone).bg(t.popover || t.surface).cursor_pointer()
       .opacity(phase === 'show' ? 1 : 0).transition('opacity', {duration: 160, easing: 'ease-out'})
@@ -55,9 +60,9 @@ export function arrivalLayer({list, now, motion, anchors, t, u = 1, onOpen, peek
       .on_mouse_down('left', (_e, cx) => cx.stop_propagation()).on_mouse_up('left', (_e, cx) => cx.stop_propagation())
       .on_click((_e, cx) => { cx.stop_propagation(); onOpen(a); })
       .child(h_flex().gap(5).items_center()
-        .child(image(`mods/sixfold-desk/icons/${a.source === 'linear' ? 'linear' : 'slack'}.svg`).size(12).flex_none())
+        .child(image(`mods/sixfold-desk/icons/${iconOf(a)}.svg`).size(12).flex_none())
         .child(div().flex_1().min_w(0).truncate().text_size(11).font_bold().text_color(t.foreground)
-          .child(`${a.space} · ${a.source === 'linear' ? `Linear ${a.label || linearCategory(a)}` : 'Slack 멘션'}${a.issue ? ` · ${a.issue}` : ''}`)))
+          .child(`${a.space} · ${headOf(a)}${a.issue ? ` · ${a.issue}` : ''}`)))
       .child(div().min_w(0).truncate().text_size(11).text_color(t.muted).child(a.line || a.title || '')));
     if (!anchor) continue;
     // The block waits invisibly on the popup, then steps in; keyed for the whole flight.
@@ -72,7 +77,7 @@ export function arrivalLayer({list, now, motion, anchors, t, u = 1, onOpen, peek
   for (const a of justLanded(list, now, motion)) {
     const anchor = anchors(a.space, a.source);
     if (!anchor) continue;
-    const tone = a.source === 'linear' ? (t.ansi4 || t.accent) : (t.ansi5 || t.accent);
+    const tone = toneOf(a, t);
     layer.push(pixelLanding(`sf-arrival-land-${a.key}`, anchor.badgeX, anchor.badgeY, true, tone, u));
   }
   return layer;

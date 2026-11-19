@@ -20,6 +20,8 @@ const ALLOW=[
     reason:'20 ms debounce of input changes; schedules again only when an input changed during the run'},
   {rule:'interval',file:'mods/sixfold-desk/linear-feed.js',match:/^timer\.after\(20, \(\) => \{ scheduled = null; refresh\(cx\); \}$/,
     reason:'20 ms debounce of input changes; schedules again only when an input changed during the run'},
+  {rule:'interval',file:'mods/sixfold-desk/github-feed.js',match:/^timer\.after\(20, \(\) => \{ scheduled = null; refresh\(cx\); \}$/,
+    reason:'20 ms debounce of input changes (as linear-feed.js); schedules again only when an input changed during the run'},
   {rule:'interval',file:'mods/sixfold-desk/alert-files.js',match:/^timer\.after\(ms, look$/,
     reason:'nextFileWait: 3 s, then 10 s, ending at 7 min, only while a file text popover is open'},
   {rule:'hidden',file:'mods/sixfold-desk/alert-files.js',match:/^timer\.after\(ms, look$/,

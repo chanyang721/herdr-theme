@@ -1,4 +1,4 @@
-// New-alert arrivals (Slack, Linear): a small popup shows for a few seconds, then
+// New-alert arrivals (Slack, Linear, GitHub): a small popup shows for a few seconds, then
 // folds into its space card in short integer-pixel steps, and the card's alert
 // badge counts it only once it has landed. With motion off there is no popup and
 // no movement: the badge simply counts it. Pure functions; the sidebar owns
@@ -193,7 +193,7 @@ export function flightPath(from, to, {steps = ARRIVAL.steps, unit = ARRIVAL.unit
 }
 
 // Pressing a popup goes straight to that space's inbox for its source.
-export const arrivalOpen = arrival => ({source: arrival.source === 'linear' ? 'linear' : 'slack', project: arrival.space});
+export const arrivalOpen = arrival => ({source: ['linear', 'github'].includes(arrival.source) ? arrival.source : 'slack', project: arrival.space});
 
 // Ids of the alerts still on their way, so each badge counts exactly the items
 // that have landed (an arrival whose item the badge does not list changes nothing).

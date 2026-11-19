@@ -167,7 +167,7 @@ export default class SixfoldDesk extends View {
         const id=`request-${Date.now().toString(36)}-${serial.toString(36)}-${Math.random().toString(36).slice(2,14)}`;
         return saveIssueRequest(issueRequest(this.panelFeedPath,space,key,desired,id),writeTextFile);
       },
-       onClassic:()=>{this.panelTrackingActive=false;this.updateRepoEvents?.();this.panelRetained?.setEnabled(false);this.syncCardActivity?.();this.startLiveMessages?.();this.refreshLegacy?.(cx);this.refreshAlerts?.(cx);this.refreshLinear?.(cx);this.refreshAsks?.(cx);},onDispose:()=>{this.repoActivity?.dispose();for(const stop of this.fileSubscriptions||[])stop();this.stopAsks?.();this.stopReports?.();this.classicCards?.dispose();}}):null;
+       onClassic:()=>{this.panelTrackingActive=false;this.updateRepoEvents?.();this.panelRetained?.setEnabled(false);this.syncCardActivity?.();this.startLiveMessages?.();this.refreshLegacy?.(cx);this.refreshAlerts?.(cx);this.refreshLinear?.(cx);this.refreshGithub?.(cx);this.refreshAsks?.(cx);},onDispose:()=>{this.repoActivity?.dispose();for(const stop of this.fileSubscriptions||[])stop();this.stopAsks?.();this.stopReports?.();this.classicCards?.dispose();}}):null;
     this.fileSubscriptions=[];
     const receiveTaskFeed=createTaskFeedSource(snapshot=>{
       this.panelFeedPath=`${appHome()}/${TASK_FEED_FILE}`;
@@ -441,7 +441,7 @@ export default class SixfoldDesk extends View {
             // suspended, then resume from that watermark in this copy's scope.
             fileReceiver.flush();this.sidebarVisible=true;this.syncCardActivity?.();this.updateRepoEvents?.();
             this.panelRetained?.setVisible(true);this.panelRetained?.preferences();
-            this.startLiveMessages?.();this.refreshLegacy?.(cx);this.refreshAlerts?.(cx);this.refreshLinear?.(cx);this.refreshAsks?.(cx);
+            this.startLiveMessages?.();this.refreshLegacy?.(cx);this.refreshAlerts?.(cx);this.refreshLinear?.(cx);this.refreshGithub?.(cx);this.refreshAsks?.(cx);
             cx.notify();
           }
           continue;

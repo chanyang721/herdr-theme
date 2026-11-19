@@ -183,3 +183,29 @@ export function slackCopyDelay(health, now = Date.now()) {
   const hours = (now - at) / 3_600_000;
   return hours > limit ? {hours: Math.floor(hours), at: health.mirror_latest_at} : null;
 }
+
+// GitHub (data/sixfold/github-alerts.json, written by a local `gh` collector; read only): review requests
+// to me, my open pull requests and mentions. `unread` is GitHub's own state of the work, not a local mark:
+// a review request while it is open, my pull request while it needs me (CI 실패·변경 요청·충돌), a mention
+// until it is read on GitHub. The same table is in sixfold-github-inbox/model.js (mods cannot import each
+// other); tests/github-alerts.test.mjs keeps the two equal.
+// --- shared GitHub alert code
+export const githubScoped = (items, space) => (items ?? []).filter(i => !space || projectKey(i.workspace) === projectKey(space));
+export const GITHUB_KINDS = Object.freeze({review: '리뷰 요청', pr: '내 PR', mention: '멘션'});
+export const githubKind = item => ({kind: GITHUB_KINDS[item?.kind] ? item.kind : 'other', label: GITHUB_KINDS[item?.kind] || '알림'});
+const NEEDS = {ci: 'CI 실패', changes: '변경 요청', conflict: '충돌', review: '리뷰 기다림', mention: '나를 멘션'};
+const CI_TEXT = {success: 'CI 통과', failure: 'CI 실패', pending: 'CI 진행 중'};
+const REVIEW_TEXT = {approved: '승인됨', changes_requested: '변경 요청', review_required: '리뷰 대기'};
+const MERGE_TEXT = {mergeable: '병합 가능', conflicting: '충돌'};
+export const githubRef = item => `${String(item?.repo ?? '')}${Number.isInteger(item?.number) ? `#${item.number}` : ''}`;
+// The second line: what needs me, else the pull request's state; a review request also says who asked.
+export function githubLine(item) {
+  const needs = (Array.isArray(item?.needs) ? item.needs : []).map(n => NEEDS[n]).filter(Boolean);
+  if (item?.kind === 'review') return [`${item.author || '누군가'} 님이 리뷰 요청`, item.draft ? '초안' : ''].filter(Boolean).join(' · ');
+  if (item?.kind === 'mention') return [item.reason === 'team_mention' ? '내 팀을 멘션' : '나를 멘션', item.subject === 'issue' ? '이슈' : item.subject === 'pull' ? 'PR' : ''].filter(Boolean).join(' · ');
+  if (needs.length) return needs.join(' · ');
+  return [CI_TEXT[item?.ci], REVIEW_TEXT[item?.review], MERGE_TEXT[item?.merge], item?.draft ? '초안' : ''].filter(Boolean).join(' · ') || '상태 확인 중';
+}
+export const githubTone = (item, t) => ({review: t.ansi1, mention: t.ansi5, pr: (item?.needs ?? []).length ? t.blocked : t.ansi2}[item?.kind] || t.muted) || t.accent;
+export const githubLink = url => typeof url === 'string' && /^https:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\/(pull|issues)\/\d{1,9}$/.test(url);
+// --- end of the shared GitHub alert code

@@ -1,7 +1,8 @@
 import { div, image } from 'gpui-kit';
 import { h_flex, v_flex, Popover } from 'gpui-base';
 import { shared, setShared } from 'herdr';
-import { scopedAlerts, alertVersion, linearScoped, changeLines, linearCategory, popoverOpen, popoverRows, projectKey, alertKind, alertLine, kindTone, popoverChangeLines } from './alert-model.js';
+import { scopedAlerts, alertVersion, linearScoped, changeLines, linearCategory, popoverOpen, popoverRows, projectKey, alertKind, alertLine, kindTone, popoverChangeLines,
+  githubScoped, githubKind, githubLine, githubRef, githubTone, githubLink } from './alert-model.js';
 import { feedNames, namesFor, alertTitle, readable } from './alert-slack.js';
 import { fileChips, loadFileText, followFileText, localNames } from './alert-files.js';
 import { spaceMentions, setSpaceMentions, arrivedFor } from './alert-mentions.js';
@@ -41,9 +42,10 @@ export const oneLine = text => String(text ?? '').replace(/\s+/g, ' ').trim();
 // an earlier run or an hour ago does not count).
 export const alertPopoverOpen = (now = Date.now()) => {
   const state = popoverState();
-  return Boolean(state?.space) && ['slack', 'linear'].some(source => popoverOpen(state, state.space, source, BOOT, now));
+  return Boolean(state?.space) && SOURCES.some(source => popoverOpen(state, state.space, source, BOOT, now));
 };
 
+const SOURCES = ['slack', 'linear', 'github'];
 const short = at => {
   const d = new Date(at);
   if (Number.isNaN(d.getTime())) return '';
@@ -96,13 +98,38 @@ function linearRows(project, t) {
       .when(!changeLines(item).length && Boolean(alertLine(item)), e => e.child(line(alertLine(item), t.muted, 11))))};
 }
 
+// GitHub rows: kind (리뷰 요청·내 PR·멘션), owner/repo#number, title and time, then what needs me.
+// Pressing a row opens that pull request or issue on github.com in the default browser (reading only;
+// nothing is written to GitHub). Work first (unread), newest first; `fresh` (just arrived) on top and lit.
+function githubRows(project, t, fresh = new Set(), interactive = true) {
+  const items = githubScoped(shared('sixfold.githubItems') ?? [], project), isUnread = i => Boolean(i.unread);
+  const lit = popoverRows(items.filter(item => fresh.has(item.id)), 5, isUnread);
+  const rows = [...lit, ...popoverRows(items.filter(item => !fresh.has(item.id)), 5 - lit.length, isUnread)];
+  return {unread: items.filter(isUnread).length, rows: rows.map((item, i) => {
+    const {label} = githubKind(item), open = interactive && githubLink(item.url);
+    return v_flex().id(`sf-alert-pop-github-${i}`).gap(2).p(8).rounded(6).bg(item.unread ? t.selected : t.chrome)
+      .when(fresh.has(item.id), e => e.border(1).border_color(t.ansi2 || t.accent))
+      .when(open, e => e.cursor_pointer().tooltip(`${githubRef(item)}
+${item.title || ''}
+누르면 GitHub에서 엽니다`)
+        .on_click((_e, cx) => { cx.stop_propagation(); cx.open_url(item.url); }))
+      .child(h_flex().gap(6).items_center()
+        .child(div().px(5).rounded(3).flex_none().text_size(10).font_bold()
+          .bg(item.unread ? githubTone(item, t) : t.surface).text_color(item.unread ? t.accent_foreground : t.muted).child(label))
+        .child(line(githubRef(item), t.muted, 11).flex_none().font_bold())
+        .child(line(item.title || '', t.foreground, 12).flex_1())
+        .child(line(short(item.at), t.dim, 10).flex_none()))
+      .child(line(githubLine(item), item.unread && item.kind === 'pr' ? (t.blocked || t.accent) : t.muted, 11));
+  })};
+}
+
 // The surface of a card's alert popover: its title, the Slack/Linear tabs, the rows of `source` and
 // 전체 보기. The popover and the new-alert peek both draw it, so a new Slack alert shows in the very
 // popover its chip opens (as a new Linear alert shows the top of its card's issue search).
 // `peek`: drawn by the arrival layer (no focus taken): a 새 알림 mark instead of the close button,
 // and the title or a tab opens the card's popover itself.
-function surface({id, project, source, t, slack, linear, onAll, onTab, onClose = null, onHead = null, peek = false}) {
-  const current = source === 'linear' ? linear : slack;
+function surface({id, project, source, t, slack, linear, github = null, onAll, onTab, onClose = null, onHead = null, peek = false}) {
+  const current = source === 'linear' ? linear : source === 'github' ? github : slack;
   const tab = (name, label, data) => h_flex().id(`sf-alert-pop-tab-${id}-${name}`).h(28).px(10).gap(5).items_center().rounded(6)
     .bg(source === name ? t.selected : t.chrome).cursor_pointer()
     .on_click((_e, cx) => { cx.stop_propagation(); onTab(name); cx.notify(); })
@@ -120,12 +147,13 @@ function surface({id, project, source, t, slack, linear, onAll, onTab, onClose =
     .child(head)
     .child(h_flex().gap(4)
       .when(Boolean(slack), e => e.child(tab('slack', 'Slack', slack)))
-      .when(Boolean(linear), e => e.child(tab('linear', 'Linear', linear))))
+      .when(Boolean(linear), e => e.child(tab('linear', 'Linear', linear)))
+      .when(Boolean(github), e => e.child(tab('github', 'GitHub', github))))
     .child(v_flex().id(`sf-alert-pop-list-${id}`).max_h(420).overflow_y_scroll().gap(4)
       .when(!current || !current.rows.length, e => e.child(line('표시할 알림이 없습니다.', t.muted, 12).p(8)))
       .children(current ? current.rows : []))
     .child(h_flex().gap(6).items_center()
-      .child(line(source === 'slack' ? 'Slack 앱 읽음 상태와 별도' : '읽음은 Linear 기준', t.dim, 10).flex_1())
+      .child(line(source === 'slack' ? 'Slack 앱 읽음 상태와 별도' : source === 'github' ? 'GitHub 상태 기준 · 읽기 전용' : '읽음은 Linear 기준', t.dim, 10).flex_1())
       .child(div().id(`sf-alert-pop-all-${id}`).px(10).py(5).rounded(5).text_size(12).font_semibold()
         .bg(t.surface).text_color(t.accent).hover(s => s.bg(t.hover)).cursor_pointer()
         .on_click((_e, cx) => { cx.stop_propagation(); hidePopover(); onAll?.(source); cx.notify(); }).child('전체 보기')));
@@ -139,10 +167,10 @@ const arrivedUnread = project => {
 };
 
 // `trigger` is the whole alerts row of the card, so the surface opens beside the card.
-export function alertPopover({id, project, trigger, t, hasSlack, hasLinear, onAll}) {
+export function alertPopover({id, project, trigger, t, hasSlack, hasLinear, hasGithub = false, onAll}) {
   const state = popoverState();
-  const source = popoverOpen(state, project, 'linear', BOOT) ? 'linear' : popoverOpen(state, project, 'slack', BOOT) ? 'slack' : null;
-  const fallback = hasLinear && !hasSlack ? 'linear' : 'slack';
+  const source = SOURCES.find(name => popoverOpen(state, project, name, BOOT)) ?? null;
+  const fallback = hasSlack ? 'slack' : hasLinear ? 'linear' : hasGithub ? 'github' : 'slack';
   const popover = Popover.new(`sf-alert-pop-${id}`).anchor('left_center').open(Boolean(source))
     .on_open_change((value, cx) => {
       // A badge press just chose its source; keep it rather than the fallback.
@@ -153,7 +181,8 @@ export function alertPopover({id, project, trigger, t, hasSlack, hasLinear, onAl
   if (!source) return popover;
   const arrived = hasSlack ? arrivedUnread(project) : [];
   const slack = hasSlack ? slackRows(project, t, new Set(arrived.map(item => item.id)), true, arrived) : null, linear = hasLinear ? linearRows(project, t) : null;
-  return popover.content(surface({id, project, source, t, slack, linear, onAll,
+  const github = hasGithub ? githubRows(project, t) : null;
+  return popover.content(surface({id, project, source, t, slack, linear, github, onAll,
     onTab: name => showPopover(project, name), onClose: hidePopover}).ml(14));
 }
 
@@ -168,4 +197,15 @@ export function slackPeek(project, t, fresh = [], onAll = null, arrived = [], {h
   const open = source => { if (onOpen) onOpen(source); else showPopover(project, source); };
   return surface({id: `peek-${projectKey(project)}`, project, source: 'slack', t, slack, linear, onAll,
     onTab: open, onHead: () => open('slack'), peek: true});
+}
+
+// A GitHub peek: the card's alert popover surface on its GitHub tab, opened beside the card by new GitHub
+// work (as slackPeek does for Slack). The rows just arrived are lit and first; the rows are read-only here.
+export function githubPeek(project, t, fresh = [], onAll = null, {hasSlack = false, hasLinear = false, onOpen = null} = {}) {
+  const github = githubRows(project, t, new Set(fresh), false);
+  if (!github.rows.length) return null;
+  const open = source => { if (onOpen) onOpen(source); else showPopover(project, source); };
+  return surface({id: `peek-github-${projectKey(project)}`, project, source: 'github', t, github,
+    slack: hasSlack ? slackRows(project, t, new Set(), false) : null, linear: hasLinear ? linearRows(project, t) : null, onAll,
+    onTab: open, onHead: () => open('github'), peek: true});
 }

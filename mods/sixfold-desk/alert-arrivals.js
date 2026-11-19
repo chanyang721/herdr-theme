@@ -1,9 +1,10 @@
 import { div } from 'gpui-kit';
 import { Popup } from 'gpui-base';
 import { settings, appHome, readTextFile, writeTextFile } from 'herdr';
-import { alertPopoverOpen, slackPeek, showPopover } from './alert-popover.js';
-import { hasWorkspaceAlerts, hasSlackAlerts, hasLinearAlerts, openInbox, openLinearInbox, alertSignature } from './alert-inbox.js';
+import { alertPopoverOpen, slackPeek, githubPeek, showPopover } from './alert-popover.js';
+import { hasWorkspaceAlerts, hasSlackAlerts, hasLinearAlerts, openInbox, openLinearInbox, openGithubInbox, alertSignature } from './alert-inbox.js';
 import { watchLinear } from './linear-feed.js';
+import { watchGithub } from './github-feed.js';
 import { arrivals, setArrivalHost, clearArrivalHost, setPeekCheck, holdArrivals } from './arrival-store.js';
 import { nextPhaseAt, arrivalOpen, peekMode } from './arrival-model.js';
 import { arrivalLayer } from './arrival-view.js';
@@ -15,6 +16,7 @@ import { projectKey } from './alert-model.js';
 export function startAlertArrivals(view, cx) {
   view.stopArrivals?.();
   const stopLinear = watchLinear(view, cx);
+  const stopGithub = watchGithub(view, cx);
   const host = () => view.sidebarVisible !== false;
   setArrivalHost(host);
   // A new alert opens its space's popover (a peek) on any card that is on screen (merged meta line or
@@ -41,7 +43,7 @@ export function startAlertArrivals(view, cx) {
     return mode;
   };
   setPeekCheck(check);
-  const stop = () => { clearArrivalHost(host); setPeekCheck(null); view.arrivalWake?.cancel?.(); view.arrivalWake = null; stopLinear(); };
+  const stop = () => { clearArrivalHost(host); setPeekCheck(null); view.arrivalWake?.cancel?.(); view.arrivalWake = null; stopLinear(); stopGithub(); };
   view.stopArrivals = stop;
   return stop;
 }
@@ -65,9 +67,11 @@ export function alertArrivalLayer(view, cx, {cards, motion, t, right}) {
     if (hit.merged) return {top: hit.top, left: 11, right, badgeY: hit.top + 38 + hit.extra + 10, edge: 11 + Math.max(0, hit.width - 6),
       badgeX: source === 'linear' && hit.width > 80 ? 11 + hit.width - 40 : 26};
     // Alerts row card: the badge in its alerts row; the peek opens at the card's right edge, as on a merged card.
-    const alerts = hasWorkspaceAlerts(hit.s.name);
+    // Chips in the row are Slack, Linear, GitHub in that order (about 39 px apart).
+    const alerts = hasWorkspaceAlerts(hit.s.name), name = hit.s.name;
+    const before = source === 'linear' ? Number(hasSlackAlerts(name)) : source === 'github' ? Number(hasSlackAlerts(name)) + Number(hasLinearAlerts(name)) : 0;
     return {top: hit.top, left: 11, right, badgeY: alerts ? hit.top + 38 + hit.extra + 13 : hit.top + 18,
-      badgeX: alerts && source === 'linear' && hasSlackAlerts(hit.s.name) ? 72 : 33,
+      badgeX: alerts ? 33 + 39 * before : 33,
       ...(hit.width > 0 ? {edge: 11 + Math.max(0, hit.width - 6)} : {})};
   };
   const next = nextPhaseAt(list, now, motion);
@@ -91,6 +95,8 @@ export function alertArrivalLayer(view, cx, {cards, motion, t, right}) {
     if (alertPopoverOpen() || view.panelRetained?.anyIssuesOpen?.()) return false;
     const fresh = shown.map(a => a.id), card = at.get(projectKey(space));
     const body = source === 'linear' ? view.panelRetained?.peekIssues?.(space, fresh, t)
+      : source === 'github' ? githubPeek(space, t, fresh, () => openGithubInbox({project: space}),
+        {hasSlack: hasSlackAlerts(space), hasLinear: hasLinearAlerts(space), onOpen: source => { showPopover(space, source); redraw(); }})
       : slackPeek(space, t, fresh, () => openInbox({project: space}), shown.map(a => a.item).filter(Boolean),
         {hasLinear: !card?.merged && hasLinearAlerts(space), onOpen: source => { showPopover(space, source); redraw(); }});
     if (!body) return null;
@@ -102,5 +108,6 @@ export function alertArrivalLayer(view, cx, {cards, motion, t, right}) {
           .child(body)));
   };
   return arrivalLayer({list, now, motion, anchors, t, u: 1 / (Number(settings()?.zoom) || 1), peek,
-    onOpen: a => { const open = arrivalOpen(a); open.source === 'linear' ? openLinearInbox({project: open.project}) : openInbox({project: open.project}); }});
+    onOpen: a => { const open = arrivalOpen(a), scope = {project: open.project};
+      open.source === 'linear' ? openLinearInbox(scope) : open.source === 'github' ? openGithubInbox(scope) : openInbox(scope); }});
 }

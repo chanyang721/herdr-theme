@@ -1,7 +1,7 @@
 import { div, image } from 'gpui-kit';
 import { h_flex } from 'gpui-base';
 import { shared, openOverlay } from 'herdr';
-import { scopedAlerts, linearScoped, slackCopyDelay, projectKey } from './alert-model.js';
+import { scopedAlerts, linearScoped, githubScoped, slackCopyDelay, projectKey } from './alert-model.js';
 import { alertPopover, showPopover, popoverState, spaceMentions } from './alert-popover.js';
 import { mentionsEpoch } from './alert-mentions.js';
 import { arrivals } from './arrival-store.js';
@@ -30,13 +30,16 @@ const slackItems = project => { const { bySpace, ids } = trackedIndex();
   return [...(bySpace.get(projectKey(project)) ?? []), ...spaceMentions(project).filter(i => !ids.has(i.id))]; };
 const slackUnread = scope => landedOnly(scopedAlerts(slackItems(scope.project),{...scope,read:shared('sixfold.alertRead') ?? {},unread:true}),scope).length;
 const linearUnreadNow = scope => landedOnly(linearScoped(shared('sixfold.linearItems') ?? [],scope.project).filter(i=>!i.read),scope).length;
+// GitHub counts the work it lists as unread (a review request, my pull request that needs me, an unread mention).
+const githubUnreadNow = scope => landedOnly(githubScoped(shared('sixfold.githubItems') ?? [],scope.project).filter(i=>i.unread),scope).length;
 // What the card's alerts row shows; part of the retained card's signature so the row redraws when it changes.
 export function alertSignature(name, motion = true) {
   if(!hasWorkspaceAlerts(name))return '';
   const scope={project:name,motion},open=popoverState();
   // The copy-delay mark (hours shown and the copy's last message) redraws the row when it starts, moves or ends.
   const delay=hasSlackAlerts(name)?slackCopyDelay(shared('sixfold.slackHealth')):null;
-  return [hasSlackAlerts(name),hasLinearAlerts(name),slackUnread(scope),linearUnreadNow(scope),open?.space===name?`${open.source}:${open.boot}:${open.at}`:'',
+  return [hasSlackAlerts(name),hasLinearAlerts(name),hasGithubAlerts(name),slackUnread(scope),linearUnreadNow(scope),hasGithubAlerts(name)?githubUnreadNow(scope):0,
+    open?.space===name?`${open.source}:${open.boot}:${open.at}`:'',
     delay?`${delay.hours}:${delay.at}`:''].join('|');
 }
 
@@ -49,11 +52,16 @@ export function openInbox(scope = {}) {
 export function openLinearInbox(scope = {}) {
   return openOverlay({mod:'sixfold-linear-inbox',kind:'dialog',width:860,height:680,props:{...scope}});
 }
+export function openGithubInbox(scope = {}) {
+  return openOverlay({mod:'sixfold-github-inbox',kind:'dialog',width:820,height:660,props:{...scope}});
+}
+const openFor = (source, scope) => source === 'linear' ? openLinearInbox(scope) : source === 'github' ? openGithubInbox(scope) : openInbox(scope);
 const named = (list,name) => (list ?? []).some(p=>String(p).toLowerCase()===name?.toLowerCase());
 export const hasSlackAlerts = name => named(shared('sixfold.alertProjects'),name) || spaceMentions(name).length > 0;
 export const hasLinearAlerts = name => named(shared('sixfold.linearSpaces'),name);
+export const hasGithubAlerts = name => named(shared('sixfold.githubSpaces'),name);
 // The sidebar reserves the alerts row from this (row height), so it covers both sources.
-export const hasWorkspaceAlerts = name => hasSlackAlerts(name) || hasLinearAlerts(name);
+export const hasWorkspaceAlerts = name => hasSlackAlerts(name) || hasLinearAlerts(name) || hasGithubAlerts(name);
 // The whole row is the popover trigger, so the surface opens beside the card.
 // A badge press picks which source the popover shows first.
 export function workspaceAlertsRow(space,t,{motion=true}={}) {
@@ -61,17 +69,19 @@ export function workspaceAlertsRow(space,t,{motion=true}={}) {
   const scope={project:space.name,motion};
   const row=h_flex().id(`sf-channel-alerts-${space.id}`).h(26).w_full().px(10).gap(6).items_center().cursor_pointer()
     .child(alertBadge(`space-${space.id}`,t,{...scope,popover:true}))
-    .child(linearBadge(`space-${space.id}`,t,{...scope,popover:true}));   // same chips as the merged meta line, no separate label
+    .child(linearBadge(`space-${space.id}`,t,{...scope,popover:true}))   // same chips as the merged meta line, no separate label
+    .child(githubBadge(`space-${space.id}`,t,{...scope,popover:true}));
   // Presses stop here so the card underneath is not selected or dragged.
   const stop=(_e,cx)=>cx.stop_propagation();
   return div().id(`sf-channel-alerts-wrap-${space.id}`).h(26).flex_none().on_mouse_down('left',stop).on_mouse_up('left',stop)
     .child(alertPopover({id:space.id,project:space.name,trigger:row,t,hasSlack:hasSlackAlerts(space.name),hasLinear:hasLinearAlerts(space.name),
-      onAll:source=>source==='linear'?openLinearInbox({project:space.name}):openInbox({project:space.name})}));
+      hasGithub:hasGithubAlerts(space.name),onAll:source=>openFor(source,{project:space.name})}));
 }
 // A task card carries its alerts on its meta line when that line can show both
-// sources (a Linear chip, or no Linear alerts); otherwise the alerts row stays.
+// sources (a Linear chip, or no Linear alerts) and the space has no GitHub chip (the
+// meta line has no room for a third); otherwise the alerts row stays.
 // Exactly one of the two is drawn, so one alerts popover belongs to a card.
-export const alertsOnMetaLine = (task, name) => Boolean(task && (task.slack || task.work) && (task.work?.tool === 'linear' || !hasLinearAlerts(name)));
+export const alertsOnMetaLine = (task, name) => Boolean(task && (task.slack || task.work) && (task.work?.tool === 'linear' || !hasLinearAlerts(name)) && !hasGithubAlerts(name));
 // A task card shows Slack and Linear on its one meta line: the Slack part opens the
 // Slack alerts, the Linear chip (key · issues · unread) opens the issue search.
 export function cardAlertCounts(name, motion = true) {
@@ -113,5 +123,16 @@ export function linearBadge(id,t,scope={}) {
     .when(!scope.popover,e=>e.on_mouse_down('left',(_e,cx)=>cx.stop_propagation()).on_mouse_up('left',(_e,cx)=>cx.stop_propagation()))
     .on_click(badgePress(scope,'linear',openLinearInbox))
     .flex().items_center().gap(3).child(image('mods/sixfold-desk/icons/linear.svg').size(13))
+    .when(unread>0,e=>e.child(div().child(String(unread))));
+}
+export function githubBadge(id,t,scope={}) {
+  if(!hasGithubAlerts(scope.project))return div();
+  const unread=githubUnreadNow(scope);
+  return div().id(`sf-github-${id}`).flex_none().px(5).py(2).rounded(4).text_size(10)
+    .bg(unread?t.accent:t.surface).text_color(unread?t.accent_foreground:t.muted)
+    .tooltip(`GitHub 손볼 일 ${unread}건 · 리뷰 요청·내 PR(CI 실패·변경 요청·충돌)·멘션`)
+    .when(!scope.popover,e=>e.on_mouse_down('left',(_e,cx)=>cx.stop_propagation()).on_mouse_up('left',(_e,cx)=>cx.stop_propagation()))
+    .on_click(badgePress(scope,'github',openGithubInbox))
+    .flex().items_center().gap(3).child(image('mods/sixfold-desk/icons/github.svg').size(13))
     .when(unread>0,e=>e.child(div().child(String(unread))));
 }

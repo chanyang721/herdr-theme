@@ -9,3 +9,5 @@ Workspace marks: common hub, Voice microphone, Herdr terminal, generic folder; p
 Connectivity labels distinguish local Mac, Herdr registered remote layout state, and Tailscale discovery. Tailscale Online is never evidence of SSH connectivity. Missing Online values stay unknown.
 
 `linear.svg` is an original rounded-square-and-check line drawing for the issue-tracker inbox badge, made in this repository (not a vendor logo).
+
+`github.svg` is an original pull-request line drawing (two branch circles and a merge arrow) for the GitHub alert badge, made in this repository (not a vendor logo).
