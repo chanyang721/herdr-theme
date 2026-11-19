@@ -13,7 +13,7 @@
       "type": "array",
       "items": {
         "type": "object",
-        "properties": {"agents": {"type": "array", "items": {"$ref": "#/$defs/agent"}}}
+        "properties": {"agents": {"type": "array", "items": {"$ref": "#/$defs/agent"}}, "role_group": {"$ref": "#/$defs/profession"}}
       }
     }
   },

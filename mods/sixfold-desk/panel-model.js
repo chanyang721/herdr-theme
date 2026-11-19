@@ -216,6 +216,8 @@ export function cleanPanelFeed(raw) {
       share, slack: object(value.slack) && text(value.slack.channel, 80) ? { channel: text(value.slack.channel, 80) } : null,
       work, issues, memory: { proposals: integer(value.memory?.proposals) }, agents,
       ...(owns(value, 'issue_catalog') ? { issue_catalog: cleanCatalog(value.issue_catalog, value.id) } : {}),
+      // The producer's short label for what the whole space is (2026-11-19); display only.
+      ...(cleanProfession(value.role_group) ? { role_group: cleanProfession(value.role_group) } : {}),
     };
   });
   for (const space of spaces) for (const agent of space.agents) if (owns(agent, 'parent_id') && (agent.parent_id === agent.id || !knownAgents.has(agent.parent_id))) agent.parent_id = null;
@@ -584,6 +586,7 @@ function copyDisplaySpace(space, agents) {
     work: space.work ? { tool: space.work.tool, key: space.work.key, open: space.work.open,...(owns(space.work,'name')?{name:space.work.name}:{}),...(owns(space.work,'url')?{url:space.work.url}:{}) } : null,
     issues: copyIssues(space.issues),
     memory: { proposals: space.memory.proposals }, agents,
+    ...(space.role_group ? { role_group: { id: space.role_group.id, label: space.role_group.label } } : {}),
     ...(owns(space, 'issue_catalog') ? { issue_catalog: space.issue_catalog ? {
       week: copyIssues(space.issue_catalog.week), milestone: copyIssues(space.issue_catalog.milestone), all: copyIssues(space.issue_catalog.all),
       ...catalogSource(space.issue_catalog),

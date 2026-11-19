@@ -141,6 +141,11 @@ under the Slack/Linear line, then one issue gap. A row under a lead stays in the
 even when it names its own issue. Their order, set and folds are part of the retained layout
 key. Malformed values drop the field only.
 
+A space may carry `role_group: {"id":"…","label":"…"}` (2026-11-19), with the same bounds as
+`profession`: what the whole space is, as the producer names it. The card header shows the label
+as one chip beside the space name (the name shrinks first, the chip truncates, the tooltip keeps
+the full label). Its rows are unchanged. Malformed values drop the field only.
+
 Agents inside an issue are not truncated. Explicit
 `parent_id` relationships form trees within the same issue. More than three child
 branches show three and their own **+N**. Child rows use a compact status dot,
