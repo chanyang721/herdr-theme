@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {spawnSync} from 'node:child_process';
 import {cleanRepositoryGraph,projectRepositoryGraph,createRepositoryController,repositoryEventState,repositoryLayout,repositorySection,repositoryFlowLayer,repositorySource,REPO_TIMING,GIT_OPERATIONS,REPO_LIMITS,REPO_EVIDENCE} from '../mods/sixfold-desk/repo-flow.js';
 import {cleanPanelFeed,projectPanelFeed} from '../mods/sixfold-desk/panel-model.js';
 import {makePanelFixture,makePanelLoadFixture} from './panel-fixtures.mjs';
@@ -214,6 +215,45 @@ test('post_tool fields must be own properties, never inherited from a prototype 
     data.events=[{...wireEvent(),evidence:name,phase:'result',result:'unknown'}];
     assert.equal(cleanRepositoryGraph(data,agents).events.length,0,name);
   }
+});
+
+// Global Object.prototype pollution runs only in a child process, restored in
+// finally, so it cannot leak into this test process or any other test.
+const pollutedProbe=`
+const {cleanRepositoryGraph,projectRepositoryGraph,repositoryEventState}=await import(process.env.REPO_FLOW_URL);
+const base=${JSON.stringify(dto())},agents=new Set(['agent-a']),out={};
+const ev=fields=>({id:'e',operation_id:'op',machine_id:'m',agent_id:'agent-a',repository_id:'repo',operation:'push',observed_at:1000,...fields});
+const run=events=>{
+  const clean=cleanRepositoryGraph(JSON.parse(JSON.stringify({...base,events})),agents);
+  const graph=projectRepositoryGraph(clean),now=1000500;
+  const state=repositoryEventState(graph,now,{previous:{motion:true,seen:[],active:[]},motion:true});
+  return {events:clean.events.map(e=>[e.id,e.evidence,e.phase,e.result]),packets:state.packets.length,nextAt:state.nextAt};
+};
+const pollute=(fields,fn)=>{
+  try{Object.assign(Object.prototype,fields);return fn();}
+  finally{for(const name of Object.keys(fields))delete Object.prototype[name];}
+};
+out.post_missing=pollute({evidence:'post_tool',phase:'result',result:'unknown'},()=>run([ev({id:'missing'})]));
+out.exit_missing=pollute({evidence:'process_exit',phase:'result',result:'succeeded'},()=>run([ev({id:'missing'})]));
+out.exit_result_missing=pollute({result:'succeeded'},()=>run([ev({id:'partial',evidence:'process_exit',phase:'result'})]));
+out.valid=pollute({evidence:'process_exit',phase:'result',result:'succeeded'},()=>run([
+  ev({id:'post',evidence:'post_tool',phase:'result',result:'unknown'}),ev({id:'exit',evidence:'process_exit',phase:'result',result:'failed'})]));
+out.restored=['evidence','phase','result'].filter(name=>name in {});
+process.stdout.write(JSON.stringify(out));
+`;
+
+test('event fields stay own-only even when Object.prototype is globally polluted (isolated child process)',()=>{
+  const child=spawnSync(process.execPath,['--input-type=module','-e',pollutedProbe],{encoding:'utf8',timeout:15000,
+    env:{...process.env,REPO_FLOW_URL:new URL('../mods/sixfold-desk/repo-flow.js',import.meta.url).href}});
+  assert.equal(child.status,0,child.stderr||String(child.error));
+  const out=JSON.parse(child.stdout);
+  for(const name of ['post_missing','exit_missing','exit_result_missing']){
+    assert.deepEqual(out[name],{events:[],packets:0,nextAt:null},`${name}: malformed JSON event must be dropped with no packet`);
+  }
+  assert.deepEqual(out.valid.events,[['post','post_tool','result','unknown'],['exit','process_exit','result','failed']]);
+  assert.equal(out.valid.packets,1,'only the evidenced failure moves; post_tool unknown stays still');
+  assert.deepEqual(out.restored,[],'the child restores Object.prototype in finally');
+  assert(!('evidence' in {})&&!('phase' in {})&&!('result' in {}),'this test process was never polluted');
 });
 
 test('post_tool keeps operation identity and per-event deduplication',()=>{
