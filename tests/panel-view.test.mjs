@@ -45,22 +45,48 @@ async function renderer(motion=true,{nativeSpaces=[],nativePanes=[]}={}){
 }
 const viewFor=feed=>({panelState:{feed:cleanPanelFeed(feed),status:'ready'},panelEvents:null,panelReducedMotion:false});
 
-test('profession and operational role render together as literal bounded text in wide and narrow rows',async()=>{
+test('a recorded profession names the chip as literal bounded text in wide and narrow rows',async()=>{
   const r=await renderer(false),feed=makePanelFixture(),agent=feed.spaces[0].agents[0];
   Object.assign(agent,{role:'review',profession:{id:'custom-discipline',label:'QA'}});
   for(const width of [224,360]){
     const tree=r.renderPanelTracking({...viewFor(feed),panelWidth:width},t,r.cx);
     const chip=byId(tree,`${width<300?'panel-tags':'panel-role'}-${agent.id}`);
-    assert.deepEqual(words(chip),['QA · 검수']);
+    assert.deepEqual(words(chip),['QA']);
     assert.match(call(chip,'accessibility_label')[1],/QA/);
     assert.match(call(byId(tree,`panel-agent-${agent.id}`),'tooltip')[1],/직무 QA/);
     assert(call(chip,'truncate'),'producer label cannot crowd out the title');
   }
   agent.profession.label='<b>QA & review</b>';
   const literal=r.renderPanelTracking({...viewFor(feed),panelWidth:360},t,r.cx);
-  assert.deepEqual(words(byId(literal,`panel-role-${agent.id}`)),['<b>QA & review</b> · 검수']);
+  assert.deepEqual(words(byId(literal,`panel-role-${agent.id}`)),['<b>QA & review</b>']);
   delete agent.profession;
   assert.deepEqual(words(byId(r.renderPanelTracking({...viewFor(feed),panelWidth:360},t,r.cx),`panel-role-${agent.id}`)),['검수']);
+});
+
+test('a coordinator sits flat under the Slack/Linear line, outside every issue, with its role group chip',async()=>{
+  const r=await renderer(false),feed=makePanelFixture({tool:'linear',slack:true}),[lead,doer,checker]=feed.spaces[0].agents;
+  Object.assign(lead,{coordinator:true,role:'integrate',role_group:{id:'ceo',label:'CEO'},issue:'DEMO-12'});
+  Object.assign(doer,{role:'implement',role_group:{id:'tl',label:'TL'}});
+  Object.assign(checker,{role:'review',role_group:{id:'qa',label:'QA'}});
+  const clean=cleanPanelFeed(feed),{cards}=r.panelLayout(clean,{tags:new Map(),packets:[]});
+  const rows=cards[0].rows;
+  assert.equal(rows[0].agent?.id,lead.id,'the coordinator is the first row under the meta line');
+  assert.equal(rows[0].coordinator,true);
+  assert.equal(rows[1].kind,'issue-gap');
+  assert(!rows.slice(1).some(row=>row.agent?.id===lead.id),'never repeated under an issue');
+  for(const width of [224,360]){
+    const tree=r.renderPanelTracking({...viewFor(feed),panelWidth:width},t,r.cx),chip=width<300?'panel-tags':'panel-role';
+    assert.equal(byId(tree,`panel-issue-indent-${lead.id}`),undefined,'not indented into an issue block');
+    assert(byId(tree,`panel-issue-indent-${doer.id}`),'workers stay under their issue');
+    assert.deepEqual(words(byId(tree,`${chip}-${lead.id}`)),['CEO']);
+    assert.deepEqual(words(byId(tree,`${chip}-${doer.id}`)),['TL']);
+    assert.deepEqual(words(byId(tree,`${chip}-${checker.id}`)),['QA']);
+    assert.match(call(byId(tree,`panel-agent-${lead.id}`),'tooltip')[1],/역할군 CEO[\s\S]*조정자/);
+  }
+  lead.profession={id:'sre',label:'Site Reliability Engineer'};
+  const recorded=r.renderPanelTracking({...viewFor(feed),panelWidth:360},t,r.cx);
+  assert.deepEqual(words(byId(recorded,`panel-role-${lead.id}`)),['SRE'],'a recorded profession wins as its short id');
+  for(const bad of [{id:'ceo'},{id:'ceo',label:'CEO',x:1},'CEO'])assert.equal(cleanPanelFeed({...feed,spaces:[{...feed.spaces[0],agents:[{...doer,role_group:bad,coordinator:'yes'}]}]}).spaces[0].agents[0].role_group,undefined);
 });
 
 test('brand SVG assets use full-color images while the space grid remains a tinted mask',async()=>{
