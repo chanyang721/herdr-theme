@@ -57,11 +57,12 @@
         "agent_id":{"anyOf":[{"$ref":"#/$defs/repo_id"},{"type":"null"}]},"repository_id":{"$ref":"#/$defs/repo_id"},
         "operation":{"enum":["commit","push","pull","merge","fetch","rebase","reset","checkout","switch","cherry-pick","revert","tag","branch","clone","add","rm","mv","stash","restore","clean","worktree","other"]},
         "phase":{"enum":["attempt","authorization","result"]},"result":{"enum":["unknown","succeeded","failed"]},
-        "evidence":{"enum":["pre_tool","approval","process_exit","head_verified","timeout","sensor_error"]},
+        "evidence":{"enum":["pre_tool","post_tool","approval","process_exit","head_verified","timeout","sensor_error"]},
         "observed_at":{"type":"integer","minimum":0,"maximum":8640000000000}
       },
       "oneOf":[
         {"properties":{"evidence":{"const":"pre_tool"},"phase":{"const":"attempt"},"result":{"const":"unknown"}}},
+        {"properties":{"evidence":{"const":"post_tool"},"phase":{"const":"result"},"result":{"const":"unknown"}}},
         {"properties":{"evidence":{"const":"approval"},"phase":{"const":"authorization"},"result":{"const":"unknown"}}},
         {"properties":{"evidence":{"const":"process_exit"},"phase":{"const":"result"},"result":{"enum":["succeeded","failed"]}}},
         {"properties":{"evidence":{"const":"head_verified"},"operation":{"const":"merge"},"phase":{"const":"result"},"result":{"const":"succeeded"}}},

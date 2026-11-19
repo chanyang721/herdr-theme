@@ -5,15 +5,20 @@ export const REPO_TIMING=Object.freeze({start:40,travel:2400,end:2840});
 export const GIT_OPERATIONS=Object.freeze(['commit','push','pull','merge','fetch','rebase','reset','checkout','switch','cherry-pick','revert','tag','branch','clone','add','rm','mv','stash','restore','clean','worktree','other']);
 export const REPO_RESULTS=Object.freeze(['started','success','failure','unknown']);
 const RESULTS={started:'진행',success:'명령 성공',failure:'명령 실패',unknown:'결과 미확인'};
-const SOURCE_LABELS={private_catalog:'명시 목록',explicit_probe:'연결 확인',pre_tool:'실행 전 관측',approval:'승인만 확인',process_exit:'종료코드 관측',head_verified:'로컬 HEAD 확인',timeout:'시간 초과',sensor_error:'관측 오류',unknown:'출처 미확인'};
+const SOURCE_LABELS={private_catalog:'명시 목록',explicit_probe:'연결 확인',pre_tool:'실행 전 관측',post_tool:'실행 후 관측(결과 미확인)',approval:'승인만 확인',process_exit:'종료코드 관측',head_verified:'로컬 HEAD 확인',timeout:'시간 초과',sensor_error:'관측 오류',unknown:'출처 미확인'};
 // Producer values select only an exact own string key: inherited names such as
 // __proto__/toString and arrays that coerce to a key never reach a table entry.
 const own=(table,value)=>typeof value==='string'&&Object.hasOwn(table,value)?table[value]:null;
 export const repositoryResult=value=>own(RESULTS,value)||RESULTS.unknown;
 export const repositorySource=value=>own(SOURCE_LABELS,value)||SOURCE_LABELS.unknown;
-// Evidence kind -> [required phase, allowed results].
-const EVIDENCE=Object.freeze({pre_tool:['attempt',['unknown']],approval:['authorization',['unknown']],process_exit:['result',['succeeded','failed']],
-  head_verified:['result',['succeeded']],timeout:['result',['unknown']],sensor_error:['result',['unknown']]});
+// Evidence kind -> [required phase, allowed results]. post_tool is a provider
+// after-execution observation: it proves the call was seen afterwards, never its
+// outcome, so it stays unknown until a separately versioned exit contract exists.
+const rule=(phase,results)=>Object.freeze([phase,Object.freeze(results)]);
+export const REPO_EVIDENCE=Object.freeze({pre_tool:rule('attempt',['unknown']),post_tool:rule('result',['unknown']),
+  approval:rule('authorization',['unknown']),process_exit:rule('result',['succeeded','failed']),
+  head_verified:rule('result',['succeeded']),timeout:rule('result',['unknown']),sensor_error:rule('result',['unknown'])});
+const EVIDENCE=REPO_EVIDENCE;
 
 const object=value=>value&&typeof value==='object'&&!Array.isArray(value);
 const credential=/gh[pousr]_|github_pat_|(?:^|[ ._-])(?:bearer|token|password|secret)(?:$|[ ._-])/i;
@@ -178,7 +183,7 @@ export function repositorySection(graph,t,{div,h_flex,v_flex},{gutter=48}={}){
     }else if(row.kind==='repo'){
       const r=row.value,bindings=graph.bindings.filter(binding=>binding.repo===r.id);
       const last=[...graph.events].reverse().find(event=>event.repo===r.id);
-      const status=last?`${last.operation} · ${last.phase==='authorization'?'승인만':last.phase==='attempt'?'실행 전':last.source==='head_verified'?'로컬 반영':repositoryResult(last.result)}`:r.state==='local_only'?'로컬 폴더':r.state==='unknown'?'레포 미확인':'사건 없음';
+      const status=last?`${last.operation} · ${last.phase==='authorization'?'승인만':last.phase==='attempt'?'실행 전':last.source==='head_verified'?'로컬 반영':last.source==='post_tool'?'실행 후 · 결과 미확인':repositoryResult(last.result)}`:r.state==='local_only'?'로컬 폴더':r.state==='unknown'?'레포 미확인':'사건 없음';
       const evidence=last?repositorySource(last.source):repositorySource(r.source);
       section.child(v_flex().id(`sf-repo-${r.id}`).h(40).flex_none().pl(9).pr(4).gap(2)
         .tooltip(`${r.name}\n${evidence} · ${bindings.length} 세션의 폴더 관계\n${r.branch?`로컬 ${r.branch} 관측`:'로컬 main 미관측'} · 원격 상태 미확인\n${last?'마지막 관측 결과이며 현재 실행 상태가 아닙니다.\n':''}cwd는 수정 파일·현재 업무·push 대상 증명이 아닙니다. 명령 성공도 원격 반영·CI·배포·서비스 확인과 별개입니다.`)

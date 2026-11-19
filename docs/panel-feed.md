@@ -73,10 +73,21 @@ and evidence combinations are strict:
 | Evidence | Phase/result | Display meaning |
 | --- | --- | --- |
 | `pre_tool` | `attempt` / `unknown` | Before execution; not proof the command ran |
+| `post_tool` | `result` / `unknown` only | Observed after execution; result unconfirmed |
 | `approval` | `authorization` / `unknown` | Approval only; no result or moving success |
 | `process_exit` | `result` / `succeeded` or `failed` | Command exit result only |
 | `head_verified` | `result` / `succeeded`, `merge` only | Verified local merge |
 | `timeout`, `sensor_error` | `result` / `unknown` | Result remains unconfirmed |
+
+`post_tool` is provider-neutral: a tool callback reported the call after it ran.
+A callback name, an error flag or a missing exit field is not an exit code, so
+this version accepts only `unknown`. `post_tool` with `succeeded` or `failed` is
+dropped like any other invalid combination; allowing those results needs a later
+contract version with its own exit fixtures. It renders `실행 후 · 결과 미확인`, a
+muted label without a packet, and never replaces `process_exit`. A consumer
+without `post_tool` drops only that event; a schema validator built from an
+older copy of this schema rejects the whole feed, so producers should emit it
+only to consumers known to include it.
 
 The latest supplied event stays as a historical label. A push command's success
 does not imply a separately observed remote ref, CI, deployment-system result or
