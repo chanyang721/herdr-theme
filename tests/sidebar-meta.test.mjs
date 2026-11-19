@@ -51,7 +51,7 @@ async function sidebar({native,feed,badges={},pins=[]}){
   const desk=new Desk();
   const c=createRetainedPanel(cx,{embedded:true,cardBadges:meta.metaBadges(desk)});c.apply(cleanPanelFeed(feed),'ready');
   Object.assign(desk,{panelRetained:c,panelTrackingActive:true,panelState:{feed:c.feed},computers:{local:{label:'Local'},machines:{}},
-    site:{},messageEvents:[],workflowNodes:[],workflowEvents:[],activeFlows:[],pendingFlows:[],queuedRoutes:[],expandedAgents:new Set(),readMessages:{},
+    site:{},messageEvents:[],workflowNodes:[],workflowEvents:[],activeFlows:[],pendingFlows:[],sidebarNotices:[],expandedAgents:new Set(),readMessages:{},
     workspaceIcons:{},workspacePins:{spaces:pins},docsSpaces:new Set(),docsHeights:{},alerts:[],asks:[],askChoices:{},askBusy:{},askErrors:{},sessionReports:[]});
   const body=id=>entities.find(entity=>entity.view.id===id&&entity.view.constructor.name==='PanelSpace');
   return {desk,c,cx,store,notified,body,meta,render:()=>desk.render(cx),done(){c.dispose();delete globalThis.__sidebarMeta;}};
@@ -86,19 +86,19 @@ test('a state badge joins the Slack · Linear meta line; no badge row, no empty 
   const raw=makePanelFixture({tool:'linear',slack:true,nav:{space_id:'sp-local',machine:null}});
   const id=raw.spaces[0].id;
   const s=await sidebar({native:[nativeSpace('sp-local','Demo workspace')],feed:raw,
-    badges:{'|sp-local':[{id:'harness-memory',text:'! 6',tone:'blocked',tooltip:'기억 · 막힘·확인 대기 6건'}]}});
+    badges:{'|sp-local':[{id:'local-notes',text:'확인 대기 6',tone:'blocked',tooltip:'막힘·확인 대기 6건'}]}});
   const tree=s.render(),own=card(tree,'sp-local')
   assert(!ids(tree).includes('sf-space-extras-sp-local'),'no separate badge row');
   assert(!ids(tree).some(x=>x.startsWith('sf-channel-alerts')),'no alerts row without alerts');
   assert(own.nodes.every(node=>!node.calls||node.calls.length||node.nodes.length),'no empty child adds a 2px gap');
   const bodyTree=s.body(id).view.render();
-  assert(ids(bodyTree).includes('sf-badge-sp-local-harness-memory'),'the badge is on the task meta line');
-  assert(texts(bodyTree).includes('확인 대기 6'),"'! 6' says what it means");
+  assert(ids(bodyTree).includes('sf-badge-sp-local-local-notes'),'the badge is on the task meta line');
+  assert(texts(bodyTree).includes('확인 대기 6'),'the producer text is drawn as written');
   assert(ids(bodyTree).includes(`panel-tool-${id}`)&&ids(bodyTree).includes(`panel-slack-${id}`),'Slack and Linear stay on the same line');
   assert(!texts(bodyTree).some(x=>/· 이슈 \d/.test(x)),'no issue count on the Linear chip');
   // A badge change redraws only that task card.
   s.notified.length=0;
-  s.store.set('sixfold.workspace.badges',{'|sp-local':[{id:'harness-memory',text:'! 2',tone:'blocked'}]});
+  s.store.set('sixfold.workspace.badges',{'|sp-local':[{id:'local-notes',text:'확인 대기 2',tone:'blocked'}]});
   s.c.alertsChanged();
   assert.deepEqual(s.notified,[s.body(id)],'the card with the badge redraws');
   assert(texts(s.body(id).view.render()).includes('확인 대기 2'));
@@ -124,14 +124,14 @@ test('the Linear chip shows the project name, or the key when the feed has no na
 
 test("a launcher-only badge sits in the header; a card without a meta line keeps its badge row",async()=>{
   const raw=makePanelFixture({tool:'linear',slack:true,nav:{space_id:'sp-local',machine:null}});
-  const s=await sidebar({native:[nativeSpace('sp-local','Demo workspace')],feed:raw,badges:{'|sp-local':[{id:'harness-memory',text:'기억',tone:'dim'}]}});
+  const s=await sidebar({native:[nativeSpace('sp-local','Demo workspace')],feed:raw,badges:{'|sp-local':[{id:'local-notes',text:'기억',tone:'dim'}]}});
   const tree=s.render(),header=card(tree,'sp-local').nodes[0];
-  assert(ids(header).includes('sf-badge-sp-local-harness-memory'),'the launcher is in the header');
+  assert(ids(header).includes('sf-badge-sp-local-local-notes'),'the launcher is in the header');
   assert(!ids(tree).includes('sf-space-extras-sp-local'));
-  assert(!ids(s.body(raw.spaces[0].id).view.render()).includes('sf-badge-sp-local-harness-memory'));
+  assert(!ids(s.body(raw.spaces[0].id).view.render()).includes('sf-badge-sp-local-local-notes'));
   s.done();
   const plain=makePanelFixture({nav:{space_id:'sp-local',machine:null}});
-  const p=await sidebar({native:[nativeSpace('sp-local','Demo workspace')],feed:plain,badges:{'|sp-local':[{id:'harness-memory',text:'! 1',tone:'blocked'}]}});
+  const p=await sidebar({native:[nativeSpace('sp-local','Demo workspace')],feed:plain,badges:{'|sp-local':[{id:'local-notes',text:'! 1',tone:'blocked'}]}});
   assert(ids(p.render()).includes('sf-space-extras-sp-local'),'no meta line: the badge keeps a row');
   p.done();
 });

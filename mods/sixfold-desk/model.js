@@ -46,3 +46,16 @@ export function priority(list) {
   const rank = { blocked: 0, done: 1, working: 2, idle: 3 };
   return list.map((item,index)=>({item,index})).sort((a,b)=>(rank[a.item.status]??4)-(rank[b.item.status]??4)||a.index-b.index).map(x=>x.item);
 }
+
+// Footer notices: a generic slot any local tool can fill (data/sixfold/sidebar-notices.json):
+//   {"notices":[{"id","text","tone":"blocked|working|dim","tooltip"}]}
+// The theme only draws at most three short lines; it runs nothing for them.
+const NOTICE_ID=/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
+export function sidebarNotices(list){
+  if(!Array.isArray(list))return [];
+  return list.filter(n=>n&&typeof n.id==='string'&&NOTICE_ID.test(n.id)&&typeof n.text==='string'&&n.text.trim()).slice(0,3)
+    .map(n=>({id:n.id,text:n.text.trim().slice(0,80),tone:['blocked','working'].includes(n.tone)?n.tone:'dim',
+      tooltip:typeof n.tooltip==='string'?n.tooltip.slice(0,600):''}));
+}
+
+export { setFallbackSpace } from './alert-model.js';

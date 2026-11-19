@@ -6328,7 +6328,7 @@
               "pins": []
             },
             "sp-s": {
-              "name": "Share",
+              "name": "Hub",
               "folders": [],
               "pins": []
             }
@@ -6851,14 +6851,14 @@
               "pins": []
             },
             "sp-s": {
-              "name": "Share",
+              "name": "Hub",
               "folders": [],
               "pins": []
             }
           }
         },
         "settings": {
-          "name": "Share",
+          "name": "Hub",
           "folders": [],
           "pins": []
         }
@@ -8786,7 +8786,7 @@
               "pins": []
             },
             "sp-s": {
-              "name": "Share",
+              "name": "Hub",
               "folders": [],
               "pins": []
             }
@@ -10096,7 +10096,7 @@
               "pins": []
             },
             "sp-s": {
-              "name": "Share",
+              "name": "Hub",
               "folders": [],
               "pins": []
             }
@@ -11698,7 +11698,7 @@
               "pins": []
             },
             "sp-s": {
-              "name": "Share",
+              "name": "Hub",
               "folders": [],
               "pins": []
             },
@@ -12423,7 +12423,7 @@
       "input": {
         "config": {
           "spaces": {
-            "share": {
+            "hub": {
               "folders": [
                 "C:\\herdr-fixture\\home\\AppData\\Local\\Temp\\tmp92fktvb5"
               ]
@@ -12444,7 +12444,7 @@
         "wanted": null,
         "live": [
           "pb",
-          "share"
+          "hub"
         ]
       },
       "expected": "pb"

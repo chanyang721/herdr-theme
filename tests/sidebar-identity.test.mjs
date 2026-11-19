@@ -29,15 +29,15 @@ test('device and known workspace identities select local artwork with stable fal
   assert.equal(computerKind('iOS','ipad-pro-12-9-gen-3'),'tablet');
   assert.equal(computerKind('iOS','iphone-14-plus'),'phone');
   const site={workspaces:{'project a':{icon:'flower'},'project b':{icon:'medical'}}};
-  assert.deepEqual(['공통','Project A','Project B','Voice','Herdr','New project'].map(name=>workspaceIdentity({name},site)),
+  assert.deepEqual(['Hub','Project A','Project B','Voice','Herdr','New project'].map(name=>workspaceIdentity({name},site)),
     ['hub','flower','medical','microphone','terminal',null]);
   // Without the machine-local file, project names carry no special mark.
   assert.equal(workspaceIdentity({name:'Project A'}), null);
   assert.equal(workspaceIdentity({name:'Project A'},{workspaces:{'project a':{icon:'../x'}}}), null);
 });
 
-test('Share keeps the hub identity after renaming', () => {
-  assert.equal(workspaceIdentity({name:'Share'}), 'hub');
+test('Hub keeps the hub identity after renaming', () => {
+  assert.equal(workspaceIdentity({name:'Hub'}), 'hub');
   assert.equal(workspaceIdentity({id:'sp-share',name:'Renamed'},{hub_space_ids:['sp-share']}), 'hub');
   assert.equal(workspaceIdentity({id:'sp-share',name:'Renamed'}), null);
 });
@@ -46,7 +46,7 @@ test('workspace pins use configured stable IDs and machines rather than names',(
   const config={spaces:[{id:'local-id',machine:null},{id:'worker/remote-id',machine:'worker'}]};
   assert(workspacePinned({id:'local-id',name:'Renamed',machine:null},config));
   assert(workspacePinned({id:'worker/remote-id',name:'Remote',machine:'worker'},config));
-  assert(!workspacePinned({id:'new-id',name:'Share',machine:null},config));
+  assert(!workspacePinned({id:'new-id',name:'Hub',machine:null},config));
   assert(!workspacePinned({id:'local-id',machine:'worker'},config));
   assert(!workspacePinned({id:'worker/remote-id',machine:'another'},config));
   for(const invalid of [undefined,null,{}, {spaces:{}},{spaces:[null,{}, {id:''}]}])assert(!workspacePinned({id:'local-id'},invalid));

@@ -13,7 +13,6 @@ pub type Input = (PathBuf, Vec<u8>, u32);
 pub const MIGRATED_SCRIPTS: &[&str] = &[
     "agent_env.py",
     "balance_grid.py",
-    "collaborate.py",
     "collect_computers.py",
     "collect_docs.py",
     "collect_workflow.py",
@@ -27,13 +26,11 @@ pub const MIGRATED_SCRIPTS: &[&str] = &[
     "install_doc_tabs.py",
     "install_preview.py",
     "install_voice.py",
-    "model_tier.py",
     "open_doc_tab.py",
     "open_document.py",
     "render_html.py",
     "render_mermaid.py",
     "resolve_doc_pins.py",
-    "route.py",
     "seed_workspace_pins.py",
     "set_workspace_icon.py",
     "site_config.py",
@@ -273,9 +270,6 @@ pub fn input_files(repo: &Path, home: &Path, names: &[String]) -> Result<Vec<Inp
             target_rel = match name.replace('\\', "/").as_str() {
                 "config/templates/settings.json" => PathBuf::from("settings.json"),
                 "config/templates/shared.json" => PathBuf::from("shared.json"),
-                "config/templates/data/sixfold/collaboration.json" => {
-                    PathBuf::from("data/sixfold/collaboration.json")
-                }
                 "config/templates/data/sixfold/project-docs-pins.json" => {
                     PathBuf::from("data/sixfold/project-docs-pins.json")
                 }
@@ -781,7 +775,7 @@ pub trait UpdateCliBackend {
     fn record(&mut self, home: &Path, pin: &Value) -> Result<()>;
     fn voice(&mut self, repo: &Path, home: &Path) -> Result<()>;
 }
-/// The old test supplied a failing voice installer process. Share this command
+/// The old test supplied a failing voice installer process. Reuse this command
 /// path with the real CLI while replacing only the subprocess operation.
 pub fn install_voice_with_runner(
     repo: &Path,

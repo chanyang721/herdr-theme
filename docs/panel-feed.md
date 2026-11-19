@@ -190,7 +190,7 @@ the sidebar never decides whether a session is kept or closed.
 Policy acceptance, role completion and physical removal are separate. A last
 pane can finish recording and learning while its row remains visible; space
 cleanup is a separate producer operation. See the
-[cross-repository lifecycle contract](workflow-lifecycle.md) for the field
+[task lifecycle mapping](task-lifecycle.md) for the field
 mapping and verification matrix.
 
 A row whose `state` is one of the cleanup states also carries a short label in
@@ -231,7 +231,7 @@ and a numeric progress percentage from 0 to 100. Missing dates or progress are
 left blank. Per-scope cache metadata distinguishes stored, stale and uncollected
 lists; it does not claim the external service is currently connected.
 
-`issue_catalog.source: "linear-ledger"` marks a catalog the harness made from its
+`issue_catalog.source: "linear-ledger"` marks a catalog the producer made from its
 local Linear ledger, the one copy both the issue window and the week band are
 made from. Any other value is dropped. Such a catalog is shown as it is: a newer
 `week-timeline.json` does not replace it, its milestones are its own, and its
@@ -282,6 +282,6 @@ values immediately.
 
 `tests/panel-fixtures.mjs` supplies the same 24 sharing/tool/Slack combinations
 to model, renderer and isolated native screenshot checks. It also supplies
-dispatch, spawn, message, review, verdict, acceptance, closing and memory
+assign, spawn, message, review, verdict, acceptance, closing and memory
 transitions. All example identities and task names are synthetic.
 See the [native gallery and validation measurements](panel-validation.md).

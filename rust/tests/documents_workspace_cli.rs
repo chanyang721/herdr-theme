@@ -242,7 +242,7 @@ fn native_seed_matches_original_action_order_and_error_finally_restore() {
     seeds(false)
 }
 #[test]
-fn installed_pinned_javascript_dispatches_windows_unc_and_drive_homes() {
+fn installed_pinned_javascript_routes_windows_unc_and_drive_homes() {
     let temp = tempfile::tempdir().unwrap();
     for (relative, helper, expected) in [
         (

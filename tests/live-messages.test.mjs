@@ -26,7 +26,7 @@ for (const native of [false,true]) test(`background messages refresh through ${n
     let raw=null;
     if(path.endsWith('/workspace-pins.local.json'))raw=pinText;
     else if(path.endsWith('/messages.json')){assert.equal(native,false,'native mode never subscribes to the legacy message file');raw=log;}
-    else if(malformedAuxiliary&&(path.endsWith('/workflow.json')||path.endsWith('/routing-queue.json')))raw='{partial';
+    else if(malformedAuxiliary&&(path.endsWith('/workflow.json')||path.endsWith('/sidebar-notices.json')))raw='{partial';
     if(raw===null)return {status:'missing',hash:null};
     const hash=createHash('sha256').update(raw).digest('hex');
     try{return {status:'ready',hash,value:JSON.parse(raw)};}catch{return {status:'invalid',hash};}
@@ -44,14 +44,13 @@ for (const native of [false,true]) test(`background messages refresh through ${n
     focused:()=>{assert.fail('file commands must not run focus/selection command handling');},panes:()=>[],
   };
   const {default: Sidebar,helperInvocation} = await loadSidebar(runtime,native);
-  assert.deepEqual(helperInvocation('/app/scripts/sixfold/route.py','route',['--drain']),['/app/scripts/sixfold/herdr-theme',['route','--drain']]);
-  assert.deepEqual(helperInvocation('/custom/scripts/sixfold/route.py','route',['--drain']),['python3',['/custom/scripts/sixfold/route.py','--drain']]);
-  assert.deepEqual(helperInvocation('/custom/collaboration.py','collaborate',['drain']),['python3',['/custom/collaboration.py','drain']]);
-  assert.deepEqual(helperInvocation(['/custom/native','adapter'],'route',['--drain']),['/custom/native',['adapter','--drain']]);
+  assert.deepEqual(helperInvocation('/app/scripts/sixfold/focus_queue.py','focus_queue',['--app-focus']),['/app/scripts/sixfold/herdr-theme',['focus_queue','--app-focus']]);
+  assert.deepEqual(helperInvocation('/custom/scripts/sixfold/focus_queue.py','focus_queue',['--app-focus']),['python3',['/custom/scripts/sixfold/focus_queue.py','--app-focus']]);
+  assert.deepEqual(helperInvocation(['/custom/native','adapter'],'focus_queue',['--app-focus']),['/custom/native',['adapter','--app-focus']]);
   assert.deepEqual(helperInvocation('/custom/voice.py','focus_queue',['--app-focus']),['python3',['/custom/voice.py','--app-focus']]);
   appLocation='\\\\fixture-host\\share\\app';
-  assert.deepEqual(helperInvocation(null,'route',['--drain']),[`${appLocation}/scripts/sixfold/herdr-theme.exe`,['route','--drain']]);
-  assert.deepEqual(helperInvocation('\\\\FIXTURE-HOST\\SHARE\\APP\\scripts\\sixfold\\route.py','route',['--drain']),[`${appLocation}/scripts/sixfold/herdr-theme.exe`,['route','--drain']]);
+  assert.deepEqual(helperInvocation(null,'focus_queue',['--app-focus']),[`${appLocation}/scripts/sixfold/herdr-theme.exe`,['focus_queue','--app-focus']]);
+  assert.deepEqual(helperInvocation('\\\\FIXTURE-HOST\\SHARE\\APP\\scripts\\sixfold\\focus_queue.py','focus_queue',['--app-focus']),[`${appLocation}/scripts/sixfold/herdr-theme.exe`,['focus_queue','--app-focus']]);
   appLocation='/app';
   const view = new Sidebar();
   view.init({},cx);

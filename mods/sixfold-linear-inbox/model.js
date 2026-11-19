@@ -32,14 +32,21 @@ export const spaceKey = name => String(name ?? '').toLowerCase().replace(/[\s_-]
 export const linearLink = url => typeof url === 'string' && /^https:\/\/linear\.app\/[A-Za-z0-9_-]+\/(issue|project)\//.test(url);
 
 // Same rule as sixfold-desk/alert-model.js placeItems (mods cannot import each other):
-// an alert whose space is not shown belongs to Share.
+// an alert whose space is not shown belongs to the fallback space.
+// The workspace that receives alerts whose own workspace is not shown. "Hub" unless the
+// sidebar publishes the site's "fallback_space" (site.local.json).
+let fallbackSpace = 'Hub';
+export const setFallbackSpace = name => { if (typeof name === 'string' && name.trim()) fallbackSpace = name.trim(); };
+export const currentFallbackSpace = () => fallbackSpace;
 export const UNSORTED = '미분류';
-export function placeItems(items, names, fallback = 'Share') {
+// The fallback space when it is on screen; otherwise the first space shown, so an alert never
+// lands on a space that does not exist (fallback_space unset and no space named Hub).
+export function placeItems(items, names, fallback = fallbackSpace) {
   const shown = new Map((names ?? []).map(name => [spaceKey(name), name]));
   if (!shown.size) return items ?? [];
-  const home = shown.get(spaceKey(fallback)) ?? fallback;
+  const home = shown.get(spaceKey(fallback)) ?? names[0];
   return (items ?? []).map(item => {
-    // Not placed yet (its issue is read on the next run): it stays 미분류, never Share.
+    // Not placed yet (its issue is read on the next run): it stays 미분류, never the fallback.
     if (item?.workspace === UNSORTED) return item;
     const space = shown.get(spaceKey(item?.workspace)) ?? home;
     return space === item?.workspace ? item : {...item, workspace: space, workspace_raw: item?.workspace ?? ''};

@@ -436,8 +436,8 @@ test('old tabs use the native resolver and an explicit native command remains co
 });
 
 test('folder warnings name the path and tell missing, denied and empty apart', () => {
-  assert.deepEqual(describeWarnings(['source_unavailable', 'source_denied:/Users/u/Documents/Reports', 'source_missing:/x/자료']), [
-    '접근 불가(접근 권한 확인): /Users/u/Documents/Reports',
+  assert.deepEqual(describeWarnings(['source_unavailable', 'source_denied:/home/u/Documents/Reports', 'source_missing:/x/자료']), [
+    '접근 불가(접근 권한 확인): /home/u/Documents/Reports',
     '경로 없음: /x/자료',
   ]);
   assert.deepEqual(describeWarnings(['source_empty:/r/연동']), ['맞는 문서 없음: /r/연동']);

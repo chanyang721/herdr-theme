@@ -40,7 +40,7 @@ export function alertSignature(name, motion = true) {
     delay?`${delay.hours}:${delay.at}`:''].join('|');
 }
 
-// A space with a tracked feed opens its channel messages; one without (Share, which only receives
+// A space with a tracked feed opens its channel messages; one without (the fallback space, which only receives
 // mentions) opens its mentions, so 전체 보기 is never an empty list.
 export function openInbox(scope = {}) {
   const newMessages = !scope.project || named(shared('sixfold.alertProjects'), scope.project);

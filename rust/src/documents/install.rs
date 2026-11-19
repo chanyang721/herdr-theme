@@ -802,13 +802,7 @@ pub fn seed_space(space: &Value, project: &Value, repo: &Path, user: &Path, site
             folders.push(json!(folder))
         }
     } else if is_hub(space, site) {
-        sources = vec![
-            (
-                repo.join("COMMON_ROUTING.md"),
-                Some("프로젝트 작업 전달".into()),
-            ),
-            (repo.join("README.ko.md"), Some("Herdr 사용 안내".into())),
-        ];
+        sources = vec![(repo.join("README.ko.md"), Some("Herdr 사용 안내".into()))];
         if folders.is_empty() {
             folders.push(json!(repo.join("docs")))
         }

@@ -580,7 +580,7 @@ pub fn site_config(home: Option<&Path>, app: Option<&Path>) -> Value {
             home.join(".config/herdr-app")
         }
     });
-    let mut base = json!({"label_prefix":"local.herdr-sixfold","state_dir":"~/Library/Application Support/HerdrSixfold","reports_dir":"~/Documents/HerdrReports","projects_dir":"~/Documents/HerdrProjects","hub_space_ids":[],"project_aliases":{},"fixed_space_names":["Share"],"doc_tabs":{}});
+    let mut base = json!({"label_prefix":"local.herdr-sixfold","state_dir":"~/Library/Application Support/HerdrSixfold","reports_dir":"~/Documents/HerdrReports","projects_dir":"~/Documents/HerdrProjects","hub_space_ids":[],"project_aliases":{},"fixed_space_names":[],"doc_tabs":{}});
     if let Ok(value) = read_json(app.join("data/sixfold/site.local.json")) {
         if let Some(map) = value.as_object() {
             for (k, v) in map {
@@ -592,7 +592,7 @@ pub fn site_config(home: Option<&Path>, app: Option<&Path>) -> Value {
 }
 pub fn is_hub(space: &Value, site: &Value) -> bool {
     arr(&site["hub_space_ids"]).contains(&space["id"])
-        || ["share", "공통", "common"].contains(&fold(s(&space["name"])).as_str())
+        || fold(s(&space["name"])) == "hub"
 }
 fn runtime_repository(executable: &Path, directory: &Path) -> Option<PathBuf> {
     executable

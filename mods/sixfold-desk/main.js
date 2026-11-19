@@ -2,7 +2,7 @@ import { View, div, svg, image } from 'gpui-kit';
 import { h_flex, v_flex } from 'gpui-base';
 import * as herdrNative from 'herdr';
 import { agents, panes, spaces, terminals, focused, props, theme, run, shared, setShared, setAgentOrder, nextCommand, exec, window, layout, readTextFile, writeTextFile, appHome, openOverlay, settings } from 'herdr';
-import { WORDS, counts, title, cycle, priority, readThrough, unreadCount } from './model.js';
+import { WORDS, counts, title, cycle, priority, readThrough, unreadCount, sidebarNotices, setFallbackSpace } from './model.js';
 
 import { computerActive, computerHub, computerKind, computerSlots, computerStatus, computerAlert, tailscaleStatus, workspaceIdentity, workspaceLocal, workspacePinned } from './sidebar-identity.js';
 
@@ -88,10 +88,6 @@ const FLOW_RESUME = 3, FLOW_RESUME_MS = 60000;
 // (app_backend.py focus(), rust voice/queue.rs app_focus). Unchanged focus is rewritten this
 // often, safely inside that window; a change is written on the next 500 ms sample.
 const VOICE_HEARTBEAT_MS = 1500;
-// Ledger states `collaborate drain` acts on (rust automation/collaboration.rs drain and
-// refresh_harness). With none of them it runs only on the fallback.
-const COLLABORATION_WORK = new Set(['pending','sending','sent','uncertain','harness_managed']);
-const COLLABORATION_FALLBACK_MS = 60000;
 const flowOrder = (a, b) => (Number.isSafeInteger(a.seq) && Number.isSafeInteger(b.seq) && a.seq !== b.seq ? a.seq - b.seq : 0) || (a.at ?? 0) - (b.at ?? 0);
 function departureGap(event, next, waiting) {
   if (waiting > FLOW_CATCH_UP) return Math.max(FLOW_MIN_GAP_MS, Math.round(FLOW_GAP_MS * FLOW_CATCH_UP / waiting));
@@ -134,11 +130,7 @@ export default class SixfoldDesk extends View {
     this.expandedAgents = new Set();
     this.activeFlows = [];
     this.pendingFlows = [];
-    this.queuedRoutes = [];
-    this.routeScript = null;
-    this.routeBusy = false;
-    this.collaborationScript = null;
-    this.collaborationBusy = false;
+    this.sidebarNotices = [];
     this.readMessages = {};
     // The header cat animates natively (pets.js): a pane header keeps no timer of its own.
     if (props()?.role === 'pane') return;
@@ -232,13 +224,19 @@ export default class SixfoldDesk extends View {
           if(snapshot===this.messageSnapshot)return;
           const object=value=>value&&typeof value==='object'&&!Array.isArray(value);
           if(object(file.icons))this.workspaceIcons=file.icons;
-          if(object(file.site))this.site=file.site;
+          if(object(file.site)){
+            this.site=file.site;
+            // Unset: the space listed in hub_space_ids, else "Hub" (alerts then fall to the first
+            // space shown when no such space is on screen; alert-model placeItems).
+            const hubIds=Array.isArray(file.site.hub_space_ids)?file.site.hub_space_ids:[];
+            const hubName=spaces().find(space=>hubIds.includes(space.id))?.name;
+            const fallback=typeof file.site.fallback_space==='string'&&file.site.fallback_space.trim()?file.site.fallback_space.trim():hubName||'Hub';
+            setFallbackSpace(fallback);
+            if(this.publishedFallback!==fallback){this.publishedFallback=fallback;setShared('sixfold.fallbackSpace',fallback);}
+          }
           if(Array.isArray(file.pins?.spaces))this.workspacePins=file.pins;
           if(object(file.computers))this.computers=file.computers;
-          const config=file.routing||{script:this.routeScript};
-          const collaboration=file.collaboration;
-          this.collaborationScript=collaboration?.enabled===true?collaboration.command||collaboration.script||null:null;
-          const requests=file.queue?.requests??this.queuedRoutes;
+          const notices=Array.isArray(file.notices?.notices)?file.notices.notices:this.sidebarNotices;
           const addresses = new Set(terminals().map(item => item.address));
           const workflow=file.workflow||{nodes:this.workflowNodes,events:this.workflowEvents};
           this.workflowNodes = workflowNodes(workflow.nodes,[...addresses]);
@@ -256,8 +254,7 @@ export default class SixfoldDesk extends View {
           this.previousDelegations = this.workflowEvents;
           this.previousEvents = events;
           this.messageEvents = events;
-          this.routeScript = config?.command || config?.script;
-          this.queuedRoutes = requests.map(({id,source,project,hold,error})=>({id,source,project,hold,error}));
+          this.sidebarNotices = sidebarNotices(notices);
           this.messageSnapshot = snapshot;
           this.startFlows(cx);
           cx.notify();
@@ -373,32 +370,6 @@ export default class SixfoldDesk extends View {
           if(text!==this.readMessagesText){this.readMessages=next;this.readMessagesText=text;cx.notify();}
         }catch{ /* Retry a partial or conflicting write on the next change or fallback. */ }
       }});
-    cx.timer.every(2000, cx => {
-      if (this.routeBusy || !this.routeScript || !this.queuedRoutes.some(item=>!item.hold)) return;
-      this.routeBusy = true;
-      spawnOrRelease(cx, () => { this.routeBusy = false; }, async cx => {
-        try { await invokeHelper(this.routeScript,'route',['--drain']); }
-        finally { this.routeBusy = false; }
-      });
-    });
-    // Registered work uses its own lease ledger; never infer tasks from speech or UI activity.
-    // Drain runs every 2 s only while that ledger holds work it acts on, otherwise once a minute.
-    this.collaborationWork=true;   // until the ledger is read
-    this.fileSubscriptions.push(subscribeJsonFile(cx,`${appHome()}/data/sixfold/collaboration-tasks.json`,snapshot=>{
-      const tasks=snapshot.status==='ready'?snapshot.value?.tasks:null;
-      const work=snapshot.status==='missing'?false:!tasks||typeof tasks!=='object'||Object.values(tasks).some(task=>COLLABORATION_WORK.has(task?.state));
-      const started=work&&!this.collaborationWork;
-      this.collaborationWork=work;
-      if(started)this.collaborationPoll?.kick(cx);
-    }));
-    // The fallback only catches a missed ledger event, so it waits while the sidebar is hidden.
-    this.collaborationPoll=createPoll(cx,{every:2000,fallback:COLLABORATION_FALLBACK_MS,fallbackWhen:()=>this.sidebarVisible!==false,
-      due:()=>Boolean(this.collaborationScript)&&this.collaborationWork,
-      job:async()=>{
-        if(!this.collaborationScript)return;
-        try { await invokeHelper(this.collaborationScript,'collaborate',['drain']); }
-        catch { /* The durable lease prevents blind retry after ambiguous delivery. */ }
-      }});
     // Optional voice integration is opt-in and runs only from this one sidebar.
     // Focus is sampled by a timer, never changed by rendering background rows.
     let voiceBusy=false, voiceActionBusy=false, voiceKey=null, voiceText=null, voiceAt=0;
@@ -482,7 +453,7 @@ export default class SixfoldDesk extends View {
           const p = current[Number(command.slice(5)) - 1];
           if (p) run('pane.focus', { pane: p.pane });
         } else if (/^computer-[1-9]$/.test(command)) {
-          // Same as clicking the sidebar card: list plus that computer's Share space and pane.
+          // Same as clicking the sidebar card: list plus that computer's hub space and pane.
           const machines = typeof herdrNative.machines === 'function' ? herdrNative.machines() : [{ name: null, layout: 'ready' }];
           const key = computerSlots(machines)[Number(command.slice(9)) - 1];
           if (key) this.selectComputer(key);
@@ -516,7 +487,7 @@ export default class SixfoldDesk extends View {
     this.classicCards?.dispose();
     this.stopArrivals?.();
     this.linkFlowTimer?.cancel();this.linkWakeTimer?.cancel();this.cometTimer?.cancel();
-    this.readPoll?.stop();this.collaborationPoll?.stop();
+    this.readPoll?.stop();
     for(const stop of this.fileSubscriptions||[])stop();
     this.fileSubscriptions=[];this.stopLiveMessages?.();this.stopLiveMessages=null;this.panelRetained?.dispose();
   }
@@ -549,8 +520,8 @@ export default class SixfoldDesk extends View {
     this.enterComputerHub(key);
   }
 
-  // Cards and shortcuts also bring the shown space and focused pane to that computer's Share.
-  // Without one unambiguous Share (or for a Tailscale-only device) only the list changes.
+  // Cards and shortcuts also bring the shown space and focused pane to that computer's hub space.
+  // Without one unambiguous hub (or for a Tailscale-only device) only the list changes.
   enterComputerHub(key) {
     const hub = computerHub(spaces(), key, this.site, this.computers);
     if (!hub || focused()?.space === hub.id) return;
@@ -1049,7 +1020,7 @@ export default class SixfoldDesk extends View {
         : lit ? div().absolute().top(-1).left(-1).right(-1).bottom(-1).rounded(7).border(2).border_color(collab) : null;
       // The name is text on the header, so its colour is chosen for that header's background.
       const tailColor = collabColor(t, s.active ? t.selected : t.surface);
-      // The Share (hub) space is the shared room itself, so its header carries no computer tag.
+      // The hub space is the shared room itself, so its header carries no computer tag.
       const partnerTail = partner && workspaceIdentity(s,this.site)!=='hub' ? h_flex().id(`sf-partner-${s.id}`).flex_none().max_w(110).min_w(0).gap(3).items_center().text_size(12).font_normal().text_color(tailColor)
         .tooltip(partnerText)
         .child(svg(`mods/sixfold-desk/icons/device-${computerKind(this.computers?.machines?.[partner.partners[0]]?.os)}.svg`).size(14).flex_none().text_color(tailColor))
@@ -1253,10 +1224,10 @@ export default class SixfoldDesk extends View {
         .when(routes.length>2,row=>row.child(div().text_size(9).text_color(t.muted).child(this.lang()==='ko'?`+${routes.length-2}개 경로 전송 중`:`+${routes.length-2} active routes`)))
         .when((this.skippedFlows||0)>0,row=>row.child(div().id('sf-transfer-skipped').text_size(9).text_color(t.muted)
           .child(this.lang()==='ko'?`밀린 전송 ${this.skippedFlows}건은 효과 없이 건너뜀`:`${this.skippedFlows} queued sends skipped`)))))
-      .when(this.queuedRoutes.length>0,e=>e.child(h_flex().id('sf-delivery-status').flex_none().px(10).py(6).gap(5).items_center().border_t(1).border_color(t.border)
-        .tooltip(this.queuedRoutes.map(item=>`${item.project} · ${item.error || (item.hold?'전달 보류':'수신 pane 대기')}`).join('\n'))
-        .child(div().text_size(10).text_color(this.queuedRoutes.some(item=>item.hold||item.error)?t.blocked:t.muted)
-          .child(this.lang()==='ko'?`전달 대기 ${this.queuedRoutes.length} · 오류/보류 ${this.queuedRoutes.filter(item=>item.hold||item.error).length}`:`Queued ${this.queuedRoutes.length} · Error/held ${this.queuedRoutes.filter(item=>item.hold||item.error).length}`))))
+      .when(this.sidebarNotices.length>0,e=>e.child(v_flex().id('sf-sidebar-notices').flex_none().px(10).py(6).gap(3).border_t(1).border_color(t.border)
+        .children(this.sidebarNotices.map(item=>div().id(`sf-notice-${item.id}`).text_size(10).truncate()
+          .when(Boolean(item.tooltip),row=>row.tooltip(item.tooltip))
+          .text_color(item.tone==='blocked'?t.blocked:item.tone==='working'?t.working:t.muted).child(item.text)))))
       .child(h_flex().h(38).flex_none().px(7).items_center()
         .child(this.button('sf-settings',w.settings,()=>run('app.settings'),t))
         .child(div().flex_1())

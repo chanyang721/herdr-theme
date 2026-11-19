@@ -49,29 +49,29 @@ test('a card has one alerts popover: the meta-line Slack chip only when the meta
   assert.notEqual(slackAlertsChip({id:'a',name:'Alpha',work:{tool:'linear'}},trigger,{}),trigger);
 });
 
-// 2026-11-16: Share only receives mentions (slack-mentions.json), never tracked-feed items, so its card
+// 2026-11-16: Hub only receives mentions (slack-mentions.json), never tracked-feed items, so its card
 // had no Slack badge and 전체 보기 opened the empty channel-message list.
 test('mentions routed to a space give it a Slack badge, an unread count and a mention inbox',async()=>{
   const {store,hasSlackAlerts,cardAlertCounts,openInbox,popover}=await inbox();
-  assert.equal(hasSlackAlerts('Share'),false,'no mentions, no badge');
-  popover.setSpaceMentions([{id:'slack:D0TEST01:1.1',project:'Share'},{id:'slack:D0TEST01:2.1',project:'Share'},{id:'slack:C0TEST01:3.1',project:'Alpha'}]);
+  assert.equal(hasSlackAlerts('Hub'),false,'no mentions, no badge');
+  popover.setSpaceMentions([{id:'slack:D0TEST01:1.1',project:'Hub'},{id:'slack:D0TEST01:2.1',project:'Hub'},{id:'slack:C0TEST01:3.1',project:'Alpha'}]);
   store.set('sixfold.alertRead',{'slack:D0TEST01:1.1':'slack:D0TEST01:1.1'});
   store.set('sixfold.alertItems',[{id:'slack:C0TEST01:3.1',project:'Alpha'}]);
-  assert.equal(hasSlackAlerts('Share'),true);
-  assert.equal(cardAlertCounts('Share').slack,1,'the unread mention only');
+  assert.equal(hasSlackAlerts('Hub'),true);
+  assert.equal(cardAlertCounts('Hub').slack,1,'the unread mention only');
   assert.equal(cardAlertCounts('Alpha').slack,1,'a mention also in the tracked feed counts once');
-  openInbox({project:'Share'});openInbox({project:'Alpha'});
-  assert.deepEqual(store.get('opened').map(o=>o.props.newMessages),[false,true],'Share opens its mentions; a tracked space its channel messages');
+  openInbox({project:'Hub'});openInbox({project:'Alpha'});
+  assert.deepEqual(store.get('opened').map(o=>o.props.newMessages),[false,true],'Hub opens its mentions; a tracked space its channel messages');
 });
 
-// 2026-11-16 review: an arrival for a space that is not on the sidebar ('미연결') lands on Share, but the
-// grouping kept its own space, so once the peek folded Share's badge, unread count and popover lost it.
-test('mentions of a space not on the sidebar count on Share, as their arrival does',async()=>{
+// 2026-11-16 review: an arrival for a space that is not on the sidebar ('미연결') lands on Hub, but the
+// grouping kept its own space, so once the peek folded Hub's badge, unread count and popover lost it.
+test('mentions of a space not on the sidebar count on Hub, as their arrival does',async()=>{
   const {cardAlertCounts,hasSlackAlerts,popover}=await inbox();
-  const items=[{id:'slack:C0TEST09:1.1',project:'미연결'},{id:'slack:D0TEST01:2.1',project:'Share'},{id:'slack:C0TEST01:3.1',project:'Alpha'},{id:'slack:C0TEST02:4.1',project:'Gone'}];
-  popover.setSpaceMentions(items,['Alpha','Share']);
-  assert.equal(cardAlertCounts('Share').slack,3,'Share + 미연결 + a space no longer on the sidebar');
-  assert.deepEqual(popover.spaceMentions('Share').map(i=>i.id),['slack:C0TEST09:1.1','slack:D0TEST01:2.1','slack:C0TEST02:4.1']);
+  const items=[{id:'slack:C0TEST09:1.1',project:'미연결'},{id:'slack:D0TEST01:2.1',project:'Hub'},{id:'slack:C0TEST01:3.1',project:'Alpha'},{id:'slack:C0TEST02:4.1',project:'Gone'}];
+  popover.setSpaceMentions(items,['Alpha','Hub']);
+  assert.equal(cardAlertCounts('Hub').slack,3,'Hub + 미연결 + a space no longer on the sidebar');
+  assert.deepEqual(popover.spaceMentions('Hub').map(i=>i.id),['slack:C0TEST09:1.1','slack:D0TEST01:2.1','slack:C0TEST02:4.1']);
   assert.deepEqual(popover.spaceMentions('Alpha').map(i=>i.id),['slack:C0TEST01:3.1'],'a sidebar space keeps its own');
   assert.equal(hasSlackAlerts('미연결'),false,'no group under the unmapped name');
   popover.setSpaceMentions(items);

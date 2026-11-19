@@ -1,11 +1,14 @@
 # Agent instructions
 
-## Herdr harness workflow
+## Optional task feeds and extensions
 
-For harness allocation, collaboration, review, lifecycle cleanup, knowledge reuse,
-and issue/panel synchronization, read [docs/harness-workflow.md](docs/harness-workflow.md) first.
-Use the shared `HERDR-WORKFLOW-1` contract and record verification evidence;
-a response ending is not task completion. Preserve the other repository rules.
+Task allocation, review and cleanup policy are not part of this theme. The theme only
+renders what an optional local producer writes (see [docs/panel-feed.md](docs/panel-feed.md),
+[docs/task-lifecycle.md](docs/task-lifecycle.md) and [docs/local-integrations.md](docs/local-integrations.md)).
+Keep those integrations behind generic extension points: `herdr-theme <name>` forwards to an
+installed `herdr-theme-<name>` executable, the sidebar shows `sidebar-notices.json`, and
+`site.local.json` holds machine-local names and presets. Do not add producer-specific
+policy, names or private links to this repository. A response ending is not task completion.
 
 ## Performance rules
 

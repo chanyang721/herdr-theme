@@ -1,12 +1,11 @@
-# Harness lifecycle and the sidebar
+# Task lifecycle and the sidebar
 
 This contract joins the optional
-[ai-workflows producer](https://github.com/chanyang721/ai-workflows) and this
+optional task-feed producer and this
 theme's existing compact sidebar. It adds no task authority, sidebar section,
 tab, or timer that can close a session. Installing the theme does not install
-the producer. This is a display mapping for the shared
-`HERDR-WORKFLOW-1` contract; [the repository adapter](harness-workflow.md)
-links its canonical policy and release evidence requirements.
+the producer. This is a display mapping only; the producer owns its policy and release
+evidence requirements.
 
 ## Separate the result from the terminal
 

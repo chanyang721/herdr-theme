@@ -4,25 +4,25 @@ import {readFile} from 'node:fs/promises';
 import {parseStartConfig,startArgv,lastJson,startResult,startAllowed,startPick,startSignature,cleanText,START_GUARD_MS}
   from '../mods/sixfold-desk/issue-start-model.js';
 
-const CONFIG={v:1,command:'/opt/demo/bin/start',args:['send','{space}','{issue} {title}','--agent','{provider}','--level','{tier}'],
+const CONFIG={v:1,command:'/opt/demo/bin/start',args:['send','{space}','{issue} {title}','--agent','{provider}','--level','{level}'],
   providers:[{id:'claude',label:'Claude'},{id:'codex',label:'Codex'}],
-  tiers:[{id:'low',label:'낮음'},{id:'mid',label:'중간'},{id:'high',label:'높음'},{id:'max',label:'최고'}],
-  default:{provider:'claude',tier:'high'},timeout_ms:300000};
+  levels:[{id:'low',label:'낮음'},{id:'mid',label:'중간'},{id:'high',label:'높음'},{id:'max',label:'최고'}],
+  default:{provider:'claude',level:'high'},timeout_ms:300000};
 const config=parseStartConfig(JSON.stringify(CONFIG));
 // The result line's text (the guard release flag is checked on its own).
 const shown=r=>r&&{ok:r.ok,text:r.text};
-const params={space:'Demo',issue:'DEMO-12',title:'Fix the  login\tpage',provider:'codex',tier:'mid'};
+const params={space:'Demo',issue:'DEMO-12',title:'Fix the  login\tpage',provider:'codex',level:'mid'};
 
 test('a valid setting parses with its defaults; anything off gives no setting',()=>{
   assert.equal(config.command,'/opt/demo/bin/start');assert.equal(config.timeout,300000);
-  assert.deepEqual(config.defaults,{provider:'claude',tier:'high'});
+  assert.deepEqual(config.defaults,{provider:'claude',level:'high'});
   assert.deepEqual(config.providers.map(p=>p.label),['Claude','Codex']);
   assert.equal(parseStartConfig({...CONFIG,timeout_ms:undefined}).timeout,300000,'timeout is optional');
-  assert.deepEqual(parseStartConfig({...CONFIG,default:undefined}).defaults,{provider:'claude',tier:'low'},'no default: the first of each list');
+  assert.deepEqual(parseStartConfig({...CONFIG,default:undefined}).defaults,{provider:'claude',level:'low'},'no default: the first of each list');
   const bad=[null,'','{not json',[],{...CONFIG,v:2},{...CONFIG,command:'start'},{...CONFIG,command:'./bin/start'},{...CONFIG,command:42},
     {...CONFIG,args:'send {issue}'},{...CONFIG,args:[1]},{...CONFIG,args:Array(41).fill('x')},{...CONFIG,args:['a\nb']},
-    {...CONFIG,providers:[]},{...CONFIG,providers:[{id:'has space'}]},{...CONFIG,providers:[{id:'a'},{id:'a'}]},{...CONFIG,tiers:undefined},
-    {...CONFIG,default:{provider:'other',tier:'high'}},{...CONFIG,default:{provider:'claude',tier:'huge'}},
+    {...CONFIG,providers:[]},{...CONFIG,providers:[{id:'has space'}]},{...CONFIG,providers:[{id:'a'},{id:'a'}]},{...CONFIG,levels:undefined},
+    {...CONFIG,default:{provider:'other',level:'high'}},{...CONFIG,default:{provider:'claude',level:'huge'}},
     {...CONFIG,timeout_ms:10},{...CONFIG,timeout_ms:'300000'},{...CONFIG,timeout_ms:10_000_000}];
   for(const value of bad)assert.equal(parseStartConfig(typeof value==='string'||value===null?value:JSON.stringify(value)),null,JSON.stringify(value)?.slice(0,80));
   assert(parseStartConfig({...CONFIG,command:'C:\\tools\\start.exe'}),'a Windows absolute path is accepted');
@@ -34,14 +34,14 @@ test('placeholders are replaced inside each argument once, without a shell; bad 
   assert.deepEqual(argv,{command:'/opt/demo/bin/start',timeout:300000,
     args:['send','Demo','DEMO-12 Fix the login page','--agent','codex','--level','mid']});
   // A title holding a placeholder, quotes or a shell sequence stays literal text in its one argument.
-  const tricky=startArgv(config,{...params,title:'{tier} "$(rm -rf ~)"; `x` | y'});
-  assert.equal(tricky.args[2],'DEMO-12 {tier} "$(rm -rf ~)"; `x` | y');assert.equal(tricky.args.length,7);
+  const tricky=startArgv(config,{...params,title:'{level} "$(rm -rf ~)"; `x` | y'});
+  assert.equal(tricky.args[2],'DEMO-12 {level} "$(rm -rf ~)"; `x` | y');assert.equal(tricky.args.length,7);
   // Title: control characters removed, whitespace folded, cut at 80 characters.
   const long=startArgv(config,{...params,title:`a\u0000b\r\n${'가'.repeat(200)}`});
   assert.equal(long.args[2],`DEMO-12 ${cleanText(`a b ${'가'.repeat(200)}`,80)}`);assert.equal([...long.args[2].slice(8)].length,80);
   assert.equal(startArgv(config,{...params,space:'De\u0007mo\n'}).args[1],'Demo','space name loses control characters');
   for(const bad of [{issue:'demo-12'},{issue:'DEMO-12; rm'},{issue:'DEMO'},{issue:'TOOLONGTEAM1-1'},{issue:'DEMO-12345678'},{issue:undefined},
-    {provider:'gpt'},{provider:undefined},{tier:'ultra'},{space:''},{space:'\u0001'},{space:7}])
+    {provider:'gpt'},{provider:undefined},{level:'ultra'},{space:''},{space:'\u0001'},{space:7}])
     assert.equal(startArgv(config,{...params,...bad}),null,JSON.stringify(bad));
   assert.equal(startArgv(null,params),null);
 });
@@ -50,10 +50,14 @@ test('the result line reads the last JSON line of stdout',()=>{
   const out=lines=>({code:0,stdout:lines.join('\n')});
   assert.deepEqual(lastJson('log\n{"a":1}\nnot json\n{"b":2}\n\n'),{b:2});
   assert.equal(lastJson('no json here'),null);assert.equal(lastJson('[1,2]'),null);assert.equal(lastJson(undefined),null);
-  assert.deepEqual(shown(startResult(out(['working…','{"outcome":"sent","task_id":"t-1","target":"Demo session","model":"opus"}']))),{ok:true,text:'보냄 · Demo session · opus'});
-  assert.deepEqual(shown(startResult(out(['{"outcome":"pending","task_id":"t-2","target":"Demo"}']))),{ok:true,text:'보냄 · Demo'});
-  assert.deepEqual(shown(startResult(out(['{"outcome":"unconfirmed","task_id":"t-3"}']))),{ok:true,text:'보냄'});
+  assert.deepEqual(shown(startResult(out(['working…','{"outcome":"sent","task":"t-1","target":"Demo session","model":"opus"}']))),{ok:true,text:'보냄 · Demo session · opus'});
+  assert.deepEqual(shown(startResult(out(['{"outcome":"pending","task":"t-2","target":"Demo"}']))),{ok:true,text:'보냄 · Demo'});
+  assert.deepEqual(shown(startResult(out(['{"outcome":"unconfirmed","task":"t-3"}']))),{ok:true,text:'보냄'});
   assert.deepEqual(shown(startResult(out(['{"outcome":"sent"}']))),{ok:false,text:'안 보냄 · sent'},'no task id: not counted as sent');
+  assert.deepEqual(shown(startResult(out(['{"outcome":"sent","job":"j-1"}']),undefined,'job')),{ok:true,text:'보냄'},'a configured task field');
+  assert.equal(parseStartConfig({...CONFIG,task_field:'job'}).taskField,'job');
+  assert.equal(parseStartConfig(CONFIG).taskField,'task');
+  assert.equal(parseStartConfig({...CONFIG,task_field:'Bad-Name'}),null);
   const reason='x'.repeat(300);
   assert.deepEqual(shown(startResult(out([`{"outcome":"blocked","reason":"${reason}"}`]))),{ok:false,text:`안 보냄 · ${'x'.repeat(120)}`});
   assert.deepEqual(shown(startResult(out(['{"outcome":"failed","reason":"no idle session"}']))),{ok:false,text:'안 보냄 · no idle session'});
@@ -70,13 +74,13 @@ test('one start per issue: none while running, none within three minutes',()=>{
   assert.equal(startAllowed({running:true,at:now-START_GUARD_MS*2},now),false);
   assert.equal(startAllowed({running:false,at:now-1000},now),false);
   assert.equal(startAllowed({running:false,at:now-START_GUARD_MS},now),true);
-  assert.deepEqual(startPick(config,null),{provider:'claude',tier:'high'});
-  assert.deepEqual(startPick(config,{provider:'codex',tier:'bogus'}),{provider:'codex',tier:'high'});
+  assert.deepEqual(startPick(config,null),{provider:'claude',level:'high'});
+  assert.deepEqual(startPick(config,{provider:'codex',level:'bogus'}),{provider:'codex',level:'high'});
   assert.equal(startPick(null,{provider:'codex'}),null);
-  const a=startSignature({detail:'DEMO-1',startPick:{provider:'codex',tier:'low'},starts:new Map()});
-  const b=startSignature({detail:'DEMO-1',startPick:{provider:'codex',tier:'low'},starts:new Map([['DEMO-1',{running:true}]])});
-  const c=startSignature({detail:'DEMO-1',startPick:{provider:'codex',tier:'low'},starts:new Map([['DEMO-1',{running:false,text:'보냄'}]])});
-  assert.equal(new Set([a,b,c,startSignature({detail:'DEMO-2'}),startSignature({detail:'DEMO-1',startPick:{provider:'claude',tier:'low'}})]).size,5,
+  const a=startSignature({detail:'DEMO-1',startPick:{provider:'codex',level:'low'},starts:new Map()});
+  const b=startSignature({detail:'DEMO-1',startPick:{provider:'codex',level:'low'},starts:new Map([['DEMO-1',{running:true}]])});
+  const c=startSignature({detail:'DEMO-1',startPick:{provider:'codex',level:'low'},starts:new Map([['DEMO-1',{running:false,text:'보냄'}]])});
+  assert.equal(new Set([a,b,c,startSignature({detail:'DEMO-2'}),startSignature({detail:'DEMO-1',startPick:{provider:'claude',level:'low'}})]).size,5,
     'the open detail, picking and each result change the redraw key');
 });
 
@@ -118,7 +122,7 @@ test('only a surely-unsent answer releases the guard',()=>{
   assert.equal(out('{"outcome":"blocked","reason":"busy"}').release,true);
   assert.equal(out('{"outcome":"failed"}').release,false,'failed may come after a try: kept');
   assert.equal(out('{"outcome":"plan","reason":"dry run"}').release,true);
-  for(const kept of ['{"outcome":"sent","task_id":"t"}','{"outcome":"pending","task_id":"t"}','{"outcome":"unconfirmed"}','{"outcome":"sent"}','{}','no json'])
+  for(const kept of ['{"outcome":"sent","task":"t"}','{"outcome":"pending","task":"t"}','{"outcome":"unconfirmed"}','{"outcome":"sent"}','{}','no json'])
     assert.equal(out(kept).release,false,kept);
   assert.equal(startResult(null).release,false,'exec failed or timed out: maybe sent');
 });
@@ -135,9 +139,21 @@ async function startIo(files={}){
 
 test('the setting file is read from the app data folder; a missing or bad one gives none',async()=>{
   const path='/home/demo/data/sixfold/issue-start.json';
-  assert.deepEqual((await (await startIo({[path]:JSON.stringify(CONFIG)})).loadStartConfig()).defaults,{provider:'claude',tier:'high'});
+  assert.deepEqual((await (await startIo({[path]:JSON.stringify(CONFIG)})).loadStartConfig()).defaults,{provider:'claude',level:'high'});
   assert.equal(await (await startIo({})).loadStartConfig(),null);
   assert.equal(await (await startIo({[path]:'{"v":1}'})).loadStartConfig(),null);
+  assert.deepEqual(await (await startIo({[path]:'{"v":1}'})).loadStartConfigStatus(),{config:null,invalid:true},'a bad file is reported');
+  assert.deepEqual(await (await startIo({})).loadStartConfigStatus(),{config:null,invalid:false},'no file is not an error');
+});
+
+test('a setting file in the previous format (tiers, {tier}, task_id) keeps working',()=>{
+  const old={...CONFIG,levels:undefined,tiers:CONFIG.levels,default:{provider:'claude',tier:'mid'},
+    args:CONFIG.args.map(arg=>arg==='{level}'?'{tier}':arg)};
+  const parsed=parseStartConfig(JSON.stringify(old));
+  assert.deepEqual(parsed.defaults,{provider:'claude',level:'mid'});
+  assert.equal(parsed.taskField,'task_id');
+  assert.equal(startArgv(parsed,{space:'Demo',issue:'DEMO-1',title:'t',provider:'codex',level:'low'}).args.at(-1),'low');
+  assert.equal(startResult({code:0,stdout:'{"outcome":"sent","task_id":"t-9"}'},undefined,parsed.taskField).ok,true);
 });
 
 test('runStart execs the argv once and ignores a second press while running or within the guard',async()=>{
@@ -146,7 +162,7 @@ test('runStart execs the argv once and ignores a second press while running or w
   const first=io.runStart(config,params,{run,now:()=>clock});
   assert.equal(await io.runStart(config,params,{run,now:()=>clock}),null,'a press while running sends nothing');
   assert.equal(io.startGuarded('Demo','DEMO-12',clock),true);
-  release({code:0,stdout:'{"outcome":"sent","task_id":"t-9","target":"Demo","model":"sonnet"}\n'});
+  release({code:0,stdout:'{"outcome":"sent","task":"t-9","target":"Demo","model":"sonnet"}\n'});
   assert.deepEqual(shown(await first),{ok:true,text:'보냄 · Demo · sonnet'});
   assert.deepEqual(calls,[['/opt/demo/bin/start',['send','Demo','DEMO-12 Fix the login page','--agent','codex','--level','mid'],{timeout:300000}]]);
   clock+=60_000;
@@ -232,7 +248,7 @@ test('a row press opens the detail as before; the list has no start area or › 
 test('the detail shows the start area right under its title, the rest below',async()=>{
   const calls=[];
   const tree=await popoverWith({detail:detailOf('DEMO-1'),onDetail(){},
-    start:{config,pick:{provider:'claude',tier:'high'},entry:null,blocked:false},
+    start:{config,pick:{provider:'claude',level:'high'},entry:null,blocked:false},
     onStartPick:(kind,id)=>calls.push(['pick',kind,id]),onStart:key=>calls.push(['start',key])});
   const body=byId(tree,'task-issue-detail-d'),area=byId(tree,'task-issue-start-d-DEMO-1');
   assert(area,'start area in the detail');assert(!byId(tree,'task-issues-list-d'),'the detail replaces the list');
@@ -243,8 +259,8 @@ test('the detail shows the start area right under its title, the rest below',asy
   for(const word of ['Claude','Codex','낮음','중간','높음','최고','작업 시작'])assert(words(area).includes(word),word);
   const picked=byId(area,'task-issue-start-provider-d-DEMO-1-claude'),other=byId(area,'task-issue-start-provider-d-DEMO-1-codex');
   assert.equal(call(picked,'border_color')[1],theme.accent);assert.equal(call(other,'border_color')[1],theme.border);
-  click(other);click(byId(area,'task-issue-start-tier-d-DEMO-1-max'));click(byId(area,'task-issue-start-go-d-DEMO-1'));
-  assert.deepEqual(calls,[['pick','provider','codex'],['pick','tier','max'],['start','DEMO-1']]);
+  click(other);click(byId(area,'task-issue-start-level-d-DEMO-1-max'));click(byId(area,'task-issue-start-go-d-DEMO-1'));
+  assert.deepEqual(calls,[['pick','provider','codex'],['pick','level','max'],['start','DEMO-1']]);
   const plain=await popoverWith({detail:detailOf('DEMO-1'),onDetail(){}});
   assert(!byId(plain,'task-issue-start-d-DEMO-1'),'no start wiring: no area');
 });
@@ -264,4 +280,6 @@ test('the detail start area shows sending, the result, the guard, and a missing 
   assert.equal(starts,1,'only the unguarded press starts');
   const none=await at({config:null,pick:null,entry:null,blocked:false});
   assert.deepEqual(words(none),['작업 시작 설정 없음']);assert(!go(none));
+  const bad=await at({config:null,invalid:true,pick:null,entry:null,blocked:false});
+  assert.deepEqual(words(bad),['작업 시작 설정을 읽지 못했습니다 · issue-start.json 확인']);assert(!go(bad));
 });

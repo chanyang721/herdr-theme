@@ -175,7 +175,7 @@ test('all 24 fixture combinations pass the actual view builder, with one-line ro
 test('message paths have a finite native transition and a stationary task title',async()=>{
   const r=await renderer(true),view=viewFor(makePanelFixture());
   const before=r.renderPanelTracking(view,t,r.cx);
-  const step=eventSequence.find(x=>x.name==='dispatch-existing');assert(step);
+  const step=eventSequence.find(x=>x.name==='assign-existing');assert(step);
   view.panelState.feed=cleanPanelFeed(step.apply(view.panelState.feed,Date.now()));
   const after=r.renderPanelTracking(view,t,r.cx);
   assert(r.paths.length>0);assert(r.timers.some(timer=>timer.ms>0&&timer.ms<=40));
@@ -190,7 +190,7 @@ test('message paths have a finite native transition and a stationary task title'
 test('system reduced motion removes every loop and moving packet, retaining labels and counts',async()=>{
   const r=await renderer(true),view=viewFor(makePanelFixture({share:'space'}));view.panelReducedMotion=true;
   r.renderPanelTracking(view,t,r.cx);
-  view.panelState.feed=cleanPanelFeed(eventSequence.find(x=>x.name==='dispatch-existing').apply(view.panelState.feed,Date.now()));
+  view.panelState.feed=cleanPanelFeed(eventSequence.find(x=>x.name==='assign-existing').apply(view.panelState.feed,Date.now()));
   const tree=r.renderPanelTracking(view,t,r.cx);
   assert.equal(all(tree).filter(n=>call(n,'loop')||call(n,'transition')).length,0);
   assert(words(tree).includes('Motion off'));assert(view.panelEvents.tags.size>0);
@@ -358,7 +358,7 @@ test('a local message rides the same pixel line, block and departure ring as a t
     return {tree,paths:all(byId(tree,'panel-route-p')).filter(n=>n.kind==='path').length};};
   for(const elapsed of [0,PANEL_LEGS[0],PANEL_LEGS[1],PANEL_LEGS[2],PANEL_TIMING.packetMs-1]){
     const phase=elapsed<PANEL_TIMING.startMs?'start':'travel';
-    const message=draw('message',phase,elapsed),task=draw('dispatch',phase,elapsed);
+    const message=draw('message',phase,elapsed),task=draw('assign',phase,elapsed);
     assert.equal(message.paths,0,'no vector stroke: the line is pixel blocks');assert.equal(task.paths,0);
     const pixels=tree=>all(byId(tree,'panel-route-p')).filter(n=>!call(n,'id')).map(n=>n.calls);
     assert.deepEqual(pixels(message.tree),pixels(task.tree),'the same pixel line');
@@ -391,7 +391,7 @@ test('a task event done mark is easy to see (2px foreground ring held lit, secon
   assert(!byId(landing,'panel-receiver-d-again')&&!byId(landing,'panel-receiver-d-core'),'no second ring or core block for a message');
   assert(!all(landing).some(n=>call(n,'border_color')?.[1]===t.foreground||call(n,'bg')?.[1]===t.foreground),'nothing in the foreground colour');
   const fadeOut=policy(blink,'opacity');assert(fadeOut.delay+fadeOut.duration<=600,'short');
-  for(const kind of ['dispatch']){
+  for(const kind of ['assign']){
     const ping=draw(kind,'ping');
     const ring=byId(ping,'panel-receiver-d'),again=byId(ping,'panel-receiver-d-again'),core=byId(ping,'panel-receiver-d-core');
     assert(ring&&again&&core,`${kind}: ring, second ring and core`);
@@ -401,7 +401,7 @@ test('a task event done mark is easy to see (2px foreground ring held lit, secon
     assert(policy(again,'width').delay>=250,'the second ring blinks after the first');
     assert(PANEL_TIMING.pingMs+PANEL_TIMING.coolMs>=policy(ring,'opacity').delay+policy(ring,'opacity').duration,'the whole mark fits before the packet is removed');
     }
-  for(const kind of ['message','dispatch']){
+  for(const kind of ['message','assign']){
     const fade=draw(kind,'fade');
     assert.equal(call(byId(fade,'panel-route-d'),'opacity'),undefined,'the route itself is not dimmed');
     assert.equal(call(byId(fade,'panel-line-d'),'opacity')[1],0.2,'only the line fades');
@@ -436,7 +436,7 @@ test('a message receiver opens the same flow-colour ring as its sender, closed d
 
 test('a row an event arrives on gets a 2px foreground overlay that blinks twice without moving the row',async()=>{
   const r=await renderer(false),view=viewFor(makePanelFixture()),space=view.panelState.feed.spaces[0],agent=space.agents[0];
-  const state={packets:[{id:'x',kind:'dispatch',to:agent.id,phase:'ping'}],spawning:new Set(),active:[]};
+  const state={packets:[{id:'x',kind:'assign',to:agent.id,phase:'ping'}],spawning:new Set(),active:[]};
   const row=r.agentRow(view,agent,space,null,state,'#79D1DC',t,true);
   const overlay=byId(row,`panel-arrival-${agent.id}`);assert(overlay);
   assert.equal(call(row,'border'),undefined,'the row border never changes, so nothing shifts');

@@ -3,7 +3,7 @@
 // badge counts it only once it has landed. With motion off there is no popup and
 // no movement: the badge simply counts it. Pure functions; the sidebar owns
 // rendering and the clock. Bounded: at most ARRIVAL.ledger entries are kept.
-import { projectKey } from './alert-model.js';
+import { projectKey, currentFallbackSpace } from './alert-model.js';
 
 export const ARRIVAL = Object.freeze({showMs: 4000, flyMs: 640, steps: 6, unit: 2, blinkMs: 480, visible: 3, ledger: 50, keepMs: 60_000,
   peekMs: 8000, holdMs: 60_000});
@@ -29,12 +29,11 @@ export function peekMode({host = true, motion = true, card = null, issuesOpen = 
 export const showFor = a => a?.peek ? ARRIVAL.peekMs : ARRIVAL.showMs;
 const held = (a, now) => Boolean(a?.held) && now - a.held < ARRIVAL.holdMs;
 const WAITING = Number.MAX_SAFE_INTEGER;   // a peek queued behind one that is held open
-export const FALLBACK_SPACE = 'Share';
-
-// The space an alert belongs to, among the spaces on screen; Share otherwise.
-export function arrivalTarget(workspace, names = [], fallback = FALLBACK_SPACE) {
+// The space an alert belongs to, among the spaces on screen; the fallback space otherwise
+// (the first space shown when the fallback space is not on screen).
+export function arrivalTarget(workspace, names = [], fallback = currentFallbackSpace()) {
   const hit = (names ?? []).find(name => projectKey(name) === projectKey(workspace));
-  return hit ?? (names ?? []).find(name => projectKey(name) === projectKey(fallback)) ?? fallback;
+  return hit ?? (names ?? []).find(name => projectKey(name) === projectKey(fallback)) ?? (names ?? [])[0] ?? fallback;
 }
 
 export function arrivalPhase(arrival, now, motion = true) {

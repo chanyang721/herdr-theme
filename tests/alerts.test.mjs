@@ -7,7 +7,7 @@ const nativeParse=JSON.parse;
 const guardModule=await import(new URL('../mods/sixfold-desk/watch-guard.js',import.meta.url).href);
 const sharedPublish=await import(new URL('../mods/sixfold-desk/shared-publish.js',import.meta.url).href);
 const changeServices=new WeakMap();let watcherId=0;
-async function alertHarness(files,{lineEnding='\n',opens=[],home='/test',arrived=[],noted=[],host={value:false}}={}){
+async function alertFixture(files,{lineEnding='\n',opens=[],home='/test',arrived=[],noted=[],host={value:false}}={}){
   const tasks=[],timers=new Set(),slowTimers=new Set(),callbacks=new Map(),shared=new Map(),writes=[];
   let notifications=0,typedHook=null,writeHook=null;
   const service=changeServices.get(files)??new Set();changeServices.set(files,service);
@@ -16,7 +16,7 @@ async function alertHarness(files,{lineEnding='\n',opens=[],home='/test',arrived
   const snapshot=path=>{const raw=files.get(path.split('/').at(-1));if(raw===undefined)return {status:'missing',hash:null};const hash=createHash('sha256').update(raw).digest('hex');try{return {status:'ready',hash,value:nativeParse(raw)};}catch{return {status:'invalid',hash};}};
   const change=changed=>{for(const listener of service)if(listener.path===changed)listener.callback([changed]);};
   const runtime={appHome:()=>home,createHash,setShared:(key,value)=>shared.set(key,value),openOverlay:value=>opens.push(value),
-    spaces:()=>[],addArrival:value=>arrived.push(value),hasArrivalHost:()=>host.value,arrivalTarget:(name,names)=>names.includes(name)?name:'Share',ARRIVAL:{visible:3},
+    spaces:()=>[],addArrival:value=>arrived.push(value),hasArrivalHost:()=>host.value,arrivalTarget:(name,names)=>names.includes(name)?name:'Hub',ARRIVAL:{visible:3},
     subscribeJsonFile:(_cx,name,callback)=>{callbacks.set(name,callback);return()=>callbacks.delete(name);},
     subscribeFileChanges:(_cx,name,callback)=>{const listener={path:name,callback};service.add(listener);return()=>service.delete(listener);},
     readJsonSnapshot:async name=>{const value=snapshot(name);await typedHook?.(name,value);return value;},
@@ -38,7 +38,7 @@ async function alertHarness(files,{lineEnding='\n',opens=[],home='/test',arrived
 
 test('initial snapshot barrier seeds existing mentions silently and changed callbacks never parse files on UI',async()=>{
   const files=new Map([['slack-mentions.json','{"items":[{"id":"history"}]}']]);
-  const h=await alertHarness(files);
+  const h=await alertFixture(files);
   try{
     for(const name of ['alerts.json','project-alerts.json','slack-alerts-read.json','slack-live-health.json','slack-workflows.json'])h.publish(name);
     await h.flush();assert.equal(files.has('slack-popup-events.json'),false,'do not seed before historical mentions arrive');
@@ -54,7 +54,7 @@ test('initial snapshot barrier seeds existing mentions silently and changed call
 });
 
 test('hidden sidebar caches alert inputs without popup/ledger I/O and resuming applies them once',async()=>{
-  const files=new Map(),h=await alertHarness(files);
+  const files=new Map(),h=await alertFixture(files);
   try{
     await h.refresh();const writes=h.writes.length,notifications=h.notifications();
     h.view.panelTrackingActive=true;h.view.sidebarVisible=false;
@@ -66,7 +66,7 @@ test('hidden sidebar caches alert inputs without popup/ledger I/O and resuming a
 });
 
 test('popup CAS refuses a typed/raw hash race and honors the competing ledger on change retry',async()=>{
-  const files=new Map([['slack-mentions.json','{"items":[{"id":"old"}]}']]),h=await alertHarness(files);
+  const files=new Map([['slack-mentions.json','{"items":[{"id":"old"}]}']]),h=await alertFixture(files);
   try{
     const ledgerWrites=()=>h.writes.filter(write=>write.name.endsWith('/slack-popup-events.json')).length;   // not the watch state file
     await h.refresh();const writes=ledgerWrites();
@@ -83,7 +83,7 @@ test('popup CAS refuses a typed/raw hash race and honors the competing ledger on
 });
 
 test('two live views consume a genuinely new mention once through the shared ledger',async()=>{
-  const files=new Map(),opens=[],first=await alertHarness(files,{opens}),second=await alertHarness(files,{opens});
+  const files=new Map(),opens=[],first=await alertFixture(files,{opens}),second=await alertFixture(files,{opens});
   try{
     await Promise.all([first.refresh(),second.refresh()]);await Promise.all([first.flush(),second.flush()]);
     files.set('slack-mentions.json','{"items":[{"id":"one-new-mention"}]}');
@@ -93,7 +93,7 @@ test('two live views consume a genuinely new mention once through the shared led
 });
 
 test('dismissal ledger uses typed data and exact raw hash before its compare-and-swap',async()=>{
-  const files=new Map([['alerts-dismissed.json','["earlier"]']]),h=await alertHarness(files);
+  const files=new Map([['alerts-dismissed.json','["earlier"]']]),h=await alertFixture(files);
   try{
     const parse=JSON.parse;JSON.parse=()=>{throw Error('UI parsed a ledger file');};
     try{await h.dismiss('current');}finally{JSON.parse=parse;}
@@ -107,7 +107,7 @@ test('dismissal ledger uses typed data and exact raw hash before its compare-and
 });
 
 test('alerts recover after cold install and partial writes through typed subscriptions', async () => {
-  const files=new Map(),h=await alertHarness(files,{home:'/fresh-install'});
+  const files=new Map(),h=await alertFixture(files,{home:'/fresh-install'});
   try{
     await h.refresh();assert.deepEqual(h.view.alerts,[]);assert.equal(h.notifications(),1);
     files.set('alerts.json',JSON.stringify({items:[{id:'late',status:'needs-you'}]}));await h.refresh();
@@ -129,7 +129,7 @@ test(`workflow updates never auto-open; new mentions open once across health tic
   const opens=[];
   const watchers=[];
   async function startWatcher(){
-    const watcher=await alertHarness(files,{lineEnding,opens});watchers.push(watcher);await watcher.refresh();return watcher.refresh;
+    const watcher=await alertFixture(files,{lineEnding,opens});watchers.push(watcher);await watcher.refresh();return watcher.refresh;
   }
   try{
     let refresh=await startWatcher();
@@ -165,7 +165,7 @@ test(`an empty first run seeds the ledger before later new source arrives (${lin
     ['alerts.json','{"items":[]}'],['project-alerts.json','{"items":[]}'],['slack-alerts-read.json','{}'],
     ['slack-mentions.json','{"items":[]}'],['slack-live-health.json','{}'],['slack-workflows.json','{"jobs":{}}'],
   ]);
-  const opens=[],watcher=await alertHarness(files,{lineEnding,opens});
+  const opens=[],watcher=await alertFixture(files,{lineEnding,opens});
   try{
     await watcher.refresh();
     assert.deepEqual(JSON.parse(files.get('slack-popup-events.json')),{schema:1,seen:[]});
@@ -178,13 +178,13 @@ test(`an empty first run seeds the ledger before later new source arrives (${lin
 test('with a sidebar drawing arrivals a new mention folds into its space card instead of opening the window',async()=>{
   const files=new Map([['slack-mentions.json','{"items":[{"id":"history","project":"Alpha"}]}']]);
   const host={value:true},arrived=[];
-  const h=await alertHarness(files,{host,arrived});
+  const h=await alertFixture(files,{host,arrived});
   try{
     h.publish();await h.flush();assert.equal(arrived.length,0,'history stays silent');
     files.set('slack-mentions.json',JSON.stringify({items:[{id:'history',project:'Alpha'},{id:'m1',project:'Alpha',text:'hello',author:'Kim'}]}));
     h.publish('slack-mentions.json');await h.flush();
     assert.equal(h.opens.length,0,'no window, no focus change');
-    assert.deepEqual(arrived.map(a=>[a.key,a.id,a.source,a.space,a.line]),[['mention:m1','m1','slack','Share','Kim: hello']]);
+    assert.deepEqual(arrived.map(a=>[a.key,a.id,a.source,a.space,a.line]),[['mention:m1','m1','slack','Hub','Kim: hello']]);
     assert.deepEqual(arrived[0].item,{id:'m1',project:'Alpha',text:'hello',author:'Kim'},'the arrival carries the mention, so the peek can list it');
     host.value=false;
     files.set('slack-mentions.json',JSON.stringify({items:[{id:'history'},{id:'m1'},{id:'m2',project:'Alpha'}]}));
@@ -203,7 +203,7 @@ test('with a sidebar drawing arrivals a new mention folds into its space card in
 // the replacement sees the mention as seen, so the late run must still announce it.
 test('a mention whose ledger write commits but answers after the run is replaced is still announced once',async()=>{
   const realNow=Date.now;let now=realNow();Date.now=()=>now;
-  const files=new Map(),h=await alertHarness(files);let release;
+  const files=new Map(),h=await alertFixture(files);let release;
   try{
     await h.refresh();let once=true;
     h.setWriteHook(async name=>{if(once&&name.endsWith('/slack-popup-events.json')){once=false;await new Promise(r=>release=r);}});
@@ -224,7 +224,7 @@ test('a mention whose ledger write commits but answers after the run is replaced
 // before its own notify, and adding an arrival alone invalidates nothing.
 test('a late-committed mention arriving into a card redraws the sidebar when the replaced run returns',async()=>{
   const realNow=Date.now;let now=realNow();Date.now=()=>now;
-  const files=new Map(),arrived=[],h=await alertHarness(files,{arrived,host:{value:true}});let release;
+  const files=new Map(),arrived=[],h=await alertFixture(files,{arrived,host:{value:true}});let release;
   try{
     await h.refresh();let once=true;
     h.setWriteHook(async name=>{if(once&&name.endsWith('/slack-popup-events.json')){once=false;await new Promise(r=>release=r);}});
@@ -245,7 +245,7 @@ test('restoring the last published inputs while a run is stuck keeps them publis
   const realNow=Date.now;let now=realNow();Date.now=()=>now;
   // Read state feeds the popup ledger, so its change reaches the (held) ledger read; health alone skips it.
   const read=value=>files.set('slack-alerts-read.json',JSON.stringify({x:value}));
-  const files=new Map(),h=await alertHarness(files);let release;read('A');
+  const files=new Map(),h=await alertFixture(files);let release;read('A');
   try{
     await h.refresh();let once=true;
     h.setTypedHook(async name=>{if(once&&name.endsWith('/slack-popup-events.json')){once=false;await new Promise(r=>release=r);}});
@@ -260,7 +260,7 @@ test('restoring the last published inputs while a run is stuck keeps them publis
 });
 
 test('a failing refresh is retried after a delay without another input change, and only its kind and time are kept',async()=>{
-  const files=new Map([['slack-mentions.json','{"items":[{"id":"history"}]}']]),h=await alertHarness(files);
+  const files=new Map([['slack-mentions.json','{"items":[{"id":"history"}]}']]),h=await alertFixture(files);
   try{
     await h.refresh();let fail=1;
     h.setTypedHook(name=>{if(fail>0&&name.endsWith('/slack-popup-events.json')){fail--;throw new Error('File changed while reading its typed snapshot');}});
@@ -280,18 +280,18 @@ test('a failing refresh is retried after a delay without another input change, a
 // 2026-11-16: the whole mention list as a shared value was persisted and copied on every badge read and
 // pushed the sidebar past its render budget. It goes to the popover module instead.
 test('mentions reach the cards through module state, never as a shared value',async()=>{
-  const files=new Map([['slack-mentions.json','{"items":[{"id":"m1","project":"Share"}]}']]);
-  const h=await alertHarness(files);
+  const files=new Map([['slack-mentions.json','{"items":[{"id":"m1","project":"Hub"}]}']]);
+  const h=await alertFixture(files);
   try{
     await h.refresh();
-    assert.deepEqual(h.shared.get('spaceMentions'),[{id:'m1',project:'Share'}]);
+    assert.deepEqual(h.shared.get('spaceMentions'),[{id:'m1',project:'Hub'}]);
     assert.equal([...h.shared.keys()].some(k=>/mention/i.test(k)&&k!=='spaceMentions'),false);
   }finally{h.stop();}
 });
 
 test('a health heartbeat writes only the shown health fields and skips the popup ledger',async()=>{
   const files=new Map([['project-alerts.json','{"items":[{"id":"a","status":"needs-you"}],"projects":["Alpha"]}'],['slack-live-health.json','{"state":"ok","last_success":"1","duration_seconds":1}']]);
-  const h=await alertHarness(files);
+  const h=await alertFixture(files);
   try{
     await h.refresh();
     const writes=[],set=h.shared.set.bind(h.shared);h.shared.set=(key,value)=>{writes.push(key);return set(key,value);};

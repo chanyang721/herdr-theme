@@ -159,7 +159,7 @@ fn test_fork_history_is_reset_and_completion_does_not_close_link() {
         "insert into threads values(?,?,?,?,?,?,?,?)",
         params![
             "child",
-            "Nash",
+            "Atlas",
             Option::<String>::None,
             "",
             1_000_000i64,
@@ -179,7 +179,7 @@ fn test_fork_history_is_reset_and_completion_does_not_close_link() {
             row["label"].as_str(),
             row["task"].as_str()
         ),
-        (Some("finished"), Some("Nash"), Some("Inspect DB calls"))
+        (Some("finished"), Some("Atlas"), Some("Inspect DB calls"))
     );
     events.push(json!({"type":"task_started"}));
     transcript(&path, &events);

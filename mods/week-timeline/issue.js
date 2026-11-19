@@ -325,7 +325,7 @@ function summary(v, t, d, shown) {
         .child(div().max_w(180).truncate().child(r.title)).child(div().text_color(t.muted).child(r.status)))))));
   }
   const box = card(t).child(div().text_size(11).font_semibold().text_color(t.muted).child('Herdr 작업 연결'));
-  if (!d.herdr.length) box.child(div().text_size(12).text_color(t.dim).child(`하네스 기록에 ${i.key} 가 들어간 작업이 없습니다`));
+  if (!d.herdr.length) box.child(div().text_size(12).text_color(t.dim).child(`작업 기록에 ${i.key} 가 들어간 작업이 없습니다`));
   d.herdr.forEach((h, n) => box.child(v_flex().gap(3).pt(n ? 6 : 0).when(n > 0, el => el.border_t(1).border_color(t.border))
     .child(h_flex().gap(6).items_center()
       .child(tag(h.kind === 'final' ? '완료 보고' : h.kind === 'progress' ? '진행 보고' : '작업', h.kind === 'final' ? t.done : t.working, t))

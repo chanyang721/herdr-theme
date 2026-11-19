@@ -1,5 +1,5 @@
 // "작업 시작" from the issue search: pure rules only (no IO). The issue row opens a strip with
-// a choice of agent and tier; [작업 시작] runs one command template from the local setting file
+// a choice of agent and level; [작업 시작] runs one command template from the local setting file
 // (data/sixfold/issue-start.json) without a shell. Every value placed into the command is checked
 // here first; anything off means nothing is run.
 //
@@ -49,31 +49,38 @@ export function parseStartConfig(text) {
   if (!value || typeof value !== 'object' || value.v !== 1 || !absolute(value.command)) return null;
   if (!Array.isArray(value.args) || value.args.length > MAX_ARGS
     || value.args.some(arg => typeof arg !== 'string' || arg.length > MAX_ARG || HAS_CONTROL.test(arg))) return null;
-  const providers = choices(value.providers), tiers = choices(value.tiers);
-  if (!providers || !tiers) return null;
+  // The file format before 2026-11-19 named levels `tiers` ({tier}, default.tier) and answered
+  // with `task_id`. Such a file still works unchanged; a file with `levels` uses the new names only.
+  const previous = value.levels === undefined && value.tiers !== undefined;
+  const providers = choices(value.providers), levels = choices(previous ? value.tiers : value.levels);
+  if (!providers || !levels) return null;
   const wanted = value.default && typeof value.default === 'object' ? value.default : {};
   const pick = (list, id) => id === undefined ? list[0].id : list.some(item => item.id === id) ? id : null;
-  const provider = pick(providers, wanted.provider), tier = pick(tiers, wanted.tier);
-  if (!provider || !tier) return null;
+  const provider = pick(providers, wanted.provider), level = pick(levels, previous ? wanted.tier : wanted.level);
+  if (!provider || !level) return null;
   const timeout = value.timeout_ms === undefined ? DEFAULT_TIMEOUT_MS : value.timeout_ms;
   if (!Number.isInteger(timeout) || timeout < 1000 || timeout > 600000) return null;
   const release = value.release_outcomes === undefined ? DEFAULT_RELEASE_OUTCOMES : value.release_outcomes;
   if (!Array.isArray(release) || release.length > 20
     || release.some(item => typeof item !== 'string' || !OUTCOME_ID.test(item) || SENT.has(item))) return null;
-  return Object.freeze({command: value.command, args: Object.freeze([...value.args]), providers, tiers,
-    defaults: Object.freeze({provider, tier}), timeout, release: Object.freeze([...new Set(release)])});
+  // The answer field naming the started work (`task` unless the command uses another name).
+  const taskField = value.task_field === undefined ? (previous ? 'task_id' : 'task') : value.task_field;
+  if (typeof taskField !== 'string' || !/^[a-z][a-z0-9_]{0,31}$/.test(taskField)) return null;
+  const args = previous ? value.args.map(arg => arg.replace(/\{tier\}/g, '{level}')) : value.args;
+  return Object.freeze({command: value.command, args: Object.freeze([...args]), providers, levels,
+    defaults: Object.freeze({provider, level}), timeout, release: Object.freeze([...new Set(release)]), taskField});
 }
 
-// {space, issue, title, provider, tier} -> {command, args, timeout}, or null when a value is off.
-// Each placeholder is replaced once, left to right: a title holding "{tier}" stays literal text.
-export function startArgv(config, {space, issue, title, provider, tier} = {}) {
+// {space, issue, title, provider, level} -> {command, args, timeout}, or null when a value is off.
+// Each placeholder is replaced once, left to right: a title holding "{level}" stays literal text.
+export function startArgv(config, {space, issue, title, provider, level} = {}) {
   if (!config || !Array.isArray(config.args) || !absolute(config.command)) return null;
   if (typeof issue !== 'string' || !ISSUE_KEY.test(issue)) return null;
-  if (!config.providers?.some(item => item.id === provider) || !config.tiers?.some(item => item.id === tier)) return null;
+  if (!config.providers?.some(item => item.id === provider) || !config.levels?.some(item => item.id === level)) return null;
   const name = typeof space === 'string' ? cleanText(space.replace(CONTROL, ''), 80) : '';
   if (!name) return null;
-  const values = {space: name, issue, title: cleanText(title, 80), provider, tier};
-  const args = config.args.map(arg => arg.replace(/\{(space|issue|title|provider|tier)\}/g, (_m, key) => values[key]));
+  const values = {space: name, issue, title: cleanText(title, 80), provider, level};
+  const args = config.args.map(arg => arg.replace(/\{(space|issue|title|provider|level)\}/g, (_m, key) => values[key]));
   if (args.length > MAX_ARGS || args.some(arg => arg.length > MAX_ARG)) return null;
   // A value must not turn an argument into an option ('-…') the template did not write as one.
   if (args.some((arg, i) => arg.startsWith('-') && !config.args[i].startsWith('-'))) return null;
@@ -94,12 +101,12 @@ export function lastJson(stdout) {
 // exec's {code, stdout} (or null when exec itself threw) -> {ok, text, release} for the result line.
 // `release`: surely not sent (a JSON answer whose outcome is on the `release` allow list), so the
 // guard may be lifted at once. A timeout, no JSON, an empty or any other outcome keeps the guard.
-export function startResult(result, release = DEFAULT_RELEASE_OUTCOMES) {
+export function startResult(result, release = DEFAULT_RELEASE_OUTCOMES, taskField = 'task') {
   const code = Number.isInteger(result?.code) ? result.code : null;
   const json = result ? lastJson(result.stdout) : null;
   if (!json) return {ok: false, text: `실행 실패(코드 ${code ?? '?'})`, release: false};
   const word = value => typeof value === 'string' || typeof value === 'number' ? cleanText(String(value), 60) : '';
-  const outcome = word(json.outcome), task = word(json.task_id);
+  const outcome = word(json.outcome), task = word(json[taskField]);
   if (SENT.has(outcome) && task) return {ok: true, text: ['보냄', word(json.target), word(json.model)].filter(Boolean).join(' · '), release: false};
   const reason = cleanText(typeof json.reason === 'string' ? json.reason : '', 120) || outcome;
   return {ok: false, text: reason ? `안 보냄 · ${reason}` : '안 보냄', release: Boolean(outcome) && !SENT.has(outcome) && release.includes(outcome)};
@@ -117,7 +124,7 @@ export function startPick(config, pick) {
   if (!config) return null;
   const has = (list, id) => list.some(item => item.id === id);
   return {provider: has(config.providers, pick?.provider) ? pick.provider : config.defaults.provider,
-    tier: has(config.tiers, pick?.tier) ? pick.tier : config.defaults.tier};
+    level: has(config.levels, pick?.level) ? pick.level : config.defaults.level};
 }
 
 // What the popover's redraw depends on from this feature (for retained-render keys and tests).

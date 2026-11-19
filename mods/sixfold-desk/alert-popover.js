@@ -55,7 +55,7 @@ const line = (value, color, size = 12) => div().min_w(0).truncate().text_size(si
 // A Slack row: "보낸 사람 → 받는 사람" and the time, the text with its tags spelled as names, and
 // its attachments. `interactive` is off for the arrival peek (read-only, takes no focus).
 // `arrived`: the mentions that just arrived for this space (the peek). Those the tracked feed does
-// not list (unmapped mentions, DMs, thread replies routed to Share) are shown too, and the
+// not list (unmapped mentions, DMs, thread replies routed to the fallback space) are shown too, and the
 // arrived ones come first, so a peek always shows what opened it.
 function slackRows(project, t, fresh = new Set(), interactive = true, arrived = []) {
   const read = shared('sixfold.alertRead') ?? {};

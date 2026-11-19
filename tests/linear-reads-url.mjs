@@ -1,6 +1,6 @@
 import {readFile} from 'node:fs/promises';
 
-// linear-reads.js for a test harness: its herdr imports come from globalThis.__linearReads
+// linear-reads.js for a test fixture: its herdr imports come from globalThis.__linearReads
 // (set per test; a quiet stub otherwise) and alert-model.js from the source tree.
 let loads = 0;
 export async function linearReadsUrl() {

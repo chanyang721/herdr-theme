@@ -47,7 +47,7 @@ test('native computer navigator, task rows, documents, badges and local question
     new(Class,props){const view=new Class();view.init?.(props,cx);const entity={view,release(){}};entities.push(entity);return entity;}};
   const c=createRetainedPanel(cx,{embedded:true});c.apply(cleanPanelFeed(raw),'ready');
   const desk=new Desk();Object.assign(desk,{panelRetained:c,panelTrackingActive:true,panelState:{feed:c.feed},computers:{local:{label:'Local'},machines:{worker:{label:'Worker'}}},
-    site:{},messageEvents:[],workflowNodes:[],workflowEvents:[],activeFlows:[],pendingFlows:[],queuedRoutes:[],expandedAgents:new Set(),readMessages:{},
+    site:{},messageEvents:[],workflowNodes:[],workflowEvents:[],activeFlows:[],pendingFlows:[],sidebarNotices:[],expandedAgents:new Set(),readMessages:{},
     workspaceIcons:{},workspacePins:{spaces:[]},docsSpaces:new Set(),docsHeights:{},alerts:[],
     asks:[{id:'demo-question',revision:'r1',kind:'permission',title:'Demo question',actions:[{id:'cancel',label:'Cancel'}]}],
     askChoices:{},askBusy:{},askErrors:{},sessionReports:[]});

@@ -103,9 +103,9 @@ function addRemote(feed, computer) {
 }
 
 export const eventSequence = Object.freeze([
-  mutation('dispatch-existing', feed => {
+  mutation('assign-existing', feed => {
     const agent = findAgent(feed, PANEL_IDS.implementer); if (agent) { agent.stage = 2; agent.status = 'working'; }
-  }, ['dispatch', PANEL_IDS.planner, PANEL_IDS.implementer, '계획: 일 2개로 나눔']),
+  }, ['assign', PANEL_IDS.planner, PANEL_IDS.implementer, '계획: 일 2개로 나눔']),
   mutation('spawn', feed => {
     const space = feed.spaces.find(space => space.id === PANEL_IDS.space);
     if (!findAgent(feed, PANEL_IDS.spawned)) space.agents.push(baseAgent(4, 'Build search filters', { stage: 2, status: 'working', issue: space.work ? 'DEMO-18' : null }));

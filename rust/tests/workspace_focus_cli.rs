@@ -118,10 +118,6 @@ fn exercise(original: bool) -> Vec<Value> {
                 json!(["old-space", "old-tab", "old-pane"])
             }
         );
-        assert!(
-            !app.join("data/sixfold/space-tiers.json").exists(),
-            "shell creation never writes a tier book"
-        );
         let output = if out.status.success() {
             serde_json::from_slice::<Value>(&out.stdout).unwrap()
         } else {

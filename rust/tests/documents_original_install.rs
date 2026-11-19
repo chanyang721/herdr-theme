@@ -252,12 +252,11 @@ fn test_seed_preserves_user_settings_and_original_project_config() {
     assert_eq!(existing["spaces"]["sp1"]["custom"], true);
 }
 #[test]
-fn test_share_seed_uses_stable_identity_and_preserves_document_sources() {
+fn test_hub_seed_uses_stable_identity_and_preserves_document_sources() {
     let f = Temp::new();
-    f.put("COMMON_ROUTING.md", "routing");
     f.put("README.ko.md", "readme");
-    let site = json!({"hub_space_ids":["sp-share"]});
-    for (id, name) in [("other", "Share"), ("sp-share", "Renamed")] {
+    let site = json!({"hub_space_ids":["sp-hub"]});
+    for (id, name) in [("other", "Hub"), ("sp-hub", "Renamed")] {
         let config = install::seed_space(
             &json!({"id":id,"name":name}),
             &json!({}),
@@ -269,7 +268,7 @@ fn test_share_seed_uses_stable_identity_and_preserves_document_sources() {
             .as_array()
             .unwrap()
             .iter()
-            .any(|pin| pin["path"] == json!(f.root.join("COMMON_ROUTING.md"))));
+            .any(|pin| pin["path"] == json!(f.root.join("README.ko.md"))));
     }
 }
 #[test]

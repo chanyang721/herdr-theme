@@ -16,9 +16,9 @@ test('slots: this computer first, then registered machines in sidebar order, dis
   assert.deepEqual(computerSlots(undefined),[]);
 });
 
-test('hub: explicit id or Share role name on that computer only; ambiguous or missing is null', () => {
+test('hub: explicit id or Hub role name on that computer only; ambiguous or missing is null', () => {
   const sp=(id,name,machine=null,tabs=[])=>({id,name,machine,tabs});
-  const spaces=[sp('a','Share'),sp('b','Work'),sp('w/c','Chanyang','worker'),sp('w/d','공통','worker'),sp('x/e','Share','other'),sp('x/f','common','other')];
+  const spaces=[sp('a','Hub'),sp('b','Work'),sp('w/c','Worker','worker'),sp('w/d','Hub','worker'),sp('x/e','Hub','other'),sp('x/f','hub','other')];
   assert.equal(computerHub(spaces,'local').id,'a');
   assert.equal(computerHub(spaces,'remote:worker').id,'w/d');
   assert.equal(computerHub(spaces,'remote:other'),null,'two role names: never guess');
@@ -26,7 +26,7 @@ test('hub: explicit id or Share role name on that computer only; ambiguous or mi
   assert.equal(computerHub(spaces,'remote:worker',{hub_space_ids:['w/c']}).id,'w/c');
   assert.equal(computerHub(spaces,'remote:missing'),null);
   assert.equal(computerHub(spaces,'tailscale:peer'),null);
-  assert.equal(computerHub([sp('w/c','Chanyang','worker')],'remote:worker'),null,'a personal name is not a Share');
+  assert.equal(computerHub([sp('w/c','Worker','worker')],'remote:worker'),null,'a personal name is not a Hub');
 });
 
 test('keys: cmd-ctrl-1..9 map to numbered computer commands and keep every existing key', () => {
@@ -103,16 +103,16 @@ test('computer commands select the listed computer without moving focus, running
       await send(missing);
       assert.equal(state['sixfold.computing.selected'],'remote:offline',`${missing} is a no-op`);
     }
-    assert.deepEqual(calls,[],'no Share on those computers: list only, nothing runs');
+    assert.deepEqual(calls,[],'no Hub on those computers: list only, nothing runs');
     assert.deepEqual(focus,{space:'home-a',tab:'ha',pane:'p1',terminal:'t1'});
-    // With a Share on that computer, the shortcut also shows that space and focuses its pane.
-    spaces.push({id:'w/share',machine:'worker',name:'Share',tabs:[{id:'wt',active:true}]});
+    // With a Hub on that computer, the shortcut also shows that space and focuses its pane.
+    spaces.push({id:'w/hub',machine:'worker',name:'Hub',tabs:[{id:'wt',active:true}]});
     await send('computer-2');
     assert.equal(state['sixfold.computing.selected'],'remote:worker');
-    assert.deepEqual(calls,[{command:'space.select',args:{id:'w/share'}},{command:'pane.focus',args:{pane:'wp1'}}]);
+    assert.deepEqual(calls,[{command:'space.select',args:{id:'w/hub'}},{command:'pane.focus',args:{pane:'wp1'}}]);
     calls.length=0;
-    // Already inside that Share: nothing moves.
-    focus.space='w/share';
+    // Already inside that Hub: nothing moves.
+    focus.space='w/hub';
     await send('computer-2');
     assert.deepEqual(calls,[]);
     focus.space='home-a';calls.length=0;

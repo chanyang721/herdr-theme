@@ -1,6 +1,7 @@
 pub mod automation;
 pub mod common;
 pub mod documents;
+pub mod extension;
 pub mod help;
 pub mod json_bytes;
 pub mod legacy_text;

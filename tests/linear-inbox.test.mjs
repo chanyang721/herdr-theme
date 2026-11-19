@@ -96,7 +96,7 @@ test('requests match the collector contract and refuse bad input', () => {
   assert.equal(resultLabel({ok: false, error: 'x'}), '실패: x');
 });
 
-test('new Linear alerts become arrivals into their space (Share otherwise); no sidebar host opens the window; unread ones announce on first run', async () => {
+test('new Linear alerts become arrivals into their space (Hub otherwise); no sidebar host opens the window; unread ones announce on first run', async () => {
   const {createHash} = await import('node:crypto');
   const files = new Map([['linear-alerts.json', JSON.stringify({items: [{id: 'old', read: false, category: 'assignments', workspace: 'Alpha'}, {id: 'past', read: true, category: 'mentions'}], spaces: ['Alpha']})]]);
   const shared = {}, opens = [], tasks = [], timers = new Set(), callbacks = new Map(), changes = new Set();
@@ -118,7 +118,7 @@ test('new Linear alerts become arrivals into their space (Share otherwise); no s
     subscribeFileChanges: (_cx, _path, callback) => { changes.add(callback); return () => changes.delete(callback); },
     setShared: (key, value) => { shared[key] = value; },
     openOverlay: value => opens.push(value),
-    spaces: () => [{id: 's1', name: 'Alpha'}, {id: 's0', name: 'Share'}],
+    spaces: () => [{id: 's1', name: 'Alpha'}, {id: 's0', name: 'Hub'}],
   };
   const storeUrl = new URL('../mods/sixfold-desk/arrival-store.js', import.meta.url).href;
   const modelUrl = new URL('../mods/sixfold-desk/arrival-model.js', import.meta.url).href;
@@ -141,14 +141,14 @@ test('new Linear alerts become arrivals into their space (Share otherwise); no s
     // First run, no sidebar host: the still-unread assignment opens the window once; read history stays silent.
     assert.equal(opens.length, 1);
     assert.deepEqual(JSON.parse(files.get('linear-popup-events.json')).seen, ['linear:old', 'linear:past']);
-    assert.deepEqual(shared['sixfold.linearSpaces'].sort(), ['Alpha', 'Share']);   // 'past' has no space: Share
+    assert.deepEqual(shared['sixfold.linearSpaces'].sort(), ['Alpha', 'Hub']);   // 'past' has no space: Hub
     feed([{id: 'old', read: false, category: 'assignments'}, {id: 'seen', read: true, category: 'assignments'}, {id: 'remind', read: false, category: 'reminders'}]);
     await flush();
     assert.equal(opens.length, 2);                       // a due reminder pops up too (every kind but reactions); a read one does not
     feed([{id: 'old', read: false, category: 'assignments'}, {id: 'remind', read: false, category: 'reminders'}, {id: 'like', read: false, category: 'reactions'}]);
     await flush();
     assert.equal(opens.length, 2);                       // a reaction: nothing
-    // A sidebar host: each new alert arrives into its space, an unknown space into Share. Comments count.
+    // A sidebar host: each new alert arrives into its space, an unknown space into Hub. Comments count.
     store.setArrivalHost(() => true);
     feed([{id: 'a', read: false, category: 'commentsAndReplies', workspace: 'Alpha', issue: 'ABC-1', issue_title: 'T',
            subtitle: 'Kim commented: looks good\nsecond line', url: 'https://linear.app/demo/issue/ABC-1/t#comment-0a1b2c3d'},
@@ -156,15 +156,15 @@ test('new Linear alerts become arrivals into their space (Share otherwise); no s
     await flush();
     assert.equal(opens.length, 2);                       // with a host: arrivals, no window
     const landed = store.arrivals().filter(a => a.key === 'linear:a' || a.key === 'linear:b').map(a => [a.key, a.id, a.space, a.source, a.issue]);
-    assert.deepEqual(landed, [['linear:b', 'b', 'Share', 'linear', ''], ['linear:a', 'a', 'Alpha', 'linear', 'ABC-1']]);   // newest lands last
+    assert.deepEqual(landed, [['linear:b', 'b', 'Hub', 'linear', ''], ['linear:a', 'a', 'Alpha', 'linear', 'ABC-1']]);   // newest lands last
     // The popup says what changed in one line (who, what) and keeps the comment link.
     const a = store.arrivals().find(x => x.key === 'linear:a');
     assert.equal(a.line, 'Kim commented: looks good');
     assert.equal(a.url, 'https://linear.app/demo/issue/ABC-1/t#comment-0a1b2c3d');
-    // An alert of a space not on screen belongs to Share everywhere: badge, popover and inbox agree with its arrival.
-    assert.equal(shared['sixfold.linearItems'].find(i => i.id === 'b').workspace, 'Share');
+    // An alert of a space not on screen belongs to Hub everywhere: badge, popover and inbox agree with its arrival.
+    assert.equal(shared['sixfold.linearItems'].find(i => i.id === 'b').workspace, 'Hub');
     assert.equal(shared['sixfold.linearItems'].find(i => i.id === 'b').workspace_raw, 'Nowhere');
-    assert.deepEqual(shared['sixfold.linearSpaces'].sort(), ['Alpha', 'Share']);
+    assert.deepEqual(shared['sixfold.linearSpaces'].sort(), ['Alpha', 'Hub']);
     const count = store.arrivals().length;
     feed([{id: 'a', read: false, category: 'mentions', workspace: 'Alpha'}, {id: 'b', read: false, category: 'assignments'}, {id: 'old', read: true, category: 'assignments'}]);
     await flush();
@@ -199,9 +199,9 @@ test('an arrival shows, flies in integer steps and lands; motion off only counts
   assert.ok(path.every(p => Number.isInteger(p.x) && Number.isInteger(p.y) && p.x % 2 === 0 && p.y % 2 === 0));
   assert.deepEqual(path.at(-1), {x: 14, y: 58});                         // ends on the target, snapped
   assert.ok(path.length <= ARRIVAL.steps && path.length >= 3);
-  assert.equal(arrivalTarget('medi', ['Alpha', 'Share']), 'Share');
-  assert.equal(arrivalTarget('ALPHA', ['Alpha', 'Share']), 'Alpha');
-  assert.equal(arrivalTarget('x', []), 'Share');
+  assert.equal(arrivalTarget('medi', ['Alpha', 'Hub']), 'Hub');
+  assert.equal(arrivalTarget('ALPHA', ['Alpha', 'Hub']), 'Alpha');
+  assert.equal(arrivalTarget('x', []), 'Hub');
   assert.deepEqual(arrivalOpen({source: 'linear', space: 'Alpha'}), {source: 'linear', project: 'Alpha'});
 });
 
@@ -225,14 +225,15 @@ test('a flight wakes the sidebar only at its finite step edges, then blinks once
   assert.equal(flyingIds(list, t0 + 1, false).size, 0);                 // motion off: counted at once
 });
 
-test('of many new alerts the newest few arrive; unknown spaces are placed in Share by both mods', async () => {
+test('of many new alerts the newest few arrive; unknown spaces are placed in Hub by both mods', async () => {
   const desk = await import('../mods/sixfold-desk/alert-model.js');
   const inbox = await import('../mods/sixfold-linear-inbox/model.js');
   for (const placeItems of [desk.placeItems, inbox.placeItems]) {
-    const placed = placeItems([{id: 1, workspace: 'alpha'}, {id: 2, workspace: 'Gone'}, {id: 3, workspace: ''}], ['Alpha', 'Share']);
-    assert.deepEqual(placed.map(i => i.workspace), ['Alpha', 'Share', 'Share']);
+    const placed = placeItems([{id: 1, workspace: 'alpha'}, {id: 2, workspace: 'Gone'}, {id: 3, workspace: ''}], ['Alpha', 'Hub']);
+    assert.deepEqual(placed.map(i => i.workspace), ['Alpha', 'Hub', 'Hub']);
     assert.equal(placed[1].workspace_raw, 'Gone');
     assert.deepEqual(placeItems([{id: 1, workspace: 'Gone'}], []).map(i => i.workspace), ['Gone']);   // no space list: unchanged
+    assert.deepEqual(placeItems([{id: 1, workspace: 'Gone'}], ['Alpha', 'Beta']).map(i => i.workspace), ['Alpha'], 'no fallback space shown: the first space');
   }
 });
 
@@ -485,13 +486,13 @@ test('alert kinds at a glance: type -> badge (unknown types keep their name); th
   assert.deepEqual([lines[0].kind, lines[0].category, lines[0].text], ['assign', '배정', 'Kim 님이 배정']);
 });
 
-test('an alert whose space is not known yet stays 미분류 in both mods (not Share, not on a card)', async () => {
+test('an alert whose space is not known yet stays 미분류 in both mods (not Hub, not on a card)', async () => {
   const desk = await import('../mods/sixfold-desk/alert-model.js');
   const inbox = await import('../mods/sixfold-linear-inbox/model.js');
   const items = [{id: 'u', workspace: '미분류'}, {id: 'x', workspace: 'Gone'}, {id: 'a', workspace: 'alpha'}];
   for (const placeItems of [desk.placeItems, inbox.placeItems])
-    assert.deepEqual(placeItems(items, ['Alpha', 'Share']).map(i => i.workspace), ['미분류', 'Share', 'Alpha']);
-  assert.equal(desk.linearUnread([{id: 'u', workspace: '미분류', read: false}], 'Share'), 0);
+    assert.deepEqual(placeItems(items, ['Alpha', 'Hub']).map(i => i.workspace), ['미분류', 'Hub', 'Alpha']);
+  assert.equal(desk.linearUnread([{id: 'u', workspace: '미분류', read: false}], 'Hub'), 0);
 });
 
 test('a local space-issue comment (issueComment) is badged 댓글 in both mods', async () => {

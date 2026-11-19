@@ -41,7 +41,7 @@ const advance = (value, previous, delta, motion = true) => panelEventStates(valu
 test('allocation metadata supplies finite default tags and distinguishes new rows from reused rows',()=>{
   const initial=normalize(),prior=boot(initial),from=initial.spaces[0].agents[0].id;
   for(const kind of ['existing','new']){
-    const next={...initial,events:[{id:`event-${kind}`,at:NOW,kind:'dispatch',from,to:from,label:'',allocation:{kind,count:2}}]};
+    const next={...initial,events:[{id:`event-${kind}`,at:NOW,kind:'assign',from,to:from,label:'',allocation:{kind,count:2}}]};
     const playing=advance(next,prior,0);
     assert.equal(playing.spawning.has(from),kind==='new');
     assert.equal(playing.tags.get(from).label,'일 나누기 · 2개');
@@ -251,17 +251,17 @@ test('initial feed is only a watermark, a newly observed ID plays once', () => {
 });
 
 test('distribution, review, verdict, acceptance and closing labels occupy the same finite tag slot', () => {
-  for (const kind of ['dispatch', 'review_request', 'verdict', 'accept', 'close_step', 'memory']) {
+  for (const kind of ['assign', 'review_request', 'verdict', 'accept', 'close_step', 'memory']) {
     const value = normalize({ events: [{ id: `event-${kind}`, at: NOW, kind, from: 'one-agent', to: 'one', label: `Label ${kind}` }] });
     const started = advance(value, boot(normalize({ events: [] })), 0);
-    assert.equal(started.tags.get('one-agent').label, `Label ${kind}`, 'one dispatch keeps the producer label');
+    assert.equal(started.tags.get('one-agent').label, `Label ${kind}`, 'one assignment keeps the producer label');
     assert.equal(advance(value, started, T.tagMs - 1).tags.has('one-agent'), true);
     assert.equal(advance(value, started, T.tagMs).tags.size, 0);
     assert.equal(value.spaces[0].agents[0].title, 'Task one-agent', 'a tag never rewrites the task title');
   }
 });
 
-test('dispatch/new session, packet arrival and fade have finite boundaries, tags stay tagMs', () => {
+test('assignment/new session, packet arrival and fade have finite boundaries, tags stay tagMs', () => {
   const value = normalize({ events: [{ id: 'spawn', at: NOW, kind: 'spawn', from: 'one', to: 'one-agent', label: 'New task' }] });
   let state = boot(normalize({ events: [] }));
   const pinged = T.packetMs + T.pingMs, gone = pinged + T.coolMs;
@@ -300,7 +300,7 @@ test('delayed polling starts a new packet at observation time without changing s
 });
 
 test('unknown ordering and tag hints are ignored rather than creating an extra data contract', () => {
-  const value = normalize({ spaces: [space('one', { agents: [agent('first', { at: NOW, updated_at: NOW, state: 'blocked' }), agent('second')] })], events: [{ id: 'hint', at: NOW, kind: 'dispatch', from: 'first', to: 'second', label: 'Task sent', tag_agent: 'second' }] });
+  const value = normalize({ spaces: [space('one', { agents: [agent('first', { at: NOW, updated_at: NOW, state: 'blocked' }), agent('second')] })], events: [{ id: 'hint', at: NOW, kind: 'assign', from: 'first', to: 'second', label: 'Task sent', tag_agent: 'second' }] });
   assert.equal(Object.hasOwn(value.spaces[0].agents[0], 'at'), false);
   assert.equal(Object.hasOwn(value.spaces[0].agents[0], 'state'), false);
   assert.deepEqual(agentGroups(value.spaces[0]).agents.map(a => a.id), ['first', 'second']);
@@ -535,7 +535,7 @@ test('optional parent relations preserve globally known forward references and r
 
 test('allocation and closing memory details are bounded optional display data', () => {
   const value=normalize({spaces:[space('one',{agents:[agent('first',{closing:{step:3,memory:{state:'proposed',proposals:2,private:'omit'}}})]})],events:[
-    {id:'existing',at:stamp(NOW),kind:'dispatch',from:'first',to:null,allocation:{kind:'existing',count:4}},
+    {id:'existing',at:stamp(NOW),kind:'assign',from:'first',to:null,allocation:{kind:'existing',count:4}},
     {id:'new',at:stamp(NOW),kind:'spawn',from:null,to:'first',allocation:{kind:'new',count:999999}},
     {id:'close',at:stamp(NOW),kind:'close_step',from:'first',to:null,step:2,memory:{state:'saved',proposals:0}},
     {id:'invalid',at:stamp(NOW),kind:'close_step',from:'first',to:null,step:7,memory:{state:'unknown',proposals:-1},allocation:{kind:'unknown',count:2}},
@@ -632,8 +632,8 @@ test('completion filtering preserves independent roots, blocked work and active 
   assert.equal(agentGroups(closed).agents.length,0,'an already hidden parent does not resurrect its completed child as a root');
 });
 
-test('완료 is the harness cleanup target: a finished task whose pane is still kept stays visible and not done',()=>{
-  // The feed (harness panel_feed.settled_status) sends status 'done' for a pane row only when the
+test('완료 is the producer cleanup target: a finished task whose pane is still kept stays visible and not done',()=>{
+  // The feed (producer settled_status) sends status 'done' for a pane row only when the
   // close scan left it nothing but idle time; a raw turn end is idle+unseen_result.
   const nav=pane=>({pane_id:pane,machine:null});
   for(const status of ['idle','working']){
@@ -878,7 +878,7 @@ test('a real stage transition without an event shows its label once and releases
 
 test('new allocation labels the coordinator while the destination owns the new-row outline',()=>{
  const initial=normalize({spaces:[space('one',{agents:[agent('sender'),agent('receiver')]})]});
- const value={...initial,events:[{id:'allocate',at:NOW,kind:'dispatch',from:'sender',to:'receiver',label:'',allocation:{kind:'new',count:2}}]};
+ const value={...initial,events:[{id:'allocate',at:NOW,kind:'assign',from:'sender',to:'receiver',label:'',allocation:{kind:'new',count:2}}]};
  const state=advance(value,boot(initial),0);assert.equal(state.tags.get('sender').label,'일 나누기 · 2개');
  assert(!state.tags.has('receiver'));assert(state.spawning.has('receiver'));
 });
@@ -1013,4 +1013,13 @@ test('bundles that have arrived (ping, fade) still count toward the cap: never m
   assert(now.ids<=cap.ids,`step ${n}: ${now.ids} IDs`);
  });
  assert(state.overflow>0,'sends past the cap are counted');
+});
+
+test('an older collector event named dispatch reads as assign; unknown kinds are still dropped', () => {
+  const from = { space: 'one', agent: 'one-agent' };
+  const out = normalize({ events: [
+    { id: 'old', at: stamp(NOW), kind: 'dispatch', from, to: from, label: '' },
+    { id: 'odd', at: stamp(NOW), kind: 'teleport', from, to: from, label: '' },
+  ] });
+  assert.deepEqual(out.events.map(event => [event.id, event.kind]), [['old', 'assign']]);
 });

@@ -72,36 +72,36 @@ fn native(config: &Path, space: &str, app: &Path) -> std::process::Output {
 fn test_filter_extensions_and_latest_order_without_following_links() {
     let f = Temp::new();
     for name in [
-        "PMO-old.md",
-        "PMO-new.pdf",
-        "PMO-sheet.xlsx",
-        "PMO-word.docx",
+        "ACME-old.md",
+        "ACME-new.pdf",
+        "ACME-sheet.xlsx",
+        "ACME-word.docx",
         "other.md",
-        "PMO.before-old.md",
+        "ACME.before-old.md",
         "latest.md",
-        "PMO.txt",
+        "ACME.txt",
     ] {
         f.file(name, "test");
     }
-    at(&f.root.join("PMO-new.pdf"), 100);
-    at(&f.root.join("PMO-old.md"), 90);
-    link(&f.root.join("PMO-old.md"), &f.root.join("PMO-link.md"));
-    let rows = docs(&[json!({"path":f.root,"match":["pmo"]})], false);
+    at(&f.root.join("ACME-new.pdf"), 100);
+    at(&f.root.join("ACME-old.md"), 90);
+    link(&f.root.join("ACME-old.md"), &f.root.join("ACME-link.md"));
+    let rows = docs(&[json!({"path":f.root,"match":["acme"]})], false);
     assert_eq!(
         names(&rows).into_iter().collect::<BTreeSet<_>>(),
         [
-            "PMO-old.md",
-            "PMO-new.pdf",
-            "PMO-sheet.xlsx",
-            "PMO-word.docx"
+            "ACME-old.md",
+            "ACME-new.pdf",
+            "ACME-sheet.xlsx",
+            "ACME-word.docx"
         ]
         .map(str::to_owned)
         .into()
     );
     let names = names(&rows);
     assert!(
-        names.iter().position(|n| n == "PMO-new.pdf")
-            < names.iter().position(|n| n == "PMO-old.md")
+        names.iter().position(|n| n == "ACME-new.pdf")
+            < names.iter().position(|n| n == "ACME-old.md")
     );
 }
 #[test]
@@ -429,7 +429,7 @@ fn test_spaces_with_only_doc_tab_rules_are_indexed_by_id_without_links() {
     );
     json_file(
         &rules,
-        &json!({"version":1,"spaces":{"sp-demo":{"name":"Demo","folders":[f.root.join("docs")]},"sp-share":{"name":"Share","folders":[f.root.join("docs")]}}}),
+        &json!({"version":1,"spaces":{"sp-demo":{"name":"Demo","folders":[f.root.join("docs")]},"sp-hub":{"name":"Hub","folders":[f.root.join("docs")]}}}),
     );
     let output = pins::collect(&config, &f.root.join("index.json"), Some(&rules)).unwrap();
     assert_eq!(
@@ -439,9 +439,9 @@ fn test_spaces_with_only_doc_tab_rules_are_indexed_by_id_without_links() {
             .keys()
             .cloned()
             .collect::<BTreeSet<_>>(),
-        ["Demo".to_owned(), "sp-share".into()].into()
+        ["Demo".to_owned(), "sp-hub".into()].into()
     );
-    assert_eq!(output["spaces"]["sp-share"]["files"][0]["name"], "guide.md");
+    assert_eq!(output["spaces"]["sp-hub"]["files"][0]["name"], "guide.md");
     let mut names = fs::read_dir(&f.root)
         .unwrap()
         .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
@@ -496,10 +496,10 @@ fn test_latest_date_beats_mtime_and_preserves_topic_id() {
 #[test]
 fn test_iso_dates_share_topic_with_compact_dates() {
     let mut f = Pins::new();
-    f.file("20261029_pmo-회신.md");
-    let fresh = f.file("2026-11-02-pmo-회신.md");
-    f.file("2026-11-03-pmo-회신.md");
-    f.latest("pmo-회신.md", None);
+    f.file("20261029_acme-회신.md");
+    let fresh = f.file("2026-11-02-acme-회신.md");
+    f.file("2026-11-03-acme-회신.md");
+    f.latest("acme-회신.md", None);
     assert_eq!(f.rows()[0]["path"], json!(fresh));
     assert_eq!(f.rows().len(), 1);
 }
@@ -695,7 +695,7 @@ impl Routed {
         let routing_file = temp.root.join("project-docs-routing.local.json");
         json_file(
             &routing_file,
-            &json!({"version":1,"fallback":"Share","sources":[{"path":reports},{"path":downloads,"depth":1,"requireMatch":true}],"spaces":{"Alpha":{"terms":["alpha","알파"]},"Beta":{"terms":["beta","베타"]}}}),
+            &json!({"version":1,"fallback":"Hub","sources":[{"path":reports},{"path":downloads,"depth":1,"requireMatch":true}],"spaces":{"Alpha":{"terms":["alpha","알파"]},"Beta":{"terms":["beta","베타"]}}}),
         );
         let routing = routing::load(&routing_file).unwrap();
         Self {
@@ -704,7 +704,7 @@ impl Routed {
             downloads,
             app,
             routing,
-            config: json!({"version":1,"spaces":{"sp-a":{"name":"Alpha","folders":[],"pins":[]},"sp-b":{"name":"Beta","folders":[],"pins":[]},"sp-s":{"name":"Share","folders":[],"pins":[]}}}),
+            config: json!({"version":1,"spaces":{"sp-a":{"name":"Alpha","folders":[],"pins":[]},"sp-b":{"name":"Beta","folders":[],"pins":[]},"sp-s":{"name":"Hub","folders":[],"pins":[]}}}),
             day: NaiveDate::from_ymd_opt(2026, 11, 5).unwrap(),
         }
     }
@@ -756,12 +756,12 @@ fn test_name_title_and_body_words_pick_the_space() {
 fn test_a_path_word_outweighs_a_body_mention_and_ties_go_to_the_fallback() {
     let f = Routed::new();
     f.file(false, "alpha/회신.md", "beta 쪽 문의도 참고", None);
-    f.file(false, "공통_정리.md", "alpha 와 beta 모두", None);
+    f.file(false, "공유_정리.md", "alpha 와 beta 모두", None);
     f.file(false, "일지.md", "아무 단어 없음", None);
     assert_eq!(f.names("sp-a"), vec!["회신.md"]);
     let mut names = f.names("sp-s");
     names.sort();
-    assert_eq!(names, vec!["공통_정리.md", "일지.md"]);
+    assert_eq!(names, vec!["공유_정리.md", "일지.md"]);
 }
 #[test]
 fn test_downloads_list_only_matching_documents_at_the_top_level() {

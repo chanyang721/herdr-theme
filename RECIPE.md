@@ -26,9 +26,9 @@ Keep the terminal area central. The default layout does not include the old inpu
 
 The theme displays observations supplied by Herdr and optional local feed producers. Working, idle, needs-human, unseen-result, cleanup-wait, closing and closed are distinct states. A finished response or a full progress bar alone is not task acceptance or proof of cleanup.
 
-The external harness owns task allocation, file ownership, result retention, acceptance and pane closure. The theme displays its events; installing this layout does not install or configure that service. Parent/child task trees and retained-result stages require the corresponding feed. Account connections and issue updates need separate setup and explicit application.
+An optional external producer owns task allocation, file ownership, result retention, acceptance and pane closure. The theme displays its events; installing this layout does not install or configure that service. Parent/child task trees and retained-result stages require the corresponding feed. Account connections and issue updates need separate setup and explicit application.
 
-Message animations require a compatible event adapter or configured local collector. As checked on 2026-11-12, core PR #90 closed unmerged and its successor #167 remains open. Do not assume stock core releases emit those native events. The proposed event uses `data.from` for the sender and envelope `terminal` for the recipient. A send observation is not a read receipt or completion. Automatic launch tasks, keys and automatic parent notes are excluded; allocation is represented separately by the harness feed. See the README compatibility section before enabling routes.
+Message animations require a compatible event adapter or configured local collector. As checked on 2026-11-12, core PR #90 closed unmerged and its successor #167 remains open. Do not assume stock core releases emit those native events. The proposed event uses `data.from` for the sender and envelope `terminal` for the recipient. A send observation is not a read receipt or completion. Automatic launch tasks, keys and automatic parent notes are excluded; allocation is represented separately by the task feed. See the README compatibility section before enabling routes.
 
 ## Built from
 

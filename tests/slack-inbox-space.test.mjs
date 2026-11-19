@@ -4,15 +4,17 @@ import {readFile} from 'node:fs/promises';
 import {inSpace} from '../mods/sixfold-slack-inbox/model.js';
 import {arrivalTarget} from '../mods/sixfold-desk/arrival-model.js';
 
-// 2026-11-16 review: Share's 전체 보기 reopened as the mentions window without its space, so it listed
+// 2026-11-16 review: Hub's 전체 보기 reopened as the mentions window without its space, so it listed
 // every space's mentions. The window now starts on the card's space by the cards' own rule.
-test('a thread belongs to the space its card counts it on: off-sidebar ones to Share', () => {
-  const names = ['Alpha', 'Share'];
-  for (const project of ['Alpha', 'alpha', 'Share', '미연결', 'Gone', '', undefined])
-    for (const space of ['Alpha', 'Share'])
+test('a thread belongs to the space its card counts it on: off-sidebar ones to Hub', () => {
+  const names = ['Alpha', 'Hub'];
+  for (const project of ['Alpha', 'alpha', 'Hub', '미연결', 'Gone', '', undefined])
+    for (const space of ['Alpha', 'Hub'])
       assert.equal(inSpace(project, space, names), arrivalTarget(project, names).toLowerCase() === space.toLowerCase(), `${project} in ${space}`);
-  assert.equal(inSpace('미연결', 'Share', ['Alpha']), true, 'Share counts even when it is not on the sidebar');
-  assert.equal(inSpace('미연결', 'Share', []), false, 'no sidebar names: its own space');
+  assert.equal(inSpace('미연결', 'Alpha', ['Alpha']), true, 'no fallback space on the sidebar: the first space shown');
+  assert.equal(inSpace('미연결', 'Hub', ['Alpha']), false, 'never a space that is not shown');
+  assert.equal(arrivalTarget('미연결', ['Alpha']), 'Alpha', 'the cards agree');
+  assert.equal(inSpace('미연결', 'Hub', []), false, 'no sidebar names: its own space');
   assert.equal(inSpace('미연결', '미연결', []), true);
 });
 
@@ -49,22 +51,22 @@ async function mentionInbox(current) {
   return {MentionInbox, opened, closed, cx};
 }
 
-test("Share's 전체 보기 opens the mentions window on Share's mentions, and 전체 still shows all", async () => {
-  const current = {props: {overlay: 'o1', project: 'Share', newMessages: false}, spaces: ['Alpha', 'Share']};
+test("Hub's 전체 보기 opens the mentions window on Hub's mentions, and 전체 still shows all", async () => {
+  const current = {props: {overlay: 'o1', project: 'Hub', newMessages: false}, spaces: ['Alpha', 'Hub']};
   const {MentionInbox, opened, closed, cx} = await mentionInbox(current);
   new MentionInbox().init(current.props, cx);
-  assert.deepEqual(opened.map(o => [o.kind, o.props]), [['window', {window: true, space: 'Share'}]]);
+  assert.deepEqual(opened.map(o => [o.kind, o.props]), [['window', {window: true, space: 'Hub'}]]);
   assert.deepEqual(closed, ['o1'], 'the dialog hands over to the window');
 
   current.props = opened[0].props;
   const view = new MentionInbox();
   view.init(current.props, cx);
-  view.items = [{id: 'slack:D0TEST01:1.1', channel: 'D0TEST01', project: 'Share', text: 'dm'},
+  view.items = [{id: 'slack:D0TEST01:1.1', channel: 'D0TEST01', project: 'Hub', text: 'dm'},
     {id: 'slack:C0TEST09:2.1', channel: 'C0TEST09', project: '미연결', text: 'unmapped'},
     {id: 'slack:C0TEST01:3.1', channel: 'C0TEST01', project: 'Alpha', text: 'alpha'}];
   const threads = tree => ids(tree).filter(id => id.startsWith('sf-thread-') && !id.includes('-files'));
   let tree = view.render();
-  assert.deepEqual(threads(tree), ['sf-thread-D0TEST01:1.1', 'sf-thread-C0TEST09:2.1'], 'Share and the off-sidebar mention only');
+  assert.deepEqual(threads(tree), ['sf-thread-D0TEST01:1.1', 'sf-thread-C0TEST09:2.1'], 'Hub and the off-sidebar mention only');
   find(tree, 'sf-filter-all-projects').handlers.click({}, cx);
   assert.equal(threads(view.render()).length, 3, '전체 shows every space');
   find(view.render(), 'sf-filter-space').handlers.click({}, cx);

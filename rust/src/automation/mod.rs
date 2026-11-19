@@ -1,12 +1,10 @@
 pub mod bridge;
 pub mod cli;
-pub mod collaboration;
 #[cfg(test)]
 mod contracts;
 pub mod format;
 pub mod metrics;
-pub mod routing;
-pub mod tiers;
+pub mod presets;
 pub mod workflow;
 pub mod workflow_core;
 pub mod workspace_focus;
@@ -203,12 +201,22 @@ fn collect_computers_with(
     }
 }
 fn workspace(args: &[String]) -> Result<()> {
-    let positional = cli::positionals(args, &["--tiers", "--by"]);
+    let positional = cli::positionals(args, &["--preset", "--model", "--effort"]);
     if positional.len() != 2 {
-        return Err("workspace <name> <folder> [--agents|--shells] [--tiers tier]".into());
+        return Err(
+            "workspace <name> <folder> [--agents|--shells] [--preset name | --model m [--effort e]]"
+                .into(),
+        );
     }
     let agents = !flag(args, "--shells");
-    let tier_arg = option(args, "--tiers");
+    let (preset, model, effort) = (
+        option(args, "--preset"),
+        option(args, "--model"),
+        option(args, "--effort"),
+    );
+    if !agents && (preset.is_some() || model.is_some() || effort.is_some()) {
+        return Err("--preset, --model and --effort apply to the agent session only (not --shells).".into());
+    }
     let spaces = call("herdr-app", &strings(&["ls"]))?;
     if list(&spaces["spaces"])
         .iter()
@@ -216,23 +224,20 @@ fn workspace(args: &[String]) -> Result<()> {
     {
         return Err("Workspace already exists; refusing to duplicate it.".into());
     }
-    if tier_arg.is_some() && !agents {
-        return Err("--tiers는 에이전트 칸에만 쓸 수 있습니다(--shells와 함께 쓰지 않음).".into());
-    }
     let site = site();
-    let tier = if agents {
-        Some(tiers::pane_tier(&site, tier_arg.as_deref())?)
-    } else {
-        None
-    };
     let mut spec = json!({"name":positional[0],"folder":positional[1],"tab":"개발"});
-    let mut launched = vec![];
-    if let Some(tier) = tier {
-        let (used, entry) = tiers::model_for("claude", &tier, &tiers::mapping(&site))?;
-        let entry = tiers::first_pane_entry(&site, &used, entry);
-        launched.push(json!({"kind":"claude","tier":tier,"tier_used":used,"model":entry["model"],"effort":entry["effort"]}));
+    let mut launched = Value::Null;
+    if agents {
+        let (used, entry) = presets::choose(
+            &site,
+            "claude",
+            preset.as_deref(),
+            model.as_deref(),
+            effort.as_deref(),
+        )?;
+        launched = json!({"kind":"claude","preset":used,"model":entry["model"],"effort":entry["effort"]});
         let mut argv = vec!["claude".into()];
-        argv.extend(tiers::flags("claude", &entry));
+        argv.extend(presets::flags("claude", &entry));
         spec["argv"] = json!(launch_argv(argv)?);
     }
     let before = workspace_focus::view();
@@ -285,15 +290,11 @@ fn workspace(args: &[String]) -> Result<()> {
                 "sixfold.native-agent=claude".into(),
             ],
         )?;
-        launched[0]["terminal"] = first["terminal"].clone();
-        let path = data().join("space-tiers.json");
-        let mut book = read_json(&path).unwrap_or(json!({}));
-        book[s(&new["space"])] = json!({"name":positional[0],"by":option(args,"--by").or_else(||std::env::var("HC_TERMINAL_ID").ok()),"at":now() as i64,"panes":launched});
-        atomic(path, &book)?;
+        launched["terminal"] = first["terminal"].clone();
     }
     let mut result = json!({"space":new["space"],"tab":new["tab"],"terminals":[first]});
     if agents {
-        result["tiers"] = json!(launched);
+        result["agent"] = launched;
     }
     print(&result)
 }
@@ -321,6 +322,19 @@ fn agent_env(args: &[String]) -> Result<()> {
         std::process::exit(cmd.status()?.code().unwrap_or(1));
     }
 }
+/// Commands this module runs; any other name goes to `crate::extension`.
+pub const COMMANDS: &[&str] = &[
+    "agent_env",
+    "workspace",
+    "collect_computers",
+    "system_metrics",
+    "demo_agent",
+    "pinned_system_metrics",
+    "collect_workflow",
+    "tui_bridge",
+    "core_api",
+    "balance_grid",
+];
 pub fn run(command: &str, args: &[String]) -> Result<()> {
     let Some(normalized) = cli::prepare(command, args)? else {
         return Ok(());
@@ -333,8 +347,6 @@ pub fn run(command: &str, args: &[String]) -> Result<()> {
         "system_metrics" => system_metrics(),
         "demo_agent" => demo_agent(args),
         "pinned_system_metrics" => metrics::run(args),
-        "route" => routing::run(args),
-        "collaborate" => collaboration::run(args),
         "collect_workflow" => workflow::run(args),
         "tui_bridge" => bridge::run(args),
         "core_api" | "balance_grid" => {

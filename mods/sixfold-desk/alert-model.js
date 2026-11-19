@@ -8,16 +8,23 @@ export function scopedAlerts(items, {project, read = {}, unread = false} = {}) {
 // Linear inbox items carry the Herdr space they belong to (machine-local mapping).
 export const linearScoped = (items, space) => (items ?? []).filter(i => !space || projectKey(i.workspace) === projectKey(space));
 export const linearUnread = (items, space) => linearScoped(items, space).filter(i => !i.read).length;
+// The workspace that receives alerts whose own workspace is not shown. "Hub" unless the
+// sidebar publishes the site's "fallback_space" (site.local.json).
+let fallbackSpace = 'Hub';
+export const setFallbackSpace = name => { if (typeof name === 'string' && name.trim()) fallbackSpace = name.trim(); };
+export const currentFallbackSpace = () => fallbackSpace;
 // An alert belongs to a space shown in the sidebar; one whose space is not
-// there (renamed, closed, unmapped) belongs to Share, so its arrival, badge,
+// there (renamed, closed, unmapped) belongs to the fallback space, so its arrival, badge,
 // popover and inbox all agree. With no space list nothing is moved.
 export const UNSORTED = '미분류';
-export function placeItems(items, names, fallback = 'Share') {
+// The fallback space when it is on screen; otherwise the first space shown, so an alert never
+// lands on a space that does not exist (fallback_space unset and no space named Hub).
+export function placeItems(items, names, fallback = fallbackSpace) {
   const shown = new Map((names ?? []).map(name => [projectKey(name), name]));
   if (!shown.size) return items ?? [];
-  const home = shown.get(projectKey(fallback)) ?? fallback;
+  const home = shown.get(projectKey(fallback)) ?? names[0];
   return (items ?? []).map(item => {
-    // Not placed yet (its issue is read on the next run): it stays 미분류, never Share.
+    // Not placed yet (its issue is read on the next run): it stays 미분류, never the fallback.
     if (item?.workspace === UNSORTED) return item;
     const space = shown.get(projectKey(item?.workspace)) ?? home;
     return space === item?.workspace ? item : {...item, workspace: space, workspace_raw: item?.workspace ?? ''};

@@ -75,7 +75,7 @@ impl Probe {
 }
 const FIXTURE_JS: &str = r#"
 const fixturePanes=['working','blocked','idle','done','working','blocked'].map((status,i)=>({pane:'pane'+i,tab:'tab',terminal:'demo'+i,status,focused:i===4,title:status+' / 합성 세션',cwd:'/synthetic',program:{key:'codex',name:'Codex',agent:true}}));
-const panes=()=>fixturePanes,spaces=()=>[{id:'space',name:'Share',active:true,machine:null,tabs:[{id:'tab',active:true,name:'합성자료',panes:6}]}],terminals=()=>fixturePanes.map(p=>({address:p.terminal,status:p.status,labels:{},program:p.program,cwd:p.cwd})),agents=()=>fixturePanes.map(p=>({...p,address:p.terminal,space:'space'})),focused=()=>({space:'space',tab:'tab',pane:'pane4',terminal:'demo4'});
+const panes=()=>fixturePanes,spaces=()=>[{id:'space',name:'Hub',active:true,machine:null,tabs:[{id:'tab',active:true,name:'합성자료',panes:6}]}],terminals=()=>fixturePanes.map(p=>({address:p.terminal,status:p.status,labels:{},program:p.program,cwd:p.cwd})),agents=()=>fixturePanes.map(p=>({...p,address:p.terminal,space:'space'})),focused=()=>({space:'space',tab:'tab',pane:'pane4',terminal:'demo4'});
 "#;
 fn json_file(p: &Path, v: &Value) -> Result<()> {
     fs::write(
@@ -191,7 +191,7 @@ pub fn ui_reload(args: &[String]) -> Result<()> {
     )?;
     json_file(
         &app.join("data/sixfold/project-alerts.json"),
-        &json!({"items":[],"projects":["Share"]}),
+        &json!({"items":[],"projects":["Hub"]}),
     )?;
     let body = app.join("mods/qa-body");
     fs::create_dir_all(&body)?;

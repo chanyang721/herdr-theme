@@ -284,22 +284,12 @@ fn base_installer_migrates_exact_owned_helper_configs_and_keeps_user_fields() {
     let repo = source(temp.path());
     let app = temp.path().join("app");
     atomic_json(
-        app.join("data/sixfold/routing.json"),
-        &json!({"script":repo.join("scripts/route.py"),"enabled":true,"custom":{"keep":1}}),
-    )
-    .unwrap();
-    atomic_json(app.join("data/sixfold/collaboration.json"),&json!({"script":app.join("scripts/sixfold/collaborate.py"),"enabled":false,"custom":"preserved"})).unwrap();
-    atomic_json(
         app.join("data/sixfold/voice-integration.json"),
         &json!({"script":repo.join("voice/focus_queue.py"),"custom":"voice-preserved"}),
     )
     .unwrap();
     install::base_install(&repo, &app, false, &[]).unwrap();
-    for (name, stem) in [
-        ("routing.json", "route"),
-        ("collaboration.json", "collaborate"),
-        ("voice-integration.json", "focus_queue"),
-    ] {
+    for (name, stem) in [("voice-integration.json", "focus_queue")] {
         let value = read_json(app.join("data/sixfold").join(name)).unwrap();
         assert!(value.get("script").is_none());
         assert_eq!(value["command"][1], stem);
@@ -314,14 +304,6 @@ fn base_installer_migrates_exact_owned_helper_configs_and_keeps_user_fields() {
         );
     }
     assert_eq!(
-        read_json(app.join("data/sixfold/routing.json")).unwrap()["custom"],
-        json!({"keep":1})
-    );
-    assert_eq!(
-        read_json(app.join("data/sixfold/collaboration.json")).unwrap()["enabled"],
-        false
-    );
-    assert_eq!(
         read_json(app.join("data/sixfold/voice-integration.json")).unwrap()["custom"],
         "voice-preserved"
     );
@@ -332,14 +314,6 @@ fn installer_preserves_external_same_name_scripts_and_existing_native_commands_v
     let repo = source(temp.path());
     let app = temp.path().join("app");
     let values = [
-        (
-            "routing.json",
-            json!({"script":temp.path().join("custom/scripts/route.py"),"custom":1}),
-        ),
-        (
-            "collaboration.json",
-            json!({"script":temp.path().join("custom/scripts/sixfold/collaborate.py"),"custom":2}),
-        ),
         (
             "voice-integration.json",
             json!({"command":["other-native-helper","focus_queue"],"custom":3}),
@@ -373,19 +347,10 @@ fn updater_migrates_owned_configs_and_installs_native_runtime_in_its_receipt() {
     let app = temp.path().join("app");
     put(&app, "mods/sixfold-desk/main.js", "old");
     atomic_json(
-        app.join("data/sixfold/routing.json"),
-        &json!({"script":repo.join("scripts/route.py"),"user":"kept"}),
+        app.join("data/sixfold/voice-integration.json"),
+        &json!({"script":repo.join("voice/focus_queue.py"),"user":"kept"}),
     )
     .unwrap();
-    atomic_json(
-        app.join("data/sixfold/collaboration.json"),
-        &json!({"script":app.join("scripts/sixfold/collaborate.py"),"enabled":true}),
-    )
-    .unwrap();
-    let external =
-        json!({"script":temp.path().join("custom/scripts/voice/focus_queue.py"),"user":"external"})
-            .to_string();
-    put(&app, "data/sixfold/voice-integration.json", &external);
     let cli = fake_cli(temp.path(), false);
     let backup = update::update(
         &repo,
@@ -397,18 +362,14 @@ fn updater_migrates_owned_configs_and_installs_native_runtime_in_its_receipt() {
         &[],
     )
     .unwrap();
-    let routing = read_json(app.join("data/sixfold/routing.json")).unwrap();
-    assert_eq!(routing["command"][1], "route");
-    assert_eq!(routing["user"], "kept");
-    assert!(routing.get("script").is_none());
+    let voice = read_json(app.join("data/sixfold/voice-integration.json")).unwrap();
+    assert_eq!(voice["command"][1], "focus_queue");
+    assert_eq!(voice["user"], "kept");
+    assert!(voice.get("script").is_none());
     assert!(app
         .join("scripts/sixfold")
         .join(install::native_name())
         .is_file());
-    assert_eq!(
-        text(app.join("data/sixfold/voice-integration.json")).unwrap(),
-        external
-    );
     let receipt = read_json(backup.join("receipt.json")).unwrap();
     assert_eq!(receipt["phase"], "verified");
     for (name, bytes) in herdr_theme::notices::files() {
@@ -417,8 +378,7 @@ fn updater_migrates_owned_configs_and_installs_native_runtime_in_its_receipt() {
         assert!(arr(&receipt["files"]).contains(&json!(relative)));
     }
     for relative in [
-        PathBuf::from("data/sixfold/routing.json"),
-        PathBuf::from("data/sixfold/collaboration.json"),
+        PathBuf::from("data/sixfold/voice-integration.json"),
         Path::new("scripts/sixfold").join(install::native_name()),
     ] {
         assert!(arr(&receipt["files"]).contains(&json!(relative)));
@@ -430,8 +390,9 @@ fn updater_rolls_back_config_migrations_and_native_runtime_with_unhealthy_candid
     let repo = source(temp.path());
     let app = temp.path().join("app");
     put(&app, "mods/sixfold-desk/main.js", "old");
-    let original = json!({"script":repo.join("scripts/route.py"),"user":"original"}).to_string();
-    put(&app, "data/sixfold/routing.json", &original);
+    let original =
+        json!({"script":repo.join("voice/focus_queue.py"),"user":"original"}).to_string();
+    put(&app, "data/sixfold/voice-integration.json", &original);
     let binary = app.join("scripts/sixfold").join(install::native_name());
     atomic_bytes(&binary, b"original native runtime").unwrap();
     let cli = fake_cli(temp.path(), true);
@@ -447,7 +408,7 @@ fn updater_rolls_back_config_migrations_and_native_runtime_with_unhealthy_candid
     .unwrap_err();
     assert!(error.to_string().contains("rolled_back"), "{error}");
     assert_eq!(
-        text(app.join("data/sixfold/routing.json")).unwrap(),
+        text(app.join("data/sixfold/voice-integration.json")).unwrap(),
         original
     );
     assert_eq!(fs::read(binary).unwrap(), b"original native runtime");
@@ -459,7 +420,7 @@ fn updater_rolls_back_config_migrations_and_native_runtime_with_unhealthy_candid
         .unwrap();
     assert_eq!(receipt["phase"], "rolled_back");
     assert!(
-        arr(&receipt["files"]).contains(&json!(PathBuf::from("data/sixfold/routing.json"))),
+        arr(&receipt["files"]).contains(&json!(PathBuf::from("data/sixfold/voice-integration.json"))),
         "the config migration must have participated in rollback"
     );
 }

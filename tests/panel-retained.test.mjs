@@ -222,7 +222,7 @@ test('identical input and data timestamps alone cause no entity notifications or
 test('hiding cancels the finite animation wake; data can change while hidden without restarting it',async()=>{
   const r=await runtime(true),feed=cleanPanelFeed(makePanelFixture());
   r.controller.apply(feed,'ready');r.flush();
-  r.controller.apply(cleanPanelFeed(eventSequence.find(step=>step.name==='dispatch-existing').apply(feed,Date.now())),'ready');
+  r.controller.apply(cleanPanelFeed(eventSequence.find(step=>step.name==='assign-existing').apply(feed,Date.now())),'ready');
   assert(r.controller.wake);const wake=r.controller.wake;
   r.controller.setVisible(false);r.flush();
   assert(wake.cancelled);assert.equal(r.controller.wake,null);assert.equal(r.controller.wakeAt,null);assert.equal(r.controller.motion,false);
@@ -267,7 +267,7 @@ test('retiring an older generation whose handles are released cannot abort the n
 test('native visibility is independent of focus and cancels finite motion when hidden',async()=>{
   const r=await runtime(true),feed=cleanPanelFeed(makePanelFixture());
   r.controller.apply(feed,'ready');assert.equal(r.controller.motion,true,'unfocused visible window still animates');
-  r.controller.apply(cleanPanelFeed(eventSequence.find(step=>step.name==='dispatch-existing').apply(feed,Date.now())),'ready');
+  r.controller.apply(cleanPanelFeed(eventSequence.find(step=>step.name==='assign-existing').apply(feed,Date.now())),'ready');
   const wake=r.controller.wake;assert(wake);
   globalThis.__retainedHostVisible=false;r.controller.preferences();
   assert(wake.cancelled);assert.equal(r.controller.hostVisible,false);assert.equal(r.controller.motion,false);assert.equal(r.controller.wake,null);
@@ -351,8 +351,8 @@ test('an open issue search asks again as its answer gets old (within a minute); 
 });
 
 test('작업 시작: a row press opens the detail with the start area under its title, [작업 시작] runs the set command once and shows its result',async()=>{
-  const config={v:1,command:'/opt/demo/start',args:['{space}','{issue} {title}','{provider}','{tier}'],
-    providers:[{id:'claude',label:'Claude'},{id:'codex',label:'Codex'}],tiers:[{id:'mid',label:'중간'},{id:'high',label:'높음'}],default:{provider:'claude',tier:'high'}};
+  const config={v:1,command:'/opt/demo/start',args:['{space}','{issue} {title}','{provider}','{level}'],
+    providers:[{id:'claude',label:'Claude'},{id:'codex',label:'Codex'}],levels:[{id:'mid',label:'중간'},{id:'high',label:'높음'}],default:{provider:'claude',level:'high'}};
   globalThis.__retainedFiles={'/home/data/sixfold/issue-start.json':JSON.stringify(config)};
   const ran=[];let answer;globalThis.__retainedExec=(command,args,options)=>{ran.push([command,args,options]);return new Promise(resolve=>{answer=resolve;});};
   const r=await runtime(),tasks=[],t=r.native.theme();
@@ -383,7 +383,7 @@ test('작업 시작: a row press opens the detail with the start area under its 
     // A second press while it runs sends nothing.
     const go=byId(popup(),`task-issue-start-go-${space.id}-DEMO-12`);assert(!go.calls.some(c=>c[0]==='on_click'));
     assert.deepEqual(ran,[['/opt/demo/start',['Demo','DEMO-12 Workspace search','codex','high'],{timeout:300000}]]);
-    answer({code:0,stdout:'{"outcome":"sent","task_id":"t-1","target":"Demo · Codex","model":"gpt"}\n'});await pending;r.flush();
+    answer({code:0,stdout:'{"outcome":"sent","task":"t-1","target":"Demo · Codex","model":"gpt"}\n'});await pending;r.flush();
     tree=popup();
     assert.deepEqual(texts(byId(tree,`task-issue-start-result-${space.id}-DEMO-12`)),['보냄 · Demo · Codex · gpt']);
     assert(!byId(tree,`task-issue-start-go-${space.id}-DEMO-12`).calls.some(c=>c[0]==='on_click'),'guarded for three minutes');
@@ -415,7 +415,7 @@ test('작업 시작: a row press opens the detail with the start area under its 
 });
 
 test('작업 시작: a blocked answer lets the issue be pressed again at once, with no guard timer',async()=>{
-  const config={v:1,command:'/opt/demo/start',args:['{issue} {title}'],providers:[{id:'claude'}],tiers:[{id:'high'}]};
+  const config={v:1,command:'/opt/demo/start',args:['{issue} {title}'],providers:[{id:'claude'}],levels:[{id:'high'}]};
   globalThis.__retainedFiles={'/home/data/sixfold/issue-start.json':JSON.stringify(config)};
   let runs=0;globalThis.__retainedExec=async()=>{runs++;return {code:1,stdout:'{"outcome":"blocked","reason":"no idle session"}'};};
   const r=await runtime(),tasks=[],t=r.native.theme();
@@ -798,7 +798,7 @@ test('a status name typed differently by two teams classifies each issue by its 
   }finally{r.controller.dispose();delete globalThis.__retainedWrites;delete globalThis.__retainedRead;}
 });
 
-// The harness Linear ledger catalog, through the app's own path (cleanPanelFeed -> apply -> spaceMap ->
+// The producer's issue ledger catalog, through the app's own path (cleanPanelFeed -> apply -> spaceMap ->
 // withTimeline -> issueExtra): its source and Linear's row statuses survive cleaning, a newer timeline
 // and a newer project cache never replace it, and every row keeps its status.
 test('a ledger catalog survives feed cleaning and is not replaced by a newer timeline or project cache',async()=>{

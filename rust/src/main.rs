@@ -4,7 +4,8 @@ fn main() {
         println!("herdr-theme <command> [arguments]\nNative Sixfold workspace, documents, local integration and voice tools.");
         return;
     }
-    let command = args.remove(0).replace('-', "_");
+    let invoked = args.remove(0);
+    let command = invoked.replace('-', "_");
     if args.len() == 1 && matches!(args[0].as_str(), "--help" | "-h") {
         match herdr_theme::help::show(&command, &args) {
             Ok(true) => return,
@@ -35,7 +36,7 @@ fn main() {
         | "media_image" => herdr_theme::documents::run(&command, &args),
         "pinned_system_metrics" => herdr_theme::automation::run(&command, &args),
         name if name.starts_with("pinned_") => herdr_theme::documents::run(&command, &args),
-        "model_tier" | "doc_catalog" | "site_config" | "file_lock" | "workspace_mods"
+        "doc_catalog" | "site_config" | "file_lock" | "workspace_mods"
         | "app_backend" | "voice_policy" | "voice_settings" => Ok(()),
 
         name if name.starts_with("native_") => herdr_theme::observers::run(&command, &args),
@@ -57,7 +58,11 @@ fn main() {
         {
             herdr_theme::voice::run(&command, &args)
         }
-        _ => herdr_theme::automation::run(&command, &args),
+        name if herdr_theme::automation::COMMANDS.contains(&name) => {
+            herdr_theme::automation::run(&command, &args)
+        }
+        // Anything else may be provided by an installed extension executable.
+        _ => herdr_theme::extension::run(&invoked, &command, &args),
     };
     if let Err(error) = result {
         if let Some(exit) = error.downcast_ref::<herdr_theme::voice::Exit>() {
@@ -74,11 +79,7 @@ fn main() {
             }
             std::process::exit(exit.code);
         }
-        if matches!(command.as_str(), "route" | "collaborate") {
-            let _ = herdr_theme::common::print(&serde_json::json!({"error":error.to_string()}));
-        } else {
-            let _ = herdr_theme::help::write_error(&command, &error.to_string());
-        }
+        let _ = herdr_theme::help::write_error(&command, &error.to_string());
         std::process::exit(1);
     }
 }

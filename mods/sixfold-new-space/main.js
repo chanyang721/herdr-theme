@@ -8,8 +8,8 @@ export default class NewWorkspace extends View {
     this.machineName = props()?.machineLabel || this.machine || '이 컴퓨터';
     this.name = InputState.new({placeholder:'워크스페이스 이름'});
     this.folder = InputState.new({value:props()?.folder || (this.machine === null ? home() : ''), placeholder:this.machine === null ? '프로젝트 폴더' : '원격 폴더 (비워두면 해당 컴퓨터의 홈)'});
-    // Tier of the single starting session (ADR-0008): low|mid|high|max, empty = high.
-    this.tiers = InputState.new({value:props()?.tiers || '', placeholder:'첫 세션 tier 하나 (low|mid|high|max · 비우면 high)'});
+    // Optional model preset of the single starting session (site.local.json model_presets); empty = site default.
+    this.preset = InputState.new({value:props()?.preset || '', placeholder:'첫 세션 모델 프리셋 (비우면 기본값)'});
     this.busy = false;
     this.error = '';
     this.name.on('submit', (_e,cx)=>this.create(cx));
@@ -18,7 +18,7 @@ export default class NewWorkspace extends View {
 
   create(cx) {
     if (this.busy) return;
-    const name=this.name.value().trim(), folder=this.folder.value().trim(), tiers=this.tiers.value().replace(/\s+/g,'');
+    const name=this.name.value().trim(), folder=this.folder.value().trim(), preset=this.preset.value().replace(/\s+/g,'');
     if (!name || (this.machine === null && !folder)) { this.error='이름과 프로젝트 폴더를 입력하세요.'; cx.notify(); return; }
     this.busy=true; this.error=''; cx.notify();
     cx.spawn(async cx=>{
@@ -30,12 +30,12 @@ export default class NewWorkspace extends View {
           return;
         }
         const agents=await knownAgents();
-        // The workspace opens one Claude session; Codex is only needed later, when dispatch adds a pane.
+        // The workspace opens one Claude session; other agents can be opened later by local tools.
         if (!agents.some(a=>a.key==='claude' && a.installed)) throw new Error('claude 실행 파일을 먼저 설치해 주세요.');
         const windows=(typeof window==='function' && window()?.platform==='windows') || /^(?:[A-Za-z]:[\\/]|\\\\)/.test(home());
         const result=await exec(`${appHome()}/scripts/sixfold/herdr-theme${windows?'.exe':''}`,[
           'workspace',name,folder,
-          ...(tiers?['--tiers',tiers]:[]),
+          ...(preset?['--preset',preset]:[]),
         ]);
         if (result.code!==0) throw new Error(result.stderr || result.stdout || '워크스페이스 생성 실패');
         closeOverlay(props().overlay);
@@ -57,8 +57,8 @@ export default class NewWorkspace extends View {
         if(this.busy)return;
         cx.spawn(async cx=>{const path=await pickFolder();if(path)this.folder.set_value(path);cx.notify();});
       })))
-      .when(this.machine === null, e=>e.child(Input.new(this.tiers).h(36).px(8).bg(t.background).rounded(5)))
-      .child(div().text_size(12).text_color(t.muted).child(this.machine === null ? '조정 세션 1개로 시작 · 칸은 작업에 따라 늘고 줄어듭니다 · tier: low|mid|high|max' : '이 컴퓨터의 폴더 경로를 입력하세요. 터미널 탭으로 시작합니다.'))
+      .when(this.machine === null, e=>e.child(Input.new(this.preset).h(36).px(8).bg(t.background).rounded(5)))
+      .child(div().text_size(12).text_color(t.muted).child(this.machine === null ? '세션 1개로 시작 · 프리셋은 site.local.json model_presets에서 정합니다' : '이 컴퓨터의 폴더 경로를 입력하세요. 터미널 탭으로 시작합니다.'))
       .when(Boolean(this.error),e=>e.child(div().text_size(11).text_color(t.blocked).child(this.error)))
       .child(h_flex().gap(8).justify_end()
         .child(button('sf-new-cancel','닫기',()=>{if(!this.busy)closeOverlay(props().overlay);}))

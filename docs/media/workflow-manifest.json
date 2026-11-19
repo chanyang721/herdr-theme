@@ -23,7 +23,7 @@
     {
       "step": "02",
       "title": "Delegate the work",
-      "source": "docs/images/panel-feed/event-dispatch-existing.png",
+      "source": "docs/images/panel-feed/event-assign-existing.png",
       "source_sha256": "5f265c64bcf7139ad658e5d76d44b954ebe4772bca5964e05ddf866fcf2d7a02",
       "duration_ms": 4500
     },

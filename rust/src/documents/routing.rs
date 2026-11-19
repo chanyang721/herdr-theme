@@ -214,9 +214,9 @@ mod tests {
     use super::*;
     #[test]
     fn tie_uses_fallback_but_unmatched_download_hidden() {
-        let routing = json!({"fallback":"Share","spaces":{"a":{"name":"A","terms":["alpha"]},"b":{"name":"B","terms":["beta"]}}});
+        let routing = json!({"fallback":"Hub","spaces":{"a":{"name":"A","terms":["alpha"]},"b":{"name":"B","terms":["beta"]}}});
         let item = json!({"path":"/missing.pdf","name":"alpha-beta.pdf"});
-        assert_eq!(target(&item, &routing, true), Some("Share".into()));
+        assert_eq!(target(&item, &routing, true), Some("Hub".into()));
         assert_eq!(
             target(
                 &json!({"path":"/none.pdf","name":"none.pdf"}),

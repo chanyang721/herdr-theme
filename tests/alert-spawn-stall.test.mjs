@@ -23,7 +23,7 @@ async function settle(timers, tasks, cx) {
   assert.fail('did not settle');
 }
 
-async function linearHarness() {
+async function linearFixture() {
   const files = new Map([['linear-alerts.json', JSON.stringify({items: [], spaces: ['Alpha']})]]);
   const shared = {}, tasks = [], timers = new Set(), callbacks = new Map(), changes = new Set();
   const control = {refuse: 0, hang: 0, holdRead: null, holdWrite: null};
@@ -55,7 +55,7 @@ async function linearHarness() {
     subscribeFileChanges: (_cx, watched, callback) => { const entry = [watched, callback]; changes.add(entry); return () => changes.delete(entry); },
     setShared: (key, value) => { shared[key] = value; },
     openOverlay: () => {},
-    spaces: () => [{id: 's1', name: 'Alpha'}, {id: 's0', name: 'Share'}],
+    spaces: () => [{id: 's1', name: 'Alpha'}, {id: 's0', name: 'Hub'}],
   };
   const key = `__linearStall${Math.random().toString(36).slice(2)}`;
   globalThis[key] = runtime;
@@ -81,7 +81,7 @@ async function linearHarness() {
 }
 
 test('Linear: after one refused spawn the next collection still publishes and its new alert arrives', async () => {
-  const h = await linearHarness();
+  const h = await linearFixture();
   h.store.setArrivalHost(() => true);
   const stop = h.module.watchLinear({}, h.cx);
   try {
@@ -99,7 +99,7 @@ test('Linear: after one refused spawn the next collection still publishes and it
 });
 
 test('Linear: a refused spawn is not retried on its own; the next input change retries', async () => {
-  const h = await linearHarness();
+  const h = await linearFixture();
   const stop = h.module.watchLinear({}, h.cx);
   try {
     h.health('a'); await h.flush();
@@ -112,7 +112,7 @@ test('Linear: a refused spawn is not retried on its own; the next input change r
 });
 
 test('Linear: a refresh whose native read never settles stops blocking after LOAD_STUCK_MS', async () => {
-  const h = await linearHarness();
+  const h = await linearFixture();
   const realNow = Date.now;
   let now = realNow();
   Date.now = () => now;
@@ -134,7 +134,7 @@ test('Linear: a refresh whose native read never settles stops blocking after LOA
 const gate = () => { let open; const promise = new Promise(resolve => { open = resolve; }); return {promise, open}; };
 
 test('Linear: an alert whose ledger write commits but answers after the run is replaced still arrives', async () => {
-  const h = await linearHarness();
+  const h = await linearFixture();
   h.store.setArrivalHost(() => true);
   const realNow = Date.now; let now = realNow(); Date.now = () => now;
   const stop = h.module.watchLinear({}, h.cx);
@@ -153,7 +153,7 @@ test('Linear: an alert whose ledger write commits but answers after the run is r
 });
 
 test('Linear: restoring the last published inputs while a run is stuck keeps them published when it returns', async () => {
-  const h = await linearHarness();
+  const h = await linearFixture();
   const realNow = Date.now; let now = realNow(); Date.now = () => now;
   const stop = h.module.watchLinear({}, h.cx);
   try {
@@ -182,7 +182,7 @@ test('Slack alerts: after one refused spawn the next change still publishes', as
   const snapshot = path => { const raw = files.get(path.split('/').at(-1)); if (raw === undefined) return {status: 'missing', hash: null};
     return {status: 'ready', hash: digest(raw), value: JSON.parse(raw)}; };
   const runtime = {appHome: () => '/test', createHash, setShared: (key, value) => shared.set(key, value), openOverlay: () => {},
-    spaces: () => [], addArrival: () => {}, hasArrivalHost: () => false, arrivalTarget: () => 'Share', ARRIVAL: {visible: 3},
+    spaces: () => [], addArrival: () => {}, hasArrivalHost: () => false, arrivalTarget: () => 'Hub', ARRIVAL: {visible: 3},
     subscribeJsonFile: (_cx, name, callback) => { callbacks.set(name, callback); return () => callbacks.delete(name); },
     subscribeFileChanges: () => () => {},
     readJsonSnapshot: async name => snapshot(name),

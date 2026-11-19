@@ -190,13 +190,13 @@ test('a row shows its text on one line and keeps the whole text in the tooltip',
   assert.ok(!all.some(s => s.includes('\n') && s.includes('요약')));
 });
 
-// 2026-11-16: Share's card popover listed nothing: its mentions are not in the tracked feed.
+// 2026-11-16: Hub's card popover listed nothing: its mentions are not in the tracked feed.
 test('the card popover of a space lists the mentions routed to it', async () => {
   const pop = await popover();
   pop.store.set('sixfold.alertItems', [{id: 'slack:C0TEST01:90.1', project: 'Alpha', author: 'U0AAA0001', text: '다른 공간 글'}]);
-  pop.setSpaceMentions([{id: 'slack:D0TEST01:600.1', project: 'Share', kind: 'dm', author: 'U0BBB0002', author_name: '이다라', at: '2026-11-16T01:00:00Z', text: 'DM 멘션입니다'}]);
-  pop.showPopover('Share', 'slack');
-  const all = texts(pop.alertPopover({id: 's5', project: 'Share', trigger: element(), t: theme, hasSlack: true, hasLinear: false, onAll() {}}));
+  pop.setSpaceMentions([{id: 'slack:D0TEST01:600.1', project: 'Hub', kind: 'dm', author: 'U0BBB0002', author_name: '이다라', at: '2026-11-16T01:00:00Z', text: 'DM 멘션입니다'}]);
+  pop.showPopover('Hub', 'slack');
+  const all = texts(pop.alertPopover({id: 's5', project: 'Hub', trigger: element(), t: theme, hasSlack: true, hasLinear: false, onAll() {}}));
   assert.ok(all.includes('DM 멘션입니다') && all.includes('미확인 1') && !all.includes('다른 공간 글'), all.join(' | '));
 });
 
@@ -223,15 +223,15 @@ test('the arrival peek shows the chips without buttons', async () => {
   assert.ok(!all.includes('본문 보기') && !all.includes('다운로드'));
 });
 
-// 2026-11-16: mentions routed to Share (unmapped, DMs, thread replies) are not in the tracked feed, so the
+// 2026-11-16: mentions routed to Hub (unmapped, DMs, thread replies) are not in the tracked feed, so the
 // peek had no rows, fell back to the small in-list popup and was not seen. The arrival carries the mention.
 test('a peek lists the mention that opened it even when the tracked feed does not, and lists it first', async () => {
   const pop = await popover();
   pop.store.set('sixfold.alertItems', [{id: 'slack:C0TEST01:90.1', project: 'Alpha', author: 'U0AAA0001', text: '다른 공간 글'}]);
-  const reply = {id: 'slack:C0TEST04:300.1', project: 'Share', kind: 'thread', channel: 'C0TEST04', channel_name: '#gamma',
+  const reply = {id: 'slack:C0TEST04:300.1', project: 'Hub', kind: 'thread', channel: 'C0TEST04', channel_name: '#gamma',
     author: 'U0BBB0002', author_name: '이다라', at: '2026-11-16T01:00:00Z', text: '스레드 답글입니다'};
-  assert.equal(pop.slackPeek('Share', theme, [reply.id]), null, 'nothing to list without the arrived mention');
-  const all = texts(pop.slackPeek('Share', theme, [reply.id], null, [reply]));
+  assert.equal(pop.slackPeek('Hub', theme, [reply.id]), null, 'nothing to list without the arrived mention');
+  const all = texts(pop.slackPeek('Hub', theme, [reply.id], null, [reply]));
   assert.ok(all.includes('스레드 답글입니다') && all.includes('이다라 → #gamma'), all.join(' | '));
   assert.ok(all.includes('미확인 1') && !all.includes('다른 공간 글'), 'only this space');
 

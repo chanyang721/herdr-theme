@@ -57,7 +57,7 @@ async function notifyNewPopupEvents(events,allowed=()=>true) {
 // one its Slack chip opens); otherwise the Slack window opens, as the Linear window does, so it is never
 // dropped. The arrival carries the mention itself, and the card remembers it (noteArrived): the peek and
 // the chip's popover list it even when the tracked feed (project-alerts.json) does not, as for unmapped
-// mentions, DMs and thread replies that land in Share.
+// mentions, DMs and thread replies that land in the fallback space.
 export function announceSlack(events){
   if(!events.length)return;
   if(!hasArrivalHost())return openSlackWindow();
@@ -147,7 +147,7 @@ export function watchAlerts(view, cx) {
         changed=publish('sixfold.alertRead',read,token('read'))||changed;
         changed=publish('sixfold.alertProjects',feed.projects ?? [],token('tracked'))||changed;
         const names=(spaces?.()??[]).map(s=>s.name),placed=JSON.stringify([token('mentions'),names]);
-        if(placed!==mentionsKey){setSpaceMentions(tagged,names);mentionsKey=placed;changed=true;}   // a space's mentions count on its card too (alert-inbox.js; off-sidebar ones on Share); module state, not shared
+        if(placed!==mentionsKey){setSpaceMentions(tagged,names);mentionsKey=placed;changed=true;}   // a space's mentions count on its card too (alert-inbox.js; off-sidebar ones on the fallback space); module state, not shared
         if(token('legacy')!==legacyToken){view.alerts = legacy.items ?? [];legacyToken=token('legacy');changed=true;}
         previous = signature;popupSeen=popupSignature;
         if(changed){
@@ -191,7 +191,7 @@ export function alertSection(view, t) {
   const waiting = alerts.filter(item => item.status === 'needs-you').length;
   return v_flex().id('sf-alerts').flex_none().px(10).py(9).gap(4).bg(t.surface).border_t(1).border_color(t.border)
     .child(h_flex().gap(5).items_center()
-      .child(div().flex_1().text_size(10).font_bold().text_color(t.muted).child('Share 알림'))
+      .child(div().flex_1().text_size(10).font_bold().text_color(t.muted).child('알림'))
       .child(div().text_size(10).text_color(t.accent).child(`확인 ${waiting}건`)))
     .children(alerts.map(item => h_flex().id(`sf-alert-${item.id}`).gap(5).items_center().px(6).py(4).rounded(4).bg(t.chrome)
       .tooltip(item.summary || item.text || item.title)

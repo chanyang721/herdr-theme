@@ -22,7 +22,10 @@ export const MESSAGE_ROUTE=Object.freeze({queue:8,bundles:8,bundleIds:32,gapMs:2
 const MAX = Object.freeze({ computers: 64, spaces: 128, agents: 256, issues: 512, links: 512, events: 256, bytes: 2 * 1024 * 1024 });
 const STATUSES = new Set(['working', 'idle', 'blocked', 'done']);
 const STATES = ['blocked', 'working', 'review', 'waiting', 'done'];
-const KINDS = new Set(['dispatch', 'review_request', 'verdict', 'accept', 'message', 'spawn', 'close_step', 'memory', 'resume', 'error']);
+const KINDS = new Set(['assign', 'review_request', 'verdict', 'accept', 'message', 'spawn', 'close_step', 'memory', 'resume', 'error']);
+// Older collectors wrote the assignment event as `dispatch`; read it as `assign`.
+const KIND_ALIASES = Object.freeze({ dispatch: 'assign' });
+const eventKind = kind => KIND_ALIASES[kind] || kind;
 const object = value => value && typeof value === 'object' && !Array.isArray(value);
 const text = (value, limit = 160) => typeof value === 'string' ? value.replace(/[\u0000-\u001f\u007f]/g, ' ').trim().slice(0, limit) : '';
 const id = value => typeof value === 'string' && value.length <= 160 && value.length > 0 && !/[\s\u0000-\u001f\u007f]/.test(value) ? value : '';
@@ -53,7 +56,7 @@ function cleanCatalogCache(value) {
 }
 const copyCatalogCache = value => value ? { state: value.state, at: value.at, scopes: Object.fromEntries(['week', 'milestone', 'all'].map(name => [name, { state: value.scopes[name].state, at: value.scopes[name].at }])) } : null;
 // Optional display extensions; absent properties keep the original v1 shape.
-// Linear's own status of a row (the harness ledger sends it, docs/panel-feed.md): a short name, a known
+// Linear's own status of a row (the feed producer sends it, docs/panel-feed.md): a short name, a known
 // type and how the issue closed. Any other value is dropped, never guessed.
 const STATUS_TYPES = ['triage', 'backlog', 'unstarted', 'started', 'completed', 'canceled', 'duplicate'];
 const CLOSED = ['completed', 'canceled', 'duplicate'];
@@ -72,7 +75,7 @@ const issueExtras = issue => ({
 const doneAt = value => typeof value === 'string' && value.length <= 40
   && (Boolean(dateOnly(value)) || /^\d{4}-\d{2}-\d{2}T/.test(value) && Number.isFinite(Date.parse(value)));
 const ISSUE_PARENT = /^[A-Z][A-Z0-9]{0,9}-\d{1,7}$/;
-// Only the harness Linear ledger names a catalog's source; any other value is dropped.
+// Only the producer's issue ledger names a catalog's source; any other value is dropped.
 const catalogSource = value => value?.source === 'linear-ledger' ? { source: 'linear-ledger' } : {};
 // Optional producer row state (docs/panel-feed.md). Display only: the
 // panel never derives a state, a keep reason or a close deadline by itself.
@@ -235,8 +238,8 @@ export function cleanPanelFeed(raw) {
     collaborationPairs.add(pair);
     return [{ a: a.id, b: b.id, kind: 'collaboration' }];
   });
-  const events = unique(list(raw.events, MAX.events), value => object(value) && id(value.id) && KINDS.has(value.kind) && time(value.at) !== null ? {
-    id: value.id, at: time(value.at), kind: value.kind, from: endpoint(value.from), to: endpoint(value.to),
+  const events = unique(list(raw.events, MAX.events), value => object(value) && id(value.id) && KINDS.has(eventKind(value.kind)) && time(value.at) !== null ? {
+    id: value.id, at: time(value.at), kind: eventKind(value.kind), from: endpoint(value.from), to: endpoint(value.to),
     label: text(value.label, 100),
     ...(typeof value.animate==='boolean'?{animate:value.animate}:{}),
     ...(owns(value, 'allocation') ? { allocation: object(value.allocation) && ['existing', 'new'].includes(value.allocation.kind)
@@ -288,7 +291,7 @@ export function panelSpacePartners(feed, spaceID) {
 }
 export function agentState(agent) {
   if (agent.closing?.blocked_reason || agent.status === 'blocked' || agent.report_missing === true || agent.error) return 'blocked';
-  // 완료 = the feed's status 'done' alone. The harness sends it for a record row without a pane
+  // 완료 = the feed's status 'done' alone. The producer sends it for a record row without a pane
   // whose task finished (stage 5) and for a pane its close scan will clean up. A finished task
   // whose pane is still kept arrives idle or working; its stage and keep_reason say why. `nav` is
   // not a pane test: a live pane whose session is not confirmed has nav null (review 2026-11-10).
@@ -681,14 +684,14 @@ export function createPanelProjection() {
 }
 
 export function panelEventLabel(event){
-  // Mockup ㉑: «일 나누기 · N개» only when one task is split into several; one dispatch
+  // Mockup ㉑: «일 나누기 · N개» only when one task is split into several; one assignment
   // keeps the producer's own words («일 맡김»).
-  if(event.kind==='dispatch')return event.allocation?.count>1?`일 나누기 · ${event.allocation.count}개`:event.label||'일 맡김';
+  if(event.kind==='assign')return event.allocation?.count>1?`일 나누기 · ${event.allocation.count}개`:event.label||'일 맡김';
   if(event.kind==='spawn')return '새 에이전트';
   if(event.label)return event.label;
   if(event.allocation?.kind==='new')return '조정: 새로 열어 맡김';
   if(event.allocation?.kind==='existing')return event.allocation.count>1?`계획: 일 ${event.allocation.count}개로 나눔`:'조정: 일 맡김';
-  return {dispatch:'조정: 일 맡김',spawn:'조정: 새로 열어 맡김',review_request:'검수 요청',verdict:'검수 완료',accept:'수락',resume:'다시 작업 중',error:'작업 오류',
+  return {assign:'조정: 일 맡김',spawn:'조정: 새로 열어 맡김',review_request:'검수 요청',verdict:'검수 완료',accept:'수락',resume:'다시 작업 중',error:'작업 오류',
     close_step:['','보고 작성','경험·결정 저장','기억함 제안','닫힘'][event.step]||'닫기 진행'}[event.kind]||'';
 }
 
@@ -802,7 +805,7 @@ export function panelEventStates(feed, now, { previous = null, motion = true } =
       spawning.add(event.to);
       if(animate)wake(event.at+PANEL_TIMING.startMs);
     }
-    if (event.drawRoute!==false&&event.animate!==false&&event.from&&event.to&&['message', 'dispatch', 'spawn', 'memory'].includes(event.kind)) {
+    if (event.drawRoute!==false&&event.animate!==false&&event.from&&event.to&&['message', 'assign', 'spawn', 'memory'].includes(event.kind)) {
       if(routeElapsed<0){wake(routeAt);wake(end);continue;}
       connections.push({ ...event, at:routeAt,elapsed:routeElapsed, phase: 'static' });
       if (animate) {

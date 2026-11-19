@@ -1,12 +1,12 @@
 import { View, div, image } from 'gpui-kit';
 import { h_flex, v_flex, Popover } from 'gpui-base';
 import { theme, props, appHome, home, readTextFile, writeTextFile, shared, setShared, openOverlay, closeOverlay, exec, spaces } from 'herdr';
-import { readable, threadGroups, freshness, collectLine, feedNames, namesFor, alertTitle, attachments, fileAction, fileTextPath, fileTextShown, fileRequestText, FILE_REQUESTS, FILE_LATE, nextFileWait, inSpace } from './model.js';
+import { readable, threadGroups, freshness, collectLine, feedNames, namesFor, alertTitle, attachments, fileAction, fileTextPath, fileTextShown, fileRequestText, FILE_REQUESTS, FILE_LATE, nextFileWait, inSpace, setFallbackSpace } from './model.js';
 
 export default class MentionInbox extends View {
   init(_props,cx) {
     this.items=[];this.feed={};this.fileOpen=null;this.fileTexts=new Map();this.site={};this.project=null;this.space=props()?.space || null;this.onlyUnread=!props()?.review;this.expanded=new Set();this.error='';
-    // A card's 전체 보기 (Share) reopens as the mentions window starting on that space's mentions.
+    // A card's 전체 보기 (fallback space) reopens as the mentions window starting on that space's mentions.
     if(props()?.overlay && !props()?.window && !props()?.newMessages){
       openOverlay({mod:'sixfold-slack-inbox',kind:'window',key:'slack-mentions',keep:true,width:1040,height:800,props:{window:true,...(props()?.project?{space:props().project}:{})}});
       closeOverlay(props().overlay);
@@ -95,7 +95,8 @@ export default class MentionInbox extends View {
     const t=theme(),read=shared('sixfold.alertRead') ?? {};
     const groups=threadGroups(this.items,read),unread=groups.filter(g=>g.unread>0).length;
     const health=shared('sixfold.slackHealth') ?? {},workflows=shared('sixfold.slackWorkflows') ?? {};
-    const stateLabels={queued:'처리 대기',dispatching:'세션 전달 중',working:'수정안 준비 중',ready:'검토 준비 완료',needs_decision:'사용자 결정 필요',blocked:'처리 막힘',delivery_unknown:'전달 확인 필요'};
+    // `dispatching`: the name older collectors still write for `sending`.
+    const stateLabels={queued:'처리 대기',sending:'세션 전달 중',dispatching:'세션 전달 중',working:'수정안 준비 중',ready:'검토 준비 완료',needs_decision:'사용자 결정 필요',blocked:'처리 막힘',delivery_unknown:'전달 확인 필요'};
     const projects=[...new Set(groups.map(g=>g.project))];
     // Project colours, the Slack workspace and the reports folder are machine-local (site.local.json).
     const site=this.site || {};
@@ -105,6 +106,7 @@ export default class MentionInbox extends View {
     const slackUrl=typeof site.slack?.workspace_url==='string'?site.slack.workspace_url.replace(/\/+$/,''):null;
     const slackLink=link=>slackUrl?String(link).startsWith(`${slackUrl}/archives/`):/^https:\/\/[a-z0-9-]+\.slack\.com\/archives\//.test(link);
     const names=site.slack?.user_names || {};
+    if(typeof shared==='function')setFallbackSpace(shared('sixfold.fallbackSpace'));
     const sidebar=(spaces?.()??[]).map(s=>s.name),ofSpace=g=>inSpace(g.project,props()?.space,sidebar);
     const shown=groups.filter(g=>(!this.space || ofSpace(g)) && (!this.project || g.project===this.project) && (!this.onlyUnread || g.unread>0));
     const button=(id,label,selected,action)=>div().id(id).px(12).py(7).rounded(5).text_size(13).font_semibold()

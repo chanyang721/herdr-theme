@@ -218,7 +218,7 @@ test('real alert consumer seeds absent optional inputs and later opens a new men
 
 test('real ask consumer preserves an io error but disables only a metadata-confirmed deletion',async()=>{
   const f=await fixture(),config=`${f.home}/data/sixfold/bridge.json`,cards=`${f.home}/data/sixfold/cards.json`;
-  const source='{"python":"demo-python","script":"/demo/bridge/dispatch.py","args":[]}';f.raw.set(config,source);
+  const source='{"python":"demo-python","script":"/demo/bridge/provider.py","args":[]}';f.raw.set(config,source);
   f.raw.set(cards,JSON.stringify({schema:1,cards:[{id:'demo-card',revision:'v1',kind:'permission',title:'Demo confirmation',questions:[],actions:[{id:'allow',label:'Allow'}]}]}));
   const read=fileReader(f);let failure=false,calls=0;
   f.reader((path,options)=>failure&&path===config?{status:'read_error',errorKind:'io',hash:null,changed:false,value:null}:read(path,options));

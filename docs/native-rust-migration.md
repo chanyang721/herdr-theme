@@ -14,8 +14,8 @@ On Windows use the MSVC Rust toolchain with its C/C++ Build Tools, or a complete
 
 | Former area | Native implementation |
 | --- | --- |
-| Agent environment, workspace creation, model tiers, grids, JSON-RPC | `rust/src/automation/{mod,tiers}.rs` |
-| Project routing, durable holds, collaboration leases and aggregation | `rust/src/automation/{routing,collaboration}.rs` |
+| Agent environment, workspace creation, model presets, grids, JSON-RPC | `rust/src/automation/{mod,presets}.rs` |
+| Unknown commands forwarded to installed `herdr-theme-<name>` extensions | `rust/src/extension.rs` |
 | Subagent lifecycle collection and process/session identification | `rust/src/automation/workflow.rs` |
 | POSIX TUI relay and escape-sequence boundaries | `rust/src/automation/bridge.rs` |
 | Local and remote system counters | `rust/src/automation/metrics.rs` |
@@ -44,7 +44,7 @@ Workspace creation also incorporates the subsequent upstream focus changes throu
 | `extras/system-metrics/mods/system-metrics/sample.py` | `herdr-theme system_metrics` |
 | Pinned agent-usage, plan-usage, CLI-status, MCP-status and system-metrics Python helpers | `pinned_*` native adapters; installation omits upstream Python files and rewrites their bundled JavaScript commands |
 
-Library-only modules still expose their Rust APIs and have the same no-op direct invocation behavior. The three manual native UI probes use `native_collaboration`, `native_doc_tabs`, and `native_ui_reload`. Voice diagnostic/evaluation tools retain their original stems and also accept the documented `voice_*` aliases.
+Library-only modules still expose their Rust APIs and have the same no-op direct invocation behavior. The manual native UI probes use `native_doc_tabs` and `native_ui_reload`. Voice diagnostic/evaluation tools retain their original stems and also accept the documented `voice_*` aliases.
 
 The remaining interpreter references are confined to explicit user-owned external command adapters, migration recognition of old settings, pinned-source provenance, and isolated validation references. They do not install a Python runtime or invoke a theme-owned Python implementation. `node scripts/check-native.mjs` checks the tracked release inventory, including extensionless shebangs.
 

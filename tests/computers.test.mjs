@@ -66,7 +66,7 @@ test('computer selection scopes workspaces and agents and restores each selectio
   try{
     const {default:Sidebar}=await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
     const view=new Sidebar();
-    Object.assign(view,{workflowNodes:[],workflowEvents:[],messageEvents:[],activeFlows:[],pendingFlows:[],queuedRoutes:[],workspaceIcons:{},expandedAgents:new Set(),readMessages:{},computers:{}});
+    Object.assign(view,{workflowNodes:[],workflowEvents:[],messageEvents:[],activeFlows:[],pendingFlows:[],sidebarNotices:[],workspaceIcons:{},expandedAgents:new Set(),readMessages:{},computers:{}});
     const render=()=>{
       rows.clear();
       const visit=node=>{if(!node || typeof node!=='object')return;if(node.rowId)rows.set(node.rowId,node);for(const child of node.nodes??[])visit(child);};
@@ -169,7 +169,7 @@ test('local creation needs only Claude installed; Codex is not required for the 
   const run=async(agents)=>{
     let execCall=null,closed=false,task;
     globalThis.__localCreateRuntime={
-      props:()=>({overlay:'dialog'}),home:()=>'/Users/me',appHome:()=>'/app',
+      props:()=>({overlay:'dialog'}),home:()=>'/home/me',appHome:()=>'/app',
       run:()=>{throw Error('local creation must go through workspace.py');},
       closeOverlay:()=>{closed=true;},exec:async(cmd,args)=>{execCall={cmd,args};return {code:0,stdout:'',stderr:''};},
       theme:()=>({}),pickFolder:async()=>null,knownAgents:async()=>agents,

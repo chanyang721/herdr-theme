@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {bridgeFrom, parseAsks, askFor, questionsOf, actionsOf, choose, complete, actionRequest, requestPath, acceptedReceipt, touchesCards} from '../mods/sixfold-desk/ask-model.js';
 
-const bridge = {python: 'python3', script: '/demo/bridge/dispatch.py', args: ['--local']};
+const bridge = {python: 'python3', script: '/demo/bridge/provider.py', args: ['--local']};
 const question = {id: 'demo-question', revision: 'rev-1', kind: 'question', terminal: 'demo-terminal', title: 'Which color?',
   questions: [{id: 'color', title: 'Color', multi: false, options: [{id: 'red', label: 'Red'}, {id: 'blue', label: 'Blue'}]}],
   actions: [{id: 'submit', label: 'Send', requiresAnswers: true, autoSubmit: true, primary: true}, {id: 'cancel', label: 'Cancel'}]};
@@ -13,7 +13,7 @@ const permission = {id: 'demo-permission', revision: 'rev-2', kind: 'permission'
 test('local command prefix is explicit and preserves configured arguments', () => {
   assert.deepEqual(bridgeFrom(JSON.stringify(bridge)), bridge);
   assert.deepEqual(bridgeFrom(Object.freeze({...bridge,args:Object.freeze([...bridge.args])})),bridge);
-  assert.deepEqual(bridgeFrom(JSON.stringify({...bridge, script: 'C:\\demo folder\\dispatch.py', args: ['a b', '']})).args, ['a b', '']);
+  assert.deepEqual(bridgeFrom(JSON.stringify({...bridge, script: 'C:\\demo folder\\provider.py', args: ['a b', '']})).args, ['a b', '']);
   for (const value of [null, '{broken', '{}', {python: 'python3'}, {...bridge, script: 'relative.py'}, {...bridge, args: [1]}, {...bridge, python: 'x\nrun'}]) {
     assert.equal(bridgeFrom(typeof value === 'object' && value ? JSON.stringify(value) : value), null);
   }

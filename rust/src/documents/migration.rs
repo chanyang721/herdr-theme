@@ -15,18 +15,6 @@ pub struct Config {
 }
 pub const CONFIGS: &[Config] = &[
     Config {
-        relative: "data/sixfold/routing.json",
-        command: "route",
-        source: "scripts/route.py",
-        installed: Some("scripts/sixfold/route.py"),
-    },
-    Config {
-        relative: "data/sixfold/collaboration.json",
-        command: "collaborate",
-        source: "scripts/collaborate.py",
-        installed: Some("scripts/sixfold/collaborate.py"),
-    },
-    Config {
         relative: "data/sixfold/voice-integration.json",
         command: "focus_queue",
         source: "voice/focus_queue.py",
@@ -149,26 +137,25 @@ mod tests {
         let app = root.path().join("app");
         let spec = CONFIGS[0];
         for path in [
-            repo.join("scripts/route.py"),
-            app.join("scripts/sixfold/route.py"),
-            repo.join("scripts/unused/../route.py"),
+            repo.join("voice/focus_queue.py"),
+            repo.join("voice/unused/../focus_queue.py"),
         ] {
             let before = json!({"script":path,"enabled":true,"custom":{"kept":1}});
             let after = rewrite(&before, &repo, &app, spec).unwrap();
             assert!(after.get("script").is_none());
-            assert_eq!(after["command"][1], "route");
+            assert_eq!(after["command"][1], "focus_queue");
             assert_eq!(after["custom"], before["custom"])
         }
         for path in [
-            root.path().join("custom/scripts/route.py"),
-            root.path().join("custom/scripts/sixfold/route.py"),
-            root.path().join("custom/route.py"),
+            root.path().join("custom/voice/focus_queue.py"),
+            app.join("scripts/sixfold/focus_queue.py"),
+            root.path().join("custom/focus_queue.py"),
         ] {
             assert!(rewrite(&json!({"script":path}), &repo, &app, spec).is_none())
         }
-        let native = json!({"command":["my-native-helper","route"],"enabled":false});
+        let native = json!({"command":["my-native-helper","focus_queue"],"enabled":false});
         assert!(rewrite(&native, &repo, &app, spec).is_none());
-        let both = json!({"command":["my-native-helper","route"],"script":repo.join("scripts/route.py"),"enabled":false});
+        let both = json!({"command":["my-native-helper","focus_queue"],"script":repo.join("voice/focus_queue.py"),"enabled":false});
         let after = rewrite(&both, &repo, &app, spec).unwrap();
         assert_eq!(after["command"], both["command"]);
         assert_eq!(after["enabled"], false);

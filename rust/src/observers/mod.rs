@@ -4,7 +4,7 @@ mod native_ui;
 use serde_json::{json, Value};
 use std::{
     error::Error,
-    fs::{self, OpenOptions},
+    fs,
     io::{Read, Write},
     path::{Path, PathBuf},
     process::{Command, Stdio},
@@ -474,10 +474,8 @@ pub fn validate_args(args: &[String], values: &[&str], flags: &[&str]) -> Result
 
 pub fn run(command: &str, args: &[String]) -> Result<()> {
     match command.replace('_', "-").as_str() {
-        "native-collaboration" => native::collaboration(args),
         "native-doc-tabs" => native::doc_tabs(args),
         "native-ui-reload" => native::ui_reload(args),
-        "native-protocol-worker" => native::protocol_worker(args),
         "native-fixture-inventory" => native::fixture_inventory(args),
         _ => err(format!("unknown local probe: {command}")),
     }

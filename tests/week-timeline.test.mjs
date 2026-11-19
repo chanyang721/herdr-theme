@@ -11,7 +11,7 @@ const raw = {
     { id: 'm1', name: '① 로그인', target: '2026-10-22', progress: 100 },
     { id: 'm3', name: '③ 공통 구현', target: '2026-11-13', progress: 16.2 },
     { id: 'm4', name: '④ 인프라', target: '2026-11-25', progress: 5 },
-    { id: 'm9', name: '⑨ 본런칭', target: '2027-02-18', progress: 0 }], issues: [
+    { id: 'm9', name: '⑨ 정식 출시', target: '2027-02-18', progress: 0 }], issues: [
     issue('DEMO-373', 'started', { start: '2026-11-09' }),                                   // top issue (group only)
     issue('DEMO-400', 'todo', { due: '2026-11-12', parent: 'DEMO-373', milestone: 'm3' }),
     issue('DEMO-480', 'todo', { due: '2026-11-11', parent: 'DEMO-400', milestone: 'm3' }),     // grandchild → same group

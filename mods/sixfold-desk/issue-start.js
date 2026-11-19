@@ -8,10 +8,16 @@ const guardKey = (space, issue) => `${space}\u0000${issue}`;
 
 export const startConfigPath = () => `${appHome()}/data/sixfold/issue-start.json`;
 
-// The parsed setting, or null when the file is missing or anything in it is off.
-export async function loadStartConfig({read = readTextFile, path = startConfigPath()} = {}) {
+// {config, invalid}: config is the parsed setting or null; invalid is true when the file exists
+// but cannot be used, so the strip can say so instead of looking unconfigured.
+export async function loadStartConfigStatus({read = readTextFile, path = startConfigPath()} = {}) {
   const text = await read(path).catch(() => null);
-  return text ? parseStartConfig(text) : null;
+  const config = text ? parseStartConfig(text) : null;
+  return {config, invalid: Boolean(text) && !config};
+}
+// The parsed setting, or null when the file is missing or anything in it is off.
+export async function loadStartConfig(options) {
+  return (await loadStartConfigStatus(options)).config;
 }
 
 export const startGuarded = (space, issue, now = Date.now()) => !startAllowed(guards.get(guardKey(space, issue)), now);
@@ -44,7 +50,7 @@ export async function runStart(config, params, {run = exec, now = () => Date.now
   try { result = await run(argv.command, argv.args, {timeout: argv.timeout}); } catch { result = null; }
   guard.running = false; guard.at = now();
   for (const [k, g] of guards) if (startAllowed(g, now())) guards.delete(k);   // drop expired guards
-  const answer = startResult(result, config.release);
+  const answer = startResult(result, config.release, config.taskField);
   if (answer.release && guards.get(key) === guard) guards.delete(key);   // surely not sent: press again at once
   return answer;
 }

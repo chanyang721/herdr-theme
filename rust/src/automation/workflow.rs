@@ -1,4 +1,11 @@
-use super::tiers::family;
+/// The agent family a terminal's agent name belongs to (claude-code is claude).
+pub fn family(agent: &str) -> &str {
+    if agent == "claude-code" {
+        "claude"
+    } else {
+        agent
+    }
+}
 use crate::common::*;
 use fs2::FileExt;
 use rusqlite::{Connection, OpenFlags};

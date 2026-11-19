@@ -1,8 +1,5 @@
 //! Argument validation happens before any app, queue or filesystem mutation.
 use crate::common::*;
-const ACTIONS: &[&str] = &[
-    "enable", "drain", "status", "enqueue", "start", "accept", "complete", "report",
-];
 fn negative_number(text: &str) -> bool {
     crate::python_unicode::regex(r"^-\d+$|^-\d*\.\d+$").is_match(text)
 }
@@ -66,12 +63,6 @@ fn parse(
                             })
                         })?
                 };
-                if key == "--tier" {
-                    choices(Some(value.clone()), key, &super::tiers::TIERS)?;
-                }
-                if key == "--mode" {
-                    choices(Some(value.clone()), key, &["read-only", "worktree"])?;
-                }
                 normalized.extend([key.into(), value]);
             } else if flags.contains(&key) && inline.is_none() {
                 let other = match key {
@@ -87,9 +78,6 @@ fn parse(
                 unknown.push(a.clone());
             }
         } else {
-            if command == "collaborate" && positional.is_empty() {
-                choices(Some(a.clone()), "action", ACTIONS)?;
-            }
             if command == "demo_agent" && positional.len() == 1 {
                 choices(
                     Some(a.clone()),
@@ -141,15 +129,8 @@ fn choices(value: Option<String>, key: &str, choices: &[&str]) -> Result<()> {
     Ok(())
 }
 pub fn prepare(command: &str, args: &[String]) -> Result<Option<Vec<String>>> {
-    // A narrow protocol probe must work before reading configuration or a
-    // ledger. Keep the historical argparse errors/help unchanged otherwise.
-    if command == "collaborate" && args == ["capabilities"] {
-        return Ok(Some(args.to_vec()));
-    }
     if ![
         "workspace",
-        "route",
-        "collaborate",
         "collect_workflow",
         "demo_agent",
         "tui_bridge",
@@ -160,45 +141,22 @@ pub fn prepare(command: &str, args: &[String]) -> Result<Option<Vec<String>>> {
         return Ok(Some(args.to_vec()));
     }
     let (values, flags): (&[&str], &[&str]) = match command {
-        "workspace" => (&["--tiers", "--by"], &["--agents", "--shells"]),
-        "route" => (&["--from", "--tier"], &["--drain", "--reply", "--enable"]),
+        "workspace" => (
+            &["--preset", "--model", "--effort"],
+            &["--agents", "--shells"],
+        ),
         "collect_workflow" => (&[], &["--once"]),
         "demo_agent" => (&[], &[]),
         "tui_bridge" => (&["--pane", "--session", "--herdr"], &[]),
         "pinned_system_metrics" => (&["--machine"], &[]),
-        "collaborate" => (
-            &[
-                "--id", "--text", "--mode", "--owns", "--batch", "--from", "--tier", "--lease",
-                "--result", "--repo",
-            ],
-            &["--drain"],
-        ),
         _ => unreachable!(),
     };
-    let (normalized, pos, mut unknown) = parse(args, values, flags, command)?;
+    let (normalized, pos, unknown) = parse(args, values, flags, command)?;
     if normalized.iter().any(|v| v == "--help") {
         if !crate::help::show(command, args)? {
             println!("usage: herdr-theme {command} [options]");
         }
         return Ok(None);
-    }
-    if command == "collaborate" {
-        let action = pos.first().map(String::as_str).unwrap_or("");
-        let allowed: &[&str] = match action {
-            "enqueue" => &[
-                "--id", "--text", "--mode", "--owns", "--batch", "--from", "--tier", "--repo",
-            ],
-            "start" | "accept" => &["--from", "--lease"],
-            "complete" => &["--from", "--lease", "--result"],
-            "report" => &["--batch", "--from"],
-            _ => &[],
-        };
-        unknown = parse(args, allowed, &["--drain"], command)?.2;
-        if let Some(index) = args.iter().position(|a| a == action) {
-            if args[index + 1..].iter().any(|a| a == "--drain") {
-                return usage("unrecognized arguments: --drain");
-            }
-        }
     }
     match command {
         "workspace" => {
@@ -212,20 +170,6 @@ pub fn prepare(command: &str, args: &[String]) -> Result<Option<Vec<String>>> {
             if flag(&normalized, "--agents") && flag(&normalized, "--shells") {
                 return usage("argument --shells: not allowed with argument --agents");
             }
-        }
-        "route" => {
-            count(&pos, 0, 2)?;
-            if !unknown.is_empty() {
-                return usage(format!("unrecognized arguments: {}", unknown.join(" ")));
-            }
-            if pos.len() < 2 && !flag(&normalized, "--enable") && !flag(&normalized, "--drain") {
-                return usage("project 와 작업 메시지가 필요합니다.");
-            }
-            choices(
-                option(&normalized, "--tier"),
-                "--tier",
-                &super::tiers::TIERS,
-            )?;
         }
         "demo_agent" => {
             if pos.len() < 2 {
@@ -245,47 +189,6 @@ pub fn prepare(command: &str, args: &[String]) -> Result<Option<Vec<String>>> {
         "tui_bridge" => {
             count(&pos, 0, 0)?;
             required(&normalized, &["--pane"])?;
-        }
-        "collaborate" => {
-            if pos.is_empty() && flag(&normalized, "--drain") {
-                return Ok(Some(normalized));
-            }
-            let action = pos.first().map(String::as_str).unwrap_or("");
-            match action {
-                "enable" | "drain" | "status" => count(&pos, 1, 1)?,
-                "enqueue" => {
-                    count(&pos, 1, 1)?;
-                    required(&normalized, &["--id", "--text", "--mode"])?;
-                    choices(
-                        option(&normalized, "--mode"),
-                        "--mode",
-                        &["read-only", "worktree"],
-                    )?;
-                    choices(
-                        option(&normalized, "--tier"),
-                        "--tier",
-                        &super::tiers::TIERS,
-                    )?;
-                }
-                "start" | "accept" => {
-                    if pos.len() < 2 {
-                        return usage("the following arguments are required: id");
-                    }
-                    count(&pos, 2, 2)?;
-                }
-                "complete" => {
-                    if pos.len() < 2 {
-                        return usage("the following arguments are required: id, --result");
-                    }
-                    count(&pos, 2, 2)?;
-                    required(&normalized, &["--result"])?;
-                }
-                "report" => {
-                    count(&pos, 1, 1)?;
-                    required(&normalized, &["--batch"])?;
-                }
-                _ => return usage("명령을 지정하세요."),
-            }
         }
         _ => {}
     }
@@ -326,8 +229,7 @@ mod tests {
     fn invalid_arguments_fail_before_any_runtime_lookup() {
         for (c, a) in [
             ("workspace", vec!["--unknown"]),
-            ("route", vec!["p", "text", "--tier", "medium"]),
-            ("collaborate", vec!["enqueue", "--id", "a"]),
+            ("workspace", vec!["name", "folder", "--panes", "6"]),
             ("tui_bridge", vec![]),
             ("collect_workflow", vec!["--unknown"]),
         ] {
@@ -339,33 +241,33 @@ mod tests {
     #[test]
     fn equals_form_and_last_value_are_preserved() {
         let a = vec![
-            "--tiers=low".into(),
-            "--tiers".into(),
-            "high".into(),
+            "--preset=fast".into(),
+            "--preset".into(),
+            "deep".into(),
             "name".into(),
             "folder".into(),
         ];
         let a = prepare("workspace", &a).unwrap().unwrap();
-        assert_eq!(option(&a, "--tiers"), Some("high".into()));
-        assert_eq!(positionals(&a, &["--tiers"]), vec!["name", "folder"]);
+        assert_eq!(option(&a, "--preset"), Some("deep".into()));
+        assert_eq!(positionals(&a, &["--preset"]), vec!["name", "folder"]);
     }
     #[test]
     fn original_argparse_long_prefix_and_negative_value_contracts() {
         let a = prepare(
-            "route",
-            &strings(&["project", "message", "--fr=source", "--ti", "high"]),
+            "workspace",
+            &strings(&["name", "folder", "--mo=m-x", "--eff", "high"]),
         )
         .unwrap()
         .unwrap();
-        assert_eq!(option(&a, "--from").as_deref(), Some("source"));
-        assert_eq!(option(&a, "--tier").as_deref(), Some("high"));
-        let a = prepare("workspace", &strings(&["name", "folder", "--by", "-3"]))
+        assert_eq!(option(&a, "--model").as_deref(), Some("m-x"));
+        assert_eq!(option(&a, "--effort").as_deref(), Some("high"));
+        let a = prepare("workspace", &strings(&["name", "folder", "--model", "-3"]))
             .unwrap()
             .unwrap();
-        assert_eq!(option(&a, "--by").as_deref(), Some("-3"));
+        assert_eq!(option(&a, "--model").as_deref(), Some("-3"));
         assert!(prepare(
             "workspace",
-            &strings(&["name", "folder", "--by", "-hithere"])
+            &strings(&["name", "folder", "--model", "-hithere"])
         )
         .is_err());
     }

@@ -11,7 +11,7 @@ the theme, and there is no fallback to another application's data directory.
 `bridge.json` specifies an executable and an absolute script path:
 
 ```json
-{"python":"python3","script":"/demo/bridge/dispatch.py","args":["--local"]}
+{"python":"python3","script":"/demo/bridge/provider.py","args":["--local"]}
 ```
 
 The executable name is historical; it can name any compatible local program.
@@ -89,6 +89,25 @@ installs the consumer; the producer and its automation are configured separately
 External tools can also publish ordinary review documents beneath
 `local-views/reviews/` and expose them through their own view metadata.
 
+## Extension points
+
+These let a private local tool add behavior without changing the theme.
+
+- **Helper commands.** `herdr-theme <name> ...` with a name the helper does not know runs
+  `herdr-theme-<name>` with the same arguments. It looks next to the installed helper first,
+  then on `PATH`. Names are lowercase letters, digits and `-`. If nothing is found, the
+  command fails with `unknown command`.
+- **Sidebar notices.** `data/sixfold/sidebar-notices.json` holds
+  `{"v":1,"notices":[{"id":"queue","text":"…","tone":"dim|working|blocked","tooltip":"…"}]}`.
+  The sidebar footer shows at most three notices. Each text is cut to 80 characters and each
+  tooltip to 600. The producer writes the file and removes notices that no longer apply.
+- **Site settings** (`site.local.json`):
+  - `fallback_space` is the space that receives unmapped alerts (default `Hub`).
+  - `hub_space_ids` lists the coordinating spaces. By name, only a space called `Hub` counts.
+  - `model_presets.<agent>.<name>` is either a model name or `{"model","effort"}`.
+    `new_space_preset` picks the preset for a new workspace's first session.
+    `herdr-theme workspace --preset <name>` (or `--model`/`--effort`) overrides it.
+
 ## Slack alerts: names and attachments
 
 Alert items in `project-alerts.json` and `slack-mentions.json` may carry
@@ -117,10 +136,10 @@ space and the Slack inbox window show the same thing:
 - A row's body is one line in the card popover and the peek (the whole text is
   in its tooltip and the inbox window).
 - Mentions routed to a space (`slack-mentions.json` `project`; unmapped
-  channels, DMs and thread replies go to Share) also give that space its Slack
+  channels, DMs and thread replies go to the fallback space, `site.local.json` `fallback_space`, default `Hub`) also give that space its Slack
   badge, unread count and popover rows. A mention whose space is not on the
-  sidebar (`미연결`, a closed space) counts on Share, where its arrival lands.
-  A space with no tracked channel feed (Share) opens the mentions window from
+  sidebar (`미연결`, a closed space) counts on the fallback space, where its arrival lands.
+  A space with no tracked channel feed (the fallback space) opens the mentions window from
   전체 보기 on that space's mentions (the off-sidebar ones included); 전체
   there shows every space.
 

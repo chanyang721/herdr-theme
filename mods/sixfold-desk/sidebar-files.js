@@ -1,7 +1,7 @@
 import {subscribeJsonFile} from './panel-io.js';
 
 const sources={
-  messages:'messages.json',routing:'routing.json',collaboration:'collaboration.json',queue:'routing-queue.json',
+  messages:'messages.json',notices:'sidebar-notices.json',
   workflow:'workflow.json',icons:'workspace-icons.json',pins:'workspace-pins.local.json',
   computers:'computers.local.json',site:'site.local.json',voice:'voice-integration.json',
 };

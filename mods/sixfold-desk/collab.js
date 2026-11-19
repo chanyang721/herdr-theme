@@ -4,7 +4,7 @@
 
 const NO_PROJECT = new Set(['', '~']);
 
-// "거상 제어판 (sub1)" on sub1 is the same project as "거상 제어판": a trailing
+// "데모 제어판 (sub1)" on sub1 is the same project as "데모 제어판": a trailing
 // "(name)" is dropped when it names the space's own computer (id or label).
 export function projectName(space, labelOf = () => null) {
   const name = String(space?.name ?? '').trim();

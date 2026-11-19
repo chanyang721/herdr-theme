@@ -10,16 +10,19 @@
 export const AUTO_LIMIT = 8;
 const PENDING = ['proposed'];
 const DECIDE = ['decide', 'followup'];   // followup: an open task of the issue; a person forwards it
-const RUNNING = ['planned', 'queued', 'dispatched', 'working', 'final', 'plan_failed'];
+const RUNNING = ['planned', 'queued', 'sent', 'working', 'final', 'plan_failed'];
 export const STATE_LABEL = Object.freeze({
-  planned: '계획만(dry-run)', queued: '대기열', dispatched: '보냄', working: '작업 중', final: '검수 대기',
+  planned: '계획만(dry-run)', queued: '대기열', sent: '보냄', working: '작업 중', final: '검수 대기',
   plan_failed: '계획 실패', proposed: '반영 대기', applied: '반영됨', discarded: '버림', decide: '결정 필요', followup: '전달 필요',
 });
 const REQUEST_ID = /^[A-Za-z0-9_-]{8,64}$/;
 const ISSUE = /^[A-Z][A-Z0-9]{0,9}-\d{1,7}$/;
 
 export const alert8 = id => String(id ?? '').replace(/[^A-Za-z0-9]/g, '').slice(0, 8);
-const entries = ledger => Array.isArray(ledger?.entries) ? ledger.entries.filter(e => e && typeof e.id === 'string') : [];
+// State names older collectors still write, read as their current name (existing ledgers keep them).
+const OLDER_STATES = Object.freeze({dispatched: 'sent'});
+const current = e => Object.hasOwn(OLDER_STATES, e.state) ? {...e, state: OLDER_STATES[e.state]} : e;
+const entries = ledger => Array.isArray(ledger?.entries) ? ledger.entries.filter(e => e && typeof e.id === 'string').map(current) : [];
 const inSpace = (entry, space) => !space || entry.workspace === space;
 const newest = (a, b) => String(b.at || '').localeCompare(String(a.at || ''));
 
@@ -29,7 +32,7 @@ function row(entry) {
   return {
     id: entry.id, key: alert8(entry.id), issue: String(entry.issue || ''), title: String(entry.title || ''),
     url: String(entry.url || ''), at: entry.at || '', state: entry.state, label: STATE_LABEL[entry.state] || entry.state,
-    reason: String(entry.reason || ''), note: String(entry.note || ''), taskId: String(entry.task_id || ''),
+    reason: String(entry.reason || ''), note: String(entry.note || ''),
     hostTask: String(entry.host_task || ''),
     proposal: proposal && {
       comment: String(proposal.comment || ''), state: String(proposal.state || ''), from: String(proposal.from_status || ''),

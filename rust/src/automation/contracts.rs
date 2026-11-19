@@ -2,21 +2,7 @@ use super::*;
 fn evaluate(c: &Value) -> Result<Value> {
     let a = &c["args"];
     Ok(match s(&c["fn"]) {
-        "tier_name" => json!(tiers::tier_name(a[0].as_str())?),
-        "mapping" => tiers::mapping(&a[0]),
-        "model_for" => json!(tiers::model_for(s(&a[0]), s(&a[1]), &a[2])?),
-        "tier_of" => json!(tiers::TIERS[tiers::tier_of(s(&a[0]), &a[1], &a[2])]),
-        "flags" => json!(tiers::flags(s(&a[0]), &a[1])),
-        "rank" => json!(tiers::rank(
-            s(&a[0]),
-            tiers::TIERS.iter().position(|v| *v == s(&a[1])).unwrap()
-        )?),
-        "receiver_available" => json!(routing::receiver_available(s(&a[0]))),
         "computers" => json!(computers(&a[0])?),
-        "thresholds" => {
-            collaboration::thresholds(list(&a[0]), s(&a[1]), &a[2], a[3].as_f64().unwrap())
-        }
-        "ownership_conflict" => json!(collaboration::ownership_conflict(&a[0], list(&a[1]))),
         "transcript" => json!(workflow::transcript_facts(s(&a[0]), s(&a[1]), s(&a[2]))),
         _ => return Err("unknown frozen case".into()),
     })

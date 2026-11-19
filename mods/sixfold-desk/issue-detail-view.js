@@ -148,14 +148,16 @@ export function milestoneRows(model,t){
   return list;
 }
 
-// "작업 시작" right under the detail's title: agent and tier chips, [작업 시작] and one result line.
-// `model.start` = {config:{providers,tiers}|null, pick:{provider,tier}, entry:{running,text,ok}|null, blocked}.
+// "작업 시작" right under the detail's title: agent and level chips, [작업 시작] and one result line.
+// `model.start` = {config:{providers,levels}|null, pick:{provider,level}, entry:{running,text,ok}|null, blocked}.
 export function startArea(model,key,t){
   const change=press;
   const {id}=model,start=model.start||{},config=start.config,entry=start.entry||null;
   const strip=v_flex().id(`task-issue-start-${id}-${key}`).flex_none().p(8).gap(6).rounded(7)
     .border(1).border_color(t.border).bg(t.chrome||t.surface);
-  if(!config)return strip.child(text('작업 시작 설정 없음',t.dim,10).id(`task-issue-start-none-${id}-${key}`));
+  if(!config)return strip.child(start.invalid
+    ?text('작업 시작 설정을 읽지 못했습니다 · issue-start.json 확인',t.blocked,10).id(`task-issue-start-invalid-${id}-${key}`)
+    :text('작업 시작 설정 없음',t.dim,10).id(`task-issue-start-none-${id}-${key}`));
   const running=entry?.running===true,enabled=!running&&start.blocked!==true&&Boolean(model.onStart);
   const chips=(kind,list,picked)=>h_flex().gap(4).items_center().flex_wrap()
     .child(text(kind==='provider'?'에이전트':'난이도',t.dim,10).w(44).flex_none())
@@ -167,7 +169,7 @@ export function startArea(model,key,t){
         .when(!running&&Boolean(model.onStartPick),e=>e.cursor_pointer().on_click(change(model.onStartPick,kind,item.id)))
         .child(item.label);
     }));
-  strip.child(chips('provider',config.providers,start.pick?.provider)).child(chips('tier',config.tiers,start.pick?.tier));
+  strip.child(chips('provider',config.providers,start.pick?.provider)).child(chips('level',config.levels,start.pick?.level));
   const line=running?'보내는 중…':entry?.text||'';
   strip.child(h_flex().gap(8).items_center()
     .child(div().id(`task-issue-start-go-${id}-${key}`).h(24).px(12).flex_none().rounded(12).flex().items_center()

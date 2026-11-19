@@ -18,7 +18,7 @@ test('error kinds keep only a short classification, never the message', () => {
   assert.equal(errorKind(new Error('Invalid Slack popup event ledger')), 'ledger-invalid');
   assert.equal(errorKind(new Error('compare-and-swap conflict')), 'write-conflict');
   assert.equal(errorKind(new Error('outstanding host task limit of 1024')), 'spawn-refused');
-  assert.equal(errorKind(new TypeError('token xoxb-123 in /Users/someone/path')), 'error:TypeError');
+  assert.equal(errorKind(new TypeError('token xoxb-123 in /home/someone/path')), 'error:TypeError');
 });
 
 test('failures retry after 5 s, 30 s, then 2 min; one retry at a time; success resets and cancels', () => {

@@ -127,7 +127,7 @@ impl Seed {
         fs::create_dir_all(app.join("data/sixfold")).unwrap();
         fs::write(
             app.join("data/sixfold/site.local.json"),
-            json!({"fixed_space_names":["Share","Project A","Project B"]}).to_string(),
+            json!({"fixed_space_names":["Hub","Project A","Project B"]}).to_string(),
         )
         .unwrap();
         let tool = root.join(if cfg!(windows) {
@@ -137,7 +137,7 @@ impl Seed {
         });
         fs::copy(env!("CARGO_BIN_EXE_herdr-theme-test-fixture"), &tool).unwrap();
         let schema = root.join("fixture.json");
-        fs::write(&schema,json!({"allowWorkspaceSeed":true,"originalSeedIds":true,"spaces":[{"id":"remote-share","name":"Share","machine":"remote"},{"id":"local-share","name":"Share","machine":null}],"seedStatus":{"space":"local-share","focused_pane":"pane-original"}}).to_string()).unwrap();
+        fs::write(&schema,json!({"allowWorkspaceSeed":true,"originalSeedIds":true,"spaces":[{"id":"remote-hub","name":"Hub","machine":"remote"},{"id":"local-hub","name":"Hub","machine":null}],"seedStatus":{"space":"local-hub","focused_pane":"pane-original"}}).to_string()).unwrap();
         let log = root.join("calls.jsonl");
         Self {
             _temp: temp,
@@ -189,7 +189,7 @@ fn test_first_seed_creates_only_missing_local_spaces_then_second_run_is_read_onl
     let data: Value = serde_json::from_slice(&fs::read(f.target()).unwrap()).unwrap();
     assert_eq!(
         data,
-        json!({"spaces":[{"id":"local-share","machine":null},{"id":"generated-Project A","machine":null},{"id":"generated-Project B","machine":null}]})
+        json!({"spaces":[{"id":"local-hub","machine":null},{"id":"generated-Project A","machine":null},{"id":"generated-Project B","machine":null}]})
     );
     assert_eq!(
         before

@@ -90,7 +90,7 @@ function runtime(agents, background = '#111a23') {
 
 function view(Sidebar, extra = {}) {
   const v = new Sidebar();
-  Object.assign(v, { workflowNodes: [], workflowEvents: [], pendingFlows: [], queuedRoutes: [], workspaceIcons: {}, expandedAgents: new Set(), readMessages: {}, computers: {}, messageEvents: [], activeFlows: [], ...extra });
+  Object.assign(v, { workflowNodes: [], workflowEvents: [], pendingFlows: [], sidebarNotices: [], workspaceIcons: {}, expandedAgents: new Set(), readMessages: {}, computers: {}, messageEvents: [], activeFlows: [], ...extra });
   return v;
 }
 

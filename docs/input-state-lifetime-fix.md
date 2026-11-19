@@ -2,7 +2,7 @@
 
 ## 증상
 
-사이드바 Demo 카드 상단(Share 카드 아래)에 `this input state has been released and can no longer be rendered`가 표시되고, 카드가 그려지지 않았다.
+사이드바 Demo 카드 상단(Hub 카드 아래)에 `this input state has been released and can no longer be rendered`가 표시되고, 카드가 그려지지 않았다.
 
 ## 확인된 결함 (1차 소스)
 

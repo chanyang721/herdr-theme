@@ -393,17 +393,9 @@ pub fn flag(args: &[String], key: &str) -> bool {
 }
 fn value_option(key: &str) -> bool {
     [
-        "--id",
-        "--text",
-        "--mode",
-        "--owns",
-        "--batch",
-        "--from",
-        "--tier",
-        "--lease",
-        "--result",
-        "--tiers",
-        "--by",
+        "--preset",
+        "--model",
+        "--effort",
         "--pane",
         "--session",
         "--herdr",
@@ -412,7 +404,7 @@ fn value_option(key: &str) -> bool {
     .contains(&key)
 }
 pub fn site() -> Value {
-    let mut defaults = json!({"label_prefix":"local.herdr-sixfold","state_dir":"~/Library/Application Support/HerdrSixfold","reports_dir":"~/Documents/HerdrReports","projects_dir":"~/Documents/HerdrProjects","hub_space_ids":[],"project_aliases":{},"fixed_space_names":["Share"],"doc_tabs":{}});
+    let mut defaults = json!({"label_prefix":"local.herdr-sixfold","state_dir":"~/Library/Application Support/HerdrSixfold","reports_dir":"~/Documents/HerdrReports","projects_dir":"~/Documents/HerdrProjects","hub_space_ids":[],"project_aliases":{},"fixed_space_names":[],"doc_tabs":{}});
     if let Ok(Value::Object(local)) = read_json(data().join("site.local.json")) {
         defaults.as_object_mut().unwrap().extend(local);
     }
@@ -422,8 +414,7 @@ pub fn is_hub(space: &Value, site: &Value) -> bool {
     site["hub_space_ids"]
         .as_array()
         .is_some_and(|a| a.contains(&space["id"]))
-        || ["share", "공통", "common"]
-            .contains(&casefold(space["name"].as_str().unwrap_or("")).as_str())
+        || casefold(space["name"].as_str().unwrap_or("")) == "hub"
 }
 pub fn list(value: &Value) -> &[Value] {
     value.as_array().map(|v| v.as_slice()).unwrap_or(&[])

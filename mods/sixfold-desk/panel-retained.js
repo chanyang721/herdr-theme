@@ -15,7 +15,7 @@ import {ensure,cached,waiting,checkCaches,anyWaiting,CACHE_POLL_MS,LOOK_POLL_MS}
 import {statusIndex,teamStatuses,statusFilters,filterRows,foldedCount,milestoneList,detailData,issueLedger,issueTree} from './issue-model.js';
 import {nativeTaskSpace,hostedTaskLayout,panelWidthClass} from './panel-host.js';
 import {motionEnabled,motionToggled,motionLabel} from './motion.js';
-import {loadStartConfig,runStart,startGuarded,startGuardLeft,startGuardsOf} from './issue-start.js';
+import {loadStartConfigStatus,runStart,startGuarded,startGuardLeft,startGuardsOf} from './issue-start.js';
 import {startPick,startSignature} from './issue-start-model.js';
 
 // Each retained entity receives only a local controller key. Display data stays
@@ -312,14 +312,14 @@ export function createRetainedPanel(cx,{macTitlebar=false,onClassic=null,onDispo
       },
     };
   };
-  // "작업 시작": an issue's detail shows, right under its title, agent and tier chips, [작업 시작] and one result line.
+  // "작업 시작": an issue's detail shows, right under its title, agent and level chips, [작업 시작] and one result line.
   // The setting file is read when a search opens; without a valid one the strip says so and runs nothing.
   // Results stay while this search is open; the send guard (issue-start.js) outlives it.
-  c.startConfig=null;
+  c.startConfig=null;c.startConfigInvalid=false;
   c.loadStartConfig=()=>{if(typeof c.cx.spawn!=='function')return;c.cx.spawn(async()=>{
-    let next=null;try{next=await loadStartConfig();}catch{}
-    if(c.disposed||signature(next)===signature(c.startConfig))return;
-    c.startConfig=next;c.repaintIssues();});};
+    let next={config:null,invalid:false};try{next=await loadStartConfigStatus();}catch{}
+    if(c.disposed||(signature(next.config)===signature(c.startConfig)&&next.invalid===c.startConfigInvalid))return;
+    c.startConfig=next.config;c.startConfigInvalid=next.invalid;c.repaintIssues();});};
   // One redraw per issue as its guard ends, so [작업 시작] comes back; cancelled when the search closes
   // and armed again for the issues still guarded when it opens.
   c.armStartTimer=(space,state,issue,left)=>{
@@ -336,11 +336,11 @@ export function createRetainedPanel(cx,{macTitlebar=false,onClassic=null,onDispo
     const starts=state.starts||(state.starts=new Map()),key=state.detail||null,config=c.startConfig;
     const pick=startPick(config,state.startPick);
     return {
-      start:key?{config,pick,entry:starts.get(key)||null,blocked:startGuarded(space.name,key)}:null,
+      start:key?{config,invalid:c.startConfigInvalid,pick,entry:starts.get(key)||null,blocked:startGuarded(space.name,key)}:null,
       onStartPick:(kind,id)=>{
         if(!config||!state.detail||starts.get(state.detail)?.running)return;
         const now=startPick(config,state.startPick);
-        if(kind!=='provider'&&kind!=='tier')return;
+        if(kind!=='provider'&&kind!=='level')return;
         state.startPick={...now,[kind]:id};c.notify(c.cards.get(space.id));
       },
       onStart:issue=>{

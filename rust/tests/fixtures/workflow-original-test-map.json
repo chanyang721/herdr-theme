@@ -108,7 +108,7 @@
       "original_line": 92,
       "original_assertions": [
         "self.assertEqual(collector.transcript_facts(path, 'codex', 'child'), ('working', 'codex.task_started', 'Inspect DB calls'))",
-        "self.assertEqual((row['status'], row['label'], row['task']), ('finished', 'Nash', 'Inspect DB calls'))",
+        "self.assertEqual((row['status'], row['label'], row['task']), ('finished', 'Atlas', 'Inspect DB calls'))",
         "self.assertEqual(collector.transcript_facts(path, 'codex', 'child')[0], 'working')",
         "self.assertEqual(collector.transcript_facts(path, 'codex', 'child')[0], 'interrupted')"
       ],

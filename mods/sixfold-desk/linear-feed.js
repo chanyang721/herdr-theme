@@ -78,7 +78,7 @@ export function publishLinear(feed, health, names = [], publish = createSharedPu
 }
 
 
-// A new alert becomes an arrival: a popup that folds into its space card (Share
+// A new alert becomes an arrival: a popup that folds into its space card (the fallback space
 // when no space matches). A sidebar that draws arrivals marks itself as host;
 // without one the Linear window opens, so an alert is never dropped.
 export function announceLinear(events) {

@@ -34,7 +34,7 @@ async function announcers() {
   const model = await import(new URL('arrival-model.js', base).href);
   const opens = [], noted = [];
   const runtime = {...store, arrivalTarget: model.arrivalTarget, ARRIVAL: model.ARRIVAL,
-    openOverlay: o => opens.push(o), spaces: () => [{name: 'Alpha'}, {name: 'Share'}], noteArrived: (space, item) => noted.push([space, item?.id]),
+    openOverlay: o => opens.push(o), spaces: () => [{name: 'Alpha'}, {name: 'Hub'}], noteArrived: (space, item) => noted.push([space, item?.id]),
     run() {}, div: element, h_flex: element, v_flex: element, readTextFile: async () => null, writeTextFile: async () => {}, appHome: () => '/h',
     setShared() {}, createHash() {}, readJsonSnapshot() {}, subscribeJsonFile() {}, subscribeFileChanges() {}, createRetry() {}, watchRecorder() {},
     setSpaceMentions() {}, createSharedPublisher() {}, slackHealthView() {}, linearHealthView() {}, placeItems: x => x, alertKind: () => ({}), alertLine: () => '',
@@ -60,9 +60,9 @@ test('a new Slack alert takes the same arrival path as a new Linear alert, with 
   assert.deepEqual(list.map(x => [x.source, x.space, x.peek]), [['slack', 'Alpha', true], ['linear', 'Alpha', true]], 'both become a peek of their card');
   assert.deepEqual(a.noted, [['Alpha', 's1']], 'the card remembers the mention, so its chip popover lists it');
 
-  // Unmapped mentions land in Share, as unmapped Linear alerts do.
+  // Unmapped mentions land in Hub, as unmapped Linear alerts do.
   a.announceSlack([{key: 'mention:s2', id: 's2', project: '미연결', title: '', line: 'DM', item: {id: 's2', project: '미연결'}}]);
-  assert.equal(a.store.arrivals().at(-1).space, 'Share');
+  assert.equal(a.store.arrivals().at(-1).space, 'Hub');
   a.store.clearArrivalHost(host);
 });
 
@@ -93,16 +93,16 @@ async function popover() {
 
 test('the Slack peek is the card popover surface, not a separate Slack-only popup', async () => {
   const pop = await popover();
-  const reply = {id: 'slack:C0TEST04:300.1', project: 'Share', kind: 'thread', author: 'U0BBB0002', author_name: '이다라', at: '2026-11-17T01:00:00Z', text: '스레드 답글입니다'};
+  const reply = {id: 'slack:C0TEST04:300.1', project: 'Hub', kind: 'thread', author: 'U0BBB0002', author_name: '이다라', at: '2026-11-17T01:00:00Z', text: '스레드 답글입니다'};
   pop.store.set('sixfold.alertItems', []);
-  pop.mentions.noteArrived('Share', reply);   // as announceSlack does
+  pop.mentions.noteArrived('Hub', reply);   // as announceSlack does
   const opened = [];
-  const peek = pop.slackPeek('Share', theme, [reply.id], () => opened.push('all'), [reply], {onOpen: source => opened.push(source)});
-  pop.showPopover('Share', 'slack');
-  const card = pop.alertPopover({id: 'c1', project: 'Share', trigger: element(), t: theme, hasSlack: true, hasLinear: false, onAll() {}});
+  const peek = pop.slackPeek('Hub', theme, [reply.id], () => opened.push('all'), [reply], {onOpen: source => opened.push(source)});
+  pop.showPopover('Hub', 'slack');
+  const card = pop.alertPopover({id: 'c1', project: 'Hub', trigger: element(), t: theme, hasSlack: true, hasLinear: false, onAll() {}});
   const cardBody = card.calls.find(([k]) => k === 'content')[1];
   const peekTexts = texts(peek), cardTexts = texts(cardBody);
-  assert.ok(peekTexts.includes('Share 알림') && cardTexts.includes('Share 알림'), 'the same title');
+  assert.ok(peekTexts.includes('Hub 알림') && cardTexts.includes('Hub 알림'), 'the same title');
   assert.ok(!peekTexts.some(s => /Slack 알림$/.test(s)), 'no Slack-only title');
   for (const shared of ['Slack', '전체 보기', 'Slack 앱 읽음 상태와 별도', '스레드 답글입니다']) assert.ok(peekTexts.includes(shared), `peek: ${shared} | ${peekTexts.join(' | ')}`);
   assert.ok(peekTexts.includes('새 알림') && !peekTexts.includes('✕'), 'a peek is marked new and has no close button');
@@ -111,9 +111,9 @@ test('the Slack peek is the card popover surface, not a separate Slack-only popu
   assert.deepEqual(shape(peek), shape(cardBody));
 
   // The peek's title and its tab open the card's popover itself, like the Linear peek opens the issue search.
-  byId(peek, 'sf-alert-pop-head-peek-share').handlers.on_click(null, cx);
-  byId(peek, 'sf-alert-pop-tab-peek-share-slack').handlers.on_click(null, cx);
-  byId(peek, 'sf-alert-pop-all-peek-share').handlers.on_click(null, cx);
+  byId(peek, 'sf-alert-pop-head-peek-hub').handlers.on_click(null, cx);
+  byId(peek, 'sf-alert-pop-tab-peek-hub-slack').handlers.on_click(null, cx);
+  byId(peek, 'sf-alert-pop-all-peek-hub').handlers.on_click(null, cx);
   assert.deepEqual(opened, ['slack', 'slack', 'all']);
 });
 

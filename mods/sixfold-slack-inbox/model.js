@@ -147,11 +147,18 @@ export function threadGroups(items,read={}) {
 // The mirror's newest message stops moving when the mirror stalls; say so instead of "0 new".
 // The mentions window opened from a space card's 전체 보기 starts on that space's mentions, by the
 // cards' rule (sixfold-desk/arrival-model.js arrivalTarget; mods cannot import each other): a thread
-// whose space is not on the sidebar ('미연결', a closed space) belongs to Share. No names: its own space.
+// whose space is not on the sidebar ('미연결', a closed space) belongs to the fallback space. No names: its own space.
 const spaceKey = name => String(name ?? '').toLowerCase().replace(/[\s_-]/g, '');
-export function inSpace(project, space, names = [], fallback = 'Share') {
+// The workspace that receives alerts whose own workspace is not shown. "Hub" unless the
+// sidebar publishes the site's "fallback_space" (site.local.json).
+let fallbackSpace = 'Hub';
+export const setFallbackSpace = name => { if (typeof name === 'string' && name.trim()) fallbackSpace = name.trim(); };
+export const currentFallbackSpace = () => fallbackSpace;
+export function inSpace(project, space, names = [], fallback = fallbackSpace) {
   const shown = new Set((names ?? []).map(spaceKey)), key = spaceKey(project);
-  return (shown.size && !shown.has(key) ? spaceKey(fallback) : key) === spaceKey(space);
+  // Not on screen: the fallback space if shown, otherwise the first space shown.
+  const home = shown.has(spaceKey(fallback)) ? spaceKey(fallback) : spaceKey(names[0]);
+  return (shown.size && !shown.has(key) ? home : key) === spaceKey(space);
 }
 export function freshness(health={},now=Date.now(),staleHours=6) {
   const parts=[];

@@ -41,12 +41,13 @@ const WRITES=['mark_read','set_state','comment'];
 
 test('autoView splits a space into 반영 대기 · 결정 필요 · 자동 작업 and ignores other spaces',()=>{
   const v=autoView(ledger(entry(),entry({id:'b'.repeat(8)+'-x',state:'decide',reason:'"고객"'}),
-    entry({id:'c'.repeat(8)+'-x',state:'dispatched'}),entry({id:'d'.repeat(8)+'-x',state:'info'}),
+    entry({id:'c'.repeat(8)+'-x',state:'sent'}),entry({id:'d'.repeat(8)+'-x',state:'info'}),
     entry({id:'e'.repeat(8)+'-x',workspace:'Beta'})),'Alpha');
   assert.deepEqual([v.pending.length,v.decide.length,v.running.length],[1,1,1]);
   assert.equal(v.pending[0].key,'a1b2c3d4');assert.equal(v.pending[0].proposal.state,'In Review');
   assert.equal(v.mode,'live');assert.equal(v.spaceOn,true);
   assert.equal(autoView(null,'Alpha').pending.length,0);
+  assert.equal(autoView(ledger(entry({state:'dispatched'})),'Alpha').running[0]?.state,'sent','an older collector state name is read as its current name');
 });
 
 test('approval requests match the collector: auto-<alert8>-<c|s>-<n>, exact body, writes switch respected',()=>{

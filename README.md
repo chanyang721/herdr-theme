@@ -22,10 +22,10 @@ The main GIF now covers **issue context → allocation → parallel work → mes
 
 This is an **editorial sequence of existing native screenshots with synthetic data**, not a continuous recording of a real task completing automatically. [Original native overview animation](docs/images/overview-native.gif) · [Source images and timings](docs/media/workflow-manifest.json) · [Full-window still](preview.png).
 
-| 1. Select the issue | 2. Delegate and collaborate |
+| 1. Select the issue | 2. Split and assign work |
 | --- | --- |
 | ![Project issue and milestone popover](docs/images/panel-feed/issues-milestone.png) | ![Five child tasks expanded beneath their parent](docs/images/panel-feed/tree-expanded.png) |
-| Inspect week, milestone and all-issue scopes, including missing or stale cache states. | Follow parent/child tasks and their work titles. Allocation and file ownership belong to the external harness. |
+| Inspect week, milestone and all-issue scopes, including missing or stale cache states. | Follow parent/child tasks and their work titles. Allocation and file ownership belong to an optional external producer. |
 
 | 3. Exchange messages and request review | 4. Preserve context and clean up |
 | --- | --- |
@@ -52,7 +52,7 @@ Working, idle, needs-human, unseen-result, cleanup-wait, closing and closed are 
 
 Task acceptance can advance while the last pane stays open. The producer must
 record and archive the result before physical cleanup; a full task bar does not
-prove that happened. [Lifecycle contract and verification matrix](docs/workflow-lifecycle.md).
+prove that happened. [Lifecycle contract and verification matrix](docs/task-lifecycle.md).
 
 ![Model, effort, usage and status in the pane header](docs/images/pane-header.png)
 
@@ -97,7 +97,7 @@ Checked on 2026-11-12: core [#90](https://github.com/herdrdev/herdr-core/pull/90
 
 - The successor event uses `data.from` for the sender and the event envelope's `terminal` for the recipient. The app's `messageEvents()` adapter must match that shape.
 - It observes an explicit send input attempt, not reading, task acceptance or completion.
-- Automatic launch tasks, keys and automatic parent notes are excluded. Allocation has a separate optional harness-feed representation.
+- Automatic launch tasks, keys and automatic parent notes are excluded. Allocation has a separate optional task-feed representation.
 - The demo uses synthetic events. Verify the actual collector, remote addresses, reconnection and unknown-sender handling on the installed app/core pair.
 
 ## Install

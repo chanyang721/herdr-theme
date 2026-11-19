@@ -69,8 +69,8 @@ function activate(badge){
   }else if(badge.command)run(badge.command.name,badge.command.args);
 }
 
-// The harness memory badge's bare '! N' means items waiting for a check; say so.
-export const badgeLabel=b=>b.id==='harness-memory'&&/^!\s*\d+$/.test(b.text)?b.text.replace(/^!\s*/,'확인 대기 '):b.text;
+// A badge is drawn with exactly the text its producer wrote.
+export const badgeLabel=b=>b.text;
 export function workspaceBadges(view,s,t){
   const list=badgesFor(badgeKey(s.machine??null,s.id),view.fileBadges,shared(BADGES_KEY));
   if(!list.length)return div();

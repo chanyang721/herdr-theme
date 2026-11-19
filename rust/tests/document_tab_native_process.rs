@@ -1,4 +1,4 @@
-//! Generated tab props pass through the actual JS dispatcher to the native CLI.
+//! Generated tab props pass through the actual JS router to the native CLI.
 use herdr_theme::documents::{common::*, install};
 use serde_json::{json, Value};
 use std::{fs, process::Command};

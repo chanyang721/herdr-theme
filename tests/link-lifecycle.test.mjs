@@ -114,7 +114,7 @@ test('two same-way sends between computers each get a packet, and the link sched
     const view = new Sidebar();
     const at = Date.now() - 1000;
     Object.assign(view, {
-      workflowNodes: [], workflowEvents: [], pendingFlows: [], queuedRoutes: [], workspaceIcons: {}, expandedAgents: new Set(), readMessages: {}, computers: {},
+      workflowNodes: [], workflowEvents: [], pendingFlows: [], sidebarNotices: [], workspaceIcons: {}, expandedAgents: new Set(), readMessages: {}, computers: {},
       messageEvents: [{ id: 'a', seq: 1, source: 't1', target: 'worker/t1', at }, { id: 'b', seq: 2, source: 't1', target: 'worker/t1', at: at + 500 }],
       activeFlows: [{ id: 'a', source: 't1', target: 'worker/t1', at, lane: 0, phase: 'travel', travelMs: 1600 },
                     { id: 'b', source: 't1', target: 'worker/t1', at: at + 500, lane: 0, phase: 'start', travelMs: 1780 }],
@@ -153,7 +153,7 @@ function renderRows(view) {
 
 function quietView(Sidebar, messageEvents = []) {
   const view = new Sidebar();
-  Object.assign(view, { workflowNodes: [], workflowEvents: [], pendingFlows: [], queuedRoutes: [], workspaceIcons: {}, expandedAgents: new Set(), readMessages: {}, computers: {}, messageEvents, activeFlows: [] });
+  Object.assign(view, { workflowNodes: [], workflowEvents: [], pendingFlows: [], sidebarNotices: [], workspaceIcons: {}, expandedAgents: new Set(), readMessages: {}, computers: {}, messageEvents, activeFlows: [] });
   return view;
 }
 

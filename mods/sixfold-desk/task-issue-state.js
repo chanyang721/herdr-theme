@@ -141,7 +141,7 @@ export function parseTimelineFeed(text) {
     })};
 }
 
-// A catalog the harness made from its Linear ledger (issue_catalog.source 'linear-ledger', 2026-11-16) is
+// A catalog the producer made from its issue ledger (issue_catalog.source 'linear-ledger', 2026-11-16) is
 // the one copy: week-timeline.json and linear-cache/ are made from the same ledger or are older, so the
 // window never mixes them in (mixing flipped the lists every minute between the two copies).
 export const fromLedger = space => space?.issue_catalog?.source === 'linear-ledger';

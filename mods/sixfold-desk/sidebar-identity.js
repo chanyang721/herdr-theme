@@ -49,7 +49,7 @@ export function workspaceLocal(space, site = {}) {
 export function workspaceIdentity(space, site = {}) {
   const name = String(space.name ?? '').trim().toLowerCase();
   const hubs = Array.isArray(site?.hub_space_ids) ? site.hub_space_ids : [];
-  if (hubs.includes(space.id) || name === 'share' || name === '공통' || name === 'common') return 'hub';
+  if (hubs.includes(space.id) || name === 'hub') return 'hub';
   const icon = workspaceLocal(space, site)?.icon;
   if (typeof icon === 'string' && /^[a-z-]+$/.test(icon)) return icon;
   if (name === 'voice') return 'microphone';
@@ -79,9 +79,9 @@ export function computerSlots(machines) {
   return [...ordered.filter(computerActive), ...ordered.filter(m => !computerActive(m))].map(key);
 }
 
-// The Share (hub) space of one listed computer, or null. Only an explicit id (this
+// The hub space of one listed computer, or null. Only an explicit id (this
 // computer: site `hub_space_ids`; a remote: its `hub_space_ids` in computers.local.json)
-// or the Share/공통/common role name counts. Several candidates or none: null, never a guess.
+// or the Hub role name counts. Several candidates or none: null, never a guess.
 export function computerHub(spaces, key, site = {}, computers = {}) {
   const machine = key === 'local' ? null : /^remote:(.+)$/.exec(key)?.[1] ?? undefined;
   if (machine === undefined) return null;
@@ -91,6 +91,6 @@ export function computerHub(spaces, key, site = {}, computers = {}) {
     ...(machine === null ? [] : (Array.isArray(computers?.machines?.[machine]?.hub_space_ids) ? computers.machines[machine].hub_space_ids : [])),
   ]);
   const explicit = mine.filter(space => ids.has(space.id));
-  const found = explicit.length ? explicit : mine.filter(space => ['share', '공통', 'common'].includes(String(space.name ?? '').trim().toLowerCase()));
+  const found = explicit.length ? explicit : mine.filter(space => String(space.name ?? '').trim().toLowerCase() === 'hub');
   return found.length === 1 ? found[0] : null;
 }

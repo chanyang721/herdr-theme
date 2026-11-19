@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {askSummary, groupAsks, summaryFor, cardsFor, reconcile, clampPage, popupHeight, SUMMARY_KEY, errorText} from '../mods/sixfold-desk/ask-model.js';
 
-const bridge = {python: 'python3', script: '/demo/bridge/dispatch.py', args: ['--local']};
+const bridge = {python: 'python3', script: '/demo/bridge/provider.py', args: ['--local']};
 const card = (id, terminal, extra = {}) => ({id, revision: 'r1', kind: 'permission', terminal, title: `Title ${id}`,
   actions: [{id: 'approve', label: 'Allow', primary: true}, {id: 'cancel', label: 'Deny'}], ...extra});
 const longLabel = 'A very long option label that explains exactly what will happen when it is chosen, '.repeat(3).trim();
@@ -349,19 +349,19 @@ const spaceOf = map => terminal => map[terminal] ?? null;
 
 test('a card from another space opens its pane popup once', () => {
   const cards = [card('a', 't-b'), card('b', 't-b')];
-  const target = autoPopupTarget(cards, [], spaceOf({'t-b': 'project-b'}), 'share');
+  const target = autoPopupTarget(cards, [], spaceOf({'t-b': 'project-b'}), 'hub');
   assert.equal(target.terminal, 't-b');
   assert.deepEqual(target.keys, ['a:r1', 'b:r1']);
-  assert.equal(autoPopupTarget(cards, target.keys, spaceOf({'t-b': 'project-b'}), 'share'), null);
+  assert.equal(autoPopupTarget(cards, target.keys, spaceOf({'t-b': 'project-b'}), 'hub'), null);
 });
 
 test('a card in the focused space stays in the list only', () => {
-  assert.equal(autoPopupTarget([card('a', 't-share')], [], spaceOf({'t-share': 'share'}), 'share'), null);
+  assert.equal(autoPopupTarget([card('a', 't-hub')], [], spaceOf({'t-hub': 'hub'}), 'hub'), null);
 });
 
 test('an unknown space counts as elsewhere, an unassigned card never pops up', () => {
-  assert.equal(autoPopupTarget([card('a', 'home/t5')], [], spaceOf({}), 'share').terminal, 'home/t5');
-  assert.equal(autoPopupTarget([card('a', null)], [], spaceOf({}), 'share'), null);
+  assert.equal(autoPopupTarget([card('a', 'home/t5')], [], spaceOf({}), 'hub').terminal, 'home/t5');
+  assert.equal(autoPopupTarget([card('a', null)], [], spaceOf({}), 'hub'), null);
 });
 
 test('a revised card pops up again, a closed one does not', () => {

@@ -16,8 +16,6 @@ const ALLOW=[
     reason:'voice focus sampling (opt-in): in-memory reads; voice-focus.json is written on a focus change and as a 1.5 s heartbeat'},
   {rule:'hidden',file:'mods/sixfold-desk/main.js',match:/^timer\.every\(500, cx=>\{ const config=this\.sidebarFiles\?\.voice;/,
     reason:'the microphone follows focus while the window is hidden too; the heartbeat keeps the helper from acting on stale focus'},
-  {rule:'hidden',file:'mods/sixfold-desk/main.js',match:/^timer\.every\(2000, cx => \{ if \(this\.routeBusy \|\| !this\.routeScript/,
-    reason:'queued message routes are delivered whether or not the window is shown; runs only while a route is queued'},
   {rule:'interval',file:'mods/sixfold-desk/alerts.js',match:/^timer\.after\(20, \(\)=>\{scheduled=null;refresh\(cx\);\}$/,
     reason:'20 ms debounce of input changes; schedules again only when an input changed during the run'},
   {rule:'interval',file:'mods/sixfold-desk/linear-feed.js',match:/^timer\.after\(20, \(\) => \{ scheduled = null; refresh\(cx\); \}$/,
