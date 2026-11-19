@@ -1,4 +1,8 @@
 import { projectTaskBranches } from './task-tree.js';
+import { cleanRepositoryGraph } from './repo-flow.js';
+// The sidebar's existing model boundary also exposes its pure repository
+// projection/view builders; they have no native imports or collection effects.
+export {repositorySection,repositoryLayout,repositoryFlowLayer,createRepositoryController,projectRepositoryGraph} from './repo-flow.js';
 
 // Display data only. The producer owns task interpretation and lifecycle policy.
 // Every event effect runs at this pace (2026-11-09: the person found 1x too fast to follow).
@@ -247,7 +251,9 @@ export function cleanPanelFeed(raw) {
     ...(owns(value, 'step') ? { step: Number.isInteger(value.step) && value.step >= 1 && value.step <= 4 ? value.step : null } : {}),
     ...(owns(value, 'memory') ? { memory: cleanMemory(value.memory) } : {}),
   } : null);
-  return { v: 1, at: time(raw.at), reduced_motion: typeof raw.reduced_motion === 'boolean' ? raw.reduced_motion : null, computers, spaces, links, events };
+  const repositories=cleanRepositoryGraph(raw.repo_activity,knownAgents);
+  return { v: 1, at: time(raw.at), reduced_motion: typeof raw.reduced_motion === 'boolean' ? raw.reduced_motion : null, computers, spaces, links, events,
+    ...(repositories?{repo_activity:repositories}:{}) };
 }
 
 export function reconcilePanelFeed(raw, previous = null) {
@@ -611,6 +617,7 @@ function copyDisplaySpace(space, agents) {
 function copyDisplayMetadata(feed) {
   return {
     v: feed.v, at: feed.at, reduced_motion: feed.reduced_motion,
+    ...(feed.repo_activity?{repo_activity:cleanRepositoryGraph(feed.repo_activity,new Set(feed.spaces.flatMap(space=>space.agents.map(agent=>agent.id))))}:{}),
     computers: feed.computers.map(computer => ({ id: computer.id, name: computer.name, linked: computer.linked, bundle: computer.bundle, traffic: { ...computer.traffic } })),
     links: feed.links.map(link => ({ a: link.a, b: link.b, kind: link.kind })),
     events: feed.events.map(event => ({ id: event.id, at: event.at, kind: event.kind, from: event.from, to: event.to, label: event.label,

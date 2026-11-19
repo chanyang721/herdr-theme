@@ -26,12 +26,12 @@ import { watchBadges, workspaceBadges } from './badges.js';
 import { watchAsks, askSection, hasAsks, paneAskButton, askPopup } from './asks.js';
 import { askFor } from './ask-model.js';
 import { watchReports, reportsSection } from './session-reports.js';
-import {reconcilePanelFeed,panelSpacePartners} from './panel-model.js';
+import {reconcilePanelFeed,panelSpacePartners,repositorySection,repositoryLayout,repositoryFlowLayer,createRepositoryController,projectRepositoryGraph} from './panel-model.js';
 import {panelCounts,panelHeaderMetrics} from './panel-view.js';
 import {TASK_FEED_FILE,createTaskFeedSource} from './task-feed-source.js';
 import {issueRequest,saveIssueRequest} from './task-issue-state.js';
 import {createRetainedPanel} from './panel-retained.js';
-import {taskComputerAnchors,taskComputerRecord} from './panel-host.js';
+import {taskComputerAnchors,taskComputerRecord,hostedTaskLayout} from './panel-host.js';
 import {subscribeJsonFile,subscribeFileChanges,fileDelivery,FILE_CHANGED_COMMAND} from './panel-io.js';
 import {watchSidebarFiles} from './sidebar-files.js';
 import {orderSpaceCards,spaceBadges,lineBadges,metaBadges} from './sidebar-meta.js';
@@ -141,7 +141,7 @@ export default class SixfoldDesk extends View {
     // hidden or retired receiver may never get that command. A fresh arrow per call would add an
     // entry every time; these fixed callbacks keep at most one pending entry each.
     const notifySidebar=()=>cx.notify();
-    const panelPreferences=()=>this.panelRetained?.preferences();
+    const panelPreferences=()=>{this.panelRetained?.preferences();this.updateRepoEvents?.();};
     const panelNavigation=()=>this.panelRetained?.navigation();
     this.invalidateSidebar=()=>fileReceiver.enqueue(notifySidebar);
     this.refreshPanelPreferences=()=>fileReceiver.enqueue(panelPreferences);
@@ -151,6 +151,10 @@ export default class SixfoldDesk extends View {
     this.panelEvents=null;
     this.panelReducedMotion=null;
     this.panelTrackingActive=false;
+    this.repoActivity=createRepositoryController({after:(ms,fn)=>cx.timer.after(ms,fn),notify:()=>this.invalidateSidebar(),
+      visible:()=>this.sidebarVisible!==false&&window()?.visible!==false,
+      motion:()=>this.panelTrackingActive&&motionEnabled(shared)&&this.panelState?.feed?.reduced_motion!==true});
+    this.updateRepoEvents=()=>this.repoActivity.apply(projectRepositoryGraph(this.panelState?.feed?.repo_activity));
     this.panelRetained=typeof cx.new==='function'?createRetainedPanel(cx,{macTitlebar:window()?.platform==='macos',embedded:true,
       onHostChange:()=>this.invalidateSidebar(),
       schedule:fn=>fileReceiver.enqueue(fn),
@@ -163,7 +167,7 @@ export default class SixfoldDesk extends View {
         const id=`request-${Date.now().toString(36)}-${serial.toString(36)}-${Math.random().toString(36).slice(2,14)}`;
         return saveIssueRequest(issueRequest(this.panelFeedPath,space,key,desired,id),writeTextFile);
       },
-      onClassic:()=>{this.panelTrackingActive=false;this.panelRetained?.setEnabled(false);this.syncCardActivity?.();this.startLiveMessages?.();this.refreshLegacy?.(cx);this.refreshAlerts?.(cx);this.refreshLinear?.(cx);this.refreshAsks?.(cx);},onDispose:()=>{for(const stop of this.fileSubscriptions||[])stop();this.stopAsks?.();this.stopReports?.();this.classicCards?.dispose();}}):null;
+       onClassic:()=>{this.panelTrackingActive=false;this.updateRepoEvents?.();this.panelRetained?.setEnabled(false);this.syncCardActivity?.();this.startLiveMessages?.();this.refreshLegacy?.(cx);this.refreshAlerts?.(cx);this.refreshLinear?.(cx);this.refreshAsks?.(cx);},onDispose:()=>{this.repoActivity?.dispose();for(const stop of this.fileSubscriptions||[])stop();this.stopAsks?.();this.stopReports?.();this.classicCards?.dispose();}}):null;
     this.fileSubscriptions=[];
     const receiveTaskFeed=createTaskFeedSource(snapshot=>{
       this.panelFeedPath=`${appHome()}/${TASK_FEED_FILE}`;
@@ -173,6 +177,7 @@ export default class SixfoldDesk extends View {
       const changed=next.changed||next.status!==this.panelState.status;
       this.panelState=next;
       this.panelTrackingActive=Boolean(next.feed)&&shared('sixfold.panel.enabled')!==false;
+      this.updateRepoEvents();
       this.syncCardActivity?.();
       if(next.feed&&this.panelRetained){
         this.panelRetained.setEnabled(this.panelTrackingActive);
@@ -191,6 +196,7 @@ export default class SixfoldDesk extends View {
         this.panelRetained?.setEnabled(tracking);
       }
       this.startLiveMessages?.();
+      this.updateRepoEvents?.();
       this.panelRetained?.preferences();       // compares its own key (motion, theme, width)
       this.panelRetained?.alertsChanged?.();   // shared workspace badges sit on task meta lines; redraws only changed marks
     }));
@@ -426,14 +432,14 @@ export default class SixfoldDesk extends View {
         if(command==='window.visibility'){
           const visible=window()?.visible!==false;
           if(!visible){
-            this.sidebarVisible=false;this.syncCardActivity?.();this.panelRetained?.setVisible(false);
+            this.sidebarVisible=false;this.syncCardActivity?.();this.panelRetained?.setVisible(false);this.updateRepoEvents?.();
             const resumeEvents=this.previousEvents,resumeDelegations=this.previousDelegations;
             this.stopLegacyMotion();this.resumeEvents=resumeEvents;this.resumeDelegations=resumeDelegations;this.stopLiveMessages?.();this.stopLiveMessages=null;
             fileReceiver.flush();
           }else{
             // Drain the latest queued data while the retained panel is still
             // suspended, then resume from that watermark in this copy's scope.
-            fileReceiver.flush();this.sidebarVisible=true;this.syncCardActivity?.();
+            fileReceiver.flush();this.sidebarVisible=true;this.syncCardActivity?.();this.updateRepoEvents?.();
             this.panelRetained?.setVisible(true);this.panelRetained?.preferences();
             this.startLiveMessages?.();this.refreshLegacy?.(cx);this.refreshAlerts?.(cx);this.refreshLinear?.(cx);this.refreshAsks?.(cx);
             cx.notify();
@@ -482,6 +488,7 @@ export default class SixfoldDesk extends View {
   lang() { return shared('sixfold.language') === 'en' ? 'en' : 'ko'; }
 
   close(){
+    this.repoActivity?.dispose();
     this.stopLegacyMotion();
     this.stopAsks?.();this.stopReports?.();
     this.classicCards?.dispose();
@@ -1130,6 +1137,9 @@ export default class SixfoldDesk extends View {
       return {task,alertHeight:extraHeight(s)+alertRowHeight(s),height:this.boxSizes?.[s.id]?.h||
         (card?card.height+9:(members.length*30+40))+extraHeight(s)+alertRowHeight(s)};
     });
+    const repoGraph=projectRepositoryGraph(this.panelState?.feed?.repo_activity);
+    const repoHost=repoGraph?hostedTaskLayout(taskPanel?.layout,taskEntries):null;
+    const repoRows=repoGraph?repositoryLayout(repoGraph,repoHost.height):null;
     // New-alert arrivals: a popup on the card's spot, then a pixel block steps into its badge.
     const arrivalCards=[];{let top=0;groups.forEach(({s},i)=>{arrivalCards.push({s,top,extra:extraHeight(s),merged:mergedAlerts(s),width:this.boxSizes?.[s.id]?.w||0});top+=taskEntries[i].height+12;});}
     const arrivalViews=alertArrivalLayer(this,cx,{cards:arrivalCards,motion:arrivalMotion,t,right:LINK_MARGIN+4});
@@ -1149,7 +1159,9 @@ export default class SixfoldDesk extends View {
         return pipeline({id:`${route.id}-hop`,width:8+(route.lane%2)*6,inset:6,from:outgoing?row:0,to:outgoing?0:row,color:workspaceFlowColor(route),phase:route.phase,packets:route.packets,motion,unit:1/(Number(settings()?.zoom)||1)})
           .right(LINK_MARGIN-18-(route.lane%2)*6);
       }))
-      .children(arrivalViews);
+      .children(arrivalViews)
+      .when(Boolean(repoGraph),e=>e.child(repositorySection(repoGraph,t,{div,h_flex,v_flex},{gutter:LINK_MARGIN}))
+        .child(repositoryFlowLayer(repoGraph,{agents:repoHost.anchors,repos:repoRows.anchors,height:repoHost.height+repoRows.height},this.repoActivity?.state,t,{div},{gutter:LINK_MARGIN})));
     return v_flex().id('sixfold-sidebar').size_full().bg(t.chrome).text_color(t.foreground)
       // Width only matters to the task panel's breakpoints; between them the
       // flex layout resizes the cards without a redraw.

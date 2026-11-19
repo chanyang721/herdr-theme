@@ -26,6 +26,78 @@ versions are ignored. Each space names its `computer` ID. Unknown traffic and
 unconnected tool fields remain visibly unmeasured or disconnected. No command
 or executable supplied in a feed is run.
 
+### Optional repository activity
+
+An optional `repo_activity` object embeds the generic `repo_activity_v1` display
+DTO. Its `schema`, `accounts`, `repositories`, `bindings`, `events` and `coverage`
+fields are described in the panel schema. This extension only displays supplied
+metadata. It does not read Git, query GitHub, discover accounts, install hooks,
+open connections or enable collection. An absent/unsupported extension leaves
+the original sidebar unchanged. Producer integration is a separate step.
+
+The native sidebar shows a fixed GitHub catalog **below its workspace cards**.
+Account and repository order comes from the producer's explicit configuration;
+local discovery can assist that configuration but must not silently add nodes.
+`accounts` supplies approved display names, personal/company classification,
+connection state and source (`private_catalog` or `explicit_probe`). Configured
+accounts stay `unknown`; connected/disconnected claims require `explicit_probe`.
+An account mapping is independent of a repository's remote namespace. Namespace
+does not identify an authenticated user or the person who pushed.
+
+`repositories` contains opaque `id`, `account_id`, `namespace` and `name` fields.
+One case-insensitive namespace/name slug has one node. The first duplicate wins;
+bindings to a discarded ID become unknown, never silently reassigned. Different
+worktrees of the same repository retain separate session bindings to that node.
+`bindings` names an explicit `agent_id`, `repository_id` and `state`: `cwd` draws
+a stationary folder relationship, `local` means a Git folder without a remote,
+`unlinked` means outside the configured catalog and `unknown` means unconfirmed.
+The last three have separate visible counts and no invented route. A cwd edge
+proves only the observed process-folder relationship. It is not authorship, all
+edited files, the current task or a later `git -C` operation's target.
+
+The v1 DTO contains no branch/ref observation. Each node therefore shows `main ?`
+(local main not observed). The tooltip distinguishes local main, remote status
+and evidence source. A configured name is not a local or remote HEAD receipt.
+No raw cwd, remote URL, command, commit message, output, credentials or private
+catalog format belongs in this extension. Unknown properties are dropped by the
+consumer. Recognizable credential/path-like labels are rejected; this does not
+detect arbitrary secrets disguised as approved display names. Producers must
+provide only approved metadata.
+
+Events retain `id`, `operation_id`, `machine_id`, nullable verified `agent_id`,
+`repository_id`, normalized `operation`, `phase`, `result`, `evidence` and integer
+Unix-seconds `observed_at`. Sender attribution must be supplied by the producer;
+the theme never guesses it from cwd or from the payload's machine ID. The phase
+and evidence combinations are strict:
+
+| Evidence | Phase/result | Display meaning |
+| --- | --- | --- |
+| `pre_tool` | `attempt` / `unknown` | Before execution; not proof the command ran |
+| `approval` | `authorization` / `unknown` | Approval only; no result or moving success |
+| `process_exit` | `result` / `succeeded` or `failed` | Command exit result only |
+| `head_verified` | `result` / `succeeded`, `merge` only | Verified local merge |
+| `timeout`, `sensor_error` | `result` / `unknown` | Result remains unconfirmed |
+
+The latest supplied event stays as a historical label. A push command's success
+does not imply a separately observed remote ref, CI, deployment-system result or
+service health. This version supplies no latter-stage evidence and renders no
+deployment-success effect. Read-only status/diff/log/show are not activity events;
+all declared mutation kinds share this renderer. Uninstrumented commands and
+missing sources remain explicit coverage gaps rather than fabricated events.
+
+Known visible agent rows connect to repo rows through the existing 48px gutter.
+Static cwd edges are quiet. New confirmed command/local results use a 3px packet
+with a finite 2.84-second lifetime. Unknown results and missing/hidden endpoints
+never acquire a moving route. Motion off and producer reduced motion keep labels
+and folder edges, consume the watermark and stop packet timers. Hidden updates
+are consumed without a backlog on reopening. Event corrections/removal withdraw
+an existing effect. No recurring timer, frame loop, filesystem scan or subprocess
+is added. Bounds: 64 accounts, 256 repos, 128 bindings, 128 events, eight active
+effects and a 2,048-ID watermark. Excess effects are consumed, not replayed later.
+The existing 2 MiB feed limit still applies. Live installation, native screenshot
+verification and cross-machine collector/transport integration are distinct from
+the portable renderer and fixture checks.
+
 Agent stages 1–4 fill the distribution, work, review and acceptance slots. Stage
 0 is unstarted; stage 5 completes the task bar. The observed session `status`
 is separate: a pane can still be working after its last task reached stage 5.

@@ -9,6 +9,7 @@
     "v": {"const": 1},
     "at": {"type": ["string", "number"]},
     "computers": {"type": "array", "items": {"type": "object"}},
+    "repo_activity": {"$ref": "#/$defs/repo_activity"},
     "spaces": {
       "type": "array",
       "items": {
@@ -18,6 +19,72 @@
     }
   },
   "$defs": {
+    "repo_id": {"type":"string","minLength":1,"maxLength":64,"pattern":"^[a-z][a-z0-9_-]{0,63}(?![\\s\\S])"},
+    "repo_display": {"type":"string","minLength":1,"maxLength":100},
+    "repo_account": {
+      "type":"object","additionalProperties":false,
+      "required":["id","name","kind","connection","source"],
+      "properties":{
+        "id":{"$ref":"#/$defs/repo_id"},"name":{"$ref":"#/$defs/repo_display"},
+        "kind":{"enum":["personal","company"]},
+        "connection":{"enum":["connected","disconnected","unknown"]},
+        "source":{"enum":["private_catalog","explicit_probe"]}
+      },
+      "allOf":[{"if":{"properties":{"source":{"const":"private_catalog"}}},"then":{"properties":{"connection":{"const":"unknown"}}}}]
+    },
+    "repository": {
+      "type":"object","additionalProperties":false,"required":["id","account_id","namespace","name"],
+      "properties":{
+        "id":{"$ref":"#/$defs/repo_id"},"account_id":{"$ref":"#/$defs/repo_id"},
+        "namespace":{"type":"string","pattern":"^[A-Za-z0-9][A-Za-z0-9-]{0,38}(?![\\s\\S])","maxLength":39},
+        "name":{"type":"string","pattern":"^(?!\\.+(?![\\s\\S]))[A-Za-z0-9_.-]{1,100}(?![\\s\\S])","maxLength":100}
+      }
+    },
+    "repo_binding": {
+      "type":"object","additionalProperties":false,"required":["agent_id","repository_id","state"],
+      "properties":{
+        "agent_id":{"$ref":"#/$defs/repo_id"},
+        "repository_id":{"anyOf":[{"$ref":"#/$defs/repo_id"},{"type":"null"}]},
+        "state":{"enum":["cwd","local","unlinked","unknown"]}
+      },
+      "allOf":[{"if":{"properties":{"state":{"const":"cwd"}}},"then":{"properties":{"repository_id":{"$ref":"#/$defs/repo_id"}}},"else":{"properties":{"repository_id":{"type":"null"}}}}]
+    },
+    "repo_event": {
+      "type":"object","additionalProperties":false,
+      "required":["id","operation_id","machine_id","agent_id","repository_id","operation","phase","result","evidence","observed_at"],
+      "properties":{
+        "id":{"$ref":"#/$defs/repo_id"},"operation_id":{"$ref":"#/$defs/repo_id"},"machine_id":{"$ref":"#/$defs/repo_id"},
+        "agent_id":{"anyOf":[{"$ref":"#/$defs/repo_id"},{"type":"null"}]},"repository_id":{"$ref":"#/$defs/repo_id"},
+        "operation":{"enum":["commit","push","pull","merge","fetch","rebase","reset","checkout","switch","cherry-pick","revert","tag","branch","clone","add","rm","mv","stash","restore","clean","worktree","other"]},
+        "phase":{"enum":["attempt","authorization","result"]},"result":{"enum":["unknown","succeeded","failed"]},
+        "evidence":{"enum":["pre_tool","approval","process_exit","head_verified","timeout","sensor_error"]},
+        "observed_at":{"type":"integer","minimum":0,"maximum":8640000000000}
+      },
+      "oneOf":[
+        {"properties":{"evidence":{"const":"pre_tool"},"phase":{"const":"attempt"},"result":{"const":"unknown"}}},
+        {"properties":{"evidence":{"const":"approval"},"phase":{"const":"authorization"},"result":{"const":"unknown"}}},
+        {"properties":{"evidence":{"const":"process_exit"},"phase":{"const":"result"},"result":{"enum":["succeeded","failed"]}}},
+        {"properties":{"evidence":{"const":"head_verified"},"operation":{"const":"merge"},"phase":{"const":"result"},"result":{"const":"succeeded"}}},
+        {"properties":{"evidence":{"enum":["timeout","sensor_error"]},"phase":{"const":"result"},"result":{"const":"unknown"}}}
+      ]
+    },
+    "repo_activity": {
+      "type":"object","additionalProperties":false,"required":["schema","accounts","repositories","bindings","events","coverage"],
+      "properties":{
+        "schema":{"const":"repo_activity_v1"},
+        "accounts":{"type":"array","maxItems":64,"items":{"$ref":"#/$defs/repo_account"}},
+        "repositories":{"type":"array","maxItems":256,"items":{"$ref":"#/$defs/repository"}},
+        "bindings":{"type":"array","maxItems":128,"items":{"$ref":"#/$defs/repo_binding"}},
+        "events":{"type":"array","maxItems":128,"items":{"$ref":"#/$defs/repo_event"}},
+        "coverage":{
+          "type":"object","additionalProperties":false,"required":["state","sensor","live_connected","gaps"],
+          "properties":{
+            "state":{"enum":["gap","unknown"]},"sensor":{"enum":["opt_in_callback","unknown"]},"live_connected":{"type":"boolean"},
+            "gaps":{"type":"array","maxItems":3,"items":{"enum":["unwrapped_commands","uninstalled_peers","remote_effects"]}}
+          }
+        }
+      }
+    },
     "agent": {
       "type": "object",
       "properties": {"profession": {"$ref": "#/$defs/profession"}, "role_group": {"$ref": "#/$defs/profession"}, "coordinator": {"const": true}}
