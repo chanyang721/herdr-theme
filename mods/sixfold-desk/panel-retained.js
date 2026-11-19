@@ -602,7 +602,8 @@ export function createRetainedPanel(cx,{macTitlebar=false,onClassic=null,onDispo
     const topology=c.feed.spaces.map(space=>{
       const group=c.projection.groups.get(space.id);
       // The meta line comes and goes with Slack / work-tool links and moves every row below it.
-      return [space.id,panelMetaHeight(space),group.grouped,group.grouped?group.groups.map(g=>[g.issue?.key,g.section,g.agents.map(a=>a.id),g.folds]):[group.agents.map(a=>a.id),group.folds],group.issueHidden,group.issuesExpanded,group.doneFold];
+      // Lead rows sit above every issue: their order, set and folds move every row below.
+      return [space.id,panelMetaHeight(space),(group.coordinators||[]).map(a=>a.id),group.coordinatorFolds||[],group.grouped,group.grouped?group.groups.map(g=>[g.issue?.key,g.section,g.agents.map(a=>a.id),g.folds]):[group.agents.map(a=>a.id),group.folds],group.issueHidden,group.issuesExpanded,group.doneFold];
     });
     // Row height depends on the parent relation (child rows are 20px) and on a
     // reason line, so both belong to the layout key even when order is unchanged.

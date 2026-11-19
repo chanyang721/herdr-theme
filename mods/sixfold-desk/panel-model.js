@@ -475,9 +475,18 @@ export function agentGroups(space, { includeClosedIds = new Set(), expandedIssue
   const listed = new Map((space?.issues ?? []).map(issue => [issue.key, withLedger(issue, ledger.get(issue.key))]));
   const all = space?.agents ?? [], parents = new Map(all.map(agent => [agent.id, agent]));
   const shown = agent => agent.closing?.step !== 4 || agent.closing.blocked_reason || includeClosedIds.has(agent.id);
-  // Coordinators belong to no issue: the card lists them under its Slack/Linear line.
-  const coordinators = sortedAgents(all.filter(agent => agent.coordinator === true && shown(agent)));
-  const input = all.filter(agent => agent.coordinator !== true);
+  // Lead rows (coordinator: the orchestrator, a space CEO) belong to no issue: the card lists them,
+  // with their own sub-tasks as a tree, under its Slack/Linear line. A finished sub-task leaves.
+  const leadOf = agent => {
+    for (let at = agent, seen = new Set(); at && !seen.has(at.id); seen.add(at.id), at = parents.get(at.parent_id))
+      if (at.coordinator === true) return at;
+    return null;
+  };
+  const underLead = new Set(all.filter(leadOf).map(agent => agent.id));
+  const leadTree = treeAgents(sortedAgents(all.filter(agent => underLead.has(agent.id) && shown(agent)
+    && (agent.coordinator === true || agentState(agent) !== 'done'))), expandedParents);
+  const leads = { coordinators: leadTree.agents, coordinatorFolds: leadTree.folds };
+  const input = all.filter(agent => !underLead.has(agent.id));
   // Where a row belongs: its own issue when the producer names one, else the issue it carries. A row
   // whose own issue is explicitly unknown (null) and that has a parent sits in its parent's bucket, folded.
   const unknown = new Set();
@@ -519,7 +528,10 @@ export function agentGroups(space, { includeClosedIds = new Set(), expandedIssue
     return shown(agent);
   }));
   const empty = { groupsHidden: 0, issueHidden: 0, issuesExpanded: false, groupsExpandable: false, issuesFiltered: 0, doneFold: null };
-  if (!space?.work) return { grouped: false, groups: [], coordinators, ...empty, ...treeAgents(agents, expandedParents) };
+  if (!space?.work) {
+    const tree = treeAgents(agents, expandedParents);
+    return { grouped: false, groups: [], ...leads, ...empty, ...tree, rowMeta: new Map([...leadTree.rowMeta, ...tree.rowMeta]) };
+  }
   // Every issue to work on is shown, each with its panes right under it; Linear's status alone hides one
   // (2026-11-17): a finished issue (completed, canceled, duplicate) leaves the list, and the ones finished
   // today wait in the folded 오늘 마무리 row; a not-yet-started one shows only while a pane works on it.
@@ -544,9 +556,9 @@ export function agentGroups(space, { includeClosedIds = new Set(), expandedIssue
   if (unassigned.length) groups.push({ issue: null, section: 'main', kind: null, working: unassigned.filter(working).length, ...treeAgents(unassigned, expandedParents) });
   if (doneExpanded) groups.push(...done.sort(byState).map(entry => build(entry, 'done')));
   filtered += doneExpanded ? 0 : done.length;
-  return { grouped: true, groups, coordinators, agents: groups.flatMap(group => group.agents), hidden: groups.reduce((sum, group) => sum + group.hidden, 0),
+  return { grouped: true, groups, ...leads, agents: groups.flatMap(group => group.agents), hidden: groups.reduce((sum, group) => sum + group.hidden, 0),
     ...empty, issuesFiltered: filtered, doneFold: done.length ? { count: done.length, expanded: doneExpanded } : null,
-    rowMeta: new Map(groups.flatMap(group => [...group.rowMeta])), folds: groups.flatMap(group => group.folds) };
+    rowMeta: new Map([...leadTree.rowMeta, ...groups.flatMap(group => [...group.rowMeta])]), folds: groups.flatMap(group => group.folds) };
 }
 
 const sameReferences = (a, b) => a?.length === b.length && b.every((value, index) => value === a[index]);

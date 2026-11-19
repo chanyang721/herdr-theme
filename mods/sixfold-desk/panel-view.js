@@ -87,29 +87,31 @@ export function panelLayout(feed, eventState, nativeSpaces=[],groupMap=null) {
     const card={space,groups,top:y,rows:[],height:PANEL_GEOMETRY.header+metaHeight+2};
     anchors.set(space.id,{y:y+PANEL_GEOMETRY.border+PANEL_GEOMETRY.header/2,kind:'space',space:space.id,computer:space.computer});
     let row=y+PANEL_GEOMETRY.border+PANEL_GEOMETRY.header+metaHeight;
-    // Coordinators first, right under the Slack/Linear line, bound to no issue.
+    // One gap between blocks, never two in a row.
+    const gap=()=>{if(card.rows.length&&card.rows.at(-1).kind!=='issue-gap'){card.rows.push({kind:'issue-gap',y:row});row+=PANEL_GEOMETRY.issueGap;}};
+    // Lead rows first, right under the Slack/Linear line, bound to no issue, with their sub-tasks.
     for(const agent of groups.coordinators||[]){
-      const height=agentRowHeight(agent,false);
-      anchors.set(agent.id,{y:row+ROW/2,kind:'agent',space:space.id,computer:space.computer});
+      const child=Boolean(groups.rowMeta?.get(agent.id)?.parent),height=agentRowHeight(agent,child);
+      anchors.set(agent.id,{y:row+(child?height:ROW)/2,kind:'agent',space:space.id,computer:space.computer});
       card.rows.push({kind:'agent',agent,y:row,height,coordinator:true});row+=height;
+      for(const fold of groups.coordinatorFolds||[])if(fold.after===agent.id){card.rows.push({kind:'children-more',fold,y:row,coordinator:true});row+=22;}
     }
-    const coordinatorGap=()=>{if(card.rows.length&&card.rows.at(-1).coordinator){card.rows.push({kind:'issue-gap',y:row});row+=PANEL_GEOMETRY.issueGap;}};
     const groupRows=groups.grouped?groups.groups:[{issue:null,agents:groups.agents,folds:groups.folds}];
     // The folded 오늘 마무리 row (issues Linear finished today) comes after the working list; its
     // issues follow it only while it is expanded.
     let doneRow=false;
     const pushDone=()=>{
       if(doneRow||!groups.doneFold)return;doneRow=true;
-      if(card.rows.length){card.rows.push({kind:'issue-gap',y:row});row+=PANEL_GEOMETRY.issueGap;}
+      gap();
       card.rows.push({kind:'done-more',count:groups.doneFold.count,expanded:groups.doneFold.expanded,y:row});row+=22;
     };
     for(const group of groupRows){
       if(!group.agents.length&&!groups.grouped)continue;
-      coordinatorGap();
+      if(card.rows.at(-1)?.coordinator)gap();
       if(group.section==='done')pushDone();
       // Each issue opens its own block: a small gap before every issue after the first,
       // and its agents sit indented under the heading (cardView).
-      if(groups.grouped&&group!==groupRows[0]){card.rows.push({kind:'issue-gap',y:row});row+=PANEL_GEOMETRY.issueGap;}
+      if(groups.grouped&&group!==groupRows[0])gap();
       if(groups.grouped){card.rows.push({kind:'issue',group,y:row});row+=PANEL_GEOMETRY.issue;}
       for(const agent of group.agents){
         const child=Boolean(groups.rowMeta?.get(agent.id)?.parent),height=agentRowHeight(agent,child);
@@ -193,11 +195,12 @@ export function agentRow(view,agent,space,tag,state,color,t,motion){
   const others=agentOtherIssues(agent),role=ROLE_LABELS[agent.role]||'',narrow=(view.panelWidth||224)<300;
   // The chip names the role group (a recorded profession, else the producer's CEO·TL·QA); the
   // operational role (구현·검수·통합) is its colour and tooltip. Without a group it is the role itself.
-  const profession=agent.profession?.label||'',group=agent.profession?(/^[a-z]{2,4}$/.test(agent.profession.id)?agent.profession.id.toUpperCase():profession):agent.role_group?.label||'';
+  const short=value=>value?(/^[a-z]{2,4}$/.test(value.id)?value.id.toUpperCase():value.label):'';
+  const profession=agent.profession?.label||'',group=short(agent.profession)||agent.role_group?.label||'';
   const roleText=group||role;
   const roleTone=agent.coordinator?t.accent:agent.role==='review'?t.ansi5:agent.role==='integrate'?t.ansi6:null;
   const heldTip=others.length?`맡은 이슈 ${others.length+1}개\n지금: ${agent.own_issue||agent.issue||'이슈 미확인'}\n${others.join(', ')}`:'';
-  const tagTip=[profession&&`직무 ${profession}`,!profession&&group&&`역할군 ${group}`,agent.coordinator&&'조정자 · 이슈에 묶이지 않음',role&&`역할 ${role}`,heldTip].filter(Boolean).join('\n');
+  const tagTip=[profession&&`직무 ${profession}`,!profession&&group&&`역할군 ${group}`,agent.coordinator&&'리드 칸 · 이슈에 묶이지 않음',role&&`역할 ${role}`,heldTip].filter(Boolean).join('\n');
   const line=h_flex().id(`panel-agent-content-${agent.id}`).w_full().min_w(0).gap(5).items_center().opacity(ghost?0:1)
     .when(born&&motion,e=>e.transition('opacity',{duration:180,easing:'ease-out'}));
   const dimmed=rowState?rowState==='closed':status==='done';

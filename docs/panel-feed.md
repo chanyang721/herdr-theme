@@ -112,12 +112,12 @@ these fields the rows keep their earlier placement.
 
 An agent may also supply `profession: {"id":"custom-discipline","label":"QA"}`.
 This is generic display metadata, independent of the operational `role`; no
-profession catalog or implied role exists in the theme. `id` is an opaque
+profession catalog or implied role exists in the theme. `id` is a
 1–80 character string without whitespace or ASCII control characters. `label`
 is 1–48 characters of plain text, without leading/trailing whitespace or ASCII
 control characters. Extra fields or malformed values drop the whole extension.
 The label is rendered through a text child, never interpreted as markup or code.
-It shares the existing role chip (`QA · 검수`) in both wide and narrow panels;
+It takes the existing role chip in both wide and narrow panels (below);
 long text truncates, the tooltip retains the complete label, and the narrow task
 title keeps its minimum width. Without valid metadata, existing role rendering
 is unchanged. The theme does not infer profession from titles or read any other
@@ -129,15 +129,17 @@ describes the compatible feed envelope and this optional `$defs.agent` extension
 Other existing fields remain open in that schema and retain this document's
 display contract. Invalid optional metadata is discarded by the consumer rather
 than invalidating otherwise usable rows.
-An agent may also carry `role_group: {"id":"tl","label":"TL"}`, the producer's short
-display group (2026-11-19), with the same bounds as `profession`, and `coordinator: true`.
-The chip names the group: a valid `profession` first (a 2–4 letter lowercase id shows as its
-uppercase id, so `sre` reads **SRE**; any other id shows its label), else `role_group`'s label,
-else the operational role as before (**구현**·**검수**·**통합**). The operational role stays in
-the chip colour and the tooltip (`역할군 TL` · `역할 구현`). A `coordinator` row is taken out of
-every issue group and listed first, flat, right under the Slack/Linear line, followed by the
-usual issue gap; its chip uses the accent colour and its tooltip says it is bound to no issue.
-Malformed values drop the field, as for `profession`.
+A lead row (2026-11-19) carries `coordinator: true`: the shared space's orchestrator,
+or a session whose current attempt was assigned the `ceo` profession. The orchestrator also
+carries `role_group: {"id":"orchestrator","label":"ORCH"}`, same bounds as `profession`;
+other rows carry none, and the theme infers none. The chip names a valid `profession`
+first (a 2–4 letter lowercase id reads as its uppercase id: `ceo` → **CEO**, `sre` →
+**SRE**; any other id shows its label), else `role_group`'s label, else the operational
+role as before (**구현**·**검수**·**통합**, narrow **구**·**검**·**통**). The operational role
+stays in the chip colour and the tooltip. Lead rows, with their own sub-tasks as a tree
+(a finished sub-task leaves), are taken out of every issue group and listed first, flat,
+right under the Slack/Linear line, then one issue gap; their order, set and folds are part
+of the retained layout key. Malformed values drop the field only.
 
 Agents inside an issue are not truncated. Explicit
 `parent_id` relationships form trees within the same issue. More than three child
