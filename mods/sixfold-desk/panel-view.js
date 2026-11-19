@@ -40,7 +40,9 @@ export function briefRows(view,feed,motion,now=Date.now()){
   const animated=new Set();
   for(const agent of (feed?.spaces||[]).flatMap(space=>space.agents)){
     const state=agentRowState(agent);
-    if(view.statusBrief.active(agent.id,state,now)&&motion&&state&&SESSION_STATES[state].animated)animated.add(agent.id);
+    // A working row keeps its spinner moving for as long as it works; the other
+    // animated states play only briefly after they change (CPU, 11/17).
+    if(motion&&state&&SESSION_STATES[state].animated&&(state==='working'||view.statusBrief.active(agent.id,state,now)))animated.add(agent.id);
   }
   view.animated=animated;
   return animated.size?view.statusBrief.nextAt(now):null;

@@ -363,6 +363,9 @@ export function agentCleanupLabel(agent, now = Date.now()) {
 // visible without guessing completion, acceptance or permission to close.
 export function agentWaitLabel(agent) {
   if (agent?.wait_kind === 'active') return null;
+  // A working row draws its live stage bar; a keep reason is about closing a
+  // resting pane, so it waits in the tooltip until the row rests.
+  if (agent?.status === 'working') return null;
   if (owns(WAIT_LABELS, agent?.wait_kind)) return WAIT_LABELS[agent.wait_kind];
   const reason = agent?.closing?.blocked_reason || agent?.keep_reason || '';
   const state = agentRowState(agent);

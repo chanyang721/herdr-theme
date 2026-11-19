@@ -78,7 +78,7 @@ test('20 spaces and 60 rows retain their entities; one title change only renders
 test('changing only wait_kind redraws the retained slot without moving or growing its row',async()=>{
   const r=await runtime(),raw=makePanelLoadFixture({spaces:2,agentsPerSpace:2,now:Date.now()});
   try{
-    const row=raw.spaces[0].agents[0];row.keep_reason='Unchanged producer detail';row.wait_kind='review_pending';
+    const row=raw.spaces[0].agents[0];row.status='idle';row.state='idle';row.keep_reason='Unchanged producer detail';row.wait_kind='review_pending';
     r.controller.apply(cleanPanelFeed(raw),'ready');r.flush();
     const entity=r.controller.rows.get(row.id);
     const walk=n=>n&&typeof n==='object'?[n,...(n.nodes||[]).flatMap(walk)]:[];

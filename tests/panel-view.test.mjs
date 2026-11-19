@@ -742,10 +742,16 @@ test('only the explicit active category preserves progress; text never overrides
  assert.equal(byId(active.row,`panel-wait-${active.agent.id}`),undefined);
  assert(byId(active.row,`panel-stage-${active.agent.id}-1`));
  assert(call(active.row,'tooltip')[1].includes('Producer activity detail'));
- const blocked=await stateRow({status:'working',state:'working',stage:2,wait_kind:'review_pending',keep_reason:'Producer activity detail'});
- assert.deepEqual(words(byId(blocked.row,`panel-wait-${blocked.agent.id}`)),['검수 대기']);
- const combined=await stateRow({status:'working',state:'working',stage:2,wait_kind:'identity',keep_reason:'Producer activity detail'});
- assert.deepEqual(words(byId(combined.row,`panel-wait-${combined.agent.id}`)),['신원 확인']);
+ // A working row draws its live stage bar whatever keeps it from closing; the
+ // category shows once it rests and the reason stays in the tooltip meanwhile.
+ for(const wait_kind of ['review_pending','identity','input']){
+  const working=await stateRow({status:'working',state:'working',stage:2,wait_kind,keep_reason:'Producer activity detail'});
+  assert.equal(byId(working.row,`panel-wait-${working.agent.id}`),undefined);
+  assert(byId(working.row,`panel-stage-${working.agent.id}-1`));
+  assert(call(working.row,'tooltip')[1].includes('Producer activity detail'));
+ }
+ const resting=await stateRow({status:'idle',state:'idle',stage:2,wait_kind:'review_pending',keep_reason:'Producer activity detail'});
+ assert.deepEqual(words(byId(resting.row,`panel-wait-${resting.agent.id}`)),['검수 대기']);
  for(const wait_kind of [undefined,'future_category','constructor']){
   const unknown=await stateRow({state:'idle',wait_kind,keep_reason:'Review, acceptance or identity words are only text'});
   assert.deepEqual(words(byId(unknown.row,`panel-wait-${unknown.agent.id}`)),['상태 확인']);
@@ -757,15 +763,21 @@ test('a status image animates for the brief window after a state change, then th
  const realNow=Date.now;let now=Date.parse('2026-11-09T05:00:00Z');
  try{
   Date.now=()=>now;
-  Object.assign(raw.spaces[0].agents[0],{state:'idle'});
+  Object.assign(raw.spaces[0].agents[0],{state:'idle',status:'idle'});
   const view=viewFor(raw),agent=view.panelState.feed.spaces[0].agents[0];
   assert.equal(r.briefRows(view,view.panelState.feed,true,now),null,'first sight: still');
-  now+=5000;agent.state='working';
+  now+=5000;agent.state='needs_human';
   const at=r.briefRows(view,view.panelState.feed,true,now);
   assert(view.animated.has(agent.id));assert.equal(at,now+8000);
   assert.equal(r.briefRows(view,view.panelState.feed,false,now),null,'motion off: never animated');
   now+=8000;
   assert.equal(r.briefRows(view,view.panelState.feed,true,now),null);assert(!view.animated.has(agent.id));
+  // A working row keeps its spinner moving for as long as it works.
+  agent.state='working';agent.status='working';
+  r.briefRows(view,view.panelState.feed,true,now);assert(view.animated.has(agent.id));
+  now+=60000;
+  r.briefRows(view,view.panelState.feed,true,now);assert(view.animated.has(agent.id),'still working: still moving');
+  assert.equal(r.briefRows(view,view.panelState.feed,false,now),null,'motion off: never animated');
  }finally{Date.now=realNow;}
 });
 
