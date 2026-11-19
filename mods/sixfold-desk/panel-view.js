@@ -272,9 +272,11 @@ export function cardView(view,card,state,color,computerNames,t,motion,rowEntitie
   if(!bodyOnly)box.ml(8).mr(RIGHT).mb(10).rounded(6).border(1).border_color(sharing?color:t.border).bg(t.chrome);
   if(!bodyOnly)box.child(h_flex().h(PANEL_GEOMETRY.header).flex_none().px(7).gap(4).items_center().rounded(5).bg(selected?t.selected:t.surface)
     .border_l(3).border_color(color).when(Boolean(space.native),e=>e.cursor_pointer().on_click(()=>run('space.select',{id:space.native.id})))
-    .child(spaceIcon(t.muted)).child(text(space.name,t.foreground,compact?11:12).font_bold().flex_1().min_w(0).tooltip(space.name))
-    // What the whole space is (the producer's role_group): one chip beside the name; the name shrinks first.
-    .when(Boolean(space.role_group),e=>e.child(div().id(`panel-space-role-${space.id}`).flex_none().max_w(compact?64:110).truncate()
+    .child(spaceIcon(t.muted)).child(text(space.name,t.foreground,compact?11:12).id(`panel-space-name-${space.id}`).font_bold().flex_1()
+      .min_w(space.role_group?TITLE_MIN:0).tooltip(space.name))
+    // What the whole space is (the producer's role_group): one chip beside the name. The name keeps
+    // TITLE_MIN like a row title; a narrow panel caps the chip harder and its tooltip keeps the label.
+    .when(Boolean(space.role_group),e=>e.child(div().id(`panel-space-role-${space.id}`).flex_none().max_w((view.panelWidth||224)<300?40:110).truncate()
       .px(4).rounded(3).border(1).border_color(color).text_size(9).text_color(color)
       .tooltip(space.role_group.label).accessibility_label(space.role_group.label).child(space.role_group.label)))
     .when(sharing,e=>e.child(h_flex().id(`panel-partner-${space.id}`).h(18).rounded(9).border(1).border_color(color+'66').bg(color+'26').px(compact?4:7).gap(3).items_center().max_w((view.panelWidth||224)<300?48:95).min_w(0).tooltip(computerNames.get(space.share.computer)||'공유 컴퓨터')
