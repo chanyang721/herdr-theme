@@ -122,6 +122,29 @@ export function groupAsks(cards) {
   return [...groups.values()];
 }
 export const cardsFor = (cards, terminal) => (cards ?? []).filter(card => termKey(card) === (terminal ?? ''));
+
+// Display requests use opaque feed IDs, not native navigation targets. Only an
+// explicit owner attaches a request to a space; names and focus are not hints.
+export function spaceAsks(requests, space) {
+  if (!key(space) || !Array.isArray(requests)) return [];
+  const counts = new Map();
+  for (const item of requests) if (key(item?.id)) counts.set(item.id, (counts.get(item.id) ?? 0) + 1);
+  return requests.filter(item => item && key(item.id) && counts.get(item.id) === 1
+    && Object.hasOwn(item, 'space') && item.space === space).map(item => ({
+    id: item.id, space, agent: key(item.agent) ? item.agent : null,
+    kind: ['permission', 'question', 'plan'].includes(item.kind) ? item.kind : null,
+    title: text(item.title) ? item.title.slice(0, 500) : '',
+  }));
+}
+export const SPACE_ASK_WIDTH = 45;
+export const SPACE_ASK_GAP = 1;
+// Bounds and the returned position share the parent's coordinate system. The
+// caller reserves the right gutter and updates bounds on layout/scroll changes.
+export function spaceAskLayout(bounds) {
+  if (!bounds || !['x', 'y', 'w', 'h'].every(k => Number.isFinite(bounds[k])) || bounds.w <= 0 || bounds.h <= 0) return null;
+  const left = bounds.x + bounds.w + SPACE_ASK_GAP;
+  return Number.isFinite(left) ? {left, top: bounds.y, width: SPACE_ASK_WIDTH, height: bounds.h} : null;
+}
 function digest(value) {
   let h = 0x811c9dc5;
   for (let i = 0; i < value.length; i++) { h ^= value.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; }

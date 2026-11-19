@@ -2,12 +2,13 @@ import { div } from 'gpui-kit';
 import { h_flex, v_flex } from 'gpui-base';
 import { exec, writeTextFile, appHome, shared, setShared, openOverlay, closeOverlay, props, panes, spaces, focused } from 'herdr';
 import { KIND_WORDS, ASK_WORDS, SUMMARY_KEY, bridgeFrom, parseAsks, questionsOf, actionsOf, choose, complete, actionRequest, requestPath, acceptedReceipt, detailOf, selectionOf,
-  askSummary, summaryFor, groupAsks, cardsFor, clampPage, reconcile, popupHeight, errorText, autoPopupTarget, prunedOpened } from './ask-model.js';
+  askSummary, summaryFor, groupAsks, cardsFor, spaceAsks, spaceAskLayout, clampPage, reconcile, popupHeight, errorText, autoPopupTarget, prunedOpened } from './ask-model.js';
 
 import {subscribeJsonFile,readJsonSnapshot} from './panel-io.js';
 
 const ROOT = '/data/sixfold';
 let sequence = 0;
+// Space tabs share these cards; their placement does not change automatic popups.
 export function watchAsks(view, cx) {
   view.stopAsks?.();
   view.asks = null; view.askChoices = Object.create(null); view.askBusy = Object.create(null); view.askErrors = Object.create(null); view.askBridge = null;
@@ -182,6 +183,32 @@ export function askSection(view, t, lang, nameOf) {
         .when(group.cards.length > 1, e => e.child(div().flex_none().text_size(10).text_color(t.blocked).child(more.count(group.cards.length)))));
     })))
     .when(groups.length > GROUP_ROWS, e => e.child(div().text_size(9).text_color(t.muted).child(more.more(groups.length))));
+}
+
+// Mount beside a measured space card in a parent that contains its right
+// gutter. Feed IDs are comparison keys only. onOpen receives display metadata;
+// the caller resolves a verified target and opens the existing response UI.
+// No click, dismissal or disappearance here sends a response.
+export function spaceAskView(requests, space, t, lang, {bounds, onOpen} = {}) {
+  const cards = spaceAsks(requests, space), layout = spaceAskLayout(bounds);
+  if (!cards.length || !layout) return null;
+  const ko = lang === 'ko', canOpen = typeof onOpen === 'function';
+  const label = ko ? '확인 대기' : 'Waiting';
+  const kind = cards[0].kind && cards.every(card => card.kind === cards[0].kind) ? kindLabel(lang, cards[0].kind) : (ko ? '요청' : 'Ask');
+  const preview = cards.slice(0, 8).map(card => card.title || kindLabel(lang, card.kind) || label);
+  if (cards.length > 8) preview.push(ko ? `외 ${cards.length - 8}건` : `+${cards.length - 8} more`);
+  let tab = stop(v_flex().id(`sf-space-ask-${space}`).absolute().left(layout.left).top(layout.top)
+    .w(layout.width).h(layout.height).overflow_hidden().items_center().justify_center().gap(5)
+    .px(2).border(1).border_l(3).border_color(t.blocked).rounded(5).bg(t.chrome).text_color(t.blocked)
+    .tooltip(`${label} · ${cards.length}\n${preview.join('\n')}`)
+    .child(div().flex_none().text_size(12).font_bold().child('◆'))
+    .child(div().flex_none().max_w(37).truncate().text_size(9).font_bold().child(kind))
+    .child(div().flex_none().text_size(10).font_bold().child(ko ? '확인' : 'Wait'))
+    .when(ko, el => el.child(div().flex_none().text_size(10).font_bold().child('대기')))
+    .child(div().flex_none().text_size(11).font_bold().child(String(cards.length))))
+    .on_click((_event, cx) => { cx.stop_propagation(); if (canOpen) onOpen(cards, cx); });
+  if (canOpen) tab = tab.cursor_pointer();
+  return tab;
 }
 
 // The popup copy reads the neutral files itself (no subscription of its own);

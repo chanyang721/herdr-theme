@@ -3,7 +3,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
-import {askSummary, groupAsks, summaryFor, cardsFor, reconcile, clampPage, popupHeight, SUMMARY_KEY, errorText} from '../mods/sixfold-desk/ask-model.js';
+import {askSummary, groupAsks, summaryFor, cardsFor, spaceAsks, spaceAskLayout, SPACE_ASK_WIDTH, SPACE_ASK_GAP, reconcile, clampPage, popupHeight, SUMMARY_KEY, errorText} from '../mods/sixfold-desk/ask-model.js';
 
 const bridge = {python: 'python3', script: '/demo/bridge/provider.py', args: ['--local']};
 const card = (id, terminal, extra = {}) => ({id, revision: 'r1', kind: 'permission', terminal, title: `Title ${id}`,
@@ -18,12 +18,13 @@ const multi = card('multi', 'pane-a', {kind: 'question', title: 'Two questions',
 
 // ---- fake element tree -------------------------------------------------
 function el(kind) {
-  const node = {kind, id: null, children: [], calls: [], click: null};
+  const node = {kind, id: null, children: [], calls: [], args: {}, click: null};
   const proxy = new Proxy(function () {}, {get(_t, prop) {
     if (prop === '__node') return node;
     if (prop === 'then') return undefined;
     return (...args) => {
       node.calls.push(prop);
+      node.args[prop] = args;
       if (prop === 'child') { if (args[0] != null) node.children.push(args[0]); }
       else if (prop === 'children') { for (const c of args[0] ?? []) if (c != null) node.children.push(c); }
       else if (prop === 'when') { return args[0] ? args[1](proxy) : proxy; }
@@ -100,6 +101,112 @@ function host(cards) {
   return {h, impl, snapshot, files, store, calls, overlays, closed, focus, setCards, emit, setProps: p => { currentProps = p; }};
 }
 const theme = new Proxy({}, {get: (_t, k) => `#${String(k).length.toString(16).padStart(6, '0')}`});
+
+// ---- space-owned display requests ---------------------------------------
+const request = (id, space, extra = {}) => ({id, space, agent: 'a-demo', kind: 'permission', title: `Request ${id}`, ...extra});
+const bounds = {x: 7, y: 430, w: 265, h: 128};
+
+test('display requests attach only by an explicit opaque space ID', () => {
+  const requests = [request('r-a', 's-a'), request('r-b', 's-b'), request('r-unknown', null),
+    {id: 'r-missing', title: 'No owner', terminal: 's-a'}, request('r-native', 'native-space'),
+    request('r-again', 's-a'), request('r-again', 's-b'), request('../bad', 's-a')];
+  assert.deepEqual(spaceAsks(requests, 's-a').map(r => r.id), ['r-a']);
+  assert.deepEqual(spaceAsks(requests, 's-b').map(r => r.id), ['r-b']);
+  assert.deepEqual(spaceAsks(requests, null), []);
+  assert.deepEqual(spaceAsks(requests, ''), []);
+  assert.deepEqual(spaceAsks(null, 's-a'), []);
+  assert.deepEqual(spaceAsks([Object.assign(Object.create({space: 's-a'}), {id: 'r-x'})], 's-a'), []);
+});
+
+test('display metadata is bounded and never carries action or navigation authority', () => {
+  const raw = request('r-a', 's-a', {title: 'X'.repeat(2000), kind: 'other', agent: '../bad',
+    actions: [{id: 'approve'}], terminal: 'native-pane', nav: {space_id: 'native-space'}});
+  const [clean] = spaceAsks([raw], 's-a');
+  assert.deepEqual(clean, {id: 'r-a', space: 's-a', agent: null, kind: null, title: 'X'.repeat(500)});
+  assert.deepEqual(spaceAsks([request('r-min', 's-a', {title: undefined, kind: undefined, agent: null})], 's-a'),
+    [{id: 'r-min', space: 's-a', agent: null, kind: null, title: ''}], 'an unresolved request without optional text still counts');
+  clean.title = 'changed'; assert.equal(raw.title.length, 2000, 'source objects are not mutated');
+});
+
+test('space tab geometry follows the card outside its right edge at both panel widths', () => {
+  for (const width of [265, 305]) {
+    const b = {...bounds, w: width};
+    assert.deepEqual(spaceAskLayout(b), {left: b.x + width + SPACE_ASK_GAP, top: b.y, width: SPACE_ASK_WIDTH, height: b.h});
+    assert.equal(spaceAskLayout({...b, y: -20, h: 196}).top, -20, 'scroll coordinates are not clamped to another card');
+    assert.equal(spaceAskLayout({...b, h: 196}).height, 196, 'expanded cards keep their own height');
+  }
+  const compact = spaceAskLayout(bounds);
+  assert.equal(compact.left, 273);
+  assert.ok(compact.left + compact.width <= 320, 'the 45px gutter tab fits the compact panel');
+  for (const b of [null, {}, {...bounds, x: NaN}, {...bounds, y: Infinity}, {...bounds, w: 0},
+    {...bounds, h: -1}, {...bounds, w: '265'}, {...bounds, x: Number.MAX_VALUE, w: Number.MAX_VALUE}]) {
+    assert.equal(spaceAskLayout(b), null);
+  }
+});
+
+test('space tab aligns to its measured card and opens only that space without responding or focusing', async () => {
+  const f = host([]), mod = await load(f.h), opened = [], cx = context();
+  const requests = [request('r-a', 's-a'), request('r-b', 's-b'), request('r-a2', 's-a', {agent: null}), request('r-null', null)];
+  const tree = mod.spaceAskView(requests, 's-a', theme, 'ko', {bounds, onOpen: (items, context) => opened.push({items, context})});
+  const root = nodeOf(tree);
+  assert.deepEqual(root.args.left, [273]); assert.deepEqual(root.args.top, [430]);
+  assert.deepEqual(root.args.w, [45]); assert.deepEqual(root.args.h, [128]);
+  assert.match(text(tree), /확인 대기 2/); assert.doesNotMatch(root.args.tooltip[0], /Request r-b|Request r-null/);
+  assert.deepEqual(f.calls, []); assert.deepEqual(opened, [], 'rendering does not auto-open');
+  root.click(event, cx);
+  assert.deepEqual(opened[0].items.map(r => r.id), ['r-a', 'r-a2']); assert.equal(opened[0].context, cx);
+  assert.deepEqual(f.calls, []); assert.deepEqual(f.focus, []); assert.deepEqual(f.overlays, []);
+  assert.ok(root.calls.includes('on_mouse_down') && root.calls.includes('on_mouse_up'));
+});
+
+test('resolved or relocated requests remove the old tab and never leak to an unknown space', async () => {
+  const f = host([]), mod = await load(f.h), render = (items, space = 's-a', b = bounds) => mod.spaceAskView(items, space, theme, 'en', {bounds: b});
+  assert.ok(render([request('r-a', 's-a')]));
+  assert.equal(render([]), null, 'confirmed removal hides the tab');
+  assert.equal(render([request('r-a', 's-b')]), null, 'relocation removes it from the previous owner');
+  assert.ok(render([request('r-a', 's-b')], 's-b'));
+  assert.equal(render([request('r-a', null)]), null);
+  assert.equal(render([request('r-a', 's-a')], 's-a', null), null, 'unmeasured cards do not guess a position');
+  nodeOf(render([request('r-a', 's-a')])).click(event, context());
+  assert.deepEqual(f.calls, []);
+});
+
+test('many requests occupy one tab and a bounded tooltip while every request reaches the opener', async () => {
+  const f = host([]), mod = await load(f.h), requests = Array.from({length: 100}, (_, i) => request(`r-${i}`, 's-a'));
+  let opened;
+  const tree = mod.spaceAskView(requests, 's-a', theme, 'en', {bounds, onOpen: items => { opened = items; }});
+  assert.match(text(tree), /Wait 100/);
+  const root = nodeOf(tree);
+  assert.equal(root.args.tooltip[0].split('\n').length, 10); assert.match(root.args.tooltip[0], /92 more/);
+  root.click(event, context()); assert.equal(opened.length, 100); assert.equal(opened.at(-1).id, 'r-99');
+  assert.deepEqual(root.args.h, [128], 'request volume never grows the card');
+});
+
+test('space tabs coexist with automatic foreign popups without responding or moving focus', async () => {
+  for (const spaceAnchored of [false, true]) {
+    const f = host([card('a1', 'pane-a')]);
+    Object.assign(f.h, {panes: () => [{terminal: 'pane-a', tab: 'tab-a'}],
+      spaces: () => [{id: 'native-a', tabs: [{id: 'tab-a'}]}], focused: () => ({space: 'native-b'})});
+    const mod = await load(f.h), view = {}, cx = context();
+    mod.watchAsks(view, cx, {spaceAnchored}); await Promise.resolve(); await Promise.resolve();
+    assert.equal(view.asks.length, 1); assert.equal(f.overlays.length, 1);
+    assert.equal(f.overlays[0].props.terminal, 'pane-a');
+    const render = () => mod.spaceAskView(view.asks.map(item => ({...item, space: 's-a'})), 's-a', theme, 'ko', {bounds});
+    assert.ok(render(), 'the space tab stays visible alongside the automatic popup');
+    assert.equal(f.store.get(SUMMARY_KEY).panes['pane-a'].n, 1, 'manual response UI still receives card summaries');
+    f.h.closeOverlay('ov-1');
+    f.setCards([card('a1', 'pane-a')]);
+    assert.equal(f.overlays.length, 1, 'the same request does not reopen a dismissed popup');
+    assert.ok(render(), 'closing a popup leaves the unresolved space tab visible');
+    f.setCards([card('a1', 'pane-a', {revision: 'r2'})]);
+    assert.equal(f.overlays.length, 2, 'a revised foreign request still opens automatically');
+    assert.deepEqual(f.focus, []);
+    assert.deepEqual(f.calls.filter(([kind]) => kind === 'write' || kind === 'exec'), []);
+    f.setCards([]); assert.deepEqual(view.asks, []);
+    assert.equal(render(), null, 'confirmed resolution removes the tab');
+    view.stopAsks();
+  }
+});
 
 // ---- pure model ----------------------------------------------------------
 test('summary groups cards per terminal, versions by id and revision, and hides without a bridge', () => {
