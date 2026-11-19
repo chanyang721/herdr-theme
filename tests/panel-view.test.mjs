@@ -121,15 +121,15 @@ test('brand SVG assets use full-color images while the space grid remains a tint
   }
 });
 
-test('Codex rows draw the plan-usage chip mark in its colour; Claude keeps its icon and the theme colour',async()=>{
+test('working rows draw the plan-usage chip marks in their family colours; resting rows draw them muted',async()=>{
   const r=await renderer(false);
-  const feed=makePanelFixture({agents:[{title:'claude row',family:'claude'},{title:'codex row',family:'codex'}]});
+  const feed=makePanelFixture({agents:[{title:'claude row',family:'claude',status:'working',state:'working'},{title:'codex row',family:'codex',status:'working',state:'working'},{title:'claude rest',family:'claude',status:'idle',state:'idle'}]});
   const nodes=all(r.renderPanelTracking(viewFor(feed),t,r.cx));
   const codex=nodes.filter(n=>n.value==='mods/sixfold-desk/icons/codex-mark.svg');
-  const claude=nodes.filter(n=>n.value==='mods/sixfold-desk/icons/claude.svg');
+  const claude=nodes.filter(n=>n.value==='mods/plan-usage/claude.svg');
   assert(codex.length>0&&claude.length>0);
   assert(codex.every(n=>n.kind==='svg'&&call(n,'text_color')?.[1]==='#10A37F'));
-  assert(claude.every(n=>n.kind==='svg'&&call(n,'text_color')?.[1]===t.foreground));
+  assert(claude.every(n=>n.kind==='svg')&&claude.some(n=>call(n,'text_color')?.[1]==='#D97757')&&claude.some(n=>call(n,'text_color')?.[1]===t.muted));
   assert.equal(nodes.filter(n=>n.value==='mods/sixfold-desk/icons/codex.svg').length,0);
   const mark=await readFile(new URL('../mods/sixfold-desk/icons/codex-mark.svg',import.meta.url),'utf8');
   assert.match(mark,/^<svg[^>]*viewBox="0 0 24 24"/);

@@ -131,9 +131,13 @@ export function panelLayout(feed, eventState, nativeSpaces=[],groupMap=null) {
 // Codex rows draw the same mark and colour as the plan-usage chip above (mods/plan-usage/codex.svg,
 // provider colour #10A37F), so one agent family looks the same in both places.
 const CODEX_COLOR='#10A37F';
+// Claude rows use the plan-usage chip's Anthropic mark and colour (#D97757). A row shows its family
+// colour only while working; any other status draws the mark in the muted grey.
+const CLAUDE_COLOR='#D97757';
+const familyColor=(agent,status,t)=>status!=='working'?t.muted:agent.family==='codex'?CODEX_COLOR:agent.family==='claude'?CLAUDE_COLOR:t.foreground;
 const familyIcon=agent=>agent.family==='codex'
   ? svg('mods/sixfold-desk/icons/codex-mark.svg').size(13).flex_none()
-  : agent.family==='claude' ? svg('mods/sixfold-desk/icons/claude.svg').size(13).flex_none()
+  : agent.family==='claude' ? svg('mods/plan-usage/claude.svg').size(13).flex_none()
   : div().size(12).flex_none().rounded(3).border(1);
 export function toolIcon(tool,t){
   if(tool==='linear')return image('mods/sixfold-desk/icons/tool-linear.svg').size(11).flex_none();
@@ -211,7 +215,7 @@ export function agentRow(view,agent,space,tag,state,color,t,motion){
     .when(Boolean(agent.nav)&&agent.closing?.step!==4,e=>e.cursor_pointer().hover(h=>h.bg(t.hover))
       .on_click((_event,cx)=>{cx.stop_propagation();navigatePanelAgent(agent);}));
   line
-    .child(div().relative().size(13).flex_none().child(familyIcon(agent).text_color(agent.family==='codex'?CODEX_COLOR:t.foreground)).when(Boolean(detail.remoteBadge),e=>e.child(detail.remoteBadge)))
+    .child(div().relative().size(13).flex_none().child(familyIcon(agent).text_color(familyColor(agent,status,t))).when(Boolean(detail.remoteBadge),e=>e.child(detail.remoteBadge)))
     // Role chip (구현·검수·통합): a review task that kept its original title still reads as a review.
     .when(!narrow&&Boolean(roleText),e=>e.child(div().id(`panel-role-${agent.id}`).flex_none().when(Boolean(group),e=>e.max_w(120).truncate()).px(3).rounded(3).border(1)
       .border_color(roleTone||t.border).text_size(8).text_color(roleTone||t.muted)
