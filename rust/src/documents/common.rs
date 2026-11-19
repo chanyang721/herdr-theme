@@ -591,8 +591,7 @@ pub fn site_config(home: Option<&Path>, app: Option<&Path>) -> Value {
     base
 }
 pub fn is_hub(space: &Value, site: &Value) -> bool {
-    arr(&site["hub_space_ids"]).contains(&space["id"])
-        || fold(s(&space["name"])) == "hub"
+    arr(&site["hub_space_ids"]).contains(&space["id"]) || fold(s(&space["name"])) == "hub"
 }
 fn runtime_repository(executable: &Path, directory: &Path) -> Option<PathBuf> {
     executable

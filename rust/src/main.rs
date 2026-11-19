@@ -36,8 +36,8 @@ fn main() {
         | "media_image" => herdr_theme::documents::run(&command, &args),
         "pinned_system_metrics" => herdr_theme::automation::run(&command, &args),
         name if name.starts_with("pinned_") => herdr_theme::documents::run(&command, &args),
-        "doc_catalog" | "site_config" | "file_lock" | "workspace_mods"
-        | "app_backend" | "voice_policy" | "voice_settings" => Ok(()),
+        "doc_catalog" | "site_config" | "file_lock" | "workspace_mods" | "app_backend"
+        | "voice_policy" | "voice_settings" => Ok(()),
 
         name if name.starts_with("native_") => herdr_theme::observers::run(&command, &args),
         name if name.starts_with("voice_")

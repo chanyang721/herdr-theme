@@ -37,7 +37,11 @@ pub fn find(name: &str, beside: Option<&Path>, path: Option<&std::ffi::OsStr>) -
     beside
         .map(|dir| dir.join(&file))
         .into_iter()
-        .chain(path.into_iter().flat_map(std::env::split_paths).map(|dir| dir.join(&file)))
+        .chain(
+            path.into_iter()
+                .flat_map(std::env::split_paths)
+                .map(|dir| dir.join(&file)),
+        )
         .find(|candidate| executable(candidate))
 }
 pub fn run(invoked: &str, command: &str, args: &[String]) -> Result<()> {

@@ -313,12 +313,10 @@ fn installer_preserves_external_same_name_scripts_and_existing_native_commands_v
     let temp = tempfile::tempdir().unwrap();
     let repo = source(temp.path());
     let app = temp.path().join("app");
-    let values = [
-        (
-            "voice-integration.json",
-            json!({"command":["other-native-helper","focus_queue"],"custom":3}),
-        ),
-    ];
+    let values = [(
+        "voice-integration.json",
+        json!({"command":["other-native-helper","focus_queue"],"custom":3}),
+    )];
     for (name, value) in &values {
         put(&app, &format!("data/sixfold/{name}"), &value.to_string())
     }
@@ -420,7 +418,8 @@ fn updater_rolls_back_config_migrations_and_native_runtime_with_unhealthy_candid
         .unwrap();
     assert_eq!(receipt["phase"], "rolled_back");
     assert!(
-        arr(&receipt["files"]).contains(&json!(PathBuf::from("data/sixfold/voice-integration.json"))),
+        arr(&receipt["files"])
+            .contains(&json!(PathBuf::from("data/sixfold/voice-integration.json"))),
         "the config migration must have participated in rollback"
     );
 }

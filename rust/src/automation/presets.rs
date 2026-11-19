@@ -93,11 +93,17 @@ mod tests {
         );
         assert_eq!(
             choose(&site, "claude", Some("deep"), None, None).unwrap(),
-            (Some("deep".into()), json!({"model":"m-deep","effort":"high"}))
+            (
+                Some("deep".into()),
+                json!({"model":"m-deep","effort":"high"})
+            )
         );
         assert_eq!(
             choose(&site, "claude", None, None, None).unwrap(),
-            (Some("quick".into()), json!({"model":"m-quick","effort":null}))
+            (
+                Some("quick".into()),
+                json!({"model":"m-quick","effort":null})
+            )
         );
         assert_eq!(
             choose(&json!({}), "claude", None, None, None).unwrap(),
@@ -111,7 +117,14 @@ mod tests {
         assert!(choose(&json!({}), "claude", None, Some("m"), Some("huge")).is_err());
         assert!(choose(&json!({}), "claude", None, None, Some("high")).is_err());
         assert_eq!(
-            choose(&json!({"new_space_preset":"gone"}), "claude", None, None, None).unwrap(),
+            choose(
+                &json!({"new_space_preset":"gone"}),
+                "claude",
+                None,
+                None,
+                None
+            )
+            .unwrap(),
             (None, Value::Null)
         );
     }

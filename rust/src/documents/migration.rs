@@ -13,14 +13,12 @@ pub struct Config {
     pub source: &'static str,
     pub installed: Option<&'static str>,
 }
-pub const CONFIGS: &[Config] = &[
-    Config {
-        relative: "data/sixfold/voice-integration.json",
-        command: "focus_queue",
-        source: "voice/focus_queue.py",
-        installed: None,
-    },
-];
+pub const CONFIGS: &[Config] = &[Config {
+    relative: "data/sixfold/voice-integration.json",
+    command: "focus_queue",
+    source: "voice/focus_queue.py",
+    installed: None,
+}];
 fn lexical(path: &Path) -> PathBuf {
     let absolute = absolute(path);
     let mut result = PathBuf::new();

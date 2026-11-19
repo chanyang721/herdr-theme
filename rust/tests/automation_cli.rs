@@ -85,6 +85,10 @@ fn unknown_commands_run_an_installed_extension_executable_or_fail_as_unknown() {
         .env("PATH", root.path().join("empty"))
         .output()
         .unwrap();
-    assert_eq!(out.status.code(), Some(7), "the extension's exit code is kept");
+    assert_eq!(
+        out.status.code(),
+        Some(7),
+        "the extension's exit code is kept"
+    );
     assert_eq!(String::from_utf8_lossy(&out.stdout), "a|--b|");
 }

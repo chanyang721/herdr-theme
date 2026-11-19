@@ -215,7 +215,9 @@ fn workspace(args: &[String]) -> Result<()> {
         option(args, "--effort"),
     );
     if !agents && (preset.is_some() || model.is_some() || effort.is_some()) {
-        return Err("--preset, --model and --effort apply to the agent session only (not --shells).".into());
+        return Err(
+            "--preset, --model and --effort apply to the agent session only (not --shells).".into(),
+        );
     }
     let spaces = call("herdr-app", &strings(&["ls"]))?;
     if list(&spaces["spaces"])
@@ -235,7 +237,8 @@ fn workspace(args: &[String]) -> Result<()> {
             model.as_deref(),
             effort.as_deref(),
         )?;
-        launched = json!({"kind":"claude","preset":used,"model":entry["model"],"effort":entry["effort"]});
+        launched =
+            json!({"kind":"claude","preset":used,"model":entry["model"],"effort":entry["effort"]});
         let mut argv = vec!["claude".into()];
         argv.extend(presets::flags("claude", &entry));
         spec["argv"] = json!(launch_argv(argv)?);
