@@ -167,7 +167,7 @@ export default class SixfoldDesk extends View {
       spaceUnread:{
         count:(space,motion)=>workspaceUnreadCounts(space.name,{alerts:space.alerts,connections:space.alerts?.connections,motion}).total,
         badge:(space,t,onOpen,motion)=>workspaceUnreadBadge(space,t,{onOpen,alerts:space.alerts,connections:space.alerts?.connections,motion}),
-        notifications:space=>workspaceNotifications(space.name,{alerts:space.alerts,connections:space.alerts?.connections})},
+        notifications:(space,query='')=>workspaceNotifications(space.name,{alerts:space.alerts,connections:space.alerts?.connections,query})},
       cardBadges:metaBadges(this),
       onIssueRequest:(space,key,desired)=>{
         const serial=globalThis.__sixfoldIssueRequestSerial=(globalThis.__sixfoldIssueRequestSerial||0)+1;

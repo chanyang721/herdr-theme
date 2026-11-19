@@ -527,7 +527,7 @@ export function createRetainedPanel(cx,{macTitlebar=false,onClassic=null,onDispo
     const extra=state?.open?c.issueExtra(space,state,data):{};
     return issuePopover({...extra,id:space.id,trigger,open:state?.open===true,scope:state?.scope||'week',...data,
       // The 알림 tab: this space's own notifications, newest first in time groups (read only).
-      ...(state?.open&&state.scope==='alerts'?{alerts:space.alerts,notifications:c.spaceUnread?.notifications(space)??null,
+      ...(state?.open&&state.scope==='alerts'?{alerts:space.alerts,notifications:c.spaceUnread?.notifications(space,state.query||'')??null,
         onAlertOpen:(row,context)=>(context||c.cx).open_url?.(row.url)}:{}),
       leadingGap:PANEL_GEOMETRY.rightGutter+PANEL_GEOMETRY.padding+PANEL_GEOMETRY.border+PANEL_GEOMETRY.popoverGap,
       projectLabel:space.name,toolLabel:space.work?.tool==='jira'?'Jira':space.work?.tool==='linear'?'Linear':space.work?.tool||'업무 도구',
