@@ -193,7 +193,7 @@ export function agentRow(view,agent,space,tag,state,color,t,motion){
   const ghost=born&&motion&&birthAge<PANEL_TIMING.packetMs;
   const stacked=false;
   const others=agentOtherIssues(agent),role=ROLE_LABELS[agent.role]||'',narrow=(view.panelWidth||224)<300;
-  // The chip names the role group (a recorded profession, else the producer's CEO·TL·QA); the
+  // The chip names the group (a recorded profession, else the producer's role_group label); the
   // operational role (구현·검수·통합) is its colour and tooltip. Without a group it is the role itself.
   const short=value=>value?(/^[a-z]{2,4}$/.test(value.id)?value.id.toUpperCase():value.label):'';
   const profession=agent.profession?.label||'',group=short(agent.profession)||agent.role_group?.label||'';

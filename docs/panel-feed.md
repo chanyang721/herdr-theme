@@ -129,17 +129,17 @@ describes the compatible feed envelope and this optional `$defs.agent` extension
 Other existing fields remain open in that schema and retain this document's
 display contract. Invalid optional metadata is discarded by the consumer rather
 than invalidating otherwise usable rows.
-A lead row (2026-11-19) carries `coordinator: true`: the shared space's orchestrator,
-or a session whose current attempt was assigned the `ceo` profession. The orchestrator also
-carries `role_group: {"id":"orchestrator","label":"ORCH"}`, same bounds as `profession`;
-other rows carry none, and the theme infers none. The chip names a valid `profession`
-first (a 2–4 letter lowercase id reads as its uppercase id: `ceo` → **CEO**, `sre` →
-**SRE**; any other id shows its label), else `role_group`'s label, else the operational
-role as before (**구현**·**검수**·**통합**, narrow **구**·**검**·**통**). The operational role
-stays in the chip colour and the tooltip. Lead rows, with their own sub-tasks as a tree
-(a finished sub-task leaves), are taken out of every issue group and listed first, flat,
-right under the Slack/Linear line, then one issue gap; their order, set and folds are part
-of the retained layout key. Malformed values drop the field only.
+A lead row (2026-11-19) carries `coordinator: true`; which rows lead is the producer's
+choice, and the theme infers none. A row may also carry `role_group: {"id":"lead","label":"LEAD"}`,
+a short display group with the same bounds as `profession`. The chip names a valid `profession`
+first (a 2–4 letter lowercase id reads as its uppercase id, so `ops` reads **OPS**; any other id
+shows its label), else `role_group`'s label, else the operational role as before
+(**구현**·**검수**·**통합**, narrow **구**·**검**·**통**). The operational role stays in the chip
+colour and the tooltip. Lead rows, with every row under them (`parent_id`) as their own tree
+(a finished sub-task leaves), are taken out of every issue group and listed first, flat, right
+under the Slack/Linear line, then one issue gap. A row under a lead stays in the lead's tree
+even when it names its own issue. Their order, set and folds are part of the retained layout
+key. Malformed values drop the field only.
 
 Agents inside an issue are not truncated. Explicit
 `parent_id` relationships form trees within the same issue. More than three child

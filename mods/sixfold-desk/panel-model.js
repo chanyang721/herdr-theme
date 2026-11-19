@@ -112,8 +112,8 @@ const agentExtras = agent => {
   // and every issue the session holds, the shown one first. Display only; absent keeps the older placement.
   ...(owns(agent, 'role') ? { role: AGENT_ROLES.includes(agent.role) ? agent.role : null } : {}),
   ...(profession ? { profession } : {}),
-  // The producer's short role group (CEO·TL·QA) for the chip, and a coordinator that sits under the
-  // Slack/Linear line instead of under an issue (2026-11-19). Display only, like role.
+  // The producer's short display group for the chip, and a lead row the producer marks, which sits
+  // under the Slack/Linear line instead of under an issue (2026-11-19). Display only, like role.
   ...(roleGroup ? { role_group: roleGroup } : {}),
   ...(agent.coordinator === true ? { coordinator: true } : {}),
   ...(owns(agent, 'own_issue') ? { own_issue: text(agent.own_issue, 80) || null } : {}),
@@ -475,7 +475,7 @@ export function agentGroups(space, { includeClosedIds = new Set(), expandedIssue
   const listed = new Map((space?.issues ?? []).map(issue => [issue.key, withLedger(issue, ledger.get(issue.key))]));
   const all = space?.agents ?? [], parents = new Map(all.map(agent => [agent.id, agent]));
   const shown = agent => agent.closing?.step !== 4 || agent.closing.blocked_reason || includeClosedIds.has(agent.id);
-  // Lead rows (coordinator: the orchestrator, a space CEO) belong to no issue: the card lists them,
+  // Lead rows (`coordinator: true`, as the producer marks them) belong to no issue: the card lists them,
   // with their own sub-tasks as a tree, under its Slack/Linear line. A finished sub-task leaves.
   const leadOf = agent => {
     for (let at = agent, seen = new Set(); at && !seen.has(at.id); seen.add(at.id), at = parents.get(at.parent_id))
