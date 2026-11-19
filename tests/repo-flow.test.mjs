@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {cleanRepositoryGraph,projectRepositoryGraph,createRepositoryController,repositoryEventState,repositoryLayout,repositorySection,repositoryFlowLayer,REPO_TIMING,GIT_OPERATIONS,REPO_LIMITS} from '../mods/sixfold-desk/repo-flow.js';
+import {cleanRepositoryGraph,projectRepositoryGraph,createRepositoryController,repositoryEventState,repositoryLayout,repositorySection,repositoryFlowLayer,repositorySource,REPO_TIMING,GIT_OPERATIONS,REPO_LIMITS,REPO_EVIDENCE} from '../mods/sixfold-desk/repo-flow.js';
 import {cleanPanelFeed,projectPanelFeed} from '../mods/sixfold-desk/panel-model.js';
 import {makePanelFixture,makePanelLoadFixture} from './panel-fixtures.mjs';
 
@@ -67,6 +67,7 @@ test('producer evidence phases and Unix seconds keep approval, command results a
     ['pre_tool','attempt','unknown','push · 실행 전'],['approval','authorization','unknown','push · 승인만'],
     ['process_exit','result','succeeded','push · 명령 성공'],['process_exit','result','failed','push · 명령 실패'],
     ['timeout','result','unknown','push · 결과 미확인'],['sensor_error','result','unknown','push · 결과 미확인'],
+    ['post_tool','result','unknown','push · 실행 후 · 결과 미확인'],
   ]){
     data.events=[{...wireEvent(),evidence,phase,result}];
     const graph=projectRepositoryGraph(cleanRepositoryGraph(data,agents));
@@ -76,7 +77,7 @@ test('producer evidence phases and Unix seconds keep approval, command results a
   }
   data.events=[{...wireEvent(),evidence:'head_verified',operation:'merge'}];
   assert(words(repositorySection(projectRepositoryGraph(cleanRepositoryGraph(data,agents)),palette,ui)).includes('merge · 로컬 반영'));
-  for(const invalid of [{evidence:'approval'},{evidence:'head_verified'}, {observed_at:true},{operation:'status'},{phase:'attempt'},{result:'future'}]){
+  for(const invalid of [{evidence:'approval'},{evidence:'head_verified'},{evidence:'post_tool'},{observed_at:true},{operation:'status'},{phase:'attempt'},{result:'future'}]){
     data.events=[{...wireEvent(),...invalid}];assert.equal(cleanRepositoryGraph(data,agents).events.length,0);
   }
 });
@@ -125,6 +126,105 @@ test('optional schema uses the same bounds and mutation catalog as the producer-
     assert.equal(schema.$defs.repo_activity.properties[field].maxItems,REPO_LIMITS[limit]);
   assert.equal(schema.$defs.repo_event.additionalProperties,false);
   assert.equal(schema.$defs.repo_event.properties.observed_at.type,'integer');
+});
+
+test('schema evidence enum and oneOf branches agree with the consumer evidence table',async()=>{
+  const {readFile}=await import('node:fs/promises');
+  const event=JSON.parse(await readFile(new URL('../schemas/herdr/panel-feed.schema.json',import.meta.url),'utf8')).$defs.repo_event;
+  const values=rule=>rule?.const!==undefined?[rule.const]:rule?.enum||[];
+  assert.deepEqual([...event.properties.evidence.enum].sort(),Object.keys(REPO_EVIDENCE).sort());
+  for(const [name,[phase,results]] of Object.entries(REPO_EVIDENCE)){
+    const branches=event.oneOf.filter(branch=>values(branch.properties.evidence).includes(name));
+    assert.equal(branches.length,1,`${name} has exactly one schema branch`);
+    assert.deepEqual(values(branches[0].properties.phase),[phase],name);
+    assert.deepEqual([...values(branches[0].properties.result)].sort(),[...results].sort(),name);
+  }
+  assert.deepEqual(values(event.oneOf.find(branch=>values(branch.properties.evidence).includes('post_tool')).properties.result),['unknown']);
+  assert(Object.isFrozen(REPO_EVIDENCE)&&Object.values(REPO_EVIDENCE).every(rule=>Object.isFrozen(rule)&&Object.isFrozen(rule[1])));
+});
+
+test('existing evidence combinations are unchanged by the post_tool extension',()=>{
+  assert.deepEqual(Object.fromEntries(Object.entries(REPO_EVIDENCE).filter(([name])=>name!=='post_tool')),{
+    pre_tool:['attempt',['unknown']],approval:['authorization',['unknown']],process_exit:['result',['succeeded','failed']],
+    head_verified:['result',['succeeded']],timeout:['result',['unknown']],sensor_error:['result',['unknown']]});
+  const data=dto(),agents=new Set(['agent-a']);
+  data.events=[{...wireEvent(),id:'exit'},{...wireEvent(),id:'pre',evidence:'pre_tool',phase:'attempt',result:'unknown'},
+    {...wireEvent(),id:'merge',operation:'merge',evidence:'head_verified'},{...wireEvent(),id:'bad',evidence:'post_tool',result:'succeeded'}];
+  assert.deepEqual(cleanRepositoryGraph(data,agents).events.map(e=>e.id),['exit','pre','merge'],'an invalid post_tool row drops only itself');
+});
+
+test('post_tool shows an after-execution observation with an unconfirmed result and no motion',()=>{
+  const data=dto(),agents=new Set(['agent-a']);
+  const post={...wireEvent(),evidence:'post_tool',phase:'result',result:'unknown'};
+  data.events=[post];
+  const clean=cleanRepositoryGraph(data,agents);
+  assert.deepEqual(clean.events,[{...post}]);
+  const projected=projectRepositoryGraph(clean);
+  assert.equal(projected.events[0].result,'unknown');assert.equal(projected.events[0].source,'post_tool');
+  assert.equal(repositorySource('post_tool'),'실행 후 관측(결과 미확인)');
+  const tree=repositorySection(projected,palette,ui);
+  assert(words(tree).includes('push · 실행 후 · 결과 미확인'));
+  assert(!words(tree).some(word=>/명령 성공|명령 실패|성공|실패/.test(word)),'unknown never reads as success or failure');
+  assert.match(byId(tree,'sf-repo-repo').calls.find(c=>c[0]==='tooltip')[1],/실행 후 관측\(결과 미확인\)/);
+  assert.equal(byId(tree,'sf-repo-result-repo').calls.find(c=>c[0]==='text_color')[1],palette.muted);
+  // Motion on, visible, fresh and attributed: still no packet, no deadline.
+  let state=repositoryEventState({...projected,events:[]},1000000,{motion:true});
+  state=repositoryEventState(projected,1000000,{previous:state,motion:true});
+  assert.equal(state.packets.length,0);assert.equal(state.active.length,0);assert.equal(state.nextAt,null);
+  assert.deepEqual(state.seen,['event'],'consumed into the watermark rather than queued');
+  const layout={agents:new Map([['agent-a',{y:20}]]),repos:repositoryLayout(projected,100).anchors,height:240};
+  assert(!nodes(repositoryFlowLayer(projected,layout,state,palette,ui)).some(n=>n.calls.some(c=>c[0]==='transition')));
+  const timers=[];let notifies=0;
+  const c=createRepositoryController({clock:()=>1000000,visible:()=>true,motion:()=>true,notify:()=>notifies++,after:(ms,fn)=>{timers.push(ms);return {cancel(){}};}});
+  c.apply({...projected,events:[]});c.apply(projected);
+  assert.equal(timers.length,0,'no deadline is armed for an unknown observation');
+  c.dispose();
+});
+
+test('post_tool rejects succeeded/failed, wrong phases and non-string or near-miss values',()=>{
+  const data=dto(),agents=new Set(['agent-a']);
+  const base=()=>({...wireEvent(),evidence:'post_tool',phase:'result',result:'unknown'});
+  const cases=[
+    ...['succeeded','failed','started','success','failure','UNKNOWN',' unknown','unknown ','',null,1,true,['unknown'],{}].map(result=>({result})),
+    ...['attempt','authorization','RESULT','',null,['result'],{}].map(phase=>({phase})),
+    ...['POST_TOOL','post_tool ','post-tool','postTool',['post_tool'],new String('post_tool'),{toString:()=>'post_tool'}].map(evidence=>({evidence})),
+  ];
+  for(const change of cases){
+    data.events=[{...base(),...change}];
+    assert.equal(cleanRepositoryGraph(data,agents).events.length,0,JSON.stringify(change));
+  }
+  for(const field of ['phase','result','evidence']){
+    const item=base();delete item[field];data.events=[item];
+    assert.equal(cleanRepositoryGraph(data,agents).events.length,0,`missing ${field}`);
+  }
+});
+
+test('post_tool fields must be own properties, never inherited from a prototype or a JSON __proto__ key',()=>{
+  const data=dto(),agents=new Set(['agent-a']);
+  const rest=()=>{const item={...wireEvent()};delete item.evidence;delete item.phase;delete item.result;return item;};
+  const fromProto=Object.assign(Object.create({evidence:'post_tool',phase:'result',result:'unknown'}),rest());
+  const partial=Object.assign(Object.create({phase:'result',result:'unknown'}),rest(),{evidence:'post_tool'});
+  for(const item of [fromProto,partial]){
+    data.events=[item];assert.equal(cleanRepositoryGraph(data,agents).events.length,0);
+  }
+  const text=JSON.stringify({...dto(),events:[{...rest(),id:'json_proto'}]})
+    .replace('"id":"json_proto",','"id":"json_proto","__proto__":{"evidence":"post_tool","phase":"result","result":"unknown"},');
+  assert.equal(cleanRepositoryGraph(JSON.parse(text),agents).events.length,0);
+  for(const name of ['__proto__','constructor','toString','hasOwnProperty','valueOf']){
+    data.events=[{...wireEvent(),evidence:name,phase:'result',result:'unknown'}];
+    assert.equal(cleanRepositoryGraph(data,agents).events.length,0,name);
+  }
+});
+
+test('post_tool keeps operation identity and per-event deduplication',()=>{
+  const data=dto(),agents=new Set(['agent-a']);
+  const pre={...wireEvent(),id:'pre',operation_id:'op_one',evidence:'pre_tool',phase:'attempt',result:'unknown'};
+  const post={...wireEvent(),id:'post',operation_id:'op_one',evidence:'post_tool',phase:'result',result:'unknown'};
+  data.events=[pre,post,{...post},{...post,result:'succeeded',id:'post_ok'}];
+  const clean=cleanRepositoryGraph(data,agents);
+  assert.deepEqual(clean.events.map(e=>[e.id,e.operation_id,e.evidence]),[['pre','op_one','pre_tool'],['post','op_one','post_tool']]);
+  const graph=projectRepositoryGraph(clean);
+  assert(words(repositorySection(graph,palette,ui)).includes('push · 실행 후 · 결과 미확인'),'the latest supplied row is the label');
 });
 
 test('old feeds keep their exact sidebar; an explicit empty catalog remains distinguishable',()=>{
