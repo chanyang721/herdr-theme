@@ -26,7 +26,7 @@ test('linear items are scoped to their space and counted unread', () => {
 test('a status notification shows its own before → after from Linear history, else nothing earlier is invented', async () => {
   const desk = await import('../mods/sixfold-desk/alert-model.js');
   const inbox = await import('../mods/sixfold-linear-inbox/model.js');
-  const base = {id: 'n1', type: 'issueStatusChanged', category: 'statusChanges', issue: 'LUK-123', subtitle: 'Marked as completed by Kim'};
+  const base = {id: 'n1', type: 'issueStatusChanged', category: 'statusChanges', issue: 'DEMO-123', subtitle: 'Marked as completed by Kim'};
   // First sighting: no between-runs diff, but the collector found the history entry.
   const fresh = {...base, changes: [], state_change: {from: '진행 중', to: '검수 대기'}};
   assert.equal(desk.alertLine(fresh), '상태 진행 중 → 검수 대기 · Kim');   // who changed it stays visible
@@ -47,7 +47,7 @@ test('a status notification shows its own before → after from Linear history, 
   assert.equal(desk.alertLine({...base, state_change: {from: '', to: 'Todo'}}), '상태 없음 → Todo · Kim');
   // The issue search row uses the same line (so does the arrival popup: linear-feed.js alertLine); the card key notices it.
   const row = {...fresh, workspace: 'Alpha', read: false, at: '2026-11-17T00:00:00Z'};
-  assert.equal(desk.issueAlerts([row], 'Alpha', 'LUK-123').lines[0].text, '상태 진행 중 → 검수 대기 · Kim');
+  assert.equal(desk.issueAlerts([row], 'Alpha', 'DEMO-123').lines[0].text, '상태 진행 중 → 검수 대기 · Kim');
   // The card popover: the state line carries who changed it, other changed fields follow as before.
   assert.deepEqual(desk.popoverChangeLines(both), ['상태 진행 중 → 검수 대기 · Kim', '담당 Kim → Lee']);
   assert.deepEqual(desk.popoverChangeLines({...both, subtitle: 'Kim changed status'}), ['상태 진행 중 → 검수 대기', '담당 Kim → Lee']);

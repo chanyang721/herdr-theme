@@ -110,15 +110,15 @@ test('a state badge joins the Slack · Linear meta line; no badge row, no empty 
 test('the Linear chip shows the project name, or the key when the feed has no name',async()=>{
   const raw=makePanelFixture({tool:'linear',slack:true,nav:{space_id:'sp-local',machine:null}});
   const id=raw.spaces[0].id;
-  raw.spaces[0].work={...raw.spaces[0].work,key:'P-LUK-49',name:'메디홈즈 Commerce Cloud 구축'};
+  raw.spaces[0].work={...raw.spaces[0].work,key:'P-DEMO-7',name:'Demo storefront build'};
   let s=await sidebar({native:[nativeSpace('sp-local','Demo workspace')],feed:raw});
   let shown=texts(s.body(id).view.render());
-  assert(shown.includes('메디홈즈 Commerce Cloud 구축')&&!shown.includes('P-LUK-49'),'the name, not the key');
+  assert(shown.includes('Demo storefront build')&&!shown.includes('P-DEMO-7'),'the name, not the key');
   s.done();
   delete raw.spaces[0].work.name;
   s=await sidebar({native:[nativeSpace('sp-local','Demo workspace')],feed:raw});
   shown=texts(s.body(id).view.render());
-  assert(shown.includes('P-LUK-49'),'no name: the key');
+  assert(shown.includes('P-DEMO-7'),'no name: the key');
   s.done();
 });
 
