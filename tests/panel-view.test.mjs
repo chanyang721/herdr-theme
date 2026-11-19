@@ -104,6 +104,22 @@ test('a lead keeps its sub-tasks as its own tree; a finished sub-task leaves; no
   assert(groups);
 });
 
+test('a space role_group is one header chip; its rows stay ordinary and malformed values drop',async()=>{
+  const r=await renderer(false),feed=makePanelFixture({tool:'linear'}),space=feed.spaces[0],[first]=space.agents;
+  space.role_group={id:'hub',label:'Coordination hub'};
+  for(const width of [224,360]){
+    const tree=r.renderPanelTracking({...viewFor(feed),panelWidth:width},t,r.cx),chip=byId(tree,`panel-space-role-${space.id}`);
+    assert.deepEqual(words(chip),['Coordination hub']);
+    assert(call(chip,'truncate'),'a long label cannot crowd out the name');
+    assert.equal(call(chip,'tooltip')[1],'Coordination hub');
+    assert(byId(tree,`panel-issue-indent-${first.id}`),'rows keep their issue placement');
+  }
+  for(const bad of [{id:'hub'},{id:'hub',label:'x',extra:1},'hub',{id:'a b',label:'x'}])
+    assert.equal(cleanPanelFeed({...feed,spaces:[{...space,role_group:bad}]}).spaces[0].role_group,undefined);
+  delete space.role_group;
+  assert.equal(byId(r.renderPanelTracking({...viewFor(feed),panelWidth:360},t,r.cx),`panel-space-role-${space.id}`),undefined);
+});
+
 test('brand SVG assets use full-color images while the space grid remains a tinted mask',async()=>{
   const r=await renderer(false);
   for(const tool of ['linear','jira']){
