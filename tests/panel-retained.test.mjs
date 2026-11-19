@@ -98,6 +98,27 @@ test('changing only wait_kind redraws the retained slot without moving or growin
   }finally{r.controller.dispose();}
 });
 
+test('a lead row closing or moving relays the retained card',async()=>{
+  const r=await runtime(),raw=makePanelLoadFixture({spaces:1,agentsPerSpace:3,now:Date.now()});
+  const [a,b]=raw.spaces[0].agents;
+  Object.assign(a,{coordinator:true,status:'working',stage:2,closing:null});
+  Object.assign(b,{coordinator:true,status:'idle',stage:0,closing:null});
+  r.controller.apply(cleanPanelFeed(raw),'ready');r.flush();
+  const laid=()=>r.controller.layout.cards[0].rows.filter(row=>row.coordinator).map(row=>row.agent.id);
+  const model=()=>r.controller.projection.groups.get(raw.spaces[0].id).coordinators.map(agent=>agent.id);
+  assert.deepEqual(laid(),model());
+  a.status='idle';a.stage=0;b.status='working';b.stage=2;
+  r.controller.apply(cleanPanelFeed(raw),'ready');r.flush();
+  assert.deepEqual(laid(),model(),'a reorder relays');
+  a.closing={step:4,blocked_reason:null};
+  r.controller.apply(cleanPanelFeed(raw),'ready');r.flush();
+  assert.deepEqual(laid(),model(),'the closing tag keeps it a moment, laid out as modelled');
+  const realNow=Date.now;Date.now=()=>realNow()+10*60*1000;
+  try{r.controller.apply(cleanPanelFeed(raw),'ready');r.flush();}finally{Date.now=realNow;}
+  assert.deepEqual(laid(),model(),'a closed lead leaves the layout');
+  assert(!laid().includes(a.id));
+});
+
 test('child completion updates the retained card and fold without focus or expansion changes',async()=>{
   const r=await runtime(),raw=makePanelLoadFixture({spaces:2,agentsPerSpace:7,now:Date.now()});
   const parent=raw.spaces[0].agents[0];for(const child of raw.spaces[0].agents.slice(1))child.parent_id=parent.id;

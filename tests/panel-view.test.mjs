@@ -63,14 +63,14 @@ test('a recorded profession names the chip as literal bounded text in wide and n
   assert.deepEqual(words(byId(r.renderPanelTracking({...viewFor(feed),panelWidth:360},t,r.cx),`panel-role-${agent.id}`)),['검수']);
 });
 
-test('a coordinator sits flat under the Slack/Linear line, outside every issue, with its role group chip',async()=>{
+test('lead rows sit flat under the Slack/Linear line, outside every issue: ORCH and an assigned CEO',async()=>{
   const r=await renderer(false),feed=makePanelFixture({tool:'linear',slack:true}),[lead,doer,checker]=feed.spaces[0].agents;
-  Object.assign(lead,{coordinator:true,role:'integrate',role_group:{id:'ceo',label:'CEO'},issue:'DEMO-12'});
-  Object.assign(doer,{role:'implement',role_group:{id:'tl',label:'TL'}});
-  Object.assign(checker,{role:'review',role_group:{id:'qa',label:'QA'}});
+  Object.assign(lead,{coordinator:true,role:'integrate',role_group:{id:'orchestrator',label:'ORCH'},issue:'DEMO-12'});
+  Object.assign(doer,{role:'implement'});
+  Object.assign(checker,{role:'review'});
   const clean=cleanPanelFeed(feed),{cards}=r.panelLayout(clean,{tags:new Map(),packets:[]});
   const rows=cards[0].rows;
-  assert.equal(rows[0].agent?.id,lead.id,'the coordinator is the first row under the meta line');
+  assert.equal(rows[0].agent?.id,lead.id,'the lead is the first row under the meta line');
   assert.equal(rows[0].coordinator,true);
   assert.equal(rows[1].kind,'issue-gap');
   assert(!rows.slice(1).some(row=>row.agent?.id===lead.id),'never repeated under an issue');
@@ -78,15 +78,30 @@ test('a coordinator sits flat under the Slack/Linear line, outside every issue, 
     const tree=r.renderPanelTracking({...viewFor(feed),panelWidth:width},t,r.cx),chip=width<300?'panel-tags':'panel-role';
     assert.equal(byId(tree,`panel-issue-indent-${lead.id}`),undefined,'not indented into an issue block');
     assert(byId(tree,`panel-issue-indent-${doer.id}`),'workers stay under their issue');
-    assert.deepEqual(words(byId(tree,`${chip}-${lead.id}`)),['CEO']);
-    assert.deepEqual(words(byId(tree,`${chip}-${doer.id}`)),['TL']);
-    assert.deepEqual(words(byId(tree,`${chip}-${checker.id}`)),['QA']);
-    assert.match(call(byId(tree,`panel-agent-${lead.id}`),'tooltip')[1],/역할군 CEO[\s\S]*조정자/);
+    assert.deepEqual(words(byId(tree,`${chip}-${lead.id}`)),['ORCH']);
+    assert.deepEqual(words(byId(tree,`${chip}-${doer.id}`)),[width<300?'구':'구현'],'no group is inferred for a worker');
+    assert.deepEqual(words(byId(tree,`${chip}-${checker.id}`)),[width<300?'검':'검수']);
+    assert.match(call(byId(tree,`panel-agent-${lead.id}`),'tooltip')[1],/역할군 ORCH[\s\S]*리드 칸/);
   }
-  lead.profession={id:'sre',label:'Site Reliability Engineer'};
-  const recorded=r.renderPanelTracking({...viewFor(feed),panelWidth:360},t,r.cx);
-  assert.deepEqual(words(byId(recorded,`panel-role-${lead.id}`)),['SRE'],'a recorded profession wins as its short id');
-  for(const bad of [{id:'ceo'},{id:'ceo',label:'CEO',x:1},'CEO'])assert.equal(cleanPanelFeed({...feed,spaces:[{...feed.spaces[0],agents:[{...doer,role_group:bad,coordinator:'yes'}]}]}).spaces[0].agents[0].role_group,undefined);
+  Object.assign(lead,{role_group:undefined,profession:{id:'ceo',label:'CEO'}});delete lead.role_group;
+  const ceo=r.renderPanelTracking({...viewFor(feed),panelWidth:360},t,r.cx);
+  assert.deepEqual(words(byId(ceo,`panel-role-${lead.id}`)),['CEO'],'an assigned CEO shows its profession');
+  for(const bad of [{id:'orchestrator'},{id:'orchestrator',label:'ORCH',x:1},'ORCH'])assert.equal(cleanPanelFeed({...feed,spaces:[{...feed.spaces[0],agents:[{...doer,role_group:bad,coordinator:'yes'}]}]}).spaces[0].agents[0].role_group,undefined);
+});
+
+test('a lead keeps its sub-tasks as its own tree; a finished sub-task leaves; no double gap',async()=>{
+  const r=await renderer(false),feed=makePanelFixture({tool:'linear'}),[lead,kid,done]=feed.spaces[0].agents;
+  Object.assign(lead,{coordinator:true,role_group:{id:'orchestrator',label:'ORCH'}});
+  Object.assign(kid,{parent_id:lead.id,subagent_kind:'agent',issue:'DEMO-18'});
+  Object.assign(done,{parent_id:lead.id,subagent_kind:'agent',status:'done',stage:4});
+  const groups=cleanPanelFeed(feed).spaces.map(space=>space)[0];
+  const {cards}=r.panelLayout(cleanPanelFeed(feed),{tags:new Map(),packets:[]});
+  const rows=cards[0].rows,ids=rows.filter(row=>row.agent).map(row=>row.agent.id);
+  assert.deepEqual(ids.slice(0,2),[lead.id,kid.id],'the sub-task follows its lead');
+  assert.equal(rows[1].coordinator,true);
+  assert(!ids.includes(done.id),'a finished sub-task of a lead leaves');
+  assert(!rows.some((row,i)=>row.kind==='issue-gap'&&rows[i+1]?.kind==='issue-gap'),'never two gaps in a row');
+  assert(groups);
 });
 
 test('brand SVG assets use full-color images while the space grid remains a tinted mask',async()=>{
