@@ -189,7 +189,7 @@ export function askSection(view, t, lang, nameOf) {
 // gutter. Feed IDs are comparison keys only. onOpen receives display metadata;
 // the caller resolves a verified target and opens the existing response UI.
 // No click, dismissal or disappearance here sends a response.
-export function spaceAskView(requests, space, t, lang, {bounds, onOpen} = {}) {
+export function spaceAskView(requests, space, t, lang, {bounds, onOpen, panes = 1} = {}) {
   const cards = spaceAsks(requests, space), layout = spaceAskLayout(bounds);
   if (!cards.length || !layout) return null;
   const ko = lang === 'ko', canOpen = typeof onOpen === 'function';
@@ -197,6 +197,7 @@ export function spaceAskView(requests, space, t, lang, {bounds, onOpen} = {}) {
   const kind = cards[0].kind && cards.every(card => card.kind === cards[0].kind) ? kindLabel(lang, cards[0].kind) : (ko ? '요청' : 'Ask');
   const preview = cards.slice(0, 8).map(card => card.title || kindLabel(lang, card.kind) || label);
   if (cards.length > 8) preview.push(ko ? `외 ${cards.length - 8}건` : `+${cards.length - 8} more`);
+  if (panes > 1) preview.push(ko ? `${panes}개 페인 · 누를 때마다 다음 페인` : `${panes} panes · each press opens the next`);
   let tab = stop(v_flex().id(`sf-space-ask-${space}`).absolute().left(layout.left).top(layout.top)
     .w(layout.width).h(layout.height).overflow_hidden().items_center().justify_center().gap(5)
     .px(2).border(1).border_l(3).border_color(t.blocked).rounded(5).bg(t.chrome).text_color(t.blocked)
