@@ -1,6 +1,6 @@
 import { View, div, image } from 'gpui-kit';
 import { v_flex, h_flex, TextView, InputState, Input } from 'gpui-base';
-import { props, appHome, readTextFile, exec, watchFolder, theme, settings, shared, setShared, spaces, panes, window as hostWindow } from 'herdr';
+import { props, appHome, readTextFile, exec, hc, machines, watchFolder, theme, settings, shared, setShared, spaces, panes, window as hostWindow } from 'herdr';
 import { stageMarkdown } from './vendor/markdown.js';
 import { dirname, resolveLink } from './vendor/paths.js';
 import { mermaidFences, applyDiagrams } from './mermaid.js';
@@ -9,6 +9,7 @@ import { columnView, columnsFor, visibleColumns } from './column-view.js';
 import { figure, viewer, fraction } from './diagram-view.js';
 import { openView, viewAt, clampScale, clampView, toggleView, wheelStep, pinchStep, keyCommand, command, panBy, viewerBindings, sharpScale } from './zoom.js';
 import { listView, breadcrumb, icon } from './finder.js';
+import { remoteTarget, createRemoteIds, machineNames, createRemoteReader, remoteBlocks, remoteLink, takeRequest } from './remote.js';
 
 const LIMIT = 400000;
 // No timed re-listing: folder watches and coming into view refresh the list. This
@@ -31,6 +32,12 @@ const COLUMN_BACK = 18;
 const VIEWER_CHROME = 36 + 24;
 const LOCATION_ICONS = { docs: '🗂', localViews: '🧭', opened: '👁', archived: '🗄' };
 const LOCAL_VIEW_TAG = '로컬 보기 · 읽기 전용';
+const REMOTE_TAG = '원격 · 읽기 전용 · 이 컴퓨터에 저장 안 함';
+// remote.js REMOTE_OPEN: read on every frame, so it is spelled here rather than imported.
+const REMOTE_OPEN = 'sixfold.docs.remote-open.v1';
+// A Finder place on a remote document (any id form, the older `remote-<machine>-<encoded path>`
+// too). shared() is saved to disk, so such a place is never saved and an old one is dropped.
+const REMOTE_PLACE = /(^|\/)\d+_remote-/;
 const isHtml = path => /\.html?$/i.test(path);
 const windows = () => typeof hostWindow === 'function' && hostWindow()?.platform === 'windows';
 const native = () => `${appHome()}/scripts/sixfold/herdr-theme${windows()?'.exe':''}`;
@@ -100,6 +107,7 @@ export default class ProjectDocuments extends View {
     // A sidebar the person showed or hid wins over the width rule; reading mode folds both panes.
     if (typeof saved.sidebar === 'boolean') this.sidebar = saved.sidebar;
     this.reading = saved.reading === true; this.paneHeight = 800; this.codeOpen = new Set(); this.zoom = null;
+    if (REMOTE_PLACE.test(this.colPath)) { this.colPath = ''; this.remember(); }
     // Focus is retained, so the handles are made here: the pane's (⌃⌘S, ⇧⌘R) and the viewer's.
     this.paneFocus = cx.focus_handle?.() || null; this.zoomFocus = cx.focus_handle?.() || null;
     // The keymap is the app's, so the viewer's ⌘ keys are bound once per load of this module.
@@ -146,7 +154,8 @@ export default class ProjectDocuments extends View {
         this.kinds = Array.isArray(data.kinds) ? data.kinds : []; this.localViews = data.localViews || null; this.recentDays = data.recentDays || 7;
         this.warnings = data.warnings || []; this.listError = null;
         if (this.linked) {
-          const pinned = this.documents.find(d => d.path === this.linked.path);
+          // A remote document is never the local file that happens to have the same path.
+          const pinned = !this.linked.on && this.documents.find(d => d.path === this.linked.path);
           if (pinned) {
             if (this.selected === this.linked.id) this.selected = pinned.id;
             this.linked = null;
@@ -163,7 +172,7 @@ export default class ProjectDocuments extends View {
         }
         this.checkedAt = data.checkedAt;
         if (!this.documents.some(d => d.id === this.selected)) this.selected = this.documents.find(d => !d.aliasOf && d.state !== 'archived')?.id;
-        if (this.selected && shared(STATE)?.[this.spaceId] !== this.selected) {
+        if (this.selected && !this.isRemote(this.selected) && shared(STATE)?.[this.spaceId] !== this.selected) {
           setShared(STATE, { ...(shared(STATE) || {}), [this.spaceId]: this.selected });
         }
         if (this.revealPending && this.selected) { this.revealPending = false; this.revealInBrowser(this.selected); }
@@ -202,8 +211,55 @@ export default class ProjectDocuments extends View {
   choose(id, cx) {
     id = this.documents.find(d => d.id === id)?.aliasOf || id;
     this.selected = id; this.copied = null; this.revealInBrowser(id);
-    setShared(STATE, { ...(shared(STATE) || {}), [this.spaceId]: id });
+    // shared() is saved to disk: a remote document's machine and path are not kept there.
+    if (!this.isRemote(id)) setShared(STATE, { ...(shared(STATE) || {}), [this.spaceId]: id });
     this.load(cx); this.refresh(cx); cx.notify();
+  }
+
+  isRemote(id) { return Boolean(this.documents.find(d => d.id === id)?.on); }
+
+  // Shows a file on another machine, asked for by a click (here or in another mod). Unchecked
+  // requests never reach hc; the file is read into memory only.
+  openRemote(request, cx) {
+    let target;
+    try { target = remoteTarget(request, { machines: machineNames(machines()) }); }
+    catch (error) { this.actionError = `원격 문서 열기 실패 · ${error.message}`; cx.notify(); return; }
+    this.remoteIds ||= createRemoteIds();
+    const id = this.remoteIds(target);
+    this.linked = { id, path: target.path, on: target.on, remoteKind: target.kind, name: target.name,
+      label: `${target.name} · ${target.on}`, kind: 'file', status: 'ok', pinned: false, opened: true };
+    this.documents = this.documents.filter(d => !d.opened).concat(this.linked);
+    this.actionError = null; this.remoteForce = true;
+    this.choose(id, cx);
+  }
+
+  // A remote open request for this space, set by another mod; taken once and removed.
+  takeRemoteRequest(cx) {
+    const value = shared(REMOTE_OPEN);
+    if (!value?.[this.spaceId]) return;
+    const { request, rest } = takeRequest(value, this.spaceId);
+    setShared(REMOTE_OPEN, rest);
+    if (request) this.openRemote(request, cx);
+  }
+
+  loadRemote(doc, key, generation, cx) {
+    this.remote ||= createRemoteReader({ hc });
+    this.loading = true;
+    cx.spawn(async cx => {
+      const current = () => !this.closed && this.generation === generation && this.bodyKey === key;
+      try {
+        const target = remoteTarget({ on: doc.on, path: doc.path });
+        const read = await this.remote.read(target);
+        if (!current()) return;
+        const shown = await remoteBlocks(read.text, target, stageMarkdown);
+        if (!current()) return;
+        this.blocks = shown.blocks; this.html = null; this.imageWarning = shown.unavailable; this.truncated = read.truncated;
+        this.diagramError = target.kind === 'markdown' && mermaidFences(read.text).length ? '원격 문서의 Mermaid는 코드로 표시' : null;
+        this.keepFigures();
+        this.bodyError = null; this.lastSuccess = Date.now();
+      } catch (error) { if (current()) this.bodyError = String(error.message || error); }
+      finally { if (current()) { this.loading = false; cx.notify(); } }
+    });
   }
 
   load(cx) {
@@ -212,11 +268,18 @@ export default class ProjectDocuments extends View {
     if (this.bodyKey !== key) {
       this.bodyKey = key; this.blocks = null; this.bodyText = null; this.bodyError = null; this.html = null;
       this.lastSuccess = null; this.newVersion = Boolean(this.lastPath && doc?.path && this.lastPath !== doc.path && this.lastId === doc.id);
-      this.zoom = null; this.codeOpen.clear();
+      this.zoom = null; this.codeOpen.clear(); this.loading = false; this.remoteAsked = null;
     }
+    // A remote document is asked again only on a click (open, 새로 고침), not on each list
+    // refresh or folder event (a failed read too); a read under way is not superseded by one.
+    if (doc?.on && doc.status === 'ok' && this.remoteAsked === key && !this.remoteForce) return;
     const generation = ++this.generation;
     this.loading = false;
     if (!doc || doc.status !== 'ok') { this.bodyError = doc?.error || doc?.status || null; return; }
+    if (doc.on) {
+      this.lastPath = doc.path; this.lastId = doc.id; this.remoteForce = false; this.remoteAsked = key;
+      return this.loadRemote(doc, key, generation, cx);
+    }
     this.lastPath = doc.path; this.lastId = doc.id;
     this.watch([dirname(doc.path)], cx);
     if (!readable(doc.path)) { this.blocks = null; this.bodyError = null; return; }
@@ -363,7 +426,7 @@ export default class ProjectDocuments extends View {
   locs() { return locations(this.documents, { kinds: this.kinds, localViews: this.localViews, kind: this.kindFilter }); }
 
   remember() {
-    const state = { view: this.view, location: this.location, colPath: this.colPath };
+    const state = { view: this.view, location: this.location, colPath: REMOTE_PLACE.test(this.colPath) ? '' : this.colPath };
     if (typeof this.sidebar === 'boolean') state.sidebar = this.sidebar;
     if (this.reading) state.reading = true;
     setShared(FINDER, { ...(shared(FINDER) || {}), [this.spaceId]: state });
@@ -518,7 +581,7 @@ export default class ProjectDocuments extends View {
 
   // Select a listed document, or show an unlisted one as a temporary 열람 tab.
   reveal(path) {
-    const existing = this.documents.find(d => d.path === path);
+    const existing = this.documents.find(d => d.path === path && !d.on);
     if (existing) { this.selected = existing.id; return; }
     this.linked = { id: `opened-${path}`, path, name: path.split('/').pop(),
       label: path.split('/').pop(), kind: 'file', status: 'ok', pinned: false, opened: true };
@@ -526,7 +589,15 @@ export default class ProjectDocuments extends View {
     this.selected = this.linked.id;
   }
 
-  follow(file, url, cx) {
+  follow(file, url, cx, doc = null) {
+    if (doc?.on) {
+      // A link in a remote document stays on that machine (or opens a web page); never a local file.
+      const link = remoteLink({ on: doc.on, path: doc.path }, url, { machines: machineNames(machines()) });
+      if (link.url) cx.open_url(link.url);
+      else if (link.remote) this.openRemote({ on: link.remote.on, path: link.remote.path }, cx);
+      else if (link.blocked) { this.actionError = `원격 링크 · ${link.blocked}`; cx.notify(); }
+      return;
+    }
     try {
       const link = resolveLink(file, url);
       if (link.url) cx.open_url(link.url);
@@ -577,6 +648,8 @@ export default class ProjectDocuments extends View {
     const active = spaces().some(s => s.id === this.spaceId && s.active) && panes().some(p => p.mod === 'project-docs-tabs' && p.tab === spaces().find(s => s.id === this.spaceId)?.tabs.find(t => t.active)?.id);
     if (active && !this.active) this.refresh(cx);
     this.active = active;
+    // Mods re-render when shared values change, so a request from another mod is taken here.
+    if (active && shared(REMOTE_OPEN)?.[this.spaceId]) this.takeRemoteRequest(cx);
     const t = theme(), doc = this.documents.find(d => d.id === this.selected);
     const button = (id, label, action) => div().id(id).px(10).py(6).flex_none().rounded(5).cursor_pointer().hover(s => s.bg(t.hover)).on_click((_e, cx) => action(cx)).child(label);
     const notice = text => div().px(16).py(6).flex_none().text_size(12).text_color(t.muted).child(text);
@@ -616,7 +689,7 @@ export default class ProjectDocuments extends View {
         .child(button('docs-reading', this.reading ? '▤ 목록 펼치기' : '▭ 읽기 모드', cx => this.toggleReading(cx)).text_size(12)
           .when(crowded, el => el.border(1).border_color(t.accent).text_color(t.foreground))
           .tooltip(this.reading ? '사이드바와 목록 다시 보기 (⇧⌘R)' : '사이드바와 목록을 접고 본문을 넓게 (⇧⌘R)'))
-        .child(button('docs-refresh', '새로 고침', cx => this.refresh(cx)).text_size(12))
+        .child(button('docs-refresh', '새로 고침', cx => { if (this.isRemote(this.selected)) { this.remoteForce = true; this.load(cx); } this.refresh(cx); }).text_size(12))
         .child(button('docs-settings', '분류 규칙', cx => this.external('code', ['--reuse-window', this.config], cx)).text_size(12)))
       .when(this.kindMenu, el => el.child(h_flex().id('docs-kinds').flex_none().flex_wrap().gap(4).px(8).py(4).border_b(1).border_color(t.border)
         .child(segment('docs-kind-all', '전체', !this.kindFilter, cx => { this.kindFilter = null; this.colPath = ''; cx.notify(); }).rounded(4))
@@ -662,16 +735,18 @@ export default class ProjectDocuments extends View {
     const kind = this.kinds.find(k => k.id === doc.kind)?.label;
     const head = this.documents.find(d => d.id === (doc.head || doc.id));
     const family = head ? [head, ...(head.versions || []).map(id => this.documents.find(d => d.id === id)).filter(Boolean)] : [doc];
-    const state = doc.state === 'previous' ? '이전 버전' : doc.state === 'archived' ? '보관' : doc.localView ? LOCAL_VIEW_TAG : null;
+    const state = doc.state === 'previous' ? '이전 버전' : doc.state === 'archived' ? '보관' : doc.localView ? LOCAL_VIEW_TAG : doc.on ? REMOTE_TAG : null;
+    // The local actions (apps, copy, pin) act on a path on this computer, so a remote document has none.
+    const local = Boolean(doc.path) && !doc.on;
     root = root.child(h_flex().flex_none().px(8).pt(4).gap(4).items_center()
-      .child(div().flex_1().min_w(0).truncate().font_semibold().tooltip(doc.path || doc.name || '').child(doc.name || doc.label))
-      .when(Boolean(doc.path), el => el.child(button('docs-open', '기본 앱', cx => this.external('open', [doc.path], cx)))
+      .child(div().flex_1().min_w(0).truncate().font_semibold().tooltip(doc.on ? `${doc.on} · ${doc.path}` : doc.path || doc.name || '').child(doc.name || doc.label))
+      .when(local, el => el.child(button('docs-open', '기본 앱', cx => this.external('open', [doc.path], cx)))
         .child(button('docs-edit', 'VS Code', cx => this.external('code', ['--reuse-window', doc.path], cx)))
         .child(button('docs-copy-file', '파일 복사', cx => this.copy(doc.path, 'file', cx)))
         .when(/\.md$/i.test(doc.path), el => el.child(button('docs-copy-text', '본문 복사', cx => this.copy(doc.path, 'text', cx)))))
-      .when(!doc.localView, el => el.child(button('docs-pin', doc.pinned ? '고정 해제' : '고정', cx => this.action(doc.pinned ? ['--unpin', doc.id] : ['--pin', doc.path], cx))))
+      .when(!doc.localView && !doc.on, el => el.child(button('docs-pin', doc.pinned ? '고정 해제' : '고정', cx => this.action(doc.pinned ? ['--unpin', doc.id] : ['--pin', doc.path], cx))))
       .when(Boolean(doc.opened), el => el.child(button(`doc-close-${doc.id}`, '닫기', cx => this.dismiss(doc.id, cx)))))
-      .child(notice([kind, state, doc.date, doc.path || doc.error || '경로 확인 필요'].filter(Boolean).join(' · ')))
+      .child(notice([kind, state, doc.on, doc.date, doc.path || doc.error || '경로 확인 필요'].filter(Boolean).join(' · ')))
       .when(family.length > 1, el => el.child(h_flex().id('docs-versions').flex_none().flex_wrap().gap(4).px(12).pb(4)
         .children(family.map((v, i) => div().id(`doc-version-${v.id}`).px(8).py(2).rounded(4).cursor_pointer().text_size(11)
           .bg(v.id === doc.id ? t.selected : t.chrome).border(1).border_color(v.id === doc.id ? t.accent : t.border)
@@ -681,8 +756,9 @@ export default class ProjectDocuments extends View {
       .when(Boolean(this.bodyError), el => el.child(notice(`확인 실패 · ${this.bodyError}${this.blocks ? ' · 마지막 성공 본문 표시' : ''}`)))
       .when(Boolean(this.imageWarning), el => el.child(notice('일부 이미지를 읽을 수 없습니다.')))
       .when(Boolean(this.diagramError), el => el.child(notice(this.diagramError)));
-    if (doc.path && !readable(doc.path)) return root.child(notice('PDF·Word·Excel 문서는 기본 앱으로 여세요.'));
-    if (doc.path && isHtml(doc.path)) {
+    if (doc.on && doc.remoteKind === 'html') root = root.child(notice('원격 HTML은 실행하거나 그리지 않고 소스로만 표시'));
+    if (doc.path && !doc.on && !readable(doc.path)) return root.child(notice('PDF·Word·Excel 문서는 기본 앱으로 여세요.'));
+    if (doc.path && !doc.on && isHtml(doc.path)) {
       if (this.html?.interactive.length) root = root.child(h_flex().id('docs-html-interactive').flex_none().mx(8).my(4).px(12).py(8).gap(8).items_center()
         .rounded(6).border(1).border_color(t.border).bg(t.selected)
         .child(v_flex().flex_1().min_w(0)
@@ -705,7 +781,7 @@ export default class ProjectDocuments extends View {
             onPinch: (event, shown, cx) => { if (!this.zoom && event.delta > 0.005 && event.touch_phase !== 'ended') this.openZoom(index, block, fraction(event), shown * (1 + event.delta), cx); },
             onToggleCode: cx => { if (this.codeOpen.has(block.code)) this.codeOpen.delete(block.code); else this.codeOpen.add(block.code); cx.notify(); } })
         : TextView.markdown(`docs-markdown-${this.bodyKey}-${index}`, block.text).selectable(true).scrollable(false).w_full().flex_none().text_size(14).text_color(t.foreground)
-          .on_link_click((url, cx) => this.follow(doc.path, url, cx)))));
+          .on_link_click((url, cx) => this.follow(doc.path, url, cx, doc)))));
   }
 
   close() { this.closed = true; ++this.generation; this.watchers.clear(); }
