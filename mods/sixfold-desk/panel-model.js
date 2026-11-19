@@ -42,6 +42,42 @@ const toolUrl=value=>typeof value==='string'&&value.length<=2048&&!/[\\\u0000-\u
 const cleanMemory = value => object(value) && ['pending', 'saved', 'proposed'].includes(value.state)
   ? { state: value.state, proposals: integer(value.proposals) } : null;
 const copyMemory = value => value ? { state: value.state, proposals: value.proposals } : null;
+// A space's own notifications (panel-feed.md «spaces[].alerts»). Display values only:
+// an unknown read state stays null and is never counted as unread.
+const ALERT_SOURCES = ['slack', 'linear', 'github'];
+export function cleanSpaceAlerts(value) {
+  if (!object(value) || !Array.isArray(value.items)) return null;
+  const items = unique(list(value.items, 200), item => object(item) && id(item.id) && ALERT_SOURCES.includes(item.source) ? {
+    id: item.id, source: item.source, ref: text(item.ref, 120), sender: text(item.sender, 80) || null,
+    summary: text(item.summary, 160), at: typeof item.at === 'string' && time(item.at) !== null ? item.at : null,
+    read: typeof item.read === 'boolean' ? item.read : null,
+  } : null);
+  const names = raw => list(raw, 64).map(entry => text(entry, 120)).filter(Boolean);
+  const per = (raw, allowed) => Object.fromEntries(ALERT_SOURCES.map(source => [source, allowed.includes(raw?.[source]) ? raw[source] : null]));
+  return { items, unread: items.filter(item => item.read === false).length,
+    connections: Object.fromEntries(ALERT_SOURCES.map(source => [source, names(value.connections?.[source])])),
+    sources: per(value.sources, ['ready', 'missing']),
+    ...(object(value.mapping) ? { mapping: per(value.mapping, ['config', 'collector', 'none']) } : {}) };
+}
+const copySpaceAlerts = alerts => alerts ? { items: alerts.items.map(item => ({ ...item })), unread: alerts.unread,
+  connections: Object.fromEntries(ALERT_SOURCES.map(source => [source, [...alerts.connections[source]]])),
+  sources: { ...alerts.sources }, ...(alerts.mapping ? { mapping: { ...alerts.mapping } } : {}) } : null;
+// Pending requests (panel-feed.md «asks[]»). The requesting space/agent is kept only
+// when it is a space/agent of this feed; otherwise it stays unknown (null).
+const ASK_KINDS = ['permission', 'question', 'plan'];
+export function cleanFeedAsks(raw, spaceIds, agentIds) {
+  return unique(list(raw, 200), item => object(item) && id(item.id) ? {
+    id: item.id, revision: text(item.revision, 160), kind: ASK_KINDS.includes(item.kind) ? item.kind : null,
+    title: text(item.title, 500), space: spaceIds.has(item.space) ? item.space : null,
+    agent: spaceIds.has(item.space) && agentIds.has(item.agent) ? item.agent : null,
+  } : null);
+}
+// The Repo Flow stage DTO (panel-feed.md «repo_flow»: the same observation as repo_activity,
+// kept as given). Its own model (repo-flow-model.js) validates every field when drawn; here only
+// that some repository carries its own stage data (flow) is checked, so an observation without
+// stages keeps the existing repository section.
+const repoFlowDto = raw => object(raw?.repo_flow) && raw.repo_flow.schema === 'repo_activity_v1'
+  && list(raw.repo_flow.repositories, 100).some(repo => object(repo?.flow)) ? raw.repo_flow : null;
 function dateOnly(value) {
   if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
   const [year, month, day] = value.split('-').map(Number);
@@ -225,6 +261,7 @@ export function cleanPanelFeed(raw) {
       ...(owns(value, 'issue_catalog') ? { issue_catalog: cleanCatalog(value.issue_catalog, value.id) } : {}),
       // The producer's short label for what the whole space is (2026-11-19); display only.
       ...(cleanProfession(value.role_group) ? { role_group: cleanProfession(value.role_group) } : {}),
+      ...(cleanSpaceAlerts(value.alerts) ? { alerts: cleanSpaceAlerts(value.alerts) } : {}),
     };
   });
   for (const space of spaces) for (const agent of space.agents) if (owns(agent, 'parent_id') && (agent.parent_id === agent.id || !knownAgents.has(agent.parent_id))) agent.parent_id = null;
@@ -252,8 +289,10 @@ export function cleanPanelFeed(raw) {
     ...(owns(value, 'memory') ? { memory: cleanMemory(value.memory) } : {}),
   } : null);
   const repositories=cleanRepositoryGraph(raw.repo_activity,knownAgents);
+  const repoFlow=repoFlowDto(raw);
   return { v: 1, at: time(raw.at), reduced_motion: typeof raw.reduced_motion === 'boolean' ? raw.reduced_motion : null, computers, spaces, links, events,
-    ...(repositories?{repo_activity:repositories}:{}) };
+    ...(repositories?{repo_activity:repositories}:{}), ...(repoFlow?{repo_flow:repoFlow}:{}),
+    ...(Array.isArray(raw.asks)?{asks:cleanFeedAsks(raw.asks,new Set(spaces.map(space=>space.id)),knownAgents)}:{}) };
 }
 
 export function reconcilePanelFeed(raw, previous = null) {
@@ -599,6 +638,7 @@ function copyDisplaySpace(space, agents) {
     issues: copyIssues(space.issues),
     memory: { proposals: space.memory.proposals }, agents,
     ...(space.role_group ? { role_group: { id: space.role_group.id, label: space.role_group.label } } : {}),
+    ...(space.alerts ? { alerts: copySpaceAlerts(space.alerts) } : {}),
     ...(owns(space, 'issue_catalog') ? { issue_catalog: space.issue_catalog ? {
       week: copyIssues(space.issue_catalog.week), milestone: copyIssues(space.issue_catalog.milestone), all: copyIssues(space.issue_catalog.all),
       ...catalogSource(space.issue_catalog),
@@ -618,6 +658,8 @@ function copyDisplayMetadata(feed) {
   return {
     v: feed.v, at: feed.at, reduced_motion: feed.reduced_motion,
     ...(feed.repo_activity?{repo_activity:cleanRepositoryGraph(feed.repo_activity,new Set(feed.spaces.flatMap(space=>space.agents.map(agent=>agent.id))))}:{}),
+    ...(feed.repo_flow?{repo_flow:feed.repo_flow}:{}),
+    ...(feed.asks?{asks:feed.asks.map(ask=>({...ask}))}:{}),
     computers: feed.computers.map(computer => ({ id: computer.id, name: computer.name, linked: computer.linked, bundle: computer.bundle, traffic: { ...computer.traffic } })),
     links: feed.links.map(link => ({ a: link.a, b: link.b, kind: link.kind })),
     events: feed.events.map(event => ({ id: event.id, at: event.at, kind: event.kind, from: event.from, to: event.to, label: event.label,
