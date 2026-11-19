@@ -61,9 +61,10 @@ export function cleanRepositoryGraph(raw,knownAgents=new Set()){
     return [{agent_id:value.agent_id,repository_id:state==='cwd'?repo:null,state}];
   });
   const events=limited(raw.events,REPO_LIMITS.events,input=>{
-    // Own enumerable fields only: an in-process caller's prototype cannot supply
-    // evidence, phase or result (spread defines a JSON "__proto__" as own data).
-    const value={...input},evidence=own(EVIDENCE,value.evidence);
+    // Own enumerable fields only, copied onto a null prototype: neither a caller's
+    // prototype nor a polluted Object.prototype can supply any event field, and
+    // spread defines a JSON "__proto__" key as own data, never as the prototype.
+    const value={__proto__:null,...input},evidence=own(EVIDENCE,value.evidence);
     if(!key(value.id)||!key(value.operation_id)||!key(value.machine_id)||!repoIds.has(value.repository_id)
       ||!Number.isSafeInteger(value.observed_at)||value.observed_at<0||value.observed_at>8640000000000||!GIT_OPERATIONS.includes(value.operation)
       ||!evidence||value.phase!==evidence[0]||!evidence[1].includes(value.result)
