@@ -150,6 +150,8 @@ export function createRetainedPanel(cx,{macTitlebar=false,onClassic=null,onDispo
   // the popover on its 알림 tab. The host supplies {count, badge, notifications} (alert-inbox.js).
   c.spaceUnread=spaceUnread;
   c.unreadBadge=spaceUnread?space=>space.work?(t=>spaceUnread.badge(space,t,(_space,scope,cx)=>c.openIssues(space,scope,cx),c.motion)):null:null;
+  // The one way a card's issue search opens: the peek title keeps the current tab, the unread
+  // count picks 알림 (scope 'alerts').
   c.openIssues=(space,scope)=>{
     let state=c.issueStates.get(space.id);
     if(!state){state={open:false,scope:'week',query:'',pending:new Map(),error:null};c.issueStates.set(space.id,state);}
@@ -420,7 +422,6 @@ export function createRetainedPanel(cx,{macTitlebar=false,onClassic=null,onDispo
   // The open/close callback of each card's issue search (kept per space id, pruned with the cards).
   c.issueOpeners=new Map();
   c.opener=(id,fn)=>{c.issueOpeners.set(id,fn);return fn;};
-  c.openIssues=space=>{c.issueOpeners.get(space.id)?.(true);};
   // Each card's {search, comment} inputs, made by adoptInputs from that card's init()/update().
   c.issueInputs=new Map();c.inputRevision=0;
   c.adoptInputs=id=>{
