@@ -26,6 +26,28 @@ versions are ignored. Each space names its `computer` ID. Unknown traffic and
 unconnected tool fields remain visibly unmeasured or disconnected. No command
 or executable supplied in a feed is run.
 
+### Optional space notifications, pending requests and repository stages
+
+- `spaces[].alerts` `{items, unread, connections, sources, mapping}` holds that
+  space's own Slack, Linear and GitHub notifications (`items[]` = `{id, source,
+  ref, sender, summary, at, read}`). A space with a work tool shows one unread
+  count on its meta line; pressing it opens the issue popover on its **알림** tab
+  (time groups 방금 · 오늘 · 어제 · 이전). `read: null` is unknown: it is neither
+  counted nor listed. Opening or closing the popover changes no read state.
+  Without `alerts` the tab reads the existing Slack, Linear and GitHub feeds of
+  that space.
+- Top-level `asks[]` `{id, revision, kind, title, space, agent}` names the space
+  that asked. A request whose `space` is a space of the feed is a tab right
+  beside that space's card (45 px in the right gutter, the card's height);
+  pressing it opens the existing request popup. Other requests stay in the
+  sidebar's 확인 대기 section. Showing a request never answers it.
+- `repo_flow` is the same `repo_activity_v1` DTO. When a repository carries its
+  own `flow` stages (commit · push · ci · cd), REPOS is drawn right under
+  COMPUTERS with PUSH · CI · CD cells and install chips on the computer rows. An
+  unobserved stage stays an empty slot. Without stage data the repository
+  section below the workspace cards (next section) is drawn as before.
+- `spaces[].role_group` is also a chip on the sidebar card head.
+
 ### Optional repository activity
 
 An optional `repo_activity` object embeds the generic `repo_activity_v1` display
