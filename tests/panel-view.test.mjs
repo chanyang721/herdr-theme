@@ -111,6 +111,8 @@ test('a space role_group is one header chip; its rows stay ordinary and malforme
     const tree=r.renderPanelTracking({...viewFor(feed),panelWidth:width},t,r.cx),chip=byId(tree,`panel-space-role-${space.id}`);
     assert.deepEqual(words(chip),['Coordination hub']);
     assert(call(chip,'truncate'),'a long label cannot crowd out the name');
+    assert.equal(call(chip,'max_w')[1],width<300?40:110,'a narrow panel caps the chip harder');
+    assert.equal(byId(tree,`panel-space-name-${space.id}`).calls.findLast(c=>c[0]==='min_w')[1],28,'the name keeps a row title\'s minimum');
     assert.equal(call(chip,'tooltip')[1],'Coordination hub');
     assert(byId(tree,`panel-issue-indent-${first.id}`),'rows keep their issue placement');
   }
