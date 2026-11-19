@@ -8,9 +8,9 @@ function element(){let proxy;const data={nodes:[],calls:[]};proxy=new Proxy(data
   if(k==='children')return ns=>{t.nodes.push(...ns.filter(Boolean));return proxy;};
   if(k==='when')return (b,f)=>{if(b)f(proxy);return proxy;};
   return (...a)=>{t.calls.push([k,...a]);return proxy;};}});return proxy;}
-async function inbox(){
+async function inbox(arrivalList=[]){
   const store=new Map([['sixfold.alertProjects',['Alpha']],['sixfold.linearSpaces',['Alpha']],['sixfold.alertItems',[]],['sixfold.linearItems',[]]]);
-  globalThis.__alertInbox={div:element,image:element,h_flex:element,v_flex:element,Popover:{new:element},shared:k=>store.get(k),setShared:(k,v)=>store.set(k,v),openOverlay:o=>store.set('opened',[...(store.get('opened')??[]),o]),arrivals:()=>[]};
+  globalThis.__alertInbox={div:element,image:element,h_flex:element,v_flex:element,Popover:{new:element},shared:k=>store.get(k),setShared:(k,v)=>store.set(k,v),openOverlay:o=>store.set('opened',[...(store.get('opened')??[]),o]),arrivals:()=>arrivalList};
   const base=new URL('../mods/sixfold-desk/',import.meta.url);
   const transform=s=>s.replace(/import \{([^}]+)\} from '(?:gpui-kit|gpui-base|herdr)';/g,'const {$1}=globalThis.__alertInbox;');
   const asUrl=s=>'data:text/javascript;base64,'+Buffer.from(s).toString('base64');
@@ -93,4 +93,64 @@ test('the tracked feed is read once per alert load and again after the next load
     assert.equal(cardAlertCounts('Alpha').slack,2);
     assert.equal(reads,2);
   }finally{store.get=get;}
+});
+
+test('the card head unread number opens the same space issue popover on alerts without changing read state',async()=>{
+  const {store,workspaceUnreadBadge,workspaceNotifications,workspaceUnreadCounts}=await inbox();
+  const alerts={unread:2,sources:['slack','github'],items:[
+    {id:'s',source:'slack',ref:'#demo',sender:'Kim',summary:'안녕',read:false,at:'2026-11-20T00:00:00Z'},
+    {id:'g',source:'github',ref:'demo/api#1',sender:'Lee',summary:'리뷰 요청',read:false,at:'2026-11-19T00:00:00Z'}]};
+  const before=JSON.stringify(alerts),calls=[],context={stop_propagation(){calls.push('stop');}},space={id:'a',name:'Alpha',alerts};
+  const badge=workspaceUnreadBadge(space,{accent:'#aabbcc'},{onOpen:(...args)=>calls.push(args)});
+  assert.equal(badge.calls.find(c=>c[0]==='id')[1],'sf-unread-a');assert(badge.nodes.includes('2'));
+  badge.calls.find(c=>c[0]==='on_click')[1]({},context);
+  assert.deepEqual(calls,['stop',[space,'alerts',context]]);
+  assert.equal(workspaceNotifications('Alpha',{alerts}).rows.length,2);
+  assert.deepEqual(workspaceUnreadCounts('Alpha',{alerts}),{slack:1,linear:0,github:1,total:2});
+  assert.equal(JSON.stringify(alerts),before);assert.equal(store.get('sixfold.alertRead'),undefined);
+  assert(!workspaceUnreadBadge({...space,alerts:{items:[],unread:0}},{accent:'#aabbcc'}).calls.some(c=>c[0]==='on_click'));
+});
+
+test('the notification adapter deduplicates mentions and excludes other spaces from the new card count',async()=>{
+  const {store,popover,workspaceNotifications,workspaceUnreadCounts}=await inbox();
+  store.set('sixfold.alertItems',[{id:'same',project:'Alpha',text:'hi'},{id:'other',project:'Beta',text:'elsewhere'}]);
+  popover.setSpaceMentions([{id:'same',project:'Alpha',text:'hi'},{id:'moved',project:'Beta'}],['Alpha','Hub']);
+  store.set('sixfold.githubItems',[{id:'g',workspace:'Hub',workspace_raw:'Gone',unread:true}]);
+  assert.equal(workspaceUnreadCounts('Alpha').total,1);
+  assert.equal(workspaceUnreadCounts('Hub').total,2,'the moved mention and GitHub item belong to their assigned card');
+  assert.deepEqual(workspaceNotifications('Alpha').rows.map(i=>i.id),['same']);
+  assert.deepEqual(workspaceNotifications('Hub').rows.map(i=>i.id).sort(),['g','moved']);
+});
+
+test('new counts and notification rows preserve fallback Slack and Linear badge placement',async()=>{
+  const {store,popover,workspaceUnreadCounts,workspaceNotifications,cardAlertCounts}=await inbox();
+  const {placeItems}=await import('../mods/sixfold-desk/alert-model.js');
+  popover.setSpaceMentions([{id:'dm',project:''},{id:'unmapped',project:'미연결'},{id:'closed',project:'Gone'}],['Alpha','Hub']);
+  store.set('sixfold.linearItems',placeItems([{id:'linear-closed',workspace:'Gone',read:false}],['Alpha','Hub']));
+  store.set('sixfold.linearSpaces',['Hub']);
+  const old=cardAlertCounts('Hub'),counts=workspaceUnreadCounts('Hub',{connections:{slack:[],linear:[]}});
+  assert.equal(counts.slack,old.slack);assert.equal(counts.linear,old.linear);assert.equal(counts.total,4);
+  assert.deepEqual(workspaceNotifications('Hub').rows.map(i=>i.id).sort(),['closed','dm','linear-closed','unmapped']);
+});
+
+test('the native head count waits for landing like source badges, while the list and authoritative DTO remain intact',async()=>{
+  const {ARRIVAL}=await import('../mods/sixfold-desk/arrival-model.js');
+  const arrivalList=['slack','linear','github'].map(source=>({id:source,key:source,source,space:'Alpha',at:Date.now()}));
+  const {store,popover,workspaceUnreadCounts,workspaceUnreadBadge,workspaceNotifications,cardAlertCounts}=await inbox(arrivalList);
+  store.set('sixfold.alertItems',[{id:'slack',project:'Alpha'}]);popover.setSpaceMentions([]);
+  store.set('sixfold.linearItems',[{id:'linear',workspace:'Alpha',read:false}]);
+  store.set('sixfold.githubItems',[{id:'github',workspace:'Alpha',unread:true}]);
+  const t={accent:'#aabbcc'};
+  assert.equal(workspaceUnreadCounts('Alpha').total,0);
+  assert.equal(cardAlertCounts('Alpha').slack,0);assert.equal(cardAlertCounts('Alpha').linear,0);
+  assert(!workspaceUnreadBadge({id:'a',name:'Alpha'},t).nodes.includes('3'));
+  assert.equal(workspaceUnreadCounts('Alpha',{motion:false}).total,3);
+  assert(workspaceUnreadBadge({id:'a',name:'Alpha'},t,{motion:false}).nodes.includes('3'));
+  assert.equal(workspaceNotifications('Alpha').rows.length,3,'flight only delays the badge; it never removes notification rows');
+  const alerts={items:[{id:'dto',source:'slack',read:false}],unread:7};
+  assert.equal(workspaceUnreadCounts('Alpha',{alerts}).total,7,'a supplied aggregate is authoritative');
+  for(const arrival of arrivalList)arrival.at=Date.now()-ARRIVAL.showMs-ARRIVAL.flyMs-1;
+  assert.equal(workspaceUnreadCounts('Alpha').total,3);
+  assert.equal(workspaceUnreadCounts('Alpha').slack,cardAlertCounts('Alpha').slack);
+  assert.equal(workspaceUnreadCounts('Alpha').linear,cardAlertCounts('Alpha').linear);
 });

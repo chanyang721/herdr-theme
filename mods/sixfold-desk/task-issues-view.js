@@ -1,6 +1,6 @@
-import {div,svg} from 'gpui-kit';
+import {div,svg,image} from 'gpui-kit';
 import {h_flex,v_flex,Popover} from 'gpui-base';
-import {kindTone} from './alert-model.js';
+import {kindTone,workspaceAlertTimeline} from './alert-model.js';
 import {issueDetail,milestoneRows,statusChip,treeIndent,ghostRow,treeEntries} from './issue-detail-view.js';
 import {statusTone,statusLook} from './issue-model.js';
 
@@ -8,6 +8,7 @@ export const ISSUE_SCOPES=Object.freeze([
   {id:'week',label:'이번 주'},
   {id:'milestone',label:'마일스톤'},
   {id:'all',label:'전체'},
+  {id:'alerts',label:'알림'},
 ]);
 // Cap of the 자동 작업 + 알림 온 이슈 area; the popover is 700 high, the tabs, filters, footer and a list row need the rest.
 export const TOP_MAX_H=260;
@@ -25,6 +26,7 @@ export function issuePopover(model,t){
   const popover=Popover.new(`task-issues-${id}`).anchor('left_center').open(open)
     .on_open_change((value,cx)=>model.onOpen?.(value,cx)).trigger(trigger);
   if(!open)return popover;
+  const notifications=model.notifications||workspaceAlertTimeline({alerts:model.alerts,query:model.query,now:model.now});
   // The trigger ends inside the card. Keep the supplied route gutter outside
   // the surface; margin participates in native window-edge clamping.
   const body=v_flex().id(`task-issues-body-${id}`).relative().w(440).ml(model.leadingGap||0).max_h(700).gap(8).p(12)
@@ -39,7 +41,7 @@ export function issuePopover(model,t){
     .child(div().id(`task-issues-close-${id}`).size(28).rounded(6).text_size(14).text_color(t.muted)
       .cursor_pointer().tooltip('닫기').on_click(change(model.onOpen,false)).child('✕')));
   // An issue's detail replaces the alerts, tabs and list (← 목록 goes back).
-  if(model.detail){
+  if(model.detail&&scope!=='alerts'){
     body.child(issueDetail(model,t));
     return popover.content(body);
   }
@@ -47,8 +49,8 @@ export function issuePopover(model,t){
   // '자동 작업' (linear-auto-view.js) holds approvals above the alerts. Both groups grow with their
   // item count, so they share one capped scroll area: a long list scrolls inside it instead of
   // spilling over the tabs and the list below (the tabs stay in reach whatever the counts).
-  const group=alertedGroup(model,t);
-  if(model.auto||group){
+  const group=scope==='alerts'?null:alertedGroup(model,t);
+  if(scope!=='alerts'&&(model.auto||group)){
     const top=v_flex().id(`task-issues-top-${id}`).flex_none().min_h(0).max_h(TOP_MAX_H).overflow_y_scroll().gap(8);
     if(model.auto)top.child(model.auto);
     if(group)top.child(group);
@@ -56,13 +58,14 @@ export function issuePopover(model,t){
   }
   body.child(h_flex().gap(4).pb(8).border_b(1).border_color(t.border)
     .children(ISSUE_SCOPES.map(item=>{
-      const count=model.scopeCounts?.[item.id];
-      return h_flex().id(`task-issues-scope-${id}-${item.id}`).h(30).px(12).gap(4).rounded(6).items_center()
+      const count=item.id==='alerts'?notifications.unread:model.scopeCounts?.[item.id];
+      return h_flex().id(`task-issues-scope-${id}-${item.id}`).h(30).px(9).gap(4).rounded(6).items_center()
         .bg(scope===item.id?t.selected:t.popover||t.surface).cursor_pointer()
         .on_click(change(model.onScope,item.id))
         .child(text(item.label,scope===item.id?t.foreground:t.muted,12))
         .child(text(Number.isInteger(count)?String(count):'—',t.dim,10));
     })));
+  if(scope==='alerts')return popover.content(body.child(alertTimeline({...model,notifications},t)));
   // Status filter (Linear's real statuses, with counts); done and canceled are folded under 전체.
   if(scope!=='milestone'&&model.filters?.length>1){
     body.child(h_flex().id(`task-issues-filters-${id}`).flex_wrap().gap(4)
@@ -139,6 +142,32 @@ export function issuePopover(model,t){
     .cursor_pointer().on_click(change(model.onExternal)));
   // No project link given for this space: nothing to open, so nothing is shown (an issue still opens from its detail).
   return popover.content(body.child(footer));
+}
+
+// A time-ordered, read-only projection. Opening or closing the surface has no
+// read side effect; a caller can attach an explicit row-opening action.
+export function alertTimeline(model,t){
+  const {id,notifications={groups:[]}}=model;
+  const list=v_flex().id(`task-alerts-list-${id}`).min_h(42).max_h(500).overflow_y_scroll().gap(5);
+  for(const group of notifications.groups){
+    list.child(text(group.label,t.dim,10).id(`task-alerts-period-${id}-${group.id}`).pt(8).font_bold());
+    for(const row of group.rows){
+      list.child(v_flex().id(`task-alert-${id}-${row.key}`).gap(3).px(8).py(6).rounded(6)
+        .bg(row.read?t.chrome||t.surface:t.selected)
+        .when(Boolean(row.url&&model.onAlertOpen),e=>e.cursor_pointer().tooltip('출처에서 열기')
+          .on_click((_event,cx)=>{cx.stop_propagation();model.onAlertOpen(row,cx);}))
+        .child(h_flex().items_center().gap(6)
+          .child(image(`mods/sixfold-desk/icons/${row.source}.svg`).size(13).flex_none())
+          .child(text(row.ref,t.foreground,11).font_bold().flex_1().tooltip(row.ref))
+          .child(text(row.sender,t.muted,10).max_w(120).tooltip(row.sender))
+          .child(text(clock(row.at)||'시각 미확인',t.dim,9).flex_none())
+          .when(!row.read,e=>e.child(div().id(`task-alert-unread-${id}-${row.key}`).size(5).rounded(3).flex_none().bg(t.accent))))
+        .child(text(row.summary,t.muted,11).tooltip(row.summary)));
+    }
+  }
+  if(!notifications.groups.length)list.child(text('이 공간에 표시할 알림이 없습니다',t.dim,11).py(12));
+  return v_flex().id(`task-alerts-${id}`).gap(8).child(list)
+    .child(text('닫아도 읽음 상태는 바뀌지 않습니다',t.dim,10));
 }
 
 // The shared "알림 온 이슈" group: in the issue search above its tabs, and alone in a peek

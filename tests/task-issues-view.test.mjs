@@ -20,7 +20,7 @@ const theme={surface:'#151a22',chrome:'#10151e',popover:'#1c2330',foreground:'#e
 const rows=Array.from({length:3},(_,i)=>({key:`DEMO-${i+1}`,title:`Demo issue ${i+1}`,state:['working','review','blocked'][i]}));
 let serial=0;
 async function renderer(){
-  globalThis.__issueView={div:()=>element(),svg:value=>element('svg',value),h_flex:()=>element('row'),v_flex:()=>element('column'),Popover:{new:id=>element('popover',id)}};
+  globalThis.__issueView={div:()=>element(),svg:value=>element('svg',value),image:value=>element('image',value),h_flex:()=>element('row'),v_flex:()=>element('column'),Popover:{new:id=>element('popover',id)}};
   const local=async name=>(await readFile(new URL(`../mods/sixfold-desk/${name}.js`,import.meta.url),'utf8'))
     .replace(/import \{([^}]+)\} from '(?:gpui-kit|gpui-base)';/g,'const {$1}=globalThis.__issueView;')
     .replace("'./alert-model.js'",JSON.stringify(new URL('../mods/sixfold-desk/alert-model.js',import.meta.url).href))
@@ -179,4 +179,38 @@ test('many auto-work cards and alerted issues stay in one capped scroll area abo
   assert(call(byId(tree,'task-issues-list-demo'),'overflow_y_scroll'),'the list scrolls too');
   const lone=byId(issuePopover(model({}),theme),'task-issues-body-demo');
   assert(!byId(lone,'task-issues-top-demo'),'no wrapper when neither group shows');
+});
+
+test('the alerts tab lists only its supplied space DTO in time groups and close never acknowledges unread items',async()=>{
+  const {issuePopover}=await renderer(),events=[],cx={stop_propagation(){}};
+  const now=new Date(2026,10,20,12).getTime(),at=(day,hour=12,minute=0)=>new Date(2026,10,20+day,hour,minute).toISOString();
+  const alerts={unread:3,sources:['slack','linear','github'],items:[
+    {id:'s',source:'slack',ref:'#demo',sender:'Kim',summary:'검토 부탁',at:at(0,11,59),read:false,url:'https://demo.slack.com/archives/C1/p1'},
+    {id:'l',source:'linear',ref:'DEMO-1',sender:'Lee',summary:'상태 변경',at:at(0,10),read:true},
+    {id:'g',source:'github',ref:'demo/api#3',sender:'Park',summary:'리뷰 요청',at:at(-1),read:false},
+    {id:'old',source:'slack',ref:'#demo',sender:'Kim',summary:'이전 메시지',at:at(-4),read:false},
+  ]};
+  const before=JSON.stringify(alerts);
+  const tree=issuePopover(model({scope:'alerts',now,alerts,auto:element(),filters:[{name:'Todo'},{name:'Done'}],
+    onOpen:open=>events.push(['open',open]),onScope:scope=>events.push(['scope',scope]),onRead:()=>events.push(['read']),
+    onAlertOpen:(row,context)=>{assert.equal(context,cx);events.push(['link',row.url]);}}),theme);
+  assert(!byId(tree,'task-issues-top-demo'));assert(!byId(tree,'task-issues-list-demo'));assert(!byId(tree,'task-issues-filters-demo'));
+  assert.deepEqual(['recent','today','yesterday','earlier'].map(period=>words(byId(tree,`task-alerts-period-demo-${period}`))[0]),['방금','오늘','어제','이전']);
+  assert.equal(walk(tree).filter(n=>n.kind==='image').length,4);
+  assert.equal(walk(tree).filter(n=>String(call(n,'id')?.[1]||'').startsWith('task-alert-unread-')).length,3);
+  assert.deepEqual(words(byId(tree,'task-issues-scope-demo-alerts')),['알림','3']);
+  for(const value of ['#demo','Kim','검토 부탁','DEMO-1','Lee','상태 변경','demo/api#3','Park','리뷰 요청'])assert(words(tree).includes(value),value);
+  click(byId(tree,'task-alert-demo-slack:s'),cx);
+  click(byId(tree,'task-issues-scope-demo-alerts'),cx);
+  click(byId(tree,'task-issues-close-demo'),cx);call(tree,'on_open_change')[1](false,cx);
+  assert.deepEqual(events,[['link','https://demo.slack.com/archives/C1/p1'],['scope','alerts'],['open',false],['open',false]]);
+  assert.equal(JSON.stringify(alerts),before);
+});
+
+test('an empty notification tab and an alerts-only space remain usable without an issue catalog',async()=>{
+  const {issuePopover}=await renderer();
+  const tree=issuePopover(model({scope:'alerts',rows:[],alerts:{items:[],unread:0},toolLabel:'연결 없음'}),theme);
+  assert(words(tree).includes('이 공간에 표시할 알림이 없습니다'));
+  assert(!words(tree).includes('이 범위에 표시할 이슈가 없습니다'));
+  assert.deepEqual(words(byId(tree,'task-issues-scope-demo-alerts')),['알림','0']);
 });

@@ -1,7 +1,7 @@
 import { div, image } from 'gpui-kit';
 import { h_flex } from 'gpui-base';
 import { shared, openOverlay } from 'herdr';
-import { scopedAlerts, linearScoped, githubScoped, slackCopyDelay, projectKey } from './alert-model.js';
+import { scopedAlerts, linearScoped, githubScoped, slackCopyDelay, projectKey, workspaceAlertCounts, workspaceAlertTimeline } from './alert-model.js';
 import { alertPopover, showPopover, popoverState, spaceMentions } from './alert-popover.js';
 import { mentionsEpoch } from './alert-mentions.js';
 import { arrivals } from './arrival-store.js';
@@ -89,6 +89,34 @@ export function cardAlertCounts(name, motion = true) {
   const delay = hasSlackAlerts(name) ? slackCopyDelay(shared('sixfold.slackHealth')) : null;
   return {hasSlack: hasSlackAlerts(name), slack: hasSlackAlerts(name) ? slackUnread(scope) : 0, linear: hasLinearAlerts(name) ? linearUnreadNow(scope) : 0,
     delay: delay ? delay.hours : 0, delayAt: delay?.at || ''};
+}
+// Use the space's optional alerts DTO when present. Older installations can
+// still read their existing feeds with the same fallback-space placement.
+const notificationInput = (name, options) => {
+  if(Array.isArray(options.alerts?.items))return {space:name,...options};
+  return {space:name,slack:[...slackItems(name),...spaceMentions(name)],
+    linear:shared('sixfold.linearItems')??[],github:shared('sixfold.githubItems')??[],read:shared('sixfold.alertRead')??{},...options};
+};
+export function workspaceUnreadCounts(name,options={}) {
+  const input=notificationInput(name,options);
+  if(Array.isArray(input.alerts?.items))return workspaceAlertCounts(input);
+  // Delay native badge counts until the arrival lands, as the source badges do.
+  // The notification list still shows every item, including an open arrival.
+  return workspaceAlertCounts({...input,slack:landedOnly(input.slack??[],options),
+    linear:landedOnly(input.linear??[],options),github:landedOnly(input.github??[],options)});
+}
+export const workspaceNotifications = (name,options={}) => workspaceAlertTimeline(notificationInput(name,options));
+// The card head supplies an opener for its own issue popover, selecting alerts.
+// Keep this separate from source badges, whose legacy inboxes are still usable.
+export function workspaceUnreadBadge(space,t,{onOpen,alerts=space.alerts,connections,motion=true}={}){
+  const count=workspaceUnreadCounts(space.name,{alerts,connections,motion}).total;
+  if(!count)return div();
+  const stop=(_event,cx)=>cx.stop_propagation();
+  return div().id(`sf-unread-${space.id}`).flex_none().px(5).py(1).rounded(7).text_size(10)
+    .text_color(t.accent).tooltip(`안 읽은 알림 ${count}건`)
+    .on_mouse_down('left',stop).on_mouse_up('left',stop)
+    .when(Boolean(onOpen),e=>e.cursor_pointer().on_click((_event,cx)=>{cx.stop_propagation();onOpen(space,'alerts',cx);}))
+    .child(String(count));
 }
 export function slackAlertsChip(space, trigger, t) {
   if (!alertsOnMetaLine(space, space.name)) return trigger;   // the alerts row has the popover for this card

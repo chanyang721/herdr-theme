@@ -1,3 +1,5 @@
+import {feedNames, namesFor, readable, senderName} from './alert-slack.js';
+
 export const projectKey = name => String(name ?? '').toLowerCase().replace(/[\s_-]/g, '');
 // A message timestamp identifies receipt. Later task edits are not new messages.
 export const alertVersion = item => item.id;
@@ -182,6 +184,102 @@ export function slackCopyDelay(health, now = Date.now()) {
   if (!Number.isFinite(at)) return null;
   const hours = (now - at) / 3_600_000;
   return hours > limit ? {hours: Math.floor(hours), at: health.mirror_latest_at} : null;
+}
+
+// A single space's notification tab. A supplied `alerts` DTO is authoritative;
+// otherwise use the existing source feeds and their original space mapping.
+// Native feeds have already placed orphan items on their fallback card; keep
+// that placement so the tab and existing source badges list the same work.
+export const ALERT_PERIODS = Object.freeze([
+  {id: 'recent', label: '방금'}, {id: 'today', label: '오늘'},
+  {id: 'yesterday', label: '어제'}, {id: 'earlier', label: '이전'},
+]);
+export const RECENT_ALERT_MS = 5 * 60 * 1000;
+const alertText = value => String(value ?? '').replace(/\s+/g, ' ').trim();
+const sourceList = items => Array.isArray(items) ? items.filter(i => i && typeof i.id === 'string' && i.id) : [];
+const connectedAlert = (item, source, space, connections) => {
+  const assigned = source === 'slack' ? item.project : item.workspace;
+  if (!space || !projectKey(assigned) || projectKey(assigned) !== projectKey(space)) return false;
+  // Routing preserves the original label for display, not a second scope check.
+  // Unmapped mentions and closed-space items still belong to the assigned card,
+  // even when that fallback has no channel, project or repository connection.
+  const original = source === 'slack' ? item.project_raw : item.workspace_raw;
+  if (original !== undefined && projectKey(original) !== projectKey(assigned)) return true;
+  if (!connections || !Object.hasOwn(connections, source)) return true;
+  const values = connections[source];
+  if (!Array.isArray(values)) return false;
+  const candidates = source === 'slack' ? [item.channel, item.channel_name] : source === 'linear' ? [item.project, item.project_id] : [item.repo];
+  const key = value => String(value ?? '').trim().replace(/^#/, '').toLowerCase();
+  return values.some(value => key(value) && candidates.some(candidate => key(candidate) === key(value)));
+};
+const alertURL = (source, value) => typeof value === 'string' &&
+  (source === 'github' ? githubLink(value) : source === 'linear' ? LINEAR_URL.test(value) : /^https:\/\/[a-z0-9-]+\.slack\.com\/[^\s]*$/i.test(value)) ? value : '';
+
+export function workspaceAlertRows({space, alerts, slack = [], linear = [], github = [], read = {}, connections} = {}) {
+  const entries = [], add = (source, item, fields) => entries.push({
+    key: `${source}:${item.id}`, id: item.id, source, ...fields,
+    ref: alertText(fields.ref), sender: alertText(fields.sender) || '보낸 사람 미확인',
+    summary: alertText(fields.summary), at: typeof fields.at === 'string' ? fields.at : '',
+    url: alertURL(source, fields.url),
+  });
+  if (Array.isArray(alerts?.items)) {
+    for (const item of sourceList(alerts.items)) {
+      if (!['slack', 'linear', 'github'].includes(item.source) || typeof item.read !== 'boolean') continue;
+      add(item.source, item, {ref: item.ref, sender: item.sender, summary: item.summary, at: item.at, read: item.read, url: item.url});
+    }
+  } else {
+    const scopedSlack = sourceList(slack).filter(i => connectedAlert(i, 'slack', space, connections));
+    const names = feedNames(scopedSlack);
+    for (const item of scopedSlack) add('slack', item, {
+      ref: item.channel_name ? `#${String(item.channel_name).replace(/^#/, '')}` : item.channel || '',
+      sender: senderName(item, names), summary: readable(item.text || item.title, namesFor(item, names), item.mentions),
+      at: item.at, read: read?.[item.id] === alertVersion(item), url: item.link,
+    });
+    for (const item of sourceList(linear).filter(i => connectedAlert(i, 'linear', space, connections))) add('linear', item, {
+      ref: item.issue || item.project, sender: item.sender || item.author_name || item.author,
+      summary: alertLine(item), at: item.at || item.changed_at, read: item.read === true, url: item.url,
+    });
+    for (const item of sourceList(github).filter(i => connectedAlert(i, 'github', space, connections))) add('github', item, {
+      ref: githubRef(item), sender: item.sender || item.author, summary: [item.title, githubLine(item)].filter(Boolean).join(' · '),
+      at: item.at, read: !item.unread, url: item.url,
+    });
+  }
+  // The same Slack message can be in both the tracked feed and mentions. Keep
+  // one row per source/id; identical ids from different services stay distinct.
+  const unique = new Map();
+  for (const item of entries) {
+    const old = unique.get(item.key);
+    if (!old || (Date.parse(item.at) || 0) >= (Date.parse(old.at) || 0)) unique.set(item.key, item);
+  }
+  return [...unique.values()];
+}
+
+function countAlertRows(rows, alerts) {
+  const counts = {slack: 0, linear: 0, github: 0};
+  for (const row of rows) if (!row.read) counts[row.source]++;
+  return {...counts, total: Number.isInteger(alerts?.unread) && alerts.unread >= 0 && Array.isArray(alerts?.items)
+    ? alerts.unread : counts.slack + counts.linear + counts.github};
+}
+export const workspaceAlertCounts = (input = {}) => countAlertRows(workspaceAlertRows(input), input.alerts);
+
+export function alertPeriod(at, now = Date.now()) {
+  const stamp = Date.parse(at), today = new Date(now);
+  if (!Number.isFinite(stamp) || !Number.isFinite(today.getTime())) return 'earlier';
+  today.setHours(0, 0, 0, 0);
+  const yesterday = new Date(today); yesterday.setDate(yesterday.getDate() - 1);
+  // A collector clock slightly ahead of this computer still describes new work.
+  if (Math.abs(now - stamp) < RECENT_ALERT_MS) return 'recent';
+  if (stamp >= today.getTime() && stamp <= now) return 'today';
+  if (stamp >= yesterday.getTime() && stamp < today.getTime()) return 'yesterday';
+  return 'earlier';
+}
+
+export function workspaceAlertTimeline(input = {}) {
+  const all = workspaceAlertRows(input), needle = alertText(input.query).normalize('NFC').toLocaleLowerCase();
+  const rows = all.filter(row => !needle || `${row.ref} ${row.sender} ${row.summary}`.normalize('NFC').toLocaleLowerCase().includes(needle))
+    .sort((a, b) => ((Date.parse(b.at) || 0) - (Date.parse(a.at) || 0)) || a.key.localeCompare(b.key));
+  const groups = ALERT_PERIODS.map(period => ({...period, rows: rows.filter(row => alertPeriod(row.at, input.now) === period.id)})).filter(group => group.rows.length);
+  return {rows, groups, total: all.length, unread: countAlertRows(all,input.alerts).total};
 }
 
 // GitHub (data/sixfold/github-alerts.json, written by a local `gh` collector; read only): review requests
