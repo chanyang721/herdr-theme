@@ -11,7 +11,8 @@ import {PANEL_FLOW, panelFlowAnchor, panelMessageAnchors, messageFlowGeometry, c
 
 const MARK={working:'●',idle:'○',blocked:'!',done:'✓'};
 const STATUS_LABEL={working:'작업 중',idle:'쉬는 중',blocked:'막힘',done:'완료'};
-const STAGES=['배분','작업','검수','수락 대기'];
+// The fourth slot is the step into the repository (accepted work is merged and pushed there).
+const STAGES=['배분','작업','검수','레포 반영'];
 const CLOSE=['보고 작성','경험·결정 저장','기억함 제안','닫힘'];
 const RIGHT=PANEL_FLOW.gutter, ROW=24, REASON=0;
 // The least a row title keeps in a narrow panel when chips share its line.
@@ -314,10 +315,13 @@ export function cardView(view,card,state,color,computerNames,t,motion,rowEntitie
     .when(Boolean(alerts?.delay),e=>e.child(text('사본 지연',t.blocked||t.muted,9).flex_none().id(`panel-slack-delay-${space.id}`)))
     .when(Boolean(alerts?.hasSlack),e=>e.cursor_pointer().tooltip(`Slack 알림${slackUnread?` 미확인 ${slackUnread}건`:''}${alerts?.delay?`\nSlack 사본이 ${alerts.delay}시간째 멈춤 (마지막 메시지 ${alerts.delayAt}) · 새 멘션이 늦게 보일 수 있음`:''}`));
   const badges=view.cardBadges?.(space)||null;
+  // One unread count for the whole space (Slack, Linear and GitHub); it opens the 알림 tab.
+  const unread=view.issuePopover?view.unreadBadge?.(space)?.(t)??null:null;
   if(panelMetaHeight(space))box.child(h_flex().h(PANEL_GEOMETRY.meta).flex_none().px(7).gap(5).items_center()
     .when(Boolean(badges),e=>e.child(badges.view(t)))
     .child(alerts?.hasSlack&&view.slackAlerts?view.slackAlerts(space,slack,t):slack)
-    .child(space.work&&view.issuePopover?view.issuePopover(space,tool,t):tool));
+    .child(space.work&&view.issuePopover?view.issuePopover(space,tool,t):tool)
+    .when(Boolean(unread),e=>e.child(unread)));
   for(const row of card.rows){
     if(row.kind==='issue'){
       const issue=row.group.issue,finished=issue?.state==='done'||row.group.kind==='closed';

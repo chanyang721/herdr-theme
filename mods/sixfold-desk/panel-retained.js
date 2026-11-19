@@ -115,7 +115,7 @@ class PanelRoot extends View{
   }
 }
 
-export function createRetainedPanel(cx,{macTitlebar=false,onClassic=null,onDispose=null,onIssueRequest=null,embedded=false,onHostChange=null,schedule=fn=>fn(),cardAlerts=null,slackAlerts=null,cardBadges=null}={}){
+export function createRetainedPanel(cx,{macTitlebar=false,onClassic=null,onDispose=null,onIssueRequest=null,embedded=false,onHostChange=null,schedule=fn=>fn(),cardAlerts=null,slackAlerts=null,cardBadges=null,spaceUnread=null}={}){
   const prune=()=>{
   for(const previous of [...registry.values()]){
     let retired=previous.protocol!=='2';try{retired||=previous.life?.is_done()===true;}catch{retired=true;}
@@ -146,12 +146,23 @@ export function createRetainedPanel(cx,{macTitlebar=false,onClassic=null,onDispo
   c.cardAlerts=cardAlerts?space=>cardAlerts(space,c.motion):null;c.slackAlerts=slackAlerts;
   // The host's workspace badges with a state ride on the same line: {key, view(t)} or null.
   c.cardBadges=cardBadges?space=>space.native?cardBadges(space.native):null:null;
+  // A space with an issue popover shows one unread count on its meta line; pressing it opens
+  // the popover on its 알림 tab. The host supplies {count, badge, notifications} (alert-inbox.js).
+  c.spaceUnread=spaceUnread;
+  c.unreadBadge=spaceUnread?space=>space.work?(t=>spaceUnread.badge(space,t,(_space,scope,cx)=>c.openIssues(space,scope,cx),c.motion)):null:null;
+  c.openIssues=(space,scope)=>{
+    let state=c.issueStates.get(space.id);
+    if(!state){state={open:false,scope:'week',query:'',pending:new Map(),error:null};c.issueStates.set(space.id,state);}
+    state.scope=scope||state.scope;
+    const open=c.issueOpeners?.get(space.id);
+    if(open)open(true);else c.notify(c.cards.get(space.id));
+  };
   // New alerts redraw a card only when what it shows changed: its meta-line counts, and the
   // alerted issues of an open issue search. Bounded by the number of cards; no timer.
   c.alertMarks=new Map();
   c.alertMark=space=>{
     const state=c.issueStates.get(space.id);
-    return JSON.stringify([c.cardAlerts?.(space)||null,c.cardBadges?.(space)?.key||null,state?.open?issueAlertSignature(shared('sixfold.linearItems')??[],space.name):'',shared('sixfold.alertPopover')?.space===space.name?shared('sixfold.alertPopover'):null,
+    return JSON.stringify([c.cardAlerts?.(space)||null,c.cardBadges?.(space)?.key||null,space.work&&c.spaceUnread?c.spaceUnread.count(space,c.motion):null,state?.open?issueAlertSignature(shared('sixfold.linearItems')??[],space.name):'',shared('sixfold.alertPopover')?.space===space.name?shared('sixfold.alertPopover'):null,
       state?.open?[[...readPendingIds()].sort().join(','),lastReadError()]:null,
       state?.open?[autoSignature(shared('sixfold.linearAuto'),space.name),[...busyKeys()].sort().join(','),[...doneIds()].sort().join(','),autoError()]:null,
       state?.open?startSignature(state):null]);
@@ -514,6 +525,9 @@ export function createRetainedPanel(cx,{macTitlebar=false,onClassic=null,onDispo
     const cache=state?.open?issueCacheLabel(space,state.scope):null;
     const extra=state?.open?c.issueExtra(space,state,data):{};
     return issuePopover({...extra,id:space.id,trigger,open:state?.open===true,scope:state?.scope||'week',...data,
+      // The 알림 tab: this space's own notifications, newest first in time groups (read only).
+      ...(state?.open&&state.scope==='alerts'?{alerts:space.alerts,notifications:c.spaceUnread?.notifications(space)??null,
+        onAlertOpen:(row,context)=>(context||c.cx).open_url?.(row.url)}:{}),
       leadingGap:PANEL_GEOMETRY.rightGutter+PANEL_GEOMETRY.padding+PANEL_GEOMETRY.border+PANEL_GEOMETRY.popoverGap,
       projectLabel:space.name,toolLabel:space.work?.tool==='jira'?'Jira':space.work?.tool==='linear'?'Linear':space.work?.tool||'업무 도구',
       icon:state?.open?toolIcon(space.work?.tool,t).size(24):null,

@@ -15,7 +15,7 @@ import { workflowNodes, delegationEvents, workflowStatus, sessionChildren, activ
 import { watchDocs, currentDocs } from './docs.js';
 import { docsFinder, docsFinderSignature, setDocsFinderOpen, docsGroup } from './docs-finder.js';
 import { watchAlerts, alertSection, visibleAlerts } from './alerts.js';
-import { workspaceAlertsRow, hasWorkspaceAlerts, openInbox, cardAlertCounts, slackAlertsChip, alertsOnMetaLine } from './alert-inbox.js';
+import { workspaceAlertsRow, hasWorkspaceAlerts, openInbox, cardAlertCounts, slackAlertsChip, alertsOnMetaLine, workspaceUnreadBadge, workspaceUnreadCounts, workspaceNotifications } from './alert-inbox.js';
 import { startAlertArrivals, alertArrivalLayer, alertCardSignature } from './alert-arrivals.js';
 import { panePet } from './pets.js';
 import { motionEnabled, arrivalMotionEnabled, motionToggled, motionLabel, briefWindow, wakeAtBriefEnd } from './motion.js';
@@ -23,7 +23,8 @@ import { paneUsage } from './session-usage.js';
 import { paneMeta, paneMetaChip, showPaneIndex, showTitle } from './pane-meta.js';
 import { paneWork, paneWorkChip } from './pane-work.js';
 import { watchBadges, workspaceBadges } from './badges.js';
-import { watchAsks, askSection, hasAsks, paneAskButton, askPopup } from './asks.js';
+import { watchAsks, askSection, hasAsks, paneAskButton, askPopup, spaceAskView, openAskPopup } from './asks.js';
+import { mountRepoFlow, repoComputerChips, repoFlowHeight } from './repo-flow-view.js';
 import { askFor } from './ask-model.js';
 import { watchReports, reportsSection } from './session-reports.js';
 import {reconcilePanelFeed,panelSpacePartners,repositorySection,repositoryLayout,repositoryFlowLayer,createRepositoryController,projectRepositoryGraph} from './panel-model.js';
@@ -160,7 +161,13 @@ export default class SixfoldDesk extends View {
       schedule:fn=>fileReceiver.enqueue(fn),
       // Counts on the meta line only when it carries the alerts; otherwise the alerts row has them (never both).
       // Counted once landed: arrivals follow their own motion rule (motion.js), not the panel's.
-      cardAlerts:space=>alertsOnMetaLine(space,space.name)?cardAlertCounts(space.name,arrivalMotionEnabled(shared)&&window()?.visible!==false):null,slackAlerts:slackAlertsChip,
+      cardAlerts:space=>!space.work&&alertsOnMetaLine(space,space.name)?cardAlertCounts(space.name,arrivalMotionEnabled(shared)&&window()?.visible!==false):null,slackAlerts:slackAlertsChip,
+      // A space with an issue popover: one unread count on its meta line opens the popover's 알림 tab.
+      // The feed's per-space alerts are used when present; otherwise the existing feeds, by space name.
+      spaceUnread:{
+        count:(space,motion)=>workspaceUnreadCounts(space.name,{alerts:space.alerts,connections:space.alerts?.connections,motion}).total,
+        badge:(space,t,onOpen,motion)=>workspaceUnreadBadge(space,t,{onOpen,alerts:space.alerts,connections:space.alerts?.connections,motion}),
+        notifications:space=>workspaceNotifications(space.name,{alerts:space.alerts,connections:space.alerts?.connections})},
       cardBadges:metaBadges(this),
       onIssueRequest:(space,key,desired)=>{
         const serial=globalThis.__sixfoldIssueRequestSerial=(globalThis.__sixfoldIssueRequestSerial||0)+1;
@@ -848,6 +855,7 @@ export default class SixfoldDesk extends View {
       const sharedProjects = collabs.filter(project => project.machines.includes(name));
       const displayName = this.computerLabel(name);
       const machineSpaces = spaces().filter(space => (space.machine ?? null) === name);
+      const repoFlow = this.panelState?.feed?.repo_flow ?? null;
       const selected = selectedComputer === (name === null ? 'local' : `remote:${name}`);
       const ready = machine.layout === 'ready';
       const state = computerStatus(machine, this.lang(), window()?.platform);
@@ -866,6 +874,8 @@ export default class SixfoldDesk extends View {
           .child(div().truncate().text_size(11).font_bold().child(displayName))
           .child(h_flex().min_w(0).gap(6).items_center()
             .children(['working','done','blocked'].filter(status => agentCount[status] > 0).map(status => this.badge(status, String(agentCount[status]), t, 9)))
+            // What the Repo Flow feed says was installed on this computer (nothing when unobserved).
+            .when(Boolean(repoFlow),el=>{const chips=repoComputerChips(repoFlow,taskComputerRecord(this.panelState?.feed,name)?.id,t);return chips?el.child(chips):el;})
             // The icon's colour says connected; words only for an exception. The tooltip keeps the detail.
             .child(div().flex_1().min_w(0).truncate().text_size(9).text_color(machine.layout === 'loading' ? t.muted : t.blocked).child(computerAlert(machine, this.lang()) ?? ''))))
         .child(div().flex_none().text_size(9).text_color(t.dim).child(String(machineSpaces.length)))
@@ -941,7 +951,7 @@ export default class SixfoldDesk extends View {
     const badgeRow=s=>!metaLine(s)&&lineBadges(spaceBadges(this,s));
     const extraHeight=s=>badgeRow(s)?20:0;
     // A task card with a meta line carries Slack and Linear alerts there; the separate alerts row is for other cards.
-    const mergedAlerts=s=>Boolean(taskPanel?.bodyFor(s)&&alertsOnMetaLine(taskPanel.taskFor(s),s.name));
+    const mergedAlerts=s=>Boolean(taskPanel?.bodyFor(s)&&(taskPanel.taskFor(s)?.work||alertsOnMetaLine(taskPanel.taskFor(s),s.name)));
     const alertRowHeight=s=>hasWorkspaceAlerts(s.name)&&!mergedAlerts(s)?26:0;
     const positions={};let offset=0;
     for(const {s,members} of groups){
@@ -994,7 +1004,7 @@ export default class SixfoldDesk extends View {
       const task=taskPanel?.taskFor(s),taskBody=taskPanel?.bodyFor(s);
       const partner=partnersOf(s),mark=spaceLink(s);
       const badgeKey=`${s.machine??''}|${String(s.id).split('/').pop()}`;
-      const key=JSON.stringify([s,members,task?.id,Boolean(taskBody),Boolean(task?.slack||task?.work),task?.memory,task?.share,task?.agents.map(agent=>[agent.id,agent.status,agent.closing]),taskPanel?.names&&[...taskPanel.names],taskPanel?.feed?.links,t,w,motion,partner,mark,comets.comets.get(groupKey(partner?.group.name??mark?.lane.link.name)),
+      const key=JSON.stringify([s,members,task?.id,Boolean(taskBody),Boolean(task?.slack||task?.work),task?.memory,task?.share,task?.role_group,task?.agents.map(agent=>[agent.id,agent.status,agent.closing]),taskPanel?.names&&[...taskPanel.names],taskPanel?.feed?.links,t,w,motion,partner,mark,comets.comets.get(groupKey(partner?.group.name??mark?.lane.link.name)),
         this.boxSizes?.[s.id],partner?.partners.includes(this.hoverComputer)||false,this.dragSpace,this.overSpace,
         this.workspaceIcons[s.id]||this.workspaceIcons[s.name],workspaceColor(s),workspacePinned(s,this.workspacePins),
         this.fileBadges?.[badgeKey],alertCardSignature(s.name,arrivalMotion),shared('sixfold.workspace.badges')?.[badgeKey],this.projectDocs?.spaces?.[s.id]||this.projectDocs?.spaces?.[s.name],
@@ -1076,6 +1086,9 @@ export default class SixfoldDesk extends View {
           .tooltip(this.lang()==='ko'?'고정 워크스페이스 · workspace-pins.local.json':'Pinned workspace · workspace-pins.local.json')
           .child(svg('mods/sixfold-desk/icons/pin.svg').size(12).text_color(t.accent))))
         .child(div().flex_1().min_w(0).truncate().text_color(s.active?t.foreground:t.muted).tooltip(s.name).child(s.name))
+        .when(Boolean(task?.role_group),e=>e.child(div().id(`sf-space-role-${s.id}`).flex_none().max_w(110).truncate()
+          .px(4).rounded(3).border(1).border_color(t.accent).text_size(9).font_normal().text_color(t.accent)
+          .tooltip(task.role_group.label).accessibility_label(task.role_group.label).child(task.role_group.label)))
         .when(Boolean(feedPartner),e=>e.child(chip(`sf-task-partner-${s.id}`,feedPartner.name,feedTone,'device-computer')))
         .when(!feedPartner&&Boolean(partnerTail),e=>e.child(partnerTail))
         .when(Boolean(localPartner),e=>e.child(chip(`sf-local-partner-${s.id}`,localPartner.name+(localPartners.length>1?` +${localPartners.length-1}`:''),paletteMode(t)==='light'?'#56307D':'#c3a6ff','link')))
@@ -1137,15 +1150,29 @@ export default class SixfoldDesk extends View {
       return {task,alertHeight:extraHeight(s)+alertRowHeight(s),height:this.boxSizes?.[s.id]?.h||
         (card?card.height+9:(members.length*30+40))+extraHeight(s)+alertRowHeight(s)};
     });
-    const repoGraph=projectRepositoryGraph(this.panelState?.feed?.repo_activity);
+    // With stage data the repositories are REPOS right under COMPUTERS (PUSH · CI · CD); an observation
+    // without stages keeps the repository section below the spaces, with its event lines.
+    const repoGraph=this.panelState?.feed?.repo_flow?null:projectRepositoryGraph(this.panelState?.feed?.repo_activity);
     const repoHost=repoGraph?hostedTaskLayout(taskPanel?.layout,taskEntries):null;
     const repoRows=repoGraph?repositoryLayout(repoGraph,repoHost.height):null;
+    const repoFlowView=this.panelState?.feed?.repo_flow?mountRepoFlow(this,this.panelState.feed.repo_flow,t,cx):null;
+    const repoBlockHeight=repoFlowView?(this.repoFlowBlockHeight??repoFlowHeight(this.panelState.feed.repo_flow,this.repoFlowExpanded===true)+6):0;
+    // A request waits as a tab right beside the card of the space that asked (bounds in this list).
+    const feedAsks=this.panelState?.feed?.asks??[],placedAsks=new Set();
+    const askTabs=[];{let top=0;groups.forEach(({s},i)=>{const task=taskPanel?.taskFor(s),size=this.boxSizes?.[s.id];
+      const tab=task&&size?spaceAskView(feedAsks,task.id,t,this.lang(),{bounds:{x:7,y:top,w:size.w,h:size.h},
+        onOpen:cards=>{const native=(this.asks??[]).filter(card=>cards.some(item=>item.id===card.id));
+          const terminal=native[0]?.terminal??null,p=terminal?panes().find(x=>x.terminal===terminal):null;
+          if(native.length)openAskPopup(terminal,p?title(p):s.name,native);}}):null;
+      if(tab){askTabs.push(tab);for(const ask of feedAsks)if(ask.space===task.id)placedAsks.add(ask.id);}
+      top+=taskEntries[i].height+12;});}
+    const unplacedAsks=(this.asks??[]).filter(card=>!placedAsks.has(card.id));
     // New-alert arrivals: a popup on the card's spot, then a pixel block steps into its badge.
     const arrivalCards=[];{let top=0;groups.forEach(({s},i)=>{arrivalCards.push({s,top,extra:extraHeight(s),merged:mergedAlerts(s),width:this.boxSizes?.[s.id]?.w||0});top+=taskEntries[i].height+12;});}
     const arrivalViews=alertArrivalLayer(this,cx,{cards:arrivalCards,motion:arrivalMotion,t,right:LINK_MARGIN+4});
     const workspaceTree=v_flex().relative().flex_none().children(spaceRows)
       .when(Boolean(taskPanel?.feed),e=>e.child(taskPanel.hostFlows(taskEntries,
-        taskComputerAnchors(taskPanel.feed,activeComputers,this.computerBlockHeight??(activeComputers.length*39+3),this.spaceSectionHeight??31),LINK_MARGIN)))
+        taskComputerAnchors(taskPanel.feed,activeComputers,this.computerBlockHeight??(activeComputers.length*39+3),(this.spaceSectionHeight??31)+repoBlockHeight),LINK_MARGIN)))
       .children(paths.filter(flow => positions[flow.source] !== undefined && positions[flow.target] !== undefined).map(flow => {
         const from=positions[flow.source], to=positions[flow.target];
         return pipeline({id:flow.id,width:8+(flow.lane%2)*6,inset:6,from,to,color:workspaceFlowColor(flow),phase:flow.phase,packets:flow.packets,motion,unit:1/(Number(settings()?.zoom)||1)})
@@ -1160,6 +1187,7 @@ export default class SixfoldDesk extends View {
           .right(LINK_MARGIN-18-(route.lane%2)*6);
       }))
       .children(arrivalViews)
+      .children(askTabs)
       .when(Boolean(repoGraph),e=>e.child(repositorySection(repoGraph,t,{div,h_flex,v_flex},{gutter:LINK_MARGIN}))
         .child(repositoryFlowLayer(repoGraph,{agents:repoHost.anchors,repos:repoRows.anchors,height:repoHost.height+repoRows.height},this.repoActivity?.state,t,{div},{gutter:LINK_MARGIN})));
     return v_flex().id('sixfold-sidebar').size_full().bg(t.chrome).text_color(t.foreground)
@@ -1216,13 +1244,15 @@ export default class SixfoldDesk extends View {
                 .when(motion, el => el.transition('top', { duration: packet.travelMs ?? 1600, easing: 'linear' }));
             });
           })))
+        .when(Boolean(repoFlowView),e=>e.child(v_flex().id('sf-repo-flow').flex_none().pl(7).pr(LINK_MARGIN).pb(6).child(repoFlowView)
+          .on_size_change((size,cx)=>{const h=size.height/(settings().zoom||1);if(Math.abs((this.repoFlowBlockHeight??0)-h)>0.5){this.repoFlowBlockHeight=h;this.invalidateSidebar?this.invalidateSidebar():cx.notify();}})))
         .child(section(`${discoveryOnly?selectedComputer.slice(10):this.computerLabel(selectedMachine)} · ${w.spaces}`)
           .on_size_change((size,cx)=>{const h=size.height/(settings().zoom||1);if(Math.abs((this.spaceSectionHeight??0)-h)>0.5){this.spaceSectionHeight=h;this.invalidateSidebar?this.invalidateSidebar():cx.notify();}})).child(workspaceTree)
         .when(workspaceList.length===0,e=>e.child(v_flex().id('sf-empty-workspaces').px(12).pb(12).gap(5)
           .child(div().text_size(11).text_color(t.muted).child(this.lang()==='ko'?(discoveryOnly?'등록 안 됨, 워크스페이스 없음':'워크스페이스 없음'):(discoveryOnly?'Unregistered, no workspaces':'No workspaces')))
           .when(discoveryOnly,row=>row.child(div().text_size(10).text_color(t.dim).child(this.lang()==='ko'?'설정 → Machines에서 SSH 컴퓨터를 등록하세요.':'Register an SSH computer in Settings → Machines.')))))
         )
-      .when(hasAsks(this), e=>e.child(askSection(this,t,this.lang(),terminal=>{const p=panes().find(x=>x.terminal===terminal);return p?title(p):(terminal||'');})))
+      .when(unplacedAsks.length>0, e=>e.child(askSection({asks:unplacedAsks,askErrors:this.askErrors},t,this.lang(),terminal=>{const p=panes().find(x=>x.terminal===terminal);return p?title(p):(terminal||'');})))
       .when((this.sessionReports ?? []).length>0, e=>e.child(reportsSection(this,t)))
       .when(visibleAlerts(this.alerts).length>0, e=>e.child(alertSection(this,t)))
       .when(routes.length>0,e=>e.child(v_flex().id('sf-transient-flows').flex_none().px(10).py(6).gap(3).bg(t.surface).border_t(1).border_color(t.border)
