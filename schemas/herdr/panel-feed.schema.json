@@ -20,7 +20,7 @@
   "$defs": {
     "agent": {
       "type": "object",
-      "properties": {"profession": {"$ref": "#/$defs/profession"}}
+      "properties": {"profession": {"$ref": "#/$defs/profession"}, "role_group": {"$ref": "#/$defs/profession"}, "coordinator": {"const": true}}
     },
     "profession": {
       "type": "object",

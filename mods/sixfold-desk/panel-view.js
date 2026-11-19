@@ -87,6 +87,13 @@ export function panelLayout(feed, eventState, nativeSpaces=[],groupMap=null) {
     const card={space,groups,top:y,rows:[],height:PANEL_GEOMETRY.header+metaHeight+2};
     anchors.set(space.id,{y:y+PANEL_GEOMETRY.border+PANEL_GEOMETRY.header/2,kind:'space',space:space.id,computer:space.computer});
     let row=y+PANEL_GEOMETRY.border+PANEL_GEOMETRY.header+metaHeight;
+    // Coordinators first, right under the Slack/Linear line, bound to no issue.
+    for(const agent of groups.coordinators||[]){
+      const height=agentRowHeight(agent,false);
+      anchors.set(agent.id,{y:row+ROW/2,kind:'agent',space:space.id,computer:space.computer});
+      card.rows.push({kind:'agent',agent,y:row,height,coordinator:true});row+=height;
+    }
+    const coordinatorGap=()=>{if(card.rows.length&&card.rows.at(-1).coordinator){card.rows.push({kind:'issue-gap',y:row});row+=PANEL_GEOMETRY.issueGap;}};
     const groupRows=groups.grouped?groups.groups:[{issue:null,agents:groups.agents,folds:groups.folds}];
     // The folded 오늘 마무리 row (issues Linear finished today) comes after the working list; its
     // issues follow it only while it is expanded.
@@ -97,6 +104,8 @@ export function panelLayout(feed, eventState, nativeSpaces=[],groupMap=null) {
       card.rows.push({kind:'done-more',count:groups.doneFold.count,expanded:groups.doneFold.expanded,y:row});row+=22;
     };
     for(const group of groupRows){
+      if(!group.agents.length&&!groups.grouped)continue;
+      coordinatorGap();
       if(group.section==='done')pushDone();
       // Each issue opens its own block: a small gap before every issue after the first,
       // and its agents sit indented under the heading (cardView).
@@ -182,10 +191,13 @@ export function agentRow(view,agent,space,tag,state,color,t,motion){
   const ghost=born&&motion&&birthAge<PANEL_TIMING.packetMs;
   const stacked=false;
   const others=agentOtherIssues(agent),role=ROLE_LABELS[agent.role]||'',narrow=(view.panelWidth||224)<300;
-  const profession=agent.profession?.label||'',roleText=[profession,role].filter(Boolean).join(' · ');
-  const roleTone=agent.role==='review'?t.ansi5:agent.role==='integrate'?t.ansi6:null;
+  // The chip names the role group (a recorded profession, else the producer's CEO·TL·QA); the
+  // operational role (구현·검수·통합) is its colour and tooltip. Without a group it is the role itself.
+  const profession=agent.profession?.label||'',group=agent.profession?(/^[a-z]{2,4}$/.test(agent.profession.id)?agent.profession.id.toUpperCase():profession):agent.role_group?.label||'';
+  const roleText=group||role;
+  const roleTone=agent.coordinator?t.accent:agent.role==='review'?t.ansi5:agent.role==='integrate'?t.ansi6:null;
   const heldTip=others.length?`맡은 이슈 ${others.length+1}개\n지금: ${agent.own_issue||agent.issue||'이슈 미확인'}\n${others.join(', ')}`:'';
-  const tagTip=[profession&&`직무 ${profession}`,role&&`역할 ${role}`,heldTip].filter(Boolean).join('\n');
+  const tagTip=[profession&&`직무 ${profession}`,!profession&&group&&`역할군 ${group}`,agent.coordinator&&'조정자 · 이슈에 묶이지 않음',role&&`역할 ${role}`,heldTip].filter(Boolean).join('\n');
   const line=h_flex().id(`panel-agent-content-${agent.id}`).w_full().min_w(0).gap(5).items_center().opacity(ghost?0:1)
     .when(born&&motion,e=>e.transition('opacity',{duration:180,easing:'ease-out'}));
   const dimmed=rowState?rowState==='closed':status==='done';
@@ -198,13 +210,13 @@ export function agentRow(view,agent,space,tag,state,color,t,motion){
   line
     .child(div().relative().size(13).flex_none().child(familyIcon(agent).text_color(agent.family==='codex'?CODEX_COLOR:t.foreground)).when(Boolean(detail.remoteBadge),e=>e.child(detail.remoteBadge)))
     // Role chip (구현·검수·통합): a review task that kept its original title still reads as a review.
-    .when(!narrow&&Boolean(roleText),e=>e.child(div().id(`panel-role-${agent.id}`).flex_none().when(Boolean(profession),e=>e.max_w(120).truncate()).px(3).rounded(3).border(1)
+    .when(!narrow&&Boolean(roleText),e=>e.child(div().id(`panel-role-${agent.id}`).flex_none().when(Boolean(group),e=>e.max_w(120).truncate()).px(3).rounded(3).border(1)
       .border_color(roleTone||t.border).text_size(8).text_color(roleTone||t.muted)
       .accessibility_label(tagTip).child(roleText)))
     // A narrow panel keeps the title readable: one shrinkable chip (검+1) and a minimum title width.
     .when(narrow&&Boolean(roleText||others.length),e=>e.child(div().id(`panel-tags-${agent.id}`).min_w(0).truncate().px(2).rounded(3).border(1)
       .border_color(roleTone||t.border).text_size(8).text_color(roleTone||t.muted).tooltip(tagTip)
-      .accessibility_label(tagTip).child(`${profession?roleText:role?role[0]:''}${others.length?`+${others.length}`:''}`)))
+      .accessibility_label(tagTip).child(`${group||(role?role[0]:'')}${others.length?`+${others.length}`:''}`)))
     .child(text(agent.title||'Untitled task',t.foreground,11).id(`panel-title-${agent.id}`).flex_1().when(narrow&&Boolean(roleText||others.length),e=>e.min_w(TITLE_MIN)))
     // A session holding several issues sits under its current one; the others are counted, listed on hover.
     .when(!narrow&&others.length>0,e=>e.child(div().id(`panel-issues-${agent.id}`).flex_none().px(3).rounded(3).bg(t.surface)
@@ -310,7 +322,8 @@ export function cardView(view,card,state,color,computerNames,t,motion,rowEntitie
       const agentView=rowEntities?.get(row.agent.id)||agentRow(view,row.agent,space,state.tags.get(row.agent.id),state,color,t,motion);
       // Under an issue heading the agents are indented, with a thin guide line, so each
       // issue reads as its own group. Ungrouped cards keep the flat rows.
-      box.child(groups?.grouped?div().id(`panel-issue-indent-${row.agent.id}`).relative().flex_none().pl(PANEL_GEOMETRY.issueIndent)
+      // A coordinator sits flat under the Slack/Linear line, outside every issue block.
+      box.child(groups?.grouped&&!row.coordinator?div().id(`panel-issue-indent-${row.agent.id}`).relative().flex_none().pl(PANEL_GEOMETRY.issueIndent)
         .child(div().absolute().left(7).top(0).bottom(0).w(1).bg(t.border))
         .child(agentView):agentView);
     }

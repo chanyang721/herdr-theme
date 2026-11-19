@@ -96,7 +96,7 @@ function cleanCleanup(value) {
   return { idle_since: since, limit_s: limit, due_at: due };
 }
 const agentExtras = agent => {
-  const profession = cleanProfession(agent.profession);
+  const profession = cleanProfession(agent.profession), roleGroup = cleanProfession(agent.role_group);
   return ({
   // An unknown state is dropped, not kept as null, so the row falls back to the
   // four-status mark exactly as an older feed does.
@@ -112,6 +112,10 @@ const agentExtras = agent => {
   // and every issue the session holds, the shown one first. Display only; absent keeps the older placement.
   ...(owns(agent, 'role') ? { role: AGENT_ROLES.includes(agent.role) ? agent.role : null } : {}),
   ...(profession ? { profession } : {}),
+  // The producer's short role group (CEO·TL·QA) for the chip, and a coordinator that sits under the
+  // Slack/Linear line instead of under an issue (2026-11-19). Display only, like role.
+  ...(roleGroup ? { role_group: roleGroup } : {}),
+  ...(agent.coordinator === true ? { coordinator: true } : {}),
   ...(owns(agent, 'own_issue') ? { own_issue: text(agent.own_issue, 80) || null } : {}),
   ...(owns(agent, 'issues') ? { issues: [...new Set(list(agent.issues, 20).map(key => text(key, 80)).filter(Boolean))] } : {}),
   });
@@ -469,7 +473,11 @@ function foldUnknown(agents, unknown, expandedParents) {
 export function agentGroups(space, { includeClosedIds = new Set(), expandedIssueSpaces = new Set(), expandedParents = new Set(), today = localDay() } = {}) {
   const ledger = ledgerRows(space);
   const listed = new Map((space?.issues ?? []).map(issue => [issue.key, withLedger(issue, ledger.get(issue.key))]));
-  const input = space?.agents ?? [], parents = new Map(input.map(agent => [agent.id, agent]));
+  const all = space?.agents ?? [], parents = new Map(all.map(agent => [agent.id, agent]));
+  const shown = agent => agent.closing?.step !== 4 || agent.closing.blocked_reason || includeClosedIds.has(agent.id);
+  // Coordinators belong to no issue: the card lists them under its Slack/Linear line.
+  const coordinators = sortedAgents(all.filter(agent => agent.coordinator === true && shown(agent)));
+  const input = all.filter(agent => agent.coordinator !== true);
   // Where a row belongs: its own issue when the producer names one, else the issue it carries. A row
   // whose own issue is explicitly unknown (null) and that has a parent sits in its parent's bucket, folded.
   const unknown = new Set();
@@ -508,10 +516,10 @@ export function agentGroups(space, { includeClosedIds = new Set(), expandedIssue
     // tree projection also removes completed branches from +N counts; active
     // descendants of an ended child remain visible as roots.
     if (parent && parent !== agent && bucket(parent) === bucket(agent) && agentState(agent) === 'done') return false;
-    return agent.closing?.step !== 4 || agent.closing.blocked_reason || includeClosedIds.has(agent.id);
+    return shown(agent);
   }));
   const empty = { groupsHidden: 0, issueHidden: 0, issuesExpanded: false, groupsExpandable: false, issuesFiltered: 0, doneFold: null };
-  if (!space?.work) return { grouped: false, groups: [], ...empty, ...treeAgents(agents, expandedParents) };
+  if (!space?.work) return { grouped: false, groups: [], coordinators, ...empty, ...treeAgents(agents, expandedParents) };
   // Every issue to work on is shown, each with its panes right under it; Linear's status alone hides one
   // (2026-11-17): a finished issue (completed, canceled, duplicate) leaves the list, and the ones finished
   // today wait in the folded 오늘 마무리 row; a not-yet-started one shows only while a pane works on it.
@@ -536,7 +544,7 @@ export function agentGroups(space, { includeClosedIds = new Set(), expandedIssue
   if (unassigned.length) groups.push({ issue: null, section: 'main', kind: null, working: unassigned.filter(working).length, ...treeAgents(unassigned, expandedParents) });
   if (doneExpanded) groups.push(...done.sort(byState).map(entry => build(entry, 'done')));
   filtered += doneExpanded ? 0 : done.length;
-  return { grouped: true, groups, agents: groups.flatMap(group => group.agents), hidden: groups.reduce((sum, group) => sum + group.hidden, 0),
+  return { grouped: true, groups, coordinators, agents: groups.flatMap(group => group.agents), hidden: groups.reduce((sum, group) => sum + group.hidden, 0),
     ...empty, issuesFiltered: filtered, doneFold: done.length ? { count: done.length, expanded: doneExpanded } : null,
     rowMeta: new Map(groups.flatMap(group => [...group.rowMeta])), folds: groups.flatMap(group => group.folds) };
 }

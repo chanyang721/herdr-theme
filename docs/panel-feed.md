@@ -129,6 +129,16 @@ describes the compatible feed envelope and this optional `$defs.agent` extension
 Other existing fields remain open in that schema and retain this document's
 display contract. Invalid optional metadata is discarded by the consumer rather
 than invalidating otherwise usable rows.
+An agent may also carry `role_group: {"id":"tl","label":"TL"}`, the producer's short
+display group (2026-11-19), with the same bounds as `profession`, and `coordinator: true`.
+The chip names the group: a valid `profession` first (a 2–4 letter lowercase id shows as its
+uppercase id, so `sre` reads **SRE**; any other id shows its label), else `role_group`'s label,
+else the operational role as before (**구현**·**검수**·**통합**). The operational role stays in
+the chip colour and the tooltip (`역할군 TL` · `역할 구현`). A `coordinator` row is taken out of
+every issue group and listed first, flat, right under the Slack/Linear line, followed by the
+usual issue gap; its chip uses the accent colour and its tooltip says it is bound to no issue.
+Malformed values drop the field, as for `profession`.
+
 Agents inside an issue are not truncated. Explicit
 `parent_id` relationships form trees within the same issue. More than three child
 branches show three and their own **+N**. Child rows use a compact status dot,
