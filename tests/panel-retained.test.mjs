@@ -889,3 +889,37 @@ test('a 오늘 마무리 fold wakes the panel once just after the next local mid
   assert.equal(r.controller.wakeAt,null,'no fold, no midnight wake');
   r.controller.dispose();
 });
+
+test('the unread count opens the issue search on its 알림 tab, and the search narrows those notifications',async()=>{
+  const {workspaceAlertTimeline}=await import('../mods/sixfold-desk/alert-model.js');
+  const spaceUnread={count:space=>space.alerts?.unread??0,
+    badge:(space,_t,onOpen)=>{const badge=element();badge.calls.push(['id',`sf-unread-${space.id}`],['on_click',(_e,cx)=>onOpen(space,'alerts',cx)]);return badge;},
+    // As main.js: the feed's own alerts, filtered by the open search's query.
+    notifications:(space,query='')=>workspaceAlertTimeline({space:space.name,alerts:space.alerts,query})};
+  const r=await runtime(false,{spaceUnread});
+  const raw=makePanelFixture({tool:'linear'}),space=raw.spaces[0];
+  space.alerts={items:[{id:'n-1111111111111111',source:'github',ref:'demo/app#7',sender:'Dana',summary:'CI failed',at:new Date().toISOString(),read:false}],
+    unread:1,connections:{slack:[],linear:[],github:['demo/app']},sources:{slack:'missing',linear:'missing',github:'ready'},mapping:{slack:'none',linear:'none',github:'collector'}};
+  r.controller.apply(cleanPanelFeed(raw),'ready');r.flush();
+  const t=r.native.theme(),card=r.controller.spaceMap.get(space.id);
+  const walk=node=>[node,...(node.nodes||[]).filter(value=>typeof value==='object').flatMap(walk)];
+  const ids=node=>walk(node).flatMap(n=>(n.calls||[]).filter(c=>c[0]==='id').map(c=>c[1]));
+  r.controller.issuePopover(card,element(),t);   // the card's render registers its opener
+  const badge=r.controller.unreadBadge(card)(t);
+  badge.calls.find(call=>call[0]==='on_click')[1](null,{stop_propagation(){}});
+  const state=r.controller.issueStates.get(space.id);
+  assert.equal(state.open,true);assert.equal(state.scope,'alerts','the unread count opens 알림, not this week');
+  r.flush();
+  const row=`task-alert-${space.id}-github:n-1111111111111111`;
+  let body=r.controller.issuePopover(card,element(),t).calls.find(call=>call[0]==='content')[1];
+  assert(ids(body).includes(row));
+  const search=r.controller.issueInputs.get(space.id).search;search.text='NO_MATCH_123';search.events.get('change')();
+  body=r.controller.issuePopover(card,element(),t).calls.find(call=>call[0]==='content')[1];
+  assert(!ids(body).includes(row),'a notification that does not match the search is not listed');
+  search.text='ci failed';search.events.get('change')();
+  body=r.controller.issuePopover(card,element(),t).calls.find(call=>call[0]==='content')[1];
+  assert(ids(body).includes(row));
+  // The peek title still opens the search on the tab it was on.
+  state.open=false;state.scope='week';r.controller.openIssues(card);assert.equal(state.scope,'week');assert.equal(state.open,true);
+  r.controller.dispose();
+});
