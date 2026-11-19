@@ -209,6 +209,9 @@ export default class SixfoldDesk extends View {
     watchAlerts(this, cx);
     startAlertArrivals(this, cx);   // Linear feed + new alerts folding into their card
     watchBadges(this, cx);
+    // A popup for another space's card names that space too.
+    this.askNameOf=terminal=>{const p=panes().find(x=>x.terminal===terminal);if(!p)return terminal||'';
+      const s=spaces().find(x=>x.tabs.some(tab=>tab.id===p.tab));return `${s?.name?`${s.name} · `:''}${title(p)}`;};
     watchAsks(this, cx);
     watchReports(this, cx);
     this.syncCardActivity=()=>{const active=this.sidebarVisible;this.setAsksActive?.(active);this.setReportsActive?.(active);};

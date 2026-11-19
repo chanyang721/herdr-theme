@@ -1,8 +1,8 @@
 import { div } from 'gpui-kit';
 import { h_flex, v_flex } from 'gpui-base';
-import { exec, writeTextFile, appHome, shared, setShared, openOverlay, closeOverlay, props } from 'herdr';
+import { exec, writeTextFile, appHome, shared, setShared, openOverlay, closeOverlay, props, panes, spaces, focused } from 'herdr';
 import { KIND_WORDS, ASK_WORDS, SUMMARY_KEY, bridgeFrom, parseAsks, questionsOf, actionsOf, choose, complete, actionRequest, requestPath, acceptedReceipt, detailOf, selectionOf,
-  askSummary, summaryFor, groupAsks, cardsFor, clampPage, reconcile, popupHeight, errorText } from './ask-model.js';
+  askSummary, summaryFor, groupAsks, cardsFor, clampPage, reconcile, popupHeight, errorText, autoPopupTarget, prunedOpened } from './ask-model.js';
 
 import {subscribeJsonFile,readJsonSnapshot} from './panel-io.js';
 
@@ -26,6 +26,7 @@ export function watchAsks(view, cx) {
       }
       view.asks=cards;pendingNotify=true;
       publishSummary(cards);
+      popupElsewhere(cards,view.askNameOf);
     }
     if(pendingNotify&&active&&view.sidebarVisible!==false){pendingNotify=false;cx.notify();}
   };
@@ -67,6 +68,27 @@ export function watchAsks(view, cx) {
   view.setAsksActive=value=>{active=value!==false;apply();};
   return stop;
 }
+// A card from another space opens its pane's popup right away instead of
+// waiting in the sidebar list. The shown keys live in shared state so every
+// sidebar copy agrees and a closed popup stays closed.
+const OPENED_KEY = 'sixfold.asks.autoOpened';
+function spaceOfTerminal(terminal) {
+  const pane = panes().find(p => p.terminal === terminal);
+  return pane ? spaces().find(space => space.tabs.some(tab => tab.id === pane.tab))?.id ?? null : null;
+}
+function popupElsewhere(cards, nameOf) {
+  try {
+    const opened = prunedOpened(shared(OPENED_KEY), cards);
+    const target = autoPopupTarget(cards, opened, spaceOfTerminal, focused()?.space);
+    if (!target) {
+      if (JSON.stringify(opened) !== JSON.stringify(shared(OPENED_KEY) ?? [])) setShared(OPENED_KEY, opened);
+      return;
+    }
+    setShared(OPENED_KEY, [...new Set([...opened, ...target.keys])]);
+    openAskPopup(target.terminal, nameOf?.(target.terminal) ?? target.terminal, target.cards);
+  } catch { /* Display-only; the sidebar list still holds every card. */ }
+}
+
 // Pane headers and the popup are other copies of this mod: they learn about
 // cards only through this summary (counts per terminal and a version), never
 // through the sidebar's objects. An unchanged summary is not rewritten.

@@ -167,3 +167,27 @@ export function popupHeight(card) {
   for (const q of questionsOf(card)) h += 26 + lines(q.title) * 16 + q.options.reduce((sum, o) => sum + 10 + lines(o.label) * 17, 0);
   return Math.max(220, Math.min(640, Math.round(h)));
 }
+
+// A card from a pane outside the focused space is easy to miss in the sidebar
+// list, so its pane's popup opens by itself once. `opened` holds the
+// `id:revision` keys already shown this way; closing a popup never reopens
+// it, and a revised card counts as new. One pane per call: the rest stay in
+// the list and open on later calls. Cards whose space is unknown count as
+// elsewhere, cards in the focused space never pop up.
+export const askKey = card => `${card.id}:${card.revision}`;
+export function autoPopupTarget(cards, opened, spaceOf, focusedSpace) {
+  const shown = new Set(opened ?? []);
+  for (const group of groupAsks(cards)) {
+    if (!group.terminal) continue;
+    const space = spaceOf(group.terminal) ?? null;
+    if (space !== null && space === (focusedSpace ?? null)) continue;
+    const fresh = group.cards.filter(card => !shown.has(askKey(card)));
+    if (fresh.length) return {terminal: group.terminal, cards: group.cards, keys: group.cards.map(askKey)};
+  }
+  return null;
+}
+// Keep only keys of cards still alive, so the record never grows without bound.
+export const prunedOpened = (opened, cards) => {
+  const live = new Set((cards ?? []).map(askKey));
+  return [...new Set(opened ?? [])].filter(key => live.has(key));
+};

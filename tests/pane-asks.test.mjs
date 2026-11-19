@@ -342,3 +342,44 @@ test('a card moved to another pane leaves the old popup and cannot be sent from 
   assert.deepEqual(p.view.asks, []);
   const b = await popup(f, mod, 'pane-b'); assert.equal(b.view.asks[0].id, 'a1');
 });
+
+// ---- cards from another space pop up by themselves --------------------
+import {autoPopupTarget, prunedOpened, askKey} from '../mods/sixfold-desk/ask-model.js';
+const spaceOf = map => terminal => map[terminal] ?? null;
+
+test('a card from another space opens its pane popup once', () => {
+  const cards = [card('a', 't-b'), card('b', 't-b')];
+  const target = autoPopupTarget(cards, [], spaceOf({'t-b': 'project-b'}), 'share');
+  assert.equal(target.terminal, 't-b');
+  assert.deepEqual(target.keys, ['a:r1', 'b:r1']);
+  assert.equal(autoPopupTarget(cards, target.keys, spaceOf({'t-b': 'project-b'}), 'share'), null);
+});
+
+test('a card in the focused space stays in the list only', () => {
+  assert.equal(autoPopupTarget([card('a', 't-share')], [], spaceOf({'t-share': 'share'}), 'share'), null);
+});
+
+test('an unknown space counts as elsewhere, an unassigned card never pops up', () => {
+  assert.equal(autoPopupTarget([card('a', 'home/t5')], [], spaceOf({}), 'share').terminal, 'home/t5');
+  assert.equal(autoPopupTarget([card('a', null)], [], spaceOf({}), 'share'), null);
+});
+
+test('a revised card pops up again, a closed one does not', () => {
+  const first = card('a', 't-b');
+  const opened = [askKey(first)];
+  assert.equal(autoPopupTarget([first], opened, spaceOf({'t-b': 'm'}), 's'), null);
+  assert.equal(autoPopupTarget([{...first, revision: 'r2'}], opened, spaceOf({'t-b': 'm'}), 's').terminal, 't-b');
+});
+
+test('one pane per call, the next one after its cards are recorded', () => {
+  const cards = [card('a', 't-1'), card('b', 't-2')];
+  const map = spaceOf({'t-1': 'm', 't-2': 'p'});
+  const first = autoPopupTarget(cards, [], map, 's');
+  assert.equal(first.terminal, 't-1');
+  assert.equal(autoPopupTarget(cards, first.keys, map, 's').terminal, 't-2');
+});
+
+test('the opened record keeps only live cards', () => {
+  assert.deepEqual(prunedOpened(['a:r1', 'gone:r1', 'a:r1'], [card('a', 't')]), ['a:r1']);
+  assert.deepEqual(prunedOpened(undefined, []), []);
+});
