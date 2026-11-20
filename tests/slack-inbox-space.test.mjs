@@ -94,3 +94,20 @@ test("a space's 새 메시지 window leaves folded messages out of 미확인만 
   find(view.render(), 'sf-filter-all').handlers.click({}, cx);
   assert.equal(threads(view.render()).length, 3, 'the history still has them');
 });
+
+test('a handled mention is not unread in the mentions window but 확인한 스레드 포함 still lists it', async () => {
+  const current = {props: {window: true}, spaces: ['Alpha', 'Hub']};
+  const {MentionInbox, cx} = await mentionInbox(current);
+  const view = new MentionInbox();
+  view.init(current.props, cx);
+  view.items = [{id: 'slack:C0TEST01:4.1', channel: 'C0TEST01', project: 'Alpha', text: 'tagged, handed off', status: 'handled'}];
+  const words = node => typeof node === 'string' ? [node] : (node?.kids ?? []).flatMap(words);
+  const threads = tree => ids(tree).filter(id => id.startsWith('sf-thread-') && !id.includes('-files'));
+  let tree = view.render();
+  assert.deepEqual(threads(tree), []);assert.ok(words(tree).includes('미확인 0'));
+  find(tree, 'sf-filter-all').handlers.click({}, cx);
+  tree = view.render();
+  assert.deepEqual(threads(tree), ['sf-thread-C0TEST01:4.1']);
+  assert.ok(words(tree).includes('미확인 0'), 'the count does not depend on the list mode');
+  assert.ok(words(tree).some(w => w.startsWith('Alpha · 0')), 'nor do the per-space counts');
+});
