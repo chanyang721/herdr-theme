@@ -10,6 +10,7 @@
     "at": {"type": ["string", "number"]},
     "computers": {"type": "array", "items": {"type": "object"}},
     "repo_activity": {"$ref": "#/$defs/repo_activity"},
+    "repo_flow": {"$ref": "#/$defs/repo_activity"},
     "spaces": {
       "type": "array",
       "items": {
@@ -33,11 +34,45 @@
       "allOf":[{"if":{"properties":{"source":{"const":"private_catalog"}}},"then":{"properties":{"connection":{"const":"unknown"}}}}]
     },
     "repository": {
-      "type":"object","additionalProperties":false,"required":["id","account_id","namespace","name"],
+      "type":"object","required":["id","account_id","namespace","name"],
       "properties":{
         "id":{"$ref":"#/$defs/repo_id"},"account_id":{"$ref":"#/$defs/repo_id"},
         "namespace":{"type":"string","pattern":"^[A-Za-z0-9][A-Za-z0-9-]{0,38}(?![\\s\\S])","maxLength":39},
-        "name":{"type":"string","pattern":"^(?!\\.+(?![\\s\\S]))[A-Za-z0-9_.-]{1,100}(?![\\s\\S])","maxLength":100}
+        "name":{"type":"string","pattern":"^(?!\\.+(?![\\s\\S]))[A-Za-z0-9_.-]{1,100}(?![\\s\\S])","maxLength":100},
+        "private":{"type":"boolean"},"quiet":{"type":"boolean"},
+        "flow":{"$ref":"#/$defs/repo_flow_stages"}
+      }
+    },
+    "repo_stage": {
+      "type":"object",
+      "properties":{
+        "state":{"enum":["unknown","none","waiting","running","succeeded","failed","offline"]},
+        "detail":{"type":"string","maxLength":160},
+        "sha":{"type":"string","pattern":"^[A-Fa-f0-9]{7,64}(?![\\s\\S])"}
+      }
+    },
+    "repo_target": {
+      "allOf":[{"$ref":"#/$defs/repo_stage"}],
+      "type":"object",
+      "properties":{
+        "id":{"type":"string","pattern":"^[A-Za-z0-9_-]{1,128}(?![\\s\\S])"},
+        "name":{"type":"string","maxLength":80},
+        "computer":{"type":"string","pattern":"^[A-Za-z0-9_-]{0,128}(?![\\s\\S])"},
+        "environment":{"type":"string","maxLength":40}
+      }
+    },
+    "repo_flow_stages": {
+      "description":"Optional per-repository stages. A stage that was not observed is left out; unknown extra fields are ignored.",
+      "type":"object",
+      "properties":{
+        "commit":{"type":"object","properties":{
+          "issue":{"type":"string","maxLength":40},"title":{"type":"string","maxLength":160},
+          "sha":{"type":"string","pattern":"^[A-Fa-f0-9]{7,64}(?![\\s\\S])"}}},
+        "push":{"$ref":"#/$defs/repo_stage"},
+        "ci":{"$ref":"#/$defs/repo_stage"},
+        "cd":{"allOf":[{"$ref":"#/$defs/repo_stage"}],"type":"object","properties":{
+          "targets":{"type":"array","maxItems":100,"items":{"$ref":"#/$defs/repo_target"}}}},
+        "provider":{"type":"string","maxLength":40}
       }
     },
     "repo_binding": {
@@ -81,7 +116,7 @@
           "type":"object","additionalProperties":false,"required":["state","sensor","live_connected","gaps"],
           "properties":{
             "state":{"enum":["gap","unknown"]},"sensor":{"enum":["opt_in_callback","unknown"]},"live_connected":{"type":"boolean"},
-            "gaps":{"type":"array","maxItems":3,"items":{"enum":["unwrapped_commands","uninstalled_peers","remote_effects"]}}
+            "gaps":{"type":"array","maxItems":8,"items":{"type":"string","maxLength":48}}
           }
         }
       }
