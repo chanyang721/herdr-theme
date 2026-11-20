@@ -46,6 +46,9 @@ or executable supplied in a feed is run.
   COMPUTERS with PUSH · CI · CD cells and install chips on the computer rows. An
   unobserved stage stays an empty slot. Without stage data the repository
   section below the workspace cards (next section) is drawn as before.
+  The schema describes `repo_flow` and each repository's optional `private`,
+  `quiet` and `flow` (`commit`, `push`, `ci`, `cd` with `targets`, `provider`).
+  Repository and stage objects accept extra fields, which are ignored.
 - `spaces[].role_group` is also a chip on the sidebar card head.
 
 ### Optional repository activity
