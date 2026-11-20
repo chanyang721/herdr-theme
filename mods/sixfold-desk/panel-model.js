@@ -561,13 +561,14 @@ export function agentGroups(space, { includeClosedIds = new Set(), expandedIssue
     return key ?? null;
   };
   for (const agent of input) resolve(agent);
-  // Issues the space does not list but an agent row names (where it sits, or another issue the session
-  // holds): built from the ledger's title and status. An explicit own issue the ledger does not know still
-  // gets its key-only row; any other key that nothing knows keeps the older placement under 이슈 없음.
+  // Issues the space does not list but an agent row sits under: built from the ledger's title and status.
+  // An explicit own issue the ledger does not know still gets its key-only row; any other key that nothing
+  // knows keeps the older placement under 이슈 없음. Another issue a session only holds makes no row
+  // (2026-11-20): once the pane that worked on it is cleaned up, its issue leaves the space.
   const extra = new Map();
   for (const agent of input) {
     const here = resolved.get(agent.id);
-    for (const key of [here, ...(agent.issues ?? [])]) {
+    for (const key of [here]) {
       if (!key || listed.has(key) || extra.has(key)) continue;
       const row = ledger.get(key);
       if (row) extra.set(key, { ...row, from_ledger: true });

@@ -217,8 +217,9 @@ nothing knows keeps the earlier placement under 이슈 없음. `role`
 **통합** chip before the title, so a review row that kept the original task
 title still reads as a review. `issues` (up to 20 keys, the shown one first)
 lists every issue the session holds: the row stays under its current issue and
-shows **+N 이슈**, with the full list in its tooltip; held issues the catalog
-knows also get their own issue rows under the same status rules. Below 300px
+shows **+N 이슈**, with the full list in its tooltip; a held issue gets no issue
+row of its own, so once the pane that worked on it is cleaned up the issue
+leaves the space (2026-11-20). Below 300px
 the role and held-issue count share one shrinkable chip (**검+1**) and the title
 keeps a minimum width; the full role and list stay in the tooltips. Without
 these fields the rows keep their earlier placement.

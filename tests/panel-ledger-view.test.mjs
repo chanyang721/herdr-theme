@@ -52,11 +52,11 @@ test('field case: finished issues leave the list, today\'s wait folded, started 
   const { space, ids } = field();
   const result = agentGroups(space, { today: localDay(NOW) });
   const shown = keys(result);
-  for (const key of ['DEMO-417', 'DEMO-502', 'DEMO-573', 'DEMO-504', 'DEMO-610']) assert(!shown.includes(key), `${key} is hidden`);
-  for (const key of ['DEMO-490', 'DEMO-412', 'DEMO-393', 'DEMO-411', 'DEMO-503', 'DEMO-611', 'DEMO-612']) assert(shown.includes(key), `${key} is shown`);
+  for (const key of ['DEMO-417', 'DEMO-502', 'DEMO-573', 'DEMO-504', 'DEMO-610', 'DEMO-411']) assert(!shown.includes(key), `${key} is hidden`);
+  for (const key of ['DEMO-490', 'DEMO-412', 'DEMO-393', 'DEMO-503', 'DEMO-611', 'DEMO-612']) assert(shown.includes(key), `${key} is shown`);
   assert.deepEqual(result.doneFold, { count: 1, expanded: false }, 'only DEMO-417 finished today; canceled/duplicate without a time are just hidden');
   for (const n of [1, 2, 15]) assert(!result.agents.some(agent => agent.id === ids[n]), `empty shell ${n} under a finished or backlog issue is hidden`);
-  assert.equal(result.issuesFiltered, 5);
+  assert.equal(result.issuesFiltered, 4, 'DEMO-504 is only held by a session, so it is not counted either');
   const open = agentGroups(space, { today: localDay(NOW), expandedIssueSpaces: new Set([space.id]) });
   assert.deepEqual(open.doneFold, { count: 1, expanded: true });
   assert.deepEqual(open.groups.filter(group => group.section === 'done').map(group => group.issue.key), ['DEMO-417']);
@@ -83,7 +83,7 @@ test('field case: an issue row reads 작업 중 only with a working pane, else �
   assert.equal(issueRowLabel(groupOf(result, 'DEMO-490')), '작업 중 1');
   assert.equal(issueRowLabel(groupOf(result, 'DEMO-412')), '쉬는 중', 'idle pane under a working-state issue');
   assert.equal(issueRowLabel(groupOf(result, 'DEMO-393')), '쉬는 중');
-  assert.equal(issueRowLabel(groupOf(result, 'DEMO-411')), '쉬는 중', 'In Progress without a pane');
+  assert.equal(groupOf(result, 'DEMO-411'), undefined, 'In Progress without a pane leaves');
   assert.equal(groupOf(result, 'DEMO-412').working, 0);
   assert.equal(result.groups[0].issue.key, 'DEMO-490', 'the issue with working panes sorts first');
   // Older feeds: the producer's working state no longer claims work the panes do not do.
@@ -92,15 +92,15 @@ test('field case: an issue row reads 작업 중 only with a working pane, else �
   assert.equal(issueRowLabel(groupOf(old, 'DEMO-490')), '작업 중 1');
 });
 
-test('field case: In Progress issue missing from the space list gets its row from the ledger', () => {
+test('field case: an issue missing from the space list gets its row from the ledger only while a pane sits under it', () => {
   const { space, ids } = field();
   const result = agentGroups(space, { today: localDay(NOW) });
-  const merge = groupOf(result, 'DEMO-411');
-  assert.equal(merge.issue.title, 'Merge approval');
-  assert.equal(merge.issue.status, 'In Progress');
-  assert.equal(merge.issue.from_ledger, true);
+  // DEMO-411 is In Progress, but only held by a pane that sits under DEMO-503: once the pane that
+  // worked on it is cleaned up, the issue leaves the space (2026-11-20).
+  assert.equal(groupOf(result, 'DEMO-411'), undefined);
   const sync = groupOf(result, 'DEMO-503');
   assert.equal(sync.issue.title, 'Stock sync');
+  assert.equal(sync.issue.from_ledger, true);
   assert.deepEqual(new Set(sync.agents.map(agent => agent.id)), new Set([ids[5], ids[12], ids[13]]));
 });
 
