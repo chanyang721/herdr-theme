@@ -93,7 +93,8 @@ export default class MentionInbox extends View {
   }
   render(){
     const t=theme(),read=shared('sixfold.alertRead') ?? {};
-    const groups=threadGroups(this.onlyUnread?unfolded(this.items):this.items,read),unread=groups.filter(g=>g.unread>0).length;
+    // Unread counts never include folded messages; 확인한 스레드 포함 still lists them.
+    const live=threadGroups(unfolded(this.items),read),groups=this.onlyUnread?live:threadGroups(this.items,read),unread=live.filter(g=>g.unread>0).length;
     const health=shared('sixfold.slackHealth') ?? {},workflows=shared('sixfold.slackWorkflows') ?? {};
     // `dispatching`: the name older collectors still write for `sending`.
     const stateLabels={queued:'처리 대기',sending:'세션 전달 중',dispatching:'세션 전달 중',working:'수정안 준비 중',ready:'검토 준비 완료',needs_decision:'사용자 결정 필요',blocked:'처리 막힘',delivery_unknown:'전달 확인 필요'};
@@ -123,8 +124,8 @@ export default class MentionInbox extends View {
       .when(Boolean(freshness(health,Date.now())),e=>e.child(div().text_size(12).text_color(t.blocked).child(freshness(health,Date.now()))))
       .child(h_flex().gap(7).items_center()
         .child(button('sf-filter-all-projects',`전체 ${groups.length}`,!this.project && !this.space,(_e,cx)=>{this.project=null;this.space=null;cx.notify();}))
-        .when(Boolean(props()?.space),e=>e.child(button('sf-filter-space',`${props().space} 멘션 · ${groups.filter(g=>ofSpace(g) && g.unread>0).length} 미확인`,Boolean(this.space) && !this.project,(_e,cx)=>{this.space=props().space;this.project=null;cx.notify();})))
-        .children(projects.map(project=>button(`sf-filter-${project}`,`${project} · ${groups.filter(g=>g.project===project && g.unread>0).length} 미확인`,this.project===project,(_e,cx)=>{this.project=project;this.space=null;cx.notify();}).text_color(color(project)))))
+        .when(Boolean(props()?.space),e=>e.child(button('sf-filter-space',`${props().space} 멘션 · ${live.filter(g=>ofSpace(g) && g.unread>0).length} 미확인`,Boolean(this.space) && !this.project,(_e,cx)=>{this.space=props().space;this.project=null;cx.notify();})))
+        .children(projects.map(project=>button(`sf-filter-${project}`,`${project} · ${live.filter(g=>g.project===project && g.unread>0).length} 미확인`,this.project===project,(_e,cx)=>{this.project=project;this.space=null;cx.notify();}).text_color(color(project)))))
       .child(h_flex().gap(7).items_center()
         .child(button('sf-filter-unread','미확인만',this.onlyUnread,(_e,cx)=>{this.onlyUnread=!props()?.review;cx.notify();}))
         .child(button('sf-filter-all','확인한 스레드 포함',!this.onlyUnread,(_e,cx)=>{this.onlyUnread=false;cx.notify();}))
