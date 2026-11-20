@@ -127,6 +127,10 @@ export function threadKey(item) {
     || item.id?.split(':').at(-1) || item.link;
   return `${item.channel || item.project}:${ts}`;
 }
+// Folded by the watcher (sixfold-desk/alerts.js FOLDED; mods cannot import each other): old or
+// already handled. 미확인만 leaves them out; 확인한 스레드 포함 still lists them.
+const FOLDED = new Set(['stale', 'handled']);
+export const unfolded = items => (items ?? []).filter(item => !FOLDED.has(item?.status));
 export function threadGroups(items,read={}) {
   const threads=new Map();
   for(const item of items){

@@ -154,3 +154,13 @@ test('the native head count waits for landing like source badges, while the list
   assert.equal(workspaceUnreadCounts('Alpha').slack,cardAlertCounts('Alpha').slack);
   assert.equal(workspaceUnreadCounts('Alpha').linear,cardAlertCounts('Alpha').linear);
 });
+
+test('folded messages never count on the card, also when they come back through the mentions feed',async()=>{
+  const {store,popover,cardAlertCounts,workspaceNotifications}=await inbox();
+  // A tagged message the watcher folded: its tracked row and its copy in slack-mentions.json.
+  store.set('sixfold.alertItems',[{id:'tagged',project:'Alpha',status:'handled'},{id:'old',project:'Alpha',status:'stale'},{id:'fresh',project:'Alpha',status:'new'}]);
+  popover.setSpaceMentions([{id:'tagged',project:'Alpha',status:'handled'},{id:'dm',project:'Alpha',status:'handled'},{id:'old',project:'Alpha'}],['Alpha','Hub']);
+  assert.equal(cardAlertCounts('Alpha').slack,1,'only the new message');
+  assert.deepEqual(workspaceNotifications('Alpha').rows.map(i=>i.id),['fresh']);
+  assert.deepEqual(popover.spaceMentions('Alpha').map(i=>i.id),['old'],'a folded mention is not kept; an unfolded copy of a folded row is deduped by it');
+});

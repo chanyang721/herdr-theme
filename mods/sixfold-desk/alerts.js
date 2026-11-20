@@ -129,7 +129,7 @@ export function watchAlerts(view, cx) {
         // The popup ledger depends only on mentions and read state; a health or workflow change skips it.
         const popupSignature=JSON.stringify([token('mentions'),token('read')]);
         const legacy=get('legacy'),feed=get('tracked'),read=get('read'),mentions=get('mentions'),health=get('health'),workflows=get('workflows');
-        const items = feed.items ?? [];
+        const items = feed.items ?? [];   // folded rows included: readers drop them (alert-model.js folded)
         const tagged=mentions.items ?? [];
         const states=workflows.jobs ?? {};
         // Once the ledger write returns these mentions are seen for every run, so they are delivered

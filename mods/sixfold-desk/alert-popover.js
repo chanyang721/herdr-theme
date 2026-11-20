@@ -2,7 +2,7 @@ import { div, image } from 'gpui-kit';
 import { h_flex, v_flex, Popover } from 'gpui-base';
 import { shared, setShared } from 'herdr';
 import { scopedAlerts, alertVersion, linearScoped, changeLines, linearCategory, popoverOpen, popoverRows, projectKey, alertKind, alertLine, kindTone, popoverChangeLines,
-  githubScoped, githubKind, githubLine, githubRef, githubTone, githubLink } from './alert-model.js';
+  githubScoped, githubKind, githubLine, githubRef, githubTone, githubLink, folded } from './alert-model.js';
 import { feedNames, namesFor, alertTitle, readable } from './alert-slack.js';
 import { fileChips, loadFileText, followFileText, localNames } from './alert-files.js';
 import { spaceMentions, setSpaceMentions, arrivedFor } from './alert-mentions.js';
@@ -62,8 +62,9 @@ const line = (value, color, size = 12) => div().min_w(0).truncate().text_size(si
 function slackRows(project, t, fresh = new Set(), interactive = true, arrived = []) {
   const read = shared('sixfold.alertRead') ?? {};
   const unread = item => read[item.id] !== alertVersion(item);
-  const all = shared('sixfold.alertItems') ?? [], scoped = scopedAlerts(all, {project});
-  const known = new Set(scoped.map(item => item.id));
+  // Folded rows name people (feedNames) and stand for their message (known), but are not rows.
+  const all = shared('sixfold.alertItems') ?? [], mine = scopedAlerts(all, {project}), scoped = mine.filter(item => !folded(item));
+  const known = new Set(mine.map(item => item.id));
   const extra = [...(arrived ?? []), ...spaceMentions(project)].filter(item => item && typeof item.id === 'string' && !known.has(item.id) && (known.add(item.id), true));
   const items = [...extra, ...scoped], feed = feedNames([...all, ...extra]), site = localNames();
   const open = interactive ? popoverState()?.file ?? null : null;

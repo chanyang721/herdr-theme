@@ -256,3 +256,16 @@ test('a missing or empty text copy reads as pending; an unsafe id is never read'
   assert.equal((await pop.files.loadFileText('../../x', {read, home: '/h'})).state, 'pending');
   assert.deepEqual(reads, ['/h/data/sixfold/slack-files/F0TEST0006.txt']);
 });
+
+test('the popover leaves folded messages out of its rows and count but still reads names from them', async () => {
+  const pop = await popover();
+  pop.store.set('sixfold.alertItems', [{...feed[1], status: 'new'}, {...feed[0], status: 'handled'}, {...feed[2], status: 'stale'}]);
+  pop.setSpaceMentions([{id: 'slack:C0TEST09:200.1', channel: 'C0TEST09', project: 'Alpha', author: 'U0EEE0005', text: '지난 멘션', status: 'handled'}], ['Alpha']);
+  pop.showPopover('Alpha', 'slack');
+  const shown = pop.alertPopover({id: 's9', project: 'Alpha', trigger: element(), t: theme, hasSlack: true, hasLinear: false, onAll() {}});
+  assert.ok(byId(shown, 'sf-alert-pop-slack-0'));
+  assert.equal(byId(shown, 'sf-alert-pop-slack-1'), null, 'one row: the new message');
+  const all = texts(shown);
+  assert.ok(all.includes('이다라 → 김가나'), 'the sender name comes from the folded row: ' + all.join(' | '));
+  assert.ok(!all.some(s => s.includes('지난 멘션') || s.includes('오늘 배포합니다')));
+});

@@ -1,7 +1,7 @@
 import { div, image } from 'gpui-kit';
 import { h_flex } from 'gpui-base';
 import { shared, openOverlay } from 'herdr';
-import { scopedAlerts, linearScoped, githubScoped, slackCopyDelay, projectKey, workspaceAlertCounts, workspaceAlertTimeline } from './alert-model.js';
+import { scopedAlerts, linearScoped, githubScoped, slackCopyDelay, projectKey, workspaceAlertCounts, workspaceAlertTimeline, folded } from './alert-model.js';
 import { alertPopover, showPopover, popoverState, spaceMentions } from './alert-popover.js';
 import { mentionsEpoch } from './alert-mentions.js';
 import { arrivals } from './arrival-store.js';
@@ -12,18 +12,19 @@ const landedOnly = (items, scope) => { const flying = flyingIds(arrivals(), Date
 // shared() copies the whole value on every read (the tracked feed is hundreds of KB), and every
 // card asks several times per render. The feed is read and grouped by space once per load
 // instead: alerts.js sets it together with the mentions, whose epoch is the version key.
-let slackIndex = { epoch: undefined, bySpace: new Map(), ids: new Set() };
+let slackIndex = { epoch: undefined, bySpace: new Map(), ids: new Set(), hidden: new Set() };
 const trackedIndex = () => {
   const epoch = mentionsEpoch();
   if (slackIndex.epoch === epoch) return slackIndex;
-  const bySpace = new Map(), ids = new Set();
+  const bySpace = new Map(), ids = new Set(), hidden = new Set();
   for (const item of shared('sixfold.alertItems') ?? []) {
     ids.add(item.id);
+    if (folded(item)) { hidden.add(item.id); continue; }   // still dedupes its mention copy, never counted or listed
     const key = projectKey(item.project);
     if (!bySpace.has(key)) bySpace.set(key, []);
     bySpace.get(key).push(item);
   }
-  return slackIndex = { epoch, bySpace, ids };
+  return slackIndex = { epoch, bySpace, ids, hidden };
 };
 // The space's tracked Slack alerts plus the mentions routed to it that the tracked feed does not list.
 const slackItems = project => { const { bySpace, ids } = trackedIndex();
@@ -94,7 +95,7 @@ export function cardAlertCounts(name, motion = true) {
 // still read their existing feeds with the same fallback-space placement.
 const notificationInput = (name, options) => {
   if(Array.isArray(options.alerts?.items))return {space:name,...options};
-  return {space:name,slack:[...slackItems(name),...spaceMentions(name)],
+  return {space:name,slack:[...slackItems(name),...spaceMentions(name).filter(i=>!trackedIndex().hidden.has(i.id))],
     linear:shared('sixfold.linearItems')??[],github:shared('sixfold.githubItems')??[],read:shared('sixfold.alertRead')??{},...options};
 };
 export function workspaceUnreadCounts(name,options={}) {
