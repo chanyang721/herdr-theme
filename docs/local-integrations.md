@@ -146,6 +146,8 @@ space and the Slack inbox window show the same thing:
   `handled` (read, dismissed or handed off) is folded: the badge, unread count
   and popover rows leave it out, and so does the inbox window's 미확인만;
   확인한 스레드 포함 still lists it. Any other status (`new`, `needs-you`) shows.
+  The same holds for a folded mention in `slack-mentions.json`, and a mention whose
+  tracked row is folded is not counted again. Folded rows still supply names.
 
 In the inbox window 본문 보기 opens a popover. In the card popover it opens a
 panel under the chip instead: the card popover is itself a popover, and a
