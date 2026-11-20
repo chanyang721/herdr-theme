@@ -32,6 +32,18 @@ underscores, colons or hyphens, beginning with a letter or digit. Revision is a
 nonempty string up to 128 characters. Optional action `autoSubmit` sends only
 after a single question's single selection is complete; it defaults to false.
 
+Optional `createdAt` (ISO time, up to 40 characters) orders the cards oldest
+first; cards without it keep the file's order. Optional `answerable: false`
+marks a display-only card: the request can no longer be answered here and waits
+in its own terminal until that terminal's prompt ends, when the card leaves the
+file. The theme shows it without buttons (any `actions` are ignored), says to
+answer it in that terminal, and offers to go there only on the person's click.
+A missing `answerable` reads as true.
+
+A popup shows one card at a time. Opened from a space tab it is one queue over
+every asking terminal of that space, oldest first; after an accepted answer the
+oldest card left is shown. One action answers exactly one card.
+
 A button first creates `bridge-actions/<request-id>.json` only if absent,
 then explicitly invokes the configured command:
 

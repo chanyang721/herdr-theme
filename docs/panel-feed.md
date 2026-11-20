@@ -36,11 +36,16 @@ or executable supplied in a feed is run.
   counted nor listed. Opening or closing the popover changes no read state.
   Without `alerts` the tab reads the existing Slack, Linear and GitHub feeds of
   that space.
-- Top-level `asks[]` `{id, revision, kind, title, space, agent}` names the space
-  that asked. A request whose `space` is a space of the feed is a tab right
-  beside that space's card (45 px in the right gutter, the card's height);
-  pressing it opens the existing request popup. Other requests stay in the
-  sidebar's 확인 대기 section. Showing a request never answers it.
+- Top-level `asks[]` `{id, revision, kind, title, space, agent, answerable?,
+  created_at?}` names the space that asked, oldest `created_at` first. A request
+  whose `space` is a space of the feed is a tab right beside that space's card
+  (45 px in the right gutter, the card's height) with the request count;
+  pressing it opens one popup queue of that space's requests, oldest first, one
+  at a time (each accepted answer shows the next oldest). Other requests stay in
+  the sidebar's 확인 대기 section. `answerable: false` is display only: the
+  request waits in its own pane, stays listed until that pane's prompt ends, and
+  the popup offers only a click to go to that pane. Missing `answerable` is
+  true. Showing a request never answers it, and one answer never covers two.
 - `repo_flow` is the same `repo_activity_v1` DTO. When a repository carries its
   own `flow` stages (commit · push · ci · cd), REPOS is drawn right under
   COMPUTERS with PUSH · CI · CD cells and install chips on the computer rows. An

@@ -1,8 +1,8 @@
 import { div } from 'gpui-kit';
 import { h_flex, v_flex } from 'gpui-base';
-import { exec, writeTextFile, appHome, shared, setShared, openOverlay, closeOverlay, props, panes, spaces, focused } from 'herdr';
+import { exec, writeTextFile, appHome, shared, setShared, openOverlay, closeOverlay, props, panes, spaces, focused, run } from 'herdr';
 import { KIND_WORDS, ASK_WORDS, SUMMARY_KEY, bridgeFrom, parseAsks, questionsOf, actionsOf, choose, complete, actionRequest, requestPath, acceptedReceipt, detailOf, selectionOf,
-  askSummary, summaryFor, groupAsks, cardsFor, spaceAsks, spaceAskLayout, clampPage, reconcile, popupHeight, errorText, autoPopupTarget, prunedOpened } from './ask-model.js';
+  askSummary, summaryFor, groupAsks, cardsFor, queueFor, pageAfter, spaceAsks, spaceAskLayout, clampPage, reconcile, popupHeight, errorText, autoPopupTarget, prunedOpened } from './ask-model.js';
 
 import {subscribeJsonFile,readJsonSnapshot} from './panel-io.js';
 
@@ -126,6 +126,7 @@ export function sendAction(view, card, action, cx) {
       const result = await exec(bridge.python, [bridge.script, ...bridge.args, path]);
       if (result.code !== 0 || !acceptedReceipt(result.stdout, id)) throw new ActionError('failed');
       view.asks = (view.asks ?? []).filter(item => item.id !== card.id || item.revision !== card.revision);
+      view.askPage = 0;   // one answer, then the oldest request left
       view.askSent?.add(card.id);
     } catch (error) { view.askErrors[card.id] = error instanceof ActionError ? error.code : 'failed'; }
     finally { delete view.askBusy[card.id]; cx.notify(); view.refreshAsks?.(cx); }
@@ -140,11 +141,24 @@ function button(id, text, color, t, action, enabled = true) {
 const kindLabel = (lang, kind) => (KIND_WORDS[lang] ?? KIND_WORDS.en)[kind] ?? kind;
 export const hasAsks = view => Array.isArray(view.asks) && view.asks.length > 0;
 
-// Opens one pane's cards in a popup at the pointer. Only a click opens it:
+// Opens one pane's cards in a popup at the pointer, or with `queue` {terminals, names}
+// every card of those panes, oldest first (a space tab). Only a click opens it:
 // nothing here moves pane focus, and closing it answers nothing.
-export function openAskPopup(terminal, name, cards) {
-  return openOverlay({mod: 'sixfold-desk', kind: 'popup', width: 560, height: popupHeight(cards?.[0]),
-    props: {role: 'ask', terminal: terminal ?? null, name: name ?? ''}});
+export function openAskPopup(terminal, name, cards, queue = null) {
+  const own = {role: 'ask', terminal: terminal ?? null, name: name ?? ''};
+  if (queue && Array.isArray(queue.terminals)) {
+    own.terminals = queue.terminals.map(t => t ?? null);
+    own.names = Object.fromEntries(Object.entries(queue.names ?? {}).filter(([, v]) => typeof v === 'string'));
+  }
+  return openOverlay({mod: 'sixfold-desk', kind: 'popup', width: 560, height: popupHeight(cards?.[0]), props: own});
+}
+// Only on the person's click: select the pane's tab, then the pane. Returns false when the pane is gone.
+export function goToPane(terminal) {
+  const pane = terminal ? panes().find(p => p.terminal === terminal) : null;
+  if (!pane) return false;
+  if (pane.tab) run('tab.select', {id: pane.tab});
+  run('pane.focus', {pane: pane.pane});
+  return true;
 }
 
 // The pane header's decision button: clearly coloured, with the kind and count.
@@ -175,7 +189,7 @@ export function askSection(view, t, lang, nameOf) {
       const failed = group.cards.some(card => view.askErrors?.[card.id]);
       return stop(h_flex().id(`sf-ask-group-${gi}`).flex_none().gap(5).items_center().px(6).py(3).rounded(4).bg(t.chrome).border(1)
         .border_color(failed ? t.blocked : t.border).cursor_pointer()
-        .tooltip(group.cards.map(card => `${kindLabel(lang, card.kind)} · ${card.title}`).join('\n'))
+        .tooltip(group.cards.map(card => `${kindLabel(lang, card.kind)} · ${card.title}${card.answerable === false ? ` (${more.paneOnly})` : ''}`).join('\n'))
         .on_click((_e, cx) => { cx.stop_propagation(); openAskPopup(group.terminal, name, group.cards); })
         .child(div().flex_none().px(4).rounded(3).bg(t.blocked).text_color(t.background).text_size(9).child(kindLabel(lang, first.kind)))
         .child(div().flex_none().max_w(110).truncate().text_size(10).text_color(t.foreground).child(name))
@@ -195,9 +209,11 @@ export function spaceAskView(requests, space, t, lang, {bounds, onOpen, panes = 
   const ko = lang === 'ko', canOpen = typeof onOpen === 'function';
   const label = ko ? '확인 대기' : 'Waiting';
   const kind = cards[0].kind && cards.every(card => card.kind === cards[0].kind) ? kindLabel(lang, cards[0].kind) : (ko ? '요청' : 'Ask');
-  const preview = cards.slice(0, 8).map(card => card.title || kindLabel(lang, card.kind) || label);
+  const preview = cards.slice(0, 8).map(card => (card.title || kindLabel(lang, card.kind) || label) + (card.answerable === false ? (ko ? ' · 페인에서' : ' · in pane') : ''));
   if (cards.length > 8) preview.push(ko ? `외 ${cards.length - 8}건` : `+${cards.length - 8} more`);
-  if (panes > 1) preview.push(ko ? `${panes}개 페인 · 누를 때마다 다음 페인` : `${panes} panes · each press opens the next`);
+  if (panes > 1) preview.push(ko ? `${panes}개 페인 · 오래된 요청부터 하나씩` : `${panes} panes · oldest request first, one at a time`);
+  const inPane = cards.filter(card => card.answerable === false).length;
+  if (inPane) preview.push(ko ? `${inPane}건은 페인에서 직접 답하기` : `${inPane} to answer in the pane`);
   let tab = stop(v_flex().id(`sf-space-ask-${space}`).absolute().left(layout.left).top(layout.top)
     .w(layout.width).h(layout.height).overflow_hidden().items_center().justify_center().gap(5)
     .px(2).border(1).border_l(3).border_color(t.blocked).rounded(5).bg(t.chrome).text_color(t.blocked)
@@ -216,7 +232,7 @@ export function spaceAskView(requests, space, t, lang, {bounds, onOpen, panes = 
 // the sidebar's summary version tells it when to read again.
 function loadPopup(view, cx) {
   if (view.askLoading) { view.askReload = true; return; }
-  const terminal = props()?.terminal ?? null;
+  const terminal = props()?.terminal ?? null, terminals = Array.isArray(props()?.terminals) ? props().terminals : null;
   view.askLoading = true;
   cx.spawn(async cx => {
     try {
@@ -233,7 +249,7 @@ function loadPopup(view, cx) {
         // valid display and offer a retry.
         if (![b, c].every(x => x.status === 'missing' || x.status === 'ready') || (b.status === 'ready' && !bridge)
           || (bridge && c.status === 'ready' && parsed === null)) { view.askLoadFailed = true; continue; }
-        const next = bridge ? cardsFor(parsed?.cards, terminal) : [];
+        const next = bridge ? (terminals ? queueFor(parsed?.cards, terminals) : cardsFor(parsed?.cards, terminal)) : [];
         // A card that vanished after a send we could not confirm is not an
         // expiry: keep saying the outcome is unconfirmed.
         const unconfirmed = Object.keys(view.askErrors).filter(id => !next.some(card => card.id === id));
@@ -243,6 +259,8 @@ function loadPopup(view, cx) {
         view.askChoices = result.choices; view.askRevised = Boolean(view.askRevised) || (view.asks !== null && result.revised);
         view.askExpired = (view.askExpired ?? 0) + (view.asks !== null ? result.expired : 0);
         for (const id of Object.keys(view.askErrors)) if (!next.some(card => card.id === id)) delete view.askErrors[id];
+        // The card on screen stays while it is open; once it is gone the oldest one shows.
+        view.askPage = view.asks === null ? 0 : pageAfter(view.asks, view.askPage, next);
         view.asks = next; view.askBridge = bridge; view.askLoadFailed = false;
         view.askPage = clampPage(view.askPage, next.length);
       } while (view.askReload);
@@ -258,7 +276,9 @@ export function askPopup(view, t, lang, cx) {
   } else if ((shared(SUMMARY_KEY)?.v ?? '') !== view.askLoadedV && !view.askLoading) loadPopup(view, cx);
   const words = KIND_WORDS[lang] ?? KIND_WORDS.en, more = ASK_WORDS[lang] ?? ASK_WORDS.en;
   const cards = view.asks ?? [], page = clampPage(view.askPage, cards.length), card = cards[page] ?? null;
-  const name = props()?.name || props()?.terminal || more.unassigned, overlay = props()?.overlay;
+  const names = props()?.names ?? {}, queued = Array.isArray(props()?.terminals);
+  const paneName = card && queued ? (names[card.terminal ?? ''] || card.terminal || more.unassigned) : null;
+  const name = [props()?.name || props()?.terminal || more.unassigned, paneName].filter(Boolean).join(' · '), overlay = props()?.overlay;
   const close = () => { if (overlay) closeOverlay(overlay); };
   const header = h_flex().gap(8).items_center().px(14).py(10).border_b(1).border_color(t.border)
     .when(Boolean(card), e => e.child(div().flex_none().px(6).py(1).rounded(3).bg(t.blocked).text_color(t.background).text_size(11).font_bold()
@@ -266,7 +286,7 @@ export function askPopup(view, t, lang, cx) {
     .child(div().flex_1().min_w(0).truncate().text_size(12).text_color(t.muted).child(name))
     .when(cards.length > 1, e => e.child(h_flex().gap(4).items_center()
       .child(button('sf-ask-prev', '‹', t.foreground, t, cx => { view.askPage = page - 1; cx.notify(); }, page > 0))
-      .child(div().text_size(11).text_color(t.muted).child(`${page + 1}/${cards.length}`))
+      .child(div().text_size(11).text_color(t.muted).child(more.queue ? more.queue(page + 1, cards.length) : `${page + 1}/${cards.length}`))
       .child(button('sf-ask-next', '›', t.foreground, t, cx => { view.askPage = page + 1; cx.notify(); }, page < cards.length - 1))))
     .child(button('sf-ask-close', more.close, t.muted, t, () => close()));
   const notices = v_flex().gap(3).px(14)
@@ -308,6 +328,11 @@ export function askPopup(view, t, lang, cx) {
             .child(div().flex_none().text_size(12).text_color(on ? t.accent : t.dim).child(q.multi ? (on ? '☑' : '☐') : (on ? '●' : '○')))
             .child(div().flex_1().min_w(0).text_size(12).text_color(busy ? t.dim : t.foreground).child(option.label)));
         }))))
+      // Display only: the request waits in its own pane. The person may go there; nothing answers here.
+      .when(card.answerable === false, e => e.child(v_flex().id(`sf-ask-in-pane-${card.id}`).gap(6).px(10).py(8).rounded(4).border(1).border_color(t.blocked)
+        .child(div().text_size(12).text_color(t.blocked).child(more.inPane))
+        .when(Boolean(card.terminal && panes().some(p => p.terminal === card.terminal)), row => row.child(h_flex().child(
+          button(`sf-ask-go-${card.id}`, more.goPane, t.working, t, () => { if (goToPane(card.terminal)) close(); }))))))
       .child(h_flex().flex_wrap().gap(6).items_center().pt(2).children(actions.map((action, i) => button(`sf-ask-${card.id}-action-${i}`, action.label,
         action.primary ? t.working : t.foreground, t, cx => sendAction(view, card, action.id, cx), !busy && (!action.requiresAnswers || complete(card, selected)))))
         .when(busy, e => e.child(div().text_size(11).text_color(t.muted).child(more.sending))))

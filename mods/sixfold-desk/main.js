@@ -1159,15 +1159,15 @@ export default class SixfoldDesk extends View {
     const repoBlockHeight=repoFlowView?(this.repoFlowBlockHeight??repoFlowHeight(this.panelState.feed.repo_flow,this.repoFlowExpanded===true)+6):0;
     // A request waits as a tab right beside the card of the space that asked (bounds in this list).
     const feedAsks=this.panelState?.feed?.asks??[],placedAsks=new Set();
-    const askTabs=[];this.askTabTurn??={};{let top=0;groups.forEach(({s},i)=>{const task=taskPanel?.taskFor(s),size=this.boxSizes?.[s.id];
+    const askTabs=[];{let top=0;groups.forEach(({s},i)=>{const task=taskPanel?.taskFor(s),size=this.boxSizes?.[s.id];
       const spaceIds=new Set(task?feedAsks.filter(ask=>ask?.space===task.id).map(ask=>ask.id):[]);
       const spaceCards=(this.asks??[]).filter(card=>spaceIds.has(card.id)),spacePanes=[];for(const card of spaceCards){const terminal=card.terminal??null,group=spacePanes.find(g=>g.terminal===terminal);if(group)group.cards.push(card);else spacePanes.push({terminal,cards:[card]});}
       const tab=task&&size&&spacePanes.length?spaceAskView(feedAsks,task.id,t,this.lang(),{bounds:{x:7,y:top,w:size.w,h:size.h},
         panes:spacePanes.length,
-        // The popup shows one pane's requests; with several panes each press opens the next one.
-        onOpen:()=>{const group=spacePanes[(this.askTabTurn[s.id]=((this.askTabTurn[s.id]??-1)+1)%spacePanes.length)];
-          const p=group.terminal?panes().find(x=>x.terminal===group.terminal):null;
-          openAskPopup(group.terminal,p?title(p):s.name,group.cards);}}):null;
+        // One queue for the space: every asking pane's requests, oldest first, one at a time.
+        onOpen:()=>{const names={};for(const g of spacePanes){const p=g.terminal?panes().find(x=>x.terminal===g.terminal):null;names[g.terminal??'']=p?title(p):(g.terminal||'');}
+          const oldest=spaceCards[0];
+          openAskPopup(oldest?.terminal??null,s.name,spaceCards,{terminals:spacePanes.map(g=>g.terminal),names});}}):null;
       // Only requests the tab can open leave the 확인 대기 list below.
       if(tab)askTabs.push(tab);if(tab)for(const card of spaceCards)placedAsks.add(card.id);
       top+=taskEntries[i].height+12;});}

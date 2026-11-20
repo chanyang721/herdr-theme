@@ -18,7 +18,7 @@ const element=()=>{
 const flatten=node=>node?.nodes?[node,...node.nodes.flatMap(flatten)]:[];
 const byId=(tree,id)=>flatten(tree).find(node=>node.calls.some(call=>call[0]==='id'&&call[1]===id));
 
-test('a space tab opens each asking pane in turn; requests it cannot open stay in 확인 대기',async()=>{
+test('a space tab opens one oldest-first queue of its asking panes; requests it cannot open stay in 확인 대기',async()=>{
   const raw=makePanelLoadFixture({spaces:2,agentsPerSpace:2,now:Date.now()}),local=raw.spaces[0],other=raw.spaces[1];
   local.nav={space_id:'sp-local',machine:null};other.nav={space_id:'sp-other',machine:null};
   raw.asks=[{id:'req-a',revision:'r1',kind:'permission',title:'Run A',space:local.id,agent:local.agents[0].id},
@@ -62,10 +62,11 @@ test('a space tab opens each asking pane in turn; requests it cannot open stay i
     const tree=desk.render(cx),tab=byId(tree,`sf-space-ask-${local.id}`);
     assert(tab,'the asking space has its tab');
     assert(!byId(tree,`sf-space-ask-${other.id}`),'a space that did not ask has none');
-    assert(tab.calls.find(call=>call[0]==='tooltip')[1].includes('2개 페인'),'the tab says it holds two panes');
+    assert(tab.calls.find(call=>call[0]==='tooltip')[1].includes('2개 페인 · 오래된 요청부터 하나씩'),'the tab says it holds two panes in one queue');
     const press=()=>desk.render(cx)&&byId(desk.render(cx),`sf-space-ask-${local.id}`).calls.find(call=>call[0]==='on_click')[1](null,{stop_propagation(){}});
-    press();press();press();
-    assert.deepEqual(overlays.map(spec=>spec.props.terminal),['term-a','term-b','term-a'],'each press opens the next pane; req-b is reachable');
+    press();press();
+    assert.deepEqual(overlays.map(spec=>spec.props.terminals),[['term-a','term-b'],['term-a','term-b']],'every press opens the same queue; req-b is reachable');
+    assert.deepEqual(overlays.map(spec=>spec.props.terminal),['term-a','term-a'],'the oldest request leads');
     // The bottom list keeps only what no tab can open (another space's request).
     const words=JSON.stringify(flatten(byId(tree,'sf-asks')).flatMap(node=>node.calls.flat().filter(v=>typeof v==='string')));
     assert(byId(tree,'sf-asks'),'an unplaced request keeps the 확인 대기 list');

@@ -122,10 +122,19 @@ test('display metadata is bounded and never carries action or navigation authori
   const raw = request('r-a', 's-a', {title: 'X'.repeat(2000), kind: 'other', agent: '../bad',
     actions: [{id: 'approve'}], terminal: 'native-pane', nav: {space_id: 'native-space'}});
   const [clean] = spaceAsks([raw], 's-a');
-  assert.deepEqual(clean, {id: 'r-a', space: 's-a', agent: null, kind: null, title: 'X'.repeat(500)});
+  assert.deepEqual(clean, {id: 'r-a', space: 's-a', agent: null, kind: null, title: 'X'.repeat(500), answerable: true, createdAt: null});
   assert.deepEqual(spaceAsks([request('r-min', 's-a', {title: undefined, kind: undefined, agent: null})], 's-a'),
-    [{id: 'r-min', space: 's-a', agent: null, kind: null, title: ''}], 'an unresolved request without optional text still counts');
+    [{id: 'r-min', space: 's-a', agent: null, kind: null, title: '', answerable: true, createdAt: null}], 'an unresolved request without optional text still counts');
   clean.title = 'changed'; assert.equal(raw.title.length, 2000, 'source objects are not mutated');
+});
+
+test('space requests come oldest first and keep the display-only flag', () => {
+  const requests = [request('r-new', 's-a', {created_at: '2026-11-20T04:00:00Z'}),
+    request('r-old', 's-a', {created_at: '2026-11-20T02:00:00Z', answerable: false}),
+    request('r-mid', 's-a', {created_at: '2026-11-20T03:00:00Z'})];
+  const out = spaceAsks(requests, 's-a');
+  assert.deepEqual(out.map(r => r.id), ['r-old', 'r-mid', 'r-new']);
+  assert.deepEqual(out.map(r => r.answerable), [false, true, true]);
 });
 
 test('space tab geometry follows the card outside its right edge at both panel widths', () => {
@@ -313,6 +322,39 @@ test('popup shows only its pane, pages through several cards, and keeps long opt
   assert.equal(find(tree, 'sf-ask-next').click(event, a.cx), undefined); assert.equal(a.view.askPage, 2, 'last page stays');
   assert.deepEqual(f.focus, []); assert.deepEqual(f.calls.filter(c => c[0] !== 'setShared'), []);
 });
+test('a card waiting in its pane is shown without buttons and only a click goes to that pane', async () => {
+  const waiting = card('w1', 'pane-a', {answerable: false, title: 'Run it?'});
+  const f = host([waiting]), mod = await load(f.h);
+  f.h.panes = () => [{terminal: 'pane-a', pane: 'p-a', tab: 'tab-a'}];
+  const mod2 = await load(f.h), p = await popup(f, mod2, 'pane-a');
+  assert.equal(p.view.asks[0].answerable, false); assert.deepEqual(p.view.asks[0].actions, [], 'no answer path');
+  let tree = p.render();
+  assert.ok(find(tree, 'sf-ask-in-pane-w1')); assert.match(text(tree), /그 페인의 Claude 창에서 직접 답하세요/);
+  assert.equal(ids(tree, 'sf-ask-w1-action-').length, 0);
+  assert.deepEqual(f.focus, [], 'rendering never moves focus');
+  click(tree, 'sf-ask-go-w1', p.cx);
+  assert.deepEqual(f.focus, [['tab.select', {id: 'tab-a'}], ['pane.focus', {pane: 'p-a'}]]);
+  assert.deepEqual(f.calls.filter(c => c[0] === 'exec' || c[0] === 'write'), [], 'going there answers nothing');
+  void mod;
+});
+
+test('a space queue shows every asking pane oldest first, one at a time, and the next after an answer', async () => {
+  const cards = [card('b-old', 'pane-b', {createdAt: '2026-11-20T01:00:00Z'}), card('a-new', 'pane-a', {createdAt: '2026-11-20T03:00:00Z'}),
+    card('a-old', 'pane-a', {createdAt: '2026-11-20T02:00:00Z'}), card('c-x', 'pane-c', {createdAt: '2026-11-20T00:00:00Z'})];
+  const f = host(cards), mod = await load(f.h);
+  const own = {role: 'ask', terminal: 'pane-b', terminals: ['pane-a', 'pane-b'], names: {'pane-a': 'Alpha', 'pane-b': 'Beta'}, name: 'Demo', overlay: 'ov-1'};
+  const view = {}, cx = context(), render = () => { f.setProps(own); return mod.askPopup(view, theme, 'ko', cx); };
+  render(); await cx.settle();
+  assert.deepEqual(view.asks.map(c => c.id), ['b-old', 'a-old', 'a-new'], 'oldest first; another space stays out');
+  let tree = render();
+  assert.match(text(tree), /1\/3 · 오래된 순/); assert.match(text(tree), /Demo · Beta/); assert.match(text(tree), /Title b-old/);
+  click(tree, 'sf-ask-b-old-action-0', cx); await cx.settle();
+  f.store.set(SUMMARY_KEY, askSummary(cards.slice(1))); render(); await cx.settle();
+  tree = render();
+  assert.match(text(tree), /Title a-old/, 'one answer, then the next oldest'); assert.match(text(tree), /Demo · Alpha/);
+  assert.equal(f.calls.filter(c => c[0] === 'exec').length, 1, 'one answer per press');
+});
+
 test('multiple questions need every answer; multi-select toggles; send goes through the fake bridge only', async () => {
   const f = host([multi]), mod = await load(f.h), p = await popup(f, mod, 'pane-a');
   let tree = p.render();

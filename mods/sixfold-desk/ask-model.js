@@ -28,6 +28,11 @@ export function actionsOf(card) {
     autoSubmit: a.autoSubmit === true, primary: a.primary === true,
   }));
 }
+// `answerable: false` is display only: the request waits in its own pane (the card can no
+// longer answer it) and stays until that pane's prompt ends. A missing field (an older
+// producer) reads as true. Cards are kept oldest first; ties keep the producer's order.
+const stamp = value => text(value) && value.length <= 40 ? value : null;
+export const byAge = (a, b) => (a.createdAt ?? '').localeCompare(b.createdAt ?? '');
 export function parseAsks(source) {
   let data;
   try { data = typeof source === 'string' ? JSON.parse(source || 'null') : source; } catch { return null; }
@@ -37,9 +42,13 @@ export function parseAsks(source) {
     if (!card || !key(card.id) || !text(card.revision) || card.revision.length > 128
       || !text(card.title) || !['permission', 'question', 'plan'].includes(card.kind) || seen.has(card.id)) return false;
     seen.add(card.id); return true;
-  }).map(card => ({id: card.id, revision: card.revision, kind: card.kind, title: card.title,
-    detail: typeof card.detail === 'string' ? card.detail : '', terminal: text(card.terminal) ? card.terminal : null,
-    questions: questionsOf(card), actions: actionsOf(card)})) };
+  }).map(card => {
+    const answerable = card.answerable !== false;
+    return {id: card.id, revision: card.revision, kind: card.kind, title: card.title,
+      detail: typeof card.detail === 'string' ? card.detail : '', terminal: text(card.terminal) ? card.terminal : null,
+      answerable, createdAt: stamp(card.createdAt),
+      questions: questionsOf(card), actions: answerable ? actionsOf(card) : []};
+  }).sort(byAge) };
 }
 export const askFor = (cards, terminal) => (cards ?? []).find(card => card.terminal && card.terminal === terminal) ?? null;
 export const detailOf = card => typeof card?.detail === 'string' ? card.detail : '';
@@ -96,12 +105,12 @@ export function touchesCards(paths, directory) {
 // and the popup re-reads the neutral cards file itself when the version moves.
 export const SUMMARY_KEY = 'sixfold.asks.summary';
 export const ASK_WORDS = {
-  ko: {open: '열기', close: '닫기', closeHint: '닫아도 거절·답변되지 않습니다. 머리줄 버튼이나 왼쪽 목록에서 다시 열 수 있습니다.',
+  ko: {open: '열기', close: '닫기', inPane: '대기 시간이 지나 이 카드로는 답할 수 없습니다. 그 페인의 Claude 창에서 직접 답하세요. 답하면 이 카드는 사라지고 다음 요청이 열립니다.', goPane: '페인으로 이동', paneOnly: '페인에서 답하기', queue: (i, n) => `${i}/${n} · 오래된 순`, closeHint: '닫아도 거절·답변되지 않습니다. 머리줄 버튼이나 왼쪽 목록에서 다시 열 수 있습니다.',
     none: '이 페인에 남은 확인 요청이 없습니다.', loading: '불러오는 중…', loadFailed: '카드를 읽지 못했습니다.', refreshFailed: '최신 내용을 읽지 못했습니다 — 아래는 마지막으로 읽은 내용입니다.', retry: '다시 읽기', sending: '전송 중…', sent: '응답을 접수했습니다.',
     expired: '처리되었거나 만료된 요청', unconfirmed: '응답 접수를 확인하지 못함 — 에이전트 페인에서 결과를 확인하세요', revised: '요청 내용이 바뀌어 선택을 초기화했습니다.', unassigned: '소속 미확인',
     errors: {failed: '전송 실패 — 다시 시도하세요', changed: '연결 설정이 바뀌었습니다 — 다시 열어 주세요', stale: '요청이 바뀌었거나 만료되었습니다 — 최신 내용을 확인하세요', incomplete: '모든 질문에 답한 뒤 보내세요'},
     count: n => `${n}건`, more: n => `${n}개 페인 · 목록을 스크롤해 모두 보기`},
-  en: {open: 'Open', close: 'Close', closeHint: 'Closing does not deny or answer. Reopen it from the pane header or the sidebar.',
+  en: {open: 'Open', close: 'Close', inPane: 'This card waited too long and can no longer answer. Answer it in that pane\'s own Claude prompt; the card then goes and the next request opens.', goPane: 'Go to pane', paneOnly: 'Answer in pane', queue: (i, n) => `${i}/${n} · oldest first`, closeHint: 'Closing does not deny or answer. Reopen it from the pane header or the sidebar.',
     none: 'No requests left for this pane.', loading: 'Loading…', loadFailed: 'Could not read the cards.', refreshFailed: 'Could not read the latest — showing the last read.', retry: 'Retry', sending: 'Sending…', sent: 'Response accepted.',
     expired: 'Handled or expired', unconfirmed: 'Response not confirmed — check the agent pane', revised: 'The request changed; choices were reset.', unassigned: 'Unassigned',
     errors: {failed: 'Send failed — try again', changed: 'Connection changed — reopen the card', stale: 'The request changed or expired — check the latest', incomplete: 'Answer every question before sending'},
@@ -122,6 +131,16 @@ export function groupAsks(cards) {
   return [...groups.values()];
 }
 export const cardsFor = (cards, terminal) => (cards ?? []).filter(card => termKey(card) === (terminal ?? ''));
+// One queue over several panes (a space tab): every card of those panes, oldest first.
+export function queueFor(cards, terminals) {
+  const wanted = new Set((Array.isArray(terminals) ? terminals : []).map(t => (typeof t === 'string' ? t : '')));
+  return (cards ?? []).filter(card => wanted.has(termKey(card))).sort(byAge);
+}
+// The card to show after a re-read: the one on screen while it is still there, else the oldest.
+export function pageAfter(previous, page, next) {
+  const id = (previous ?? [])[page]?.id, at = id === undefined ? -1 : (next ?? []).findIndex(card => card.id === id);
+  return at >= 0 ? at : 0;
+}
 
 // Display requests use opaque feed IDs, not native navigation targets. Only an
 // explicit owner attaches a request to a space; names and focus are not hints.
@@ -134,7 +153,8 @@ export function spaceAsks(requests, space) {
     id: item.id, space, agent: key(item.agent) ? item.agent : null,
     kind: ['permission', 'question', 'plan'].includes(item.kind) ? item.kind : null,
     title: text(item.title) ? item.title.slice(0, 500) : '',
-  }));
+    answerable: item.answerable !== false, createdAt: stamp(item.created_at),
+  })).sort(byAge);
 }
 export const SPACE_ASK_WIDTH = 45;
 export const SPACE_ASK_GAP = 1;
@@ -156,7 +176,8 @@ export function askSummary(cards) {
   for (const group of groupAsks(cards)) panes[group.terminal ?? ''] = {n: group.cards.length, kind: group.cards[0].kind};
   // The owning terminal is part of the version: a card moved to another pane
   // must leave the old pane's popup.
-  const live = (cards ?? []).map(card => JSON.stringify([card.id, card.revision, card.terminal ?? null])).join('|');
+  // So is answerable: a card that now waits in its pane must lose its buttons in the popup.
+  const live = (cards ?? []).map(card => JSON.stringify([card.id, card.revision, card.terminal ?? null, card.answerable !== false])).join('|');
   return {v: live ? digest(live) : '', panes};
 }
 export function summaryFor(summary, terminal) {
