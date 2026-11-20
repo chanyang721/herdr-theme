@@ -29,6 +29,14 @@ test('cards use opaque ids, revisions and generic display fields', () => {
   assert.equal(actionsOf(parsed.cards[0])[0].autoSubmit, true);
   assert.equal(parseAsks(JSON.stringify({schema:1,cards:[{...question,id:undefined}]})).cards.length,0);
 });
+test('question and option text may span lines; blank or NUL text is dropped', () => {
+  const long = {...question, questions: [{id: 'fix', title: 'Fix the line?\n\n[before] a\n[after] b', multi: false,
+    options: [{id: 'yes', label: 'Approve\nas written'}, {id: 'blank', label: ' \n '}, {id: 'nul', label: 'x\0y'}]}]};
+  const [q] = questionsOf(long);
+  assert.equal(q.title, 'Fix the line?\n\n[before] a\n[after] b');
+  assert.deepEqual(q.options.map(o => o.id), ['yes']);
+  assert.equal(questionsOf({...long, questions: [{id: 'empty', title: '\n', options: []}]}).length, 0);
+});
 test('single and multiple selections preserve option ids and provider order', () => {
   const one = questionsOf(question)[0];
   assert.deepEqual(choose({color: ['red']}, one, 'blue'), {color: ['blue']});

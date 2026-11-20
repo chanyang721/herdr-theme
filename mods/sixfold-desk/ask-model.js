@@ -7,6 +7,9 @@ const KEY = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
 const key = value => typeof value === 'string' && KEY.test(value);
 const REQUEST = /^[a-z0-9][a-z0-9-]{0,95}$/;
 const text = value => typeof value === 'string' && value.length > 0 && !/[\0\r\n]/.test(value);
+// Question and option text may span lines (a question often carries its reasons
+// on separate lines); only a NUL makes it unusable.
+const prose = value => typeof value === 'string' && value.trim().length > 0 && !value.includes('\0');
 const absolute = value => /^(?:\/|[A-Za-z]:[\\/]|\\\\)/.test(value);
 
 export function bridgeFrom(source) {
@@ -17,9 +20,9 @@ export function bridgeFrom(source) {
   return { python: data.python, script: data.script, args: [...(data.args ?? [])] };
 }
 export function questionsOf(card) {
-  return (Array.isArray(card?.questions) ? card.questions : []).filter(q => q && key(q.id) && text(q.title)).map(q => ({
+  return (Array.isArray(card?.questions) ? card.questions : []).filter(q => q && key(q.id) && prose(q.title)).map(q => ({
     id: q.id, title: q.title, multi: q.multi === true,
-    options: (Array.isArray(q.options) ? q.options : []).filter(o => o && key(o.id) && text(o.label)).map(o => ({id: o.id, label: o.label})),
+    options: (Array.isArray(q.options) ? q.options : []).filter(o => o && key(o.id) && prose(o.label)).map(o => ({id: o.id, label: o.label})),
   }));
 }
 export function actionsOf(card) {
