@@ -306,3 +306,14 @@ test('a health heartbeat writes only the shown health fields and skips the popup
     assert.equal(ledgerReads,0,'health never reads the popup ledger');
   }finally{h.stop();}
 });
+
+test('channel messages the watcher folded (stale, handled) leave the published alert items',async()=>{
+  const items=[{id:'new',status:'new',project:'Alpha'},{id:'old',status:'stale',project:'Alpha'},{id:'read',status:'handled',project:'Alpha'},{id:'ask',status:'needs-you',project:'Alpha'},{id:'bare',project:'Alpha'}];
+  const files=new Map([['project-alerts.json',JSON.stringify({items,projects:['Alpha']})]]);
+  const h=await alertFixture(files);
+  try{
+    await h.refresh();
+    assert.deepEqual(h.shared.get('sixfold.alertItems').map(i=>i.id),['new','ask','bare'],'the badge, popover and rows never see folded ones');
+    assert.deepEqual(h.shared.get('sixfold.alertProjects'),['Alpha'],'the space keeps its Slack chip');
+  }finally{h.stop();}
+});
