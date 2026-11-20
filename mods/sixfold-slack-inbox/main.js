@@ -1,7 +1,7 @@
 import { View, div, image } from 'gpui-kit';
 import { h_flex, v_flex, Popover } from 'gpui-base';
 import { theme, props, appHome, home, readTextFile, writeTextFile, shared, setShared, openOverlay, closeOverlay, exec, spaces } from 'herdr';
-import { readable, threadGroups, freshness, collectLine, feedNames, namesFor, alertTitle, attachments, fileAction, fileTextPath, fileTextShown, fileRequestText, FILE_REQUESTS, FILE_LATE, nextFileWait, inSpace, setFallbackSpace } from './model.js';
+import { readable, threadGroups, freshness, collectLine, feedNames, namesFor, alertTitle, attachments, fileAction, fileTextPath, fileTextShown, fileRequestText, FILE_REQUESTS, FILE_LATE, nextFileWait, inSpace, setFallbackSpace, unfolded } from './model.js';
 
 export default class MentionInbox extends View {
   init(_props,cx) {
@@ -93,7 +93,7 @@ export default class MentionInbox extends View {
   }
   render(){
     const t=theme(),read=shared('sixfold.alertRead') ?? {};
-    const groups=threadGroups(this.items,read),unread=groups.filter(g=>g.unread>0).length;
+    const groups=threadGroups(this.onlyUnread?unfolded(this.items):this.items,read),unread=groups.filter(g=>g.unread>0).length;
     const health=shared('sixfold.slackHealth') ?? {},workflows=shared('sixfold.slackWorkflows') ?? {};
     // `dispatching`: the name older collectors still write for `sending`.
     const stateLabels={queued:'처리 대기',sending:'세션 전달 중',dispatching:'세션 전달 중',working:'수정안 준비 중',ready:'검토 준비 완료',needs_decision:'사용자 결정 필요',blocked:'처리 막힘',delivery_unknown:'전달 확인 필요'};
