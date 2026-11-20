@@ -717,6 +717,15 @@ test('producer wait categories remain readable in a 24px row even when native st
   assert.equal(all(row).filter(n=>call(n,'w')?.[1]===64&&call(n,'h')?.[1]===18).length,1);
  }
 });
+test('a pane blocked on the person reads 권한 확인 before any closing category',async()=>{
+ for(const wait_kind of ['cleanup','review_pending',undefined]){
+  const keep_reason='Closing detail retained in the tooltip';
+  const {agent,row}=await stateRow({status:'blocked',state:'idle',keep_reason,wait_kind});
+  assert.deepEqual(words(byId(row,`panel-wait-${agent.id}`)),['권한 확인'],String(wait_kind));
+ }
+ const {agent,row}=await stateRow({status:'done',stage:5,state:'idle',keep_reason:'x',wait_kind:'cleanup'});
+ assert.deepEqual(words(byId(row,`panel-wait-${agent.id}`)),['정리 확인'],'not blocked: the category as before');
+});
 test('wait labels require producer evidence and preserve progress and cleanup without hiding blockers',async()=>{
  let item=await stateRow({status:'working',stage:2});
  assert.equal(byId(item.row,`panel-wait-${item.agent.id}`),undefined);

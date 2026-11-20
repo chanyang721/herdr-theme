@@ -414,6 +414,10 @@ export function agentWaitLabel(agent) {
   // A working row draws its live stage bar; a keep reason is about closing a
   // resting pane, so it waits in the tooltip until the row rests.
   if (agent?.status === 'working') return null;
+  // Native blocked: the pane waits for the person's permission or answer right now. That
+  // comes before any closing category (a review row waiting to be cleaned up that asks for
+  // permission read «정리 확인», 2026-11-20); the category stays in the tooltip.
+  if (agent?.status === 'blocked') return '권한 확인';
   if (owns(WAIT_LABELS, agent?.wait_kind)) return WAIT_LABELS[agent.wait_kind];
   const reason = agent?.closing?.blocked_reason || agent?.keep_reason || '';
   const state = agentRowState(agent);
