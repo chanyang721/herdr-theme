@@ -1,6 +1,10 @@
 import {feedNames, namesFor, readable, senderName} from './alert-slack.js';
 
 export const projectKey = name => String(name ?? '').toLowerCase().replace(/[\s_-]/g, '');
+// Messages the watcher folded: past its age window (stale), or read, dismissed or handed off (handled).
+// The feeds keep them; badges, unread counts and popover rows leave them out. A folded tracked row
+// still stands for its message, so the same message from the mentions feed is not counted again.
+export const folded = item => item?.status === 'stale' || item?.status === 'handled';
 // A message timestamp identifies receipt. Later task edits are not new messages.
 export const alertVersion = item => item.id;
 export function scopedAlerts(items, {project, read = {}, unread = false} = {}) {

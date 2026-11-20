@@ -1,4 +1,4 @@
-import { projectKey } from './alert-model.js';
+import { projectKey, folded } from './alert-model.js';
 import { arrivalTarget } from './arrival-model.js';
 
 // Mentions routed to a space (slack-mentions.json: unmapped channels, DMs and thread replies go to the fallback space).
@@ -13,7 +13,7 @@ let mentionsBySpace = new Map();
 export function setSpaceMentions(items, names = []) {
   const next = new Map(), onScreen = (names ?? []).length > 0;
   for (const item of items ?? []) {
-    if (!item || typeof item.id !== 'string') continue;
+    if (!item || typeof item.id !== 'string' || folded(item)) continue;
     const space = onScreen ? arrivalTarget(item.project, names) : item.project, key = projectKey(space);
     if (!next.has(key)) next.set(key, []);
     // A moved mention carries the fallback space as its project (as placeItems does for Linear), so the badge's

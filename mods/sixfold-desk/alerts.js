@@ -11,9 +11,6 @@ import {createSharedPublisher,slackHealthView} from './shared-publish.js';
 
 const SHOWN = new Set(['needs-you']);  // Only what a person must decide; the rest stays in the project.
 const MARKS = { 'needs-you': '!', info: '✓', processing: '●' };
-// Channel messages the watcher folded: past its age window (stale), or read, dismissed or handed
-// off (handled). project-alerts.json keeps them; the badge, popover and rows do not count them.
-const FOLDED = new Set(['stale', 'handled']);
 const ALERT_LOAD_STUCK_MS = 120000;   // a refresh still loading after this no longer blocks the next one
 
 // Sender shown in the popup: the collector's author_name first, the raw author (an ID) only when there is no name.
@@ -132,7 +129,7 @@ export function watchAlerts(view, cx) {
         // The popup ledger depends only on mentions and read state; a health or workflow change skips it.
         const popupSignature=JSON.stringify([token('mentions'),token('read')]);
         const legacy=get('legacy'),feed=get('tracked'),read=get('read'),mentions=get('mentions'),health=get('health'),workflows=get('workflows');
-        const items = (feed.items ?? []).filter(item => !FOLDED.has(item?.status));
+        const items = feed.items ?? [];   // folded rows included: readers drop them (alert-model.js folded)
         const tagged=mentions.items ?? [];
         const states=workflows.jobs ?? {};
         // Once the ledger write returns these mentions are seen for every run, so they are delivered
