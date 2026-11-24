@@ -59,6 +59,25 @@ test('action envelope binds the displayed revision and selected option ids', () 
   assert.equal(actionRequest(question, 'cancel', {}, 'demo-request', 'now').action, 'cancel');
   assert.throws(() => requestPath('/demo', '../escape'), /Invalid/);
 });
+test('a question card as the producer writes it keeps every question as buttons and sends the picks', () => {
+  // Producer shape: q<i>/o<i> ids, question text with line breaks, two questions, one multiSelect.
+  const card = {id: 'demo-ask', revision: 'rev-9', kind: 'question', terminal: 'demo-terminal', title: 'Question: proceed?',
+    answerable: true, detail: '', createdAt: '2026-01-01T00:00:00Z',
+    questions: [
+      {id: 'q0', title: 'Proceed with the merge?\n\n[comment]\nposted after merge', multi: false,
+        options: [{id: 'o0', label: 'All of it'}, {id: 'o1', label: 'Merge only'}, {id: 'o2', label: 'Hold'}]},
+      {id: 'q1', title: 'Which checks?', multi: true, options: [{id: 'o0', label: 'Unit'}, {id: 'o1', label: 'Lint'}]}],
+    actions: [{id: 'submit', label: 'Send', requiresAnswers: true, primary: true, autoSubmit: false}, {id: 'cancel', label: 'Cancel'}]};
+  const [parsed] = parseAsks(JSON.stringify({schema: 1, cards: [card]})).cards;
+  assert.deepEqual(parsed.questions.map(q => [q.id, q.multi, q.options.map(o => o.label)]),
+    [['q0', false, ['All of it', 'Merge only', 'Hold']], ['q1', true, ['Unit', 'Lint']]]);
+  let picks = choose({}, parsed.questions[0], 'o1');
+  assert.equal(complete(parsed, picks), false);
+  picks = choose(choose(picks, parsed.questions[1], 'o1'), parsed.questions[1], 'o0');
+  assert.equal(complete(parsed, picks), true);
+  assert.deepEqual(actionRequest(parsed, 'submit', picks, 'demo-request', 'now').answers, {q0: ['o1'], q1: ['o0', 'o1']});
+  assert.throws(() => actionRequest(parsed, 'submit', {q0: ['o1']}, 'demo-request', 'now'), /Complete/);
+});
 test('only a matching accepted or duplicate receipt completes a request', () => {
   for (const status of ['accepted', 'duplicate']) assert.equal(acceptedReceipt(JSON.stringify({schema: 1, id: 'demo-request', status}), 'demo-request'), true);
   for (const output of ['', '{}', JSON.stringify({schema: 1, id: 'other', status: 'accepted'}), JSON.stringify({schema: 1, id: 'demo-request', status: 'stale'})]) {
