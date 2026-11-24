@@ -121,3 +121,43 @@ test('malformed DTO entries are ignored and unsupported links cannot become open
   assert(rows.every(i=>i.sender==='보낸 사람 미확인'));
   assert.equal(workspaceAlertTimeline({alerts:{items:null}}).total,0);
 });
+
+test('opening a Slack row in the 알림 tab writes the same 읽음 mark the mentions window does',async()=>{
+  const {slackReadPatch}=await import('../mods/sixfold-desk/alert-model.js');
+  assert.deepEqual(slackReadPatch(null,['slack:C1:1.1']),{'slack:C1:1.1':'slack:C1:1.1'});
+  assert.deepEqual(slackReadPatch('{"slack:C1:0.1":"slack:C1:0.1"}',['slack:C1:1.1','slack:C1:1.1']),
+    {'slack:C1:0.1':'slack:C1:0.1','slack:C1:1.1':'slack:C1:1.1'});
+  assert.equal(slackReadPatch('{"slack:C1:1.1":"slack:C1:1.1"}',['slack:C1:1.1']),null,'already read: no write');
+  assert.equal(slackReadPatch('{}',['',null,7]),null,'no usable id: no write');
+  assert.throws(()=>slackReadPatch('[]',['slack:C1:1.1']),'a non-object file is never overwritten');
+  assert.throws(()=>slackReadPatch('{broken',['slack:C1:1.1']));
+});
+
+test('the alerts DTO rows are tied back to their Slack message: link to open, slack:<channel>:<ts> to mark',async()=>{
+  const {linkFeedSlack,slackReadTarget,workspaceAlertTimeline}=await import('../mods/sixfold-desk/alert-model.js');
+  const {createHash}=await import('node:crypto');
+  const sha=v=>createHash('sha256').update(v).digest('hex');
+  const src={id:'slack:C0DEMO:1795496163.620659',link:'https://demo.slack.com/archives/C0DEMO/p1795496163620659'};
+  // the DTO's opaque id: n- + first 16 hex of sha256('slack:' + message id)
+  const opaque=`n-${sha(`slack:${src.id}`).slice(0,16)}`;
+  const items=[{id:opaque,source:'slack',ref:'C0DEMO',sender:'Kim',summary:'cc',at:at(0,11),read:false},
+    {id:'n-0000000000000000',source:'slack',ref:'C0DEMO',summary:'없는 메시지',at:at(0,10),read:false},
+    {id:`n-${sha('linear:l1').slice(0,16)}`,source:'linear',ref:'DEMO-1',summary:'댓글',at:at(0,9),read:false},
+    {id:'n-1111111111111111',source:'github',ref:'demo/a#1',summary:'리뷰',at:at(0,8),read:false}];
+  const linked=linkFeedSlack(items,[src,{id:'slack:C0DEMO:1.1'}],sha);
+  assert.equal(linked[0].url,src.link);
+  assert.equal(linked[0].sourceId,src.id);
+  assert.equal(linked[1],items[1],'a row whose message is not here stays as it was');
+  assert.equal(linked[2],items[2],'Linear rows are never tied to Slack');
+  const both=linkFeedSlack(items,[src,{id:src.id,link:''},{id:src.id,link:'javascript:alert(1)'}],sha);
+  assert.equal(both[0].url,src.link,'a copy of the message without a valid link never replaces the valid one');
+  assert.equal(linkFeedSlack(items,[{id:src.id,link:'https://evil.example/x'}],sha)[0],items[0],'only a Slack link is used');
+  const rows=workspaceAlertTimeline({space:'Alpha',alerts:{items:linked},now}).rows;
+  const slack=rows.find(r=>r.id===opaque);
+  assert.equal(slack.url,src.link,'the row is clickable');
+  assert.equal(slackReadTarget(slack),src.id,'an unread Slack row writes its slack:<channel>:<ts> key');
+  assert.equal(slackReadTarget(rows.find(r=>r.id==='n-0000000000000000')),null,'an opaque id is never written');
+  assert.equal(slackReadTarget({...slack,read:true}),null,'a read row writes nothing');
+  for(const row of rows.filter(r=>r.source!=='slack'))assert.equal(slackReadTarget(row),null,`${row.source} writes nothing`);
+  assert.equal(slackReadTarget({source:'slack',id:'slack:C1:1.1',read:false}),'slack:C1:1.1','the old feed path keeps its own id');
+});

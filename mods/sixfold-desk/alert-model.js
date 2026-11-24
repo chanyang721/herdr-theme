@@ -7,6 +7,74 @@ export const projectKey = name => String(name ?? '').toLowerCase().replace(/[\s_
 export const folded = item => item?.status === 'stale' || item?.status === 'handled';
 // A message timestamp identifies receipt. Later task edits are not new messages.
 export const alertVersion = item => item.id;
+// A space alerts DTO (docs/panel-feed.md) may list Slack rows under opaque ids, n-<first 16 hex of
+// sha256("slack:" + message id)>, with no link. A Slack row is tied back to its own message here, from
+// the local Slack feeds this computer already reads: `url` (the message link) and `sourceId` (slack:<channel>:<ts>, the
+// key the 읽음 marks use). A row whose message is not in those feeds stays as it was (not clickable).
+export function linkFeedSlack(items, sources, hash) {
+  if (!Array.isArray(items)) return items;
+  const byOpaque = new Map();
+  for (const item of sources ?? []) {
+    // Only a valid Slack link counts; the first one found for a message is kept (a copy without one never replaces it).
+    const url = item && typeof item.id === 'string' && item.id ? alertURL('slack', item.link) : '';
+    const key = url ? `n-${hash(`slack:${item.id}`).slice(0, 16)}` : '';
+    if (key && !byOpaque.has(key)) byOpaque.set(key, {id: item.id, link: url});
+  }
+  if (!byOpaque.size) return items;
+  return items.map(item => {
+    const src = item?.source === 'slack' ? byOpaque.get(item.id) : null;
+    return src ? {...item, url: src.link, sourceId: src.id} : item;
+  });
+}
+// The Slack 읽음 key an opened 알림-tab row writes, or null: only an unread Slack row whose message is known
+// (slack:<channel>:<ts>, the key the 읽음 file uses). Read rows, Linear and GitHub write nothing.
+export function slackReadTarget(row) {
+  const id = row?.sourceId || row?.id;
+  return row?.source === 'slack' && row.read !== true && typeof id === 'string' && /^slack:[A-Z0-9]+:\d+\.\d+$/.test(id) ? id : null;
+}
+// The panel's Slack 읽음 marks (data/sixfold/slack-alerts-read.json, {id: version}) with `ids` added.
+// A local collector may act on a newly read mention, so every surface that shows a Slack row as read
+// writes it here, not only the mentions window.
+// Returns null when nothing changes; throws on a file that is not a JSON object (never overwrite it).
+export function slackReadPatch(text, ids) {
+  const read = text ? JSON.parse(text) : {};
+  if (!read || typeof read !== 'object' || Array.isArray(read)) throw new Error('slack-alerts-read.json is not an object');
+  const fresh = [...new Set((ids ?? []).filter(id => typeof id === 'string' && id && read[id] !== id))];
+  if (!fresh.length) return null;
+  for (const id of fresh) read[id] = id;
+  return read;
+}
+
+// Opening a row in a space's 알림 tab: the row's link opens at once, and an unread Slack row is marked
+// read in the same 읽음 file (and format) the mentions window writes, with a compare-and-swap on the
+// exact old text. A local collector may react to that mark. A failed write leaves the row unread; the
+// next open tries again; a write that lost to a newer file is merged into it (markSlackRead).
+// io: {openUrl(url), spawn(task), readText() -> text|null, writeText(text, old), publish(read)}.
+export function openAlertRow(row, io) {
+  if (row?.url) io.openUrl(row.url);
+  const id = slackReadTarget(row);
+  return id ? io.spawn(() => markSlackRead(id, io)) : null;
+}
+
+// A write refused because the file changed since it was read (another window, another open) reads
+// the newer text and merges into it, a few times; marks already there are kept.
+export async function markSlackRead(id, io, tries = 4) {
+  for (let attempt = 0; attempt < tries; attempt++) {
+    let old;
+    try {
+      old = await io.readText();
+      const next = slackReadPatch(old, [id]);
+      if (!next) return false;
+      await io.writeText(JSON.stringify(next), old);
+      io.publish?.(next);
+      return true;
+    } catch {
+      if (old !== undefined && attempt + 1 < tries) continue;   // a lost compare-and-swap: read again
+      return false;
+    }
+  }
+  return false;
+}
 export function scopedAlerts(items, {project, read = {}, unread = false} = {}) {
   return (items ?? []).filter(i => (!project || projectKey(i.project) === projectKey(project))
     && (!unread || read[i.id] !== alertVersion(i)));
@@ -229,7 +297,8 @@ export function workspaceAlertRows({space, alerts, slack = [], linear = [], gith
   if (Array.isArray(alerts?.items)) {
     for (const item of sourceList(alerts.items)) {
       if (!['slack', 'linear', 'github'].includes(item.source) || typeof item.read !== 'boolean') continue;
-      add(item.source, item, {ref: item.ref, sender: item.sender, summary: item.summary, at: item.at, read: item.read, url: item.url});
+      add(item.source, item, {ref: item.ref, sender: item.sender, summary: item.summary, at: item.at, read: item.read, url: item.url,
+        ...(typeof item.sourceId === 'string' ? {sourceId: item.sourceId} : {})});
     }
   } else {
     const scopedSlack = sourceList(slack).filter(i => connectedAlert(i, 'slack', space, connections));

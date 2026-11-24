@@ -214,3 +214,61 @@ test('an empty notification tab and an alerts-only space remain usable without a
   assert(!words(tree).includes('이 범위에 표시할 이슈가 없습니다'));
   assert.deepEqual(words(byId(tree,'task-issues-scope-demo-alerts')),['알림','0']);
 });
+
+test('clicking an unread Slack row in the alerts tab opens it and writes its 읽음 mark once; other rows write nothing',async()=>{
+  const {issuePopover}=await renderer();
+  const {openAlertRow,linkFeedSlack,workspaceAlertTimeline}=await import('../mods/sixfold-desk/alert-model.js');
+  const {createHash}=await import('node:crypto');
+  const sha=v=>createHash('sha256').update(v).digest('hex'),cx={stop_propagation(){}};
+  const now=new Date(2026,10,20,12).getTime(),at=(hour)=>new Date(2026,10,20,hour).toISOString();
+  const link=id=>`https://demo.slack.com/archives/C0DEMO/p${id.split(':')[2].replace('.','')}`;
+  const run=async(tree,ids,file)=>{
+    const opened=[],writes=[],jobs=[];
+    const io={openUrl:url=>opened.push(url),spawn:task=>{const job=task();jobs.push(job);return job;},
+      readText:async()=>file,writeText:async(text,old)=>{writes.push([JSON.parse(text),old]);},publish:()=>{}};
+    const model2={...tree,onAlertOpen:row=>openAlertRow(row,io)};
+    const view=issuePopover(model2,theme);
+    for(const id of ids)click(byId(view,id),cx);
+    await Promise.all(jobs);
+    return {opened,writes};
+  };
+  const old='{"slack:C0DEMO:1.000001":"slack:C0DEMO:1.000001"}';
+  // DTO path: rows under opaque ids, tied back to their messages.
+  const m1='slack:C0DEMO:1795496163.620659',m2='slack:C0DEMO:1795496000.000001';
+  const dto={unread:3,items:linkFeedSlack([
+    {id:`n-${sha(`slack:${m1}`).slice(0,16)}`,source:'slack',ref:'C0DEMO',summary:'cc',at:at(11),read:false},
+    {id:`n-${sha(`slack:${m2}`).slice(0,16)}`,source:'slack',ref:'C0DEMO',summary:'읽음',at:at(10),read:true},
+    {id:'n-aaaaaaaaaaaaaaaa',source:'linear',ref:'DEMO-1',summary:'댓글',at:at(9),read:false},
+    {id:'n-bbbbbbbbbbbbbbbb',source:'github',ref:'demo/a#1',summary:'리뷰',at:at(8),read:false},
+  ],[{id:m1,link:link(m1)},{id:m2,link:link(m2)}],sha)};
+  const base=model({scope:'alerts',now,alerts:dto});
+  const rowId=item=>`task-alert-demo-${item.source}:${item.id}`;
+  const a=await run(base,dto.items.map(rowId),old);
+  assert.deepEqual(a.opened,[link(m1),link(m2)],'only rows with a link open');
+  assert.equal(a.writes.length,1,'one write: the unread Slack row');
+  assert.deepEqual(a.writes[0],[{...JSON.parse(old),[m1]:m1},old],'its slack:<channel>:<ts> key, against the exact old text');
+  // The local feed path: rows already carry their own ids.
+  const lin='https://linear.app/demo/issue/DEMO-1/title',gh='https://github.com/demo/alpha/pull/4';
+  const notifications=workspaceAlertTimeline({space:'Demo',now,read:{[m2]:m2},
+    slack:[{id:m1,project:'Demo',channel:'C0DEMO',text:'cc',at:at(11),link:link(m1)},{id:m2,project:'Demo',channel:'C0DEMO',text:'읽음',at:at(10),link:link(m2)}],
+    linear:[{id:'l1',workspace:'Demo',issue:'DEMO-1',subtitle:'댓글',at:at(9),read:false,url:lin}],
+    github:[{id:'g1',workspace:'Demo',repo:'demo/alpha',number:4,kind:'review',title:'리뷰',at:at(8),unread:true,url:gh}]});
+  assert.equal(notifications.rows.length,4);
+  const b=await run(model({scope:'alerts',now,notifications}),notifications.rows.map(r=>`task-alert-demo-${r.key}`),null);
+  assert.deepEqual(b.opened,[link(m1),link(m2),lin,gh],'every row with a link opens, Linear and GitHub too');
+  assert.deepEqual(b.writes,[[{[m1]:m1},null]],'one write for the unread Slack row only; a missing file starts empty');
+});
+
+test('two Slack rows opened at once both stay read: a write that lost the compare-and-swap merges into the newer file',async()=>{
+  const {markSlackRead}=await import('../mods/sixfold-desk/alert-model.js');
+  let file='{"slack:C0DEMO:1.000001":"slack:C0DEMO:1.000001"}',writes=0;
+  const tick=()=>new Promise(resolve=>setTimeout(resolve,0));
+  const io={readText:async()=>{const seen=file;await tick();return seen;},
+    writeText:async(text,old)=>{await tick();if(old!==file)throw new Error('changed');file=text;writes++;},publish:()=>{}};
+  const [a,b]=await Promise.all([markSlackRead('slack:C0DEMO:2.000002',io),markSlackRead('slack:C0DEMO:3.000003',io)]);
+  assert.deepEqual([a,b],[true,true]);
+  assert.deepEqual(Object.keys(JSON.parse(file)).sort(),['slack:C0DEMO:1.000001','slack:C0DEMO:2.000002','slack:C0DEMO:3.000003']);
+  assert.equal(writes,2);
+  const broken={readText:async()=>'[]',writeText:async()=>{throw new Error('never');}};
+  assert.equal(await markSlackRead('slack:C0DEMO:4.000004',broken),false,'a file that is not an object is never written');
+});

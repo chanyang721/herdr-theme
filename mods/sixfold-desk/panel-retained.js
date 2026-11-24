@@ -1,7 +1,7 @@
 import {View,div,svg} from 'gpui-kit';
 import {h_flex,v_flex,InputState,Input} from 'gpui-base';
 import {theme,spaces,shared,setShared,settings,window,exec,appHome,readTextFile,writeTextFile} from 'herdr';
-import {issueAlerts,issueAlertSignature,alertedIssues,issueReadTargets,groupReadTargets} from './alert-model.js';
+import {issueAlerts,issueAlertSignature,alertedIssues,issueReadTargets,groupReadTargets,openAlertRow} from './alert-model.js';
 import {requestReads,checkReads,readPendingIds,lastReadError,READ_POLL_MS} from './linear-reads.js';
 import {autoView,autoSignature} from './linear-auto-model.js';
 import {approve,local,busyKeys,doneIds,autoError,checkApprovals,settleLedger,AUTO_POLL_MS} from './linear-auto.js';
@@ -28,6 +28,7 @@ const signature=value=>JSON.stringify(value);
 const inputAlive=input=>{if(!input)return false;try{input.value();return true;}catch{return false;}};
 const label=(value,color,size=10)=>div().min_w(0).truncate().text_size(size).text_color(color).child(value);
 const countRenders=(c,kind,id='all')=>{const key=`${kind}:${id}`;c.stats.renders[key]=(c.stats.renders[key]||0)+1;};
+
 
 class PanelRow extends View{
   init(props){this.key=props.key;this.id=props.id;}
@@ -167,7 +168,9 @@ export function createRetainedPanel(cx,{macTitlebar=false,onClassic=null,onDispo
     return JSON.stringify([c.cardAlerts?.(space)||null,c.cardBadges?.(space)?.key||null,space.work&&c.spaceUnread?c.spaceUnread.count(space,c.motion):null,state?.open?issueAlertSignature(shared('sixfold.linearItems')??[],space.name):'',shared('sixfold.alertPopover')?.space===space.name?shared('sixfold.alertPopover'):null,
       state?.open?[[...readPendingIds()].sort().join(','),lastReadError()]:null,
       state?.open?[autoSignature(shared('sixfold.linearAuto'),space.name),[...busyKeys()].sort().join(','),[...doneIds()].sort().join(','),autoError()]:null,
-      state?.open?startSignature(state):null]);
+      state?.open?startSignature(state):null,
+      // An open 알림 tab redraws when a row gains its link (its Slack message arrived after the feed).
+      state?.open&&state.scope==='alerts'?(c.spaceUnread?.notifications?.(space,state.query||'')?.rows??[]).filter(row=>row.url).map(row=>`${row.key}=${row.url}`).join('\n'):null]);
   };
   // Read marks: one request per alert (the collector runs it once through its guard). While any is
   // pending, its result is read every READ_POLL_MS; the timer stops when none is left (at most 3 min).
@@ -528,7 +531,9 @@ export function createRetainedPanel(cx,{macTitlebar=false,onClassic=null,onDispo
     return issuePopover({...extra,id:space.id,trigger,open:state?.open===true,scope:state?.scope||'week',...data,
       // The 알림 tab: this space's own notifications, newest first in time groups (read only).
       ...(state?.open&&state.scope==='alerts'?{alerts:space.alerts,notifications:c.spaceUnread?.notifications(space,state.query||'')??null,
-        onAlertOpen:(row,context)=>(context||c.cx).open_url?.(row.url)}:{}),
+        onAlertOpen:(row,context)=>{const path=`${appHome()}/data/sixfold/slack-alerts-read.json`,cx=context||c.cx;
+          openAlertRow(row,{openUrl:url=>cx.open_url?.(url),spawn:task=>c.cx.spawn(task),readText:()=>readTextFile(path).catch(()=>null),
+            writeText:(text,old)=>writeTextFile(path,text,old),publish:read=>setShared('sixfold.alertRead',read)});}}:{}),
       leadingGap:PANEL_GEOMETRY.rightGutter+PANEL_GEOMETRY.padding+PANEL_GEOMETRY.border+PANEL_GEOMETRY.popoverGap,
       projectLabel:space.name,toolLabel:space.work?.tool==='jira'?'Jira':space.work?.tool==='linear'?'Linear':space.work?.tool||'업무 도구',
       icon:state?.open?toolIcon(space.work?.tool,t).size(24):null,

@@ -923,3 +923,36 @@ test('the unread count opens the issue search on its 알림 tab, and the search 
   state.open=false;state.scope='week';r.controller.openIssues(card);assert.equal(state.scope,'week');assert.equal(state.open,true);
   r.controller.dispose();
 });
+
+test('an open 알림 tab redraws when a Slack row gains its link, so it can be opened without reopening the tab',async()=>{
+  const {workspaceAlertTimeline}=await import('../mods/sixfold-desk/alert-model.js');
+  let linked=false,linkUrl='https://demo.slack.com/archives/C0DEMO/p1795496163620659';
+  const spaceUnread={count:space=>space.alerts?.unread??0,
+    badge:(space,_t,onOpen)=>{const badge=element();badge.calls.push(['id',`sf-unread-${space.id}`],['on_click',(_e,cx)=>onOpen(space,'alerts',cx)]);return badge;},
+    // As main.js, with the row's Slack message arriving later (linked).
+    notifications:(space,query='')=>workspaceAlertTimeline({space:space.name,query,alerts:{...space.alerts,
+      items:space.alerts.items.map(item=>linked&&item.source==='slack'?{...item,url:linkUrl,sourceId:'slack:C0DEMO:1795496163.620659'}:item)}})};
+  const r=await runtime(false,{spaceUnread});
+  const raw=makePanelFixture({tool:'linear'}),space=raw.spaces[0];
+  space.alerts={items:[{id:'n-d4d26aac49def037',source:'slack',ref:'C0DEMO',sender:'Kim',summary:'cc',at:new Date().toISOString(),read:false}],
+    unread:1,connections:{slack:['C0DEMO'],linear:[],github:[]},sources:{slack:'ready',linear:'missing',github:'missing'},mapping:{slack:'config',linear:'none',github:'none'}};
+  r.controller.apply(cleanPanelFeed(raw),'ready');r.flush();
+  const t=r.native.theme(),card=r.controller.spaceMap.get(space.id);
+  const walk=node=>[node,...(node.nodes||[]).filter(value=>typeof value==='object').flatMap(walk)];
+  const byId=(node,id)=>walk(node).find(n=>(n.calls||[]).some(c=>c[0]==='id'&&c[1]===id));
+  r.controller.issuePopover(card,element(),t);
+  r.controller.unreadBadge(card)(t).calls.find(call=>call[0]==='on_click')[1](null,{stop_propagation(){}});
+  r.flush();
+  const rowId=`task-alert-${space.id}-slack:n-d4d26aac49def037`;
+  let body=r.controller.issuePopover(card,element(),t).calls.find(call=>call[0]==='content')[1];
+  assert(!(byId(body,rowId).calls||[]).some(c=>c[0]==='on_click'),'no link yet: not clickable');
+  const before=r.controller.alertMarks.get(space.id);
+  linked=true;r.controller.alertsChanged();
+  assert.notEqual(r.controller.alertMarks.get(space.id),before,'the card is marked for a redraw');
+  body=r.controller.issuePopover(card,element(),t).calls.find(call=>call[0]==='content')[1];
+  assert((byId(body,rowId).calls||[]).some(c=>c[0]==='on_click'),'the same open tab now opens the row');
+  const marked=r.controller.alertMarks.get(space.id);
+  linkUrl='https://demo.slack.com/archives/C0DEMO/p1795496163620660';r.controller.alertsChanged();
+  assert.notEqual(r.controller.alertMarks.get(space.id),marked,'a changed link redraws too, so the row never opens the old one');
+  r.controller.dispose();
+});
