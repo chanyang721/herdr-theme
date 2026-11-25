@@ -5,6 +5,8 @@ import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {askSummary, groupAsks, summaryFor, unverifiedFor, summaryFromSnapshots, cardsFor, spaceAsks, spaceAskLayout, SPACE_ASK_WIDTH, SPACE_ASK_GAP, reconcile, clampPage, popupHeight, SUMMARY_KEY, errorText} from '../mods/sixfold-desk/ask-model.js';
 
+// The summary as written, without its write generation.
+const plain = summary => { if (!summary || typeof summary !== 'object') return summary; const {g, ...rest} = summary; return rest; };
 const bridge = {python: 'python3', script: '/demo/bridge/provider.py', args: ['--local']};
 const card = (id, terminal, extra = {}) => ({id, revision: 'r1', kind: 'permission', terminal, title: `Title ${id}`,
   actions: [{id: 'approve', label: 'Allow', primary: true}, {id: 'cancel', label: 'Deny'}], ...extra});
@@ -252,7 +254,7 @@ test('the sidebar watcher publishes the per-pane summary only when it changes', 
   f.setCards([card('a1', 'pane-a')]); assert.equal(writes(), first, 'same cards do not rewrite shared state');
   f.setCards([card('a1', 'pane-a'), card('b1', 'pane-b')]); assert.equal(f.store.get(SUMMARY_KEY).panes['pane-b'].n, 1);
   f.files.delete('/demo/data/sixfold/bridge.json'); f.emit('/demo/data/sixfold/bridge.json');
-  assert.deepEqual(f.store.get(SUMMARY_KEY), {status: 'missing', v: '', panes: {}}, 'no bridge: pane buttons disappear');
+  assert.deepEqual(plain(f.store.get(SUMMARY_KEY)), {status: 'missing', v: '', panes: {}}, 'no bridge: pane buttons disappear');
   view.stopAsks();
 });
 
@@ -302,7 +304,7 @@ test('a header whose request was already answered re-reads the file and clears t
   let reads = 0; f.impl.readJsonSnapshot = async path => { reads++; return f.snapshot(path); };
   assert.match(text(mod.paneAskButton({pane: 'p1', terminal: 'pane-a'}, theme, 'ko', 'Alpha', cx)), /권한/, 'drawn until the read returns');
   await cx.settle();
-  assert.deepEqual(f.store.get(SUMMARY_KEY), {status: 'ready', v: '', panes: {}}, 'the shared summary is corrected for every copy');
+  assert.deepEqual(plain(f.store.get(SUMMARY_KEY)), {status: 'ready', v: '', panes: {}}, 'the shared summary is corrected for every copy');
   assert.equal(mod.paneAskButton({pane: 'p1', terminal: 'pane-a'}, theme, 'ko', 'Alpha', cx), null);
   assert.equal(reads, 2, 'one read of bridge and cards');
   // A header with nothing to show reads nothing.
@@ -335,7 +337,59 @@ test('header checks are bounded, never overwrite a newer summary, and show unrea
   f.impl.readJsonSnapshot = async path => { f.store.set(SUMMARY_KEY, newer); return f.snapshot(path); };
   f.store.set(SUMMARY_KEY, askSummary([card('a1', 'pane-a')]));
   mod.checkSummary(cx, Date.now() + 30_000); await cx.settle();
-  assert.deepEqual(f.store.get(SUMMARY_KEY), newer);
+  assert.deepEqual(plain(f.store.get(SUMMARY_KEY)), newer);
+});
+
+test('an older-format summary is unknown, not empty: the header says so and reads the files at once', async () => {
+  const f = host([card('a1', 'pane-a')]), mod = await load(f.h), cx = context();
+  f.store.set(SUMMARY_KEY, {v: 'old', panes: {'pane-a': {n: 1, kind: 'permission'}}});
+  let reads = 0; f.impl.readJsonSnapshot = async path => { reads++; return f.snapshot(path); };
+  const first = mod.paneAskButton({pane: 'p1', terminal: 'pane-a'}, theme, 'ko', 'Alpha', cx);
+  assert.match(text(first), /확인 중/, 'a real card is not hidden while unknown'); assert.doesNotMatch(text(first), /권한/);
+  assert.equal(mod.paneAskButton({pane: 'p2', terminal: 'pane-b'}, theme, 'ko', 'Beta', cx), null);
+  await cx.settle();
+  assert.equal(reads, 2, 'read on the first render');
+  assert.equal(f.store.get(SUMMARY_KEY).status, 'ready');
+  assert.match(text(mod.paneAskButton({pane: 'p1', terminal: 'pane-a'}, theme, 'ko', 'Alpha', cx)), /권한/);
+});
+
+test('the watcher compares with the shared summary, so a file restored to the same cards is published again', async () => {
+  const f = host([card('a1', 'pane-a')]), mod = await load(f.h), view = {}, cx = context();
+  mod.watchAsks(view, cx); await Promise.resolve(); await Promise.resolve();
+  // A header reads the file while it is briefly absent and records "missing";
+  // the watcher never saw that state, so its own last list is unchanged.
+  const saved = f.files.get('/demo/data/sixfold/cards.json');
+  f.files.delete('/demo/data/sixfold/cards.json');
+  mod.checkSummary(cx, Date.now() + 10_000); await cx.settle();
+  assert.equal(f.store.get(SUMMARY_KEY).status, 'missing');
+  f.files.set('/demo/data/sixfold/cards.json', saved); f.emit('/demo/data/sixfold/cards.json');
+  assert.equal(summaryFor(f.store.get(SUMMARY_KEY), 'pane-a')?.n, 1, 'a file event republishes');
+  f.store.set(SUMMARY_KEY, askSummary(null, 'missing'));
+  await view.refreshAsks(cx); await cx.settle();
+  assert.equal(summaryFor(f.store.get(SUMMARY_KEY), 'pane-a')?.n, 1, 'so does a refresh');
+  view.stopAsks();
+});
+
+test('a header read never overwrites a summary that changed and changed back meanwhile', async () => {
+  const f = host([]), mod = await load(f.h), view = {}, cx = context();
+  f.setCards([card('a1', 'pane-a')]);
+  mod.watchAsks(view, cx); await Promise.resolve(); await Promise.resolve();
+  const start = f.store.get(SUMMARY_KEY);
+  // The header reads an empty file; meanwhile the watcher publishes
+  // A -> empty -> A, ending on the value the header started from.
+  f.impl.readJsonSnapshot = async path => {
+    if (path.endsWith('cards.json')) {
+      const read = {status: 'ready', value: {schema: 1, cards: []}};
+      f.setCards([]); f.setCards([card('a1', 'pane-a')]);
+      return read;
+    }
+    return f.snapshot(path);
+  };
+  mod.checkSummary(cx, Date.now() + 10_000); await cx.settle();
+  const end = f.store.get(SUMMARY_KEY);
+  assert.equal(summaryFor(end, 'pane-a')?.n, 1, 'the late empty read does not win');
+  assert.notEqual(end.g, start.g, 'every write carries a new generation');
+  view.stopAsks();
 });
 
 test('the sidebar watcher publishes a failed cards read as unreadable, not as the last counts', async () => {
@@ -347,7 +401,7 @@ test('the sidebar watcher publishes a failed cards read as unreadable, not as th
   assert.equal(unverifiedFor(f.store.get(SUMMARY_KEY), 'pane-a'), true);
   assert.deepEqual(view.asks.map(c => c.id), ['a1'], 'the sidebar list keeps the last valid cards');
   f.setCards([]);
-  assert.deepEqual(f.store.get(SUMMARY_KEY), {status: 'ready', v: '', panes: {}});
+  assert.deepEqual(plain(f.store.get(SUMMARY_KEY)), {status: 'ready', v: '', panes: {}});
   f.files.delete('/demo/data/sixfold/cards.json'); f.emit('/demo/data/sixfold/cards.json');
   assert.equal(f.store.get(SUMMARY_KEY).status, 'missing');
   view.stopAsks();

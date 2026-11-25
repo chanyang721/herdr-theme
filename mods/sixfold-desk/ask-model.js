@@ -185,7 +185,7 @@ export function askSummary(cards, status = 'ready', previous = null) {
   if (status === 'missing') return {status, v: '', panes: {}};
   if (status === 'unreadable') {
     const known = summaryState(previous) === 'ready' ? Object.keys(previous.panes ?? {})
-      : summaryState(previous) === 'unreadable' && Array.isArray(previous.unverified) ? previous.unverified : [];
+      : summaryState(previous) === 'unreadable' && Array.isArray(previous.unverified) ? previous.unverified : legacyPanes(previous);
     const unverified = [...new Set(known.filter(t => typeof t === 'string'))].sort();
     return {status, v: `!${digest(JSON.stringify(unverified))}`, panes: {}, unverified};
   }
@@ -197,19 +197,33 @@ export function askSummary(cards, status = 'ready', previous = null) {
   const live = (cards ?? []).map(card => JSON.stringify([card.id, card.revision, card.terminal ?? null, card.answerable !== false])).join('|');
   return {status, v: live ? digest(live) : '', panes};
 }
-// A summary without a known status (an older theme's, or garbage) is not a
-// reading of the cards file and is never drawn.
+// A summary without a known status is not a reading of the cards file: never
+// drawn as a count. One in the older format (no status, written before this
+// field existed) is unknown, not empty: its panes say "unconfirmed" until a
+// header or the watcher reads the files.
 export const summaryState = summary => summary && typeof summary === 'object' && SUMMARY_STATES.includes(summary.status) ? summary.status : null;
+const validPane = pane => pane && Number.isInteger(pane.n) && pane.n > 0 && ['permission', 'question', 'plan'].includes(pane.kind);
+function legacyPanes(summary) {
+  if (!summary || typeof summary !== 'object' || Object.hasOwn(summary, 'status') || !summary.panes || typeof summary.panes !== 'object') return [];
+  return Object.keys(summary.panes).filter(t => validPane(summary.panes[t]));
+}
+// Same reading of the files, whoever wrote it and whatever its generation `g`.
+export function sameSummary(a, b) {
+  const view = s => s && typeof s === 'object' ? JSON.stringify([s.status ?? null, s.v ?? null, s.panes ?? null, s.unverified ?? null]) : JSON.stringify(s ?? null);
+  return view(a) === view(b);
+}
 export function summaryFor(summary, terminal) {
   if (summaryState(summary) !== 'ready') return null;
   const pane = summary.panes && typeof summary.panes === 'object'
     && Object.hasOwn(summary.panes, terminal ?? '') ? summary.panes[terminal ?? ''] : null;
-  return pane && Number.isInteger(pane.n) && pane.n > 0 && ['permission', 'question', 'plan'].includes(pane.kind) ? pane : null;
+  return validPane(pane) ? pane : null;
 }
-// True when the cards file could not be read and this pane had requests on
-// the last good read: its header says "unconfirmed", never the old count.
+// True when this pane's state is not known from a read: the cards file could
+// not be read and the pane had requests on the last good read, or the summary
+// is in the older format. Its header says "unconfirmed", never a count.
 export const unverifiedFor = (summary, terminal) => summaryState(summary) === 'unreadable'
-  && Array.isArray(summary.unverified) && summary.unverified.includes(terminal ?? '');
+  ? Array.isArray(summary.unverified) && summary.unverified.includes(terminal ?? '')
+  : legacyPanes(summary).includes(terminal ?? '');
 // The summary of the bridge and cards files as read right now (typed
 // snapshots {status: 'ready'|'missing'|'invalid', value}). A missing bridge or
 // cards file means nothing waits; any other failed read is 'unreadable'.

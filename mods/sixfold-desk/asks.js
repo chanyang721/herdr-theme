@@ -2,7 +2,7 @@ import { div } from 'gpui-kit';
 import { h_flex, v_flex } from 'gpui-base';
 import { exec, writeTextFile, appHome, shared, setShared, openOverlay, closeOverlay, props, panes, spaces, focused, run } from 'herdr';
 import { KIND_WORDS, ASK_WORDS, SUMMARY_KEY, bridgeFrom, parseAsks, questionsOf, actionsOf, choose, complete, actionRequest, requestPath, acceptedReceipt, detailOf, selectionOf,
-  askSummary, summaryFor, unverifiedFor, summaryFromSnapshots, groupAsks, cardsFor, queueFor, pageAfter, spaceAsks, spaceAskLayout, clampPage, reconcile, popupHeight, errorText, autoPopupTarget, prunedOpened } from './ask-model.js';
+  askSummary, summaryFor, unverifiedFor, summaryFromSnapshots, summaryState, sameSummary, groupAsks, cardsFor, queueFor, pageAfter, spaceAsks, spaceAskLayout, clampPage, reconcile, popupHeight, errorText, autoPopupTarget, prunedOpened } from './ask-model.js';
 
 import {subscribeJsonFile,readJsonSnapshot} from './panel-io.js';
 
@@ -30,9 +30,12 @@ export function watchAsks(view, cx) {
         delete view.askChoices[old.id];delete view.askErrors[old.id];
       }
       view.asks=cards;pendingNotify=true;
-      publishSummary(cards,status);
       popupElsewhere(cards,view.askNameOf);
     }
+    // Compared with the summary in shared state on every event and refresh,
+    // not with this watcher's own last list: another writer (a header check,
+    // an older copy, a persisted shared.json) may have left a different one.
+    publishSummary(cards,status);
     if(pendingNotify&&active&&view.sidebarVisible!==false){pendingNotify=false;cx.notify();}
   };
   const take=(key,parse,snapshot)=>{
@@ -99,10 +102,16 @@ function popupElsewhere(cards, nameOf) {
 // Pane headers and the popup are other copies of this mod: they learn about
 // cards only through this summary (counts per terminal and a version), never
 // through the sidebar's objects. An unchanged summary is not rewritten.
+// Every write carries a new generation `g`, so a reader can tell "unchanged"
+// from "changed and changed back" (a value-only comparison cannot).
+const generationOf = summary => summary && typeof summary === 'object' && typeof summary.g === 'string' ? summary.g : JSON.stringify(summary ?? null);
+function writeSummary(next) {
+  setShared(SUMMARY_KEY, {...next, g: `${Date.now().toString(36)}.${Math.random().toString(36).slice(2, 10)}`});
+}
 function publishSummary(cards, status = 'ready') {
   try {
     const current = shared(SUMMARY_KEY) ?? null, next = askSummary(cards, status, current);
-    if (JSON.stringify(current) !== JSON.stringify(next)) setShared(SUMMARY_KEY, next);
+    if (!sameSummary(current, next) || summaryState(current) === null) writeSummary(next);
   } catch { /* Display-only signal; the cards file stays authoritative. */ }
 }
 // The summary is only a copy, rewritten by the sidebar watcher when a file
@@ -111,21 +120,22 @@ function publishSummary(cards, status = 'ready') {
 // would keep an answered request. So a header that shows a request re-reads
 // the files itself, at most every SUMMARY_CHECK_MS and only from a render,
 // and corrects the shared summary when the files disagree. The write is
-// compare-and-set: a summary the watcher published meanwhile wins.
+// compare-and-set on the generation: a summary written meanwhile wins, even
+// one that went back to the value this read started from.
 const SUMMARY_CHECK_MS = 5000;
 const summaryCheck = {at: 0, busy: false};
 export function checkSummary(cx, now = Date.now()) {
   if (!cx?.spawn || summaryCheck.busy || now - summaryCheck.at < SUMMARY_CHECK_MS) return false;
   summaryCheck.busy = true; summaryCheck.at = now;
-  const seen = JSON.stringify(shared(SUMMARY_KEY) ?? null);
+  const seen = generationOf(shared(SUMMARY_KEY));
   try {
     cx.spawn(async () => {
       try {
         const [b, c] = await Promise.all([snapshot('bridge'), snapshot('cards')]);
         const current = shared(SUMMARY_KEY) ?? null;
-        if (JSON.stringify(current) !== seen) return;
+        if (generationOf(current) !== seen) return;
         const next = summaryFromSnapshots(b, c, current);
-        if (JSON.stringify(next) !== seen) setShared(SUMMARY_KEY, next);
+        if (!sameSummary(next, current) || summaryState(current) === null) writeSummary(next);
       } catch { /* Display-only; the next render checks again. */ }
       finally { summaryCheck.busy = false; }
     });
@@ -202,12 +212,15 @@ export function paneAskButton(p, t, lang, name, cx = null) {
   const unknown = !pane && unverifiedFor(summary, p.terminal);
   if (!pane && !unknown) return null;
   checkSummary(cx);
-  // The cards file could not be read: say so, never the last count.
+  // The cards file could not be read, or the summary is in the older format
+  // (unknown until read): say so, never a count.
+  const failedRead = summaryState(summary) === 'unreadable';
   if (unknown) return stop(h_flex().id(`sf-pane-ask-${p.pane}`).flex_none().h(22).px(9).rounded(4).border(1).border_color(t.blocked)
     .bg(t.chrome).text_color(t.muted).text_size(11).items_center().cursor_pointer()
-    .tooltip(lang === 'ko' ? '확인 요청 파일을 읽지 못했습니다 — 눌러서 다시 읽기' : 'Could not read the requests file — click to read again')
+    .tooltip(failedRead ? (lang === 'ko' ? '확인 요청 파일을 읽지 못했습니다 — 눌러서 다시 읽기' : 'Could not read the requests file — click to read again')
+      : (lang === 'ko' ? '확인 요청 파일을 다시 읽는 중입니다' : 'Reading the requests file again'))
     .on_click((_e, cx) => { cx.stop_propagation(); openAskPopup(p.terminal, name, null); })
-    .child(lang === 'ko' ? '▲ 확인 불가' : '▲ Unconfirmed'));
+    .child(failedRead ? (lang === 'ko' ? '▲ 확인 불가' : '▲ Unconfirmed') : (lang === 'ko' ? '▲ 확인 중' : '▲ Checking')));
   const label = `${kindLabel(lang, pane.kind)}${pane.n > 1 ? ` ${pane.n}` : ''}`;
   return stop(h_flex().id(`sf-pane-ask-${p.pane}`).flex_none().h(22).px(9).rounded(4).bg(t.blocked).text_color(t.background)
     .text_size(11).font_bold().items_center().cursor_pointer()
