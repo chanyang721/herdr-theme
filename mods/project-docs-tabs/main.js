@@ -210,10 +210,9 @@ export default class ProjectDocuments extends View {
           if (this.closed || this.watchers.get(root) !== entry) return;
           // Ignore our installer lock and unrelated generated data in this
           // folder; otherwise a refresh can trigger its own next refresh.
-          // (Only when the folder is watched for the pins file alone: an open document or its images there
-          // must still refresh.)
-          const listOnly = !['doc', 'media'].some(group => this.watchGroups.get(group)?.has(root));
-          if (root === dirname(this.config) && listOnly && !changed.some(path => path === root || path.endsWith('/' + this.config.split('/').pop()) || path.endsWith('/' + REQUEST))) continue;
+          // The open document and its images may live here too: their own changes still refresh.
+          if (root === dirname(this.config) && !changed.some(path => path === root || path.endsWith('/' + this.config.split('/').pop()) || path.endsWith('/' + REQUEST)
+            || path === this.watchedDoc || this.mediaFiles?.includes(path))) continue;
           if (this.visible()) this.refresh(cx); else this.stale = true;   // a hidden tab refreshes when shown
         }
       } catch { if (this.watchers.get(root) === entry) this.watchers.delete(root); }
@@ -289,7 +288,7 @@ export default class ProjectDocuments extends View {
     this.loading = false;
     // Another document (or none, or a remote one): the previous document's folders are no longer watched.
     const watchedDoc = doc?.status === 'ok' && !doc.on ? doc.path : null;
-    if (this.watchedDoc !== watchedDoc) { this.watchedDoc = watchedDoc; this.setWatch('doc', watchedDoc ? [dirname(watchedDoc)] : [], cx); this.setWatch('media', [], cx); }
+    if (this.watchedDoc !== watchedDoc) { this.watchedDoc = watchedDoc; this.setWatch('doc', watchedDoc ? [dirname(watchedDoc)] : [], cx); this.mediaFiles = []; this.setWatch('media', [], cx); }
     if (!doc || doc.status !== 'ok') { this.bodyError = doc?.error || doc?.status || null; return; }
     if (doc.on) {
       this.lastPath = doc.path; this.lastId = doc.id; this.remoteForce = false; this.remoteAsked = key;
@@ -327,7 +326,7 @@ export default class ProjectDocuments extends View {
           if (!current()) return;
           this.bodyText = text; this.diagramLook = look; this.blocks = applyDiagrams(staged.blocks, diagrams); this.imageWarning = staged.unavailable;
           this.keepFigures();
-          this.setWatch('media', staged.files.map(dirname), cx);
+          this.mediaFiles = staged.files.slice(); this.setWatch('media', staged.files.map(dirname), cx);
           this.truncated = text.length > LIMIT;
         }
         this.bodyError = null; this.lastSuccess = Date.now();

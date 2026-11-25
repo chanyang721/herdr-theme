@@ -643,6 +643,7 @@ test('a document in the pins file folder still refreshes on its own change', asy
   h.state.active = true; h.view.choose('n', h.cx); await h.flush();
   const before = h.calls.length;
   h.watchers.get('/app/data/sixfold').resolve(['/app/data/sixfold/doc-tabs-install.lock']); await h.flush();
+  assert.equal(h.calls.length, before, 'an unrelated file there (the installer lock) still refreshes nothing');
   h.state.text = () => 'edited note';
   h.watchers.get('/app/data/sixfold').resolve(['/app/data/sixfold/note.md']); await h.flush();
   assert.ok(h.calls.length > before, 'the open document there is reread');
