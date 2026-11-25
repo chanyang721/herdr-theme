@@ -99,7 +99,7 @@ export default class ProjectDocuments extends View {
     this.config = p.pinsConfig || `${appHome()}/data/sixfold/project-docs-pins.json`;
     this.mermaidCommand = helper(p, 'mermaid', 'render_mermaid');
     this.htmlCommand = helper(p, 'html', 'render_html');
-    this.documents = []; this.watchers = new Map(); this.generation = 0;
+    this.documents = []; this.watchers = new Map(); this.watchGroups = new Map(); this.generation = 0;
     this.selected = shared(STATE)?.[this.spaceId]; this.width = 800; this.paneWidth = 1200;
     this.kinds = []; this.localViews = null; this.kindFilter = null; this.kindMenu = false; this.sidebar = null;
     const saved = shared(FINDER)?.[this.spaceId] || {};
@@ -176,7 +176,7 @@ export default class ProjectDocuments extends View {
           setShared(STATE, { ...(shared(STATE) || {}), [this.spaceId]: this.selected });
         }
         if (this.revealPending && this.selected) { this.revealPending = false; this.revealInBrowser(this.selected); }
-        this.watch([dirname(this.config), ...(data.watchRoots || [])], cx);
+        this.setWatch('list', [dirname(this.config), ...(data.watchRoots || [])], cx);
         this.load(cx);
       } catch (error) { if (!this.closed) this.listError = String(error.message || error); }
       finally {
@@ -189,23 +189,32 @@ export default class ProjectDocuments extends View {
     });
   }
 
-  watch(roots, cx) {
-    for (const root of new Set(roots)) {
-      if (this.watchers.has(root)) continue;
-      const token = {}; this.watchers.set(root, token);
-      cx.spawn(async cx => {
-        try {
-          while (!this.closed && this.watchers.get(root) === token) {
-            const changed = await watchFolder(root);
-            if (this.closed || this.watchers.get(root) !== token) return;
-            // Ignore our installer lock and unrelated generated data in this
-            // folder; otherwise a refresh can trigger its own next refresh.
-            if (root === dirname(this.config) && !changed.some(path => path === root || path.endsWith('/' + this.config.split('/').pop()) || path.endsWith('/' + REQUEST))) continue;
-            if (this.visible()) this.refresh(cx); else this.stale = true;   // a hidden tab refreshes when shown
-          }
-        } catch { this.watchers.delete(root); }
-      });
-    }
+  // What this tab watches, by reason: 'list' (the pins file and the resolver's roots), 'doc' (the open
+  // document's folder) and 'media' (that document's image folders). A folder no reason needs any more
+  // has its pending watch cancelled at once, so watches never pile up as documents are opened.
+  setWatch(group, roots, cx) {
+    this.watchGroups.set(group, new Set((roots || []).filter(root => typeof root === 'string' && root)));
+    const want = new Set([...this.watchGroups.values()].flatMap(set => [...set]));
+    for (const [root, entry] of this.watchers) if (!want.has(root)) { this.watchers.delete(root); entry.handle?.cancel?.(); }
+    if (this.closed) return;
+    for (const root of want) if (!this.watchers.has(root)) this.startWatch(root, cx);
+  }
+
+  startWatch(root, cx) {
+    const entry = { handle: null }; this.watchers.set(root, entry);
+    cx.spawn(async cx => {
+      try {
+        while (!this.closed && this.watchers.get(root) === entry) {
+          const handle = entry.handle = watchFolder(root);
+          const changed = await handle;
+          if (this.closed || this.watchers.get(root) !== entry) return;
+          // Ignore our installer lock and unrelated generated data in this
+          // folder; otherwise a refresh can trigger its own next refresh.
+          if (root === dirname(this.config) && !changed.some(path => path === root || path.endsWith('/' + this.config.split('/').pop()) || path.endsWith('/' + REQUEST))) continue;
+          if (this.visible()) this.refresh(cx); else this.stale = true;   // a hidden tab refreshes when shown
+        }
+      } catch { if (this.watchers.get(root) === entry) this.watchers.delete(root); }
+    });
   }
 
   choose(id, cx) {
@@ -275,13 +284,15 @@ export default class ProjectDocuments extends View {
     if (doc?.on && doc.status === 'ok' && this.remoteAsked === key && !this.remoteForce) return;
     const generation = ++this.generation;
     this.loading = false;
+    // Another document (or none, or a remote one): the previous document's folders are no longer watched.
+    const watchedDoc = doc?.status === 'ok' && !doc.on ? doc.path : null;
+    if (this.watchedDoc !== watchedDoc) { this.watchedDoc = watchedDoc; this.setWatch('doc', watchedDoc ? [dirname(watchedDoc)] : [], cx); this.setWatch('media', [], cx); }
     if (!doc || doc.status !== 'ok') { this.bodyError = doc?.error || doc?.status || null; return; }
     if (doc.on) {
       this.lastPath = doc.path; this.lastId = doc.id; this.remoteForce = false; this.remoteAsked = key;
       return this.loadRemote(doc, key, generation, cx);
     }
     this.lastPath = doc.path; this.lastId = doc.id;
-    this.watch([dirname(doc.path)], cx);
     if (!readable(doc.path)) { this.blocks = null; this.bodyError = null; return; }
     this.loading = true;
     cx.spawn(async cx => {
@@ -313,7 +324,7 @@ export default class ProjectDocuments extends View {
           if (!current()) return;
           this.bodyText = text; this.diagramLook = look; this.blocks = applyDiagrams(staged.blocks, diagrams); this.imageWarning = staged.unavailable;
           this.keepFigures();
-          this.watch(staged.files.map(dirname), cx);
+          this.setWatch('media', staged.files.map(dirname), cx);
           this.truncated = text.length > LIMIT;
         }
         this.bodyError = null; this.lastSuccess = Date.now();
@@ -784,7 +795,7 @@ export default class ProjectDocuments extends View {
           .on_link_click((url, cx) => this.follow(doc.path, url, cx, doc)))));
   }
 
-  close() { this.closed = true; ++this.generation; this.watchers.clear(); }
+  close() { this.closed = true; ++this.generation; for (const entry of this.watchers.values()) entry.handle?.cancel?.(); this.watchers.clear(); this.watchGroups.clear(); }
 }
 
 // The zoom viewer for the open picture, over the whole pane.

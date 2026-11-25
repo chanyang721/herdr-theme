@@ -52,7 +52,7 @@ async function localViews({ documents = [document('a'), document('b')], selectio
       if (state.result) return state.result();
       return { code: 0, stdout: JSON.stringify({ spaceId: 'Demo', documents: state.documents, warnings: [], checkedAt: 1, watchRoots: ['/docs'] }), stderr: '' };
     },
-    watchFolder: root => { const pending = deferred(); watchers.set(root, pending); return pending.promise; },
+    watchFolder: root => { const pending = deferred(); pending.promise.cancel = () => { pending.cancelled = true; pending.resolve([]); }; watchers.set(root, pending); return pending.promise; },
     theme: () => ({ canvas: '#101010' }), settings: () => ({ dark: true, ...state.settings }), mermaidFences, applyDiagrams, shared: key => stored[key], setShared: (key, value) => { stored[key] = value; },
     spaces: () => [{ id: 'Demo', active: state.active, tabs: [{ id: 'tab-docs', active: true }] }],
     panes: () => [{ mod: 'project-docs-tabs', tab: 'tab-docs' }],
@@ -621,4 +621,19 @@ test('the soft mark counts the picture density and the app UI zoom, not a fixed 
   h.view.zoom.code = null; // a plain picture carries one pixel per point
   assert.equal(shown(0.6), '60% · 흐림');
   assert.equal(shown(0.5), '50%');
+});
+
+test('a folder no open document needs any more has its watch cancelled; closing cancels every watch', async () => {
+  const h = await localViews({ documents: [document('a', '/notes/a.md'), document('b', '/elsewhere/b.md')] });
+  h.view.choose('a', h.cx); await h.flush();
+  const notes = h.watchers.get('/notes');
+  assert.ok(notes && !notes.cancelled, 'the open document\'s folder is watched');
+  h.view.choose('b', h.cx); await h.flush();
+  assert.equal(notes.cancelled, true, 'another document: the old folder is released, not left pending');
+  assert.ok(h.watchers.get('/elsewhere') && !h.watchers.get('/elsewhere').cancelled);
+  assert.ok(!h.watchers.get('/docs').cancelled, 'the listing roots stay watched');
+  assert.deepEqual([...h.view.watchers.keys()].sort(), ['/app/data/sixfold', '/docs', '/elsewhere']);
+  const open = [...h.view.watchers.keys()].map(root => h.watchers.get(root));
+  h.view.close();
+  assert.ok(open.every(pending => pending.cancelled), 'closing the tab releases every watch');
 });

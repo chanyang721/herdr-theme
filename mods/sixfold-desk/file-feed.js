@@ -24,7 +24,7 @@ function immutable(value,seen=new Set()){
 export function createFileHub(adapter){
   if(typeof adapter?.readJson!=='function'||typeof adapter?.watch!=='function')throw new TypeError('readJson and watch adapters are required');
   const root=adapter.root,rootKey=keyOf(root),entries=new Map(),changes=new Set();
-  let disposed=false,watchTask=null,retryTask=null,watchToken=0,waitingToken=null,context=null;
+  let disposed=false,watchTask=null,retryTask=null,watchToken=0,waitingToken=null,context=null,pendingWatch=null;
   const metrics={watchStarts:0,watchWaits:0,watchBatches:0,ignoredBatches:0,matchedFiles:0,nativeReads:0,readRequests:0,readCompletions:0,callbacks:0,fileCallbacks:0,changeCallbacks:0,rebinds:0,errors:0,lastBatchAt:null,lastPaths:[],lastError:null,lastErrorPhase:null};
   const now=()=>typeof adapter.now==='function'?adapter.now():Date.now();
   const errors=(error,phase,path)=>{
@@ -36,9 +36,13 @@ export function createFileHub(adapter){
   const retireReads=()=>{for(const entry of entries.values()){entry.epoch++;entry.reading=null;entry.dirty=false;}};
   const subscribed=()=>entries.size>0||changes.size>0;
   const consumers=()=>[...[...entries.values()].flatMap(value=>[...value.listeners]),...changes];
+  // The native wait itself (adapter.watch's handle) is released too: cancelling only the task that
+  // awaits it would leave the host watch pending for ever, one more per stop or retirement.
+  const releaseWatch=()=>{const handle=pendingWatch;pendingWatch=null;cancel(handle);};
   const stop=()=>{
     watchToken++;
     waitingToken=null;
+    releaseWatch();
     cancel(watchTask);watchTask=null;
     cancel(retryTask);retryTask=null;
   };
@@ -123,6 +127,7 @@ export function createFileHub(adapter){
     if(disposed||!subscribed()||(!taskDone(watchTask)))return;
     const retired=Boolean(watchTask);
     if(retired){
+      releaseWatch();
       cancel(watchTask);
       // A cancelled source generation may leave its host promise pending for
       // ever. New work must not coalesce with that orphan or accept a late
@@ -140,7 +145,7 @@ export function createFileHub(adapter){
       const task=spawn(async()=>{
         while(!disposed&&subscribed()&&token===watchToken){
           let batch;
-          try{metrics.watchWaits++;waitingToken=token;batch=await adapter.watch(root);}catch(error){
+          try{metrics.watchWaits++;waitingToken=token;const handle=pendingWatch=adapter.watch(root);batch=await handle;if(pendingWatch===handle)pendingWatch=null;}catch(error){
             if(token===watchToken){waitingToken=null;watchTask=null;errors(error,'watch',root);retry(context);}
             return;
           }

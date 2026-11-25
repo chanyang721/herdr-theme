@@ -326,3 +326,18 @@ test('an "unchanged" answer for a different hash is read again instead of taggin
   assert.equal(rows.at(-1).status,'invalid');assert.deepEqual(rows.at(-1).value,{spaces:[]});
   hub.dispose();
 });
+
+test('the native wait itself is cancelled when the last subscriber leaves or the hub is disposed',async()=>{
+  const handles=[];
+  const f=fixture();
+  f.adapter.watch=root=>{let release;const p=new Promise(resolve=>{release=resolve;});p.cancelled=false;p.cancel=()=>{p.cancelled=true;release([]);};handles.push(p);return p;};
+  const hub=createFileHub(f.adapter);
+  const stop=hub.subscribe('/demo/views/feed.json',()=>{});await tick();
+  assert.equal(handles.length,1);
+  stop();await tick();
+  assert.equal(handles[0].cancelled,true,'no subscriber left: the host watch is released, not left pending');
+  hub.subscribe('/demo/views/feed.json',()=>{});await tick();
+  assert.equal(handles.length,2);
+  hub.dispose();
+  assert.equal(handles[1].cancelled,true,'disposed: released');
+});
