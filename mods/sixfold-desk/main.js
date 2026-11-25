@@ -970,8 +970,9 @@ export default class SixfoldDesk extends View {
     const workMeta=s=>Boolean(taskPanel?.bodyFor(s)&&taskPanel.taskFor(s)?.work);
     const mergedAlerts=s=>!hasNeeds(s.name)&&Boolean(taskPanel?.bodyFor(s)&&(taskPanel.taskFor(s)?.work||alertsOnMetaLine(taskPanel.taskFor(s),s.name)));
     const alertRowHeight=s=>hasWorkspaceAlerts(s.name)&&!mergedAlerts(s)?26:0;
-    // Only the alerts row holds a work card's alert popover: without the row, its open state is released.
-    for(const {s} of groups)if(workMeta(s)&&!hasNeeds(s.name))releaseAlertPopover(s.name);
+    // A card whose last request left releases an open requests tab; a work card, whose alert popover only
+    // its alerts row holds, releases any tab.
+    for(const {s} of groups)if(!hasNeeds(s.name))releaseAlertPopover(s.name,workMeta(s)?null:'needs');
     const positions={};let offset=0;
     for(const {s,members} of groups){
       const task=taskPanel?.taskFor(s),card=taskPanel?.layout?.cards.find(card=>card.space.id===task?.id);

@@ -204,4 +204,10 @@ test('an open alert popover of a card whose row went away is released, others ar
   releaseAlertPopover('alpha');
   assert.deepEqual(store.get('sixfold.alertPopover'),{},'released');
   assert.equal(popover.alertPopoverOpen(),false,'no longer holds back arrival peeks');
+  popover.showPopover('Alpha','slack');
+  releaseAlertPopover('Alpha','needs');
+  assert.equal(store.get('sixfold.alertPopover').source,'slack','only the requests tab is released by name');
+  popover.showPopover('Alpha','needs');
+  releaseAlertPopover('Alpha','needs');
+  assert.deepEqual(store.get('sixfold.alertPopover'),{},'the requests tab with nothing left does not reopen by itself');
 });

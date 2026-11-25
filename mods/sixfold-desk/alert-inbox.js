@@ -68,12 +68,13 @@ export const hasNeeds = name => spaceNeeds(name).length > 0;
 export const hasWorkspaceAlerts = name => hasSlackAlerts(name) || hasLinearAlerts(name) || hasGithubAlerts(name) || hasNeeds(name);
 // The whole row is the popover trigger, so the surface opens beside the card.
 // A badge press picks which source the popover shows first.
-// A card whose alerts row went away (a work card's last request left) draws no alert popover any more:
-// an open state naming it is released, so it neither lingers nor holds back the next arrival peek.
-// Writes only when that state is set, so a render that calls this every time writes nothing.
-export function releaseAlertPopover(name) {
+// An open state the card can no longer draw is released, so it neither lingers, nor holds back the next
+// arrival peek, nor opens again by itself when a new request comes: `source` given, only that tab (the
+// requests tab once the card's last request left); none, any tab (a work card whose alerts row went away).
+// Writes only when such a state is set, so a render that calls this every time writes nothing.
+export function releaseAlertPopover(name, source = null) {
   const open = popoverState();
-  if (open?.space && String(open.space).toLowerCase() === String(name).toLowerCase()) hidePopover();
+  if (open?.space && String(open.space).toLowerCase() === String(name).toLowerCase() && (!source || open.source === source)) hidePopover();
 }
 // `needsOnly`: a card whose meta line already carries its Slack, Linear and GitHub counts draws only the
 // requests chip here (no second copy of those counts). Its popover still has every tab, so an arrival peek
