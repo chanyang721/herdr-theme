@@ -41,9 +41,11 @@ export function briefRows(view,feed,motion,now=Date.now()){
   const animated=new Set();
   for(const agent of (feed?.spaces||[]).flatMap(space=>space.agents)){
     const state=agentRowState(agent);
-    // A working row keeps its spinner moving for as long as it works; the other
-    // animated states play only briefly after they change (CPU, 11/17).
-    if(motion&&state&&SESSION_STATES[state].animated&&(state==='working'||view.statusBrief.active(agent.id,state,now)))animated.add(agent.id);
+    // Every animated state, working included, plays only briefly after it changes, then
+    // holds its still image. An animated image makes GPUI rebuild the whole window's scene
+    // on each of its frames: one spinner per working row kept the app at 80-90% CPU
+    // (2026-11-25, 18-26% without). A working row shows it is alive through its stage bar.
+    if(motion&&state&&SESSION_STATES[state].animated&&view.statusBrief.active(agent.id,state,now))animated.add(agent.id);
   }
   view.animated=animated;
   return animated.size?view.statusBrief.nextAt(now):null;

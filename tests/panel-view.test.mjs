@@ -781,11 +781,13 @@ test('a status image animates for the brief window after a state change, then th
   assert.equal(r.briefRows(view,view.panelState.feed,false,now),null,'motion off: never animated');
   now+=8000;
   assert.equal(r.briefRows(view,view.panelState.feed,true,now),null);assert(!view.animated.has(agent.id));
-  // A working row keeps its spinner moving for as long as it works.
+  // Working, too, moves only for the brief window: a spinner that runs while the agent
+  // works redraws the whole window on every frame.
   agent.state='working';agent.status='working';
   r.briefRows(view,view.panelState.feed,true,now);assert(view.animated.has(agent.id));
-  now+=60000;
-  r.briefRows(view,view.panelState.feed,true,now);assert(view.animated.has(agent.id),'still working: still moving');
+  now+=8000;
+  assert.equal(r.briefRows(view,view.panelState.feed,true,now),null,'still working: holds the still image');
+  assert(!view.animated.has(agent.id));
   assert.equal(r.briefRows(view,view.panelState.feed,false,now),null,'motion off: never animated');
  }finally{Date.now=realNow;}
 });
