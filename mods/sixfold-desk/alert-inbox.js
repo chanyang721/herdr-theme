@@ -68,8 +68,9 @@ export const hasNeeds = name => spaceNeeds(name).length > 0;
 export const hasWorkspaceAlerts = name => hasSlackAlerts(name) || hasLinearAlerts(name) || hasGithubAlerts(name) || hasNeeds(name);
 // The whole row is the popover trigger, so the surface opens beside the card.
 // A badge press picks which source the popover shows first.
-// `needsOnly`: a card whose meta line already carries its Slack, Linear and GitHub counts draws this row
-// for its requests only (no second copy of those chips, and its popover answers only to that tab).
+// `needsOnly`: a card whose meta line already carries its Slack, Linear and GitHub counts draws only the
+// requests chip here (no second copy of those counts). Its popover still has every tab, so an arrival peek
+// that opens the card's Slack or GitHub popover lands here.
 export function workspaceAlertsRow(space,t,{motion=true,needsOnly=false}={}) {
   if(needsOnly?!hasNeeds(space.name):!hasWorkspaceAlerts(space.name))return div();
   const scope={project:space.name,motion};
@@ -81,8 +82,8 @@ export function workspaceAlertsRow(space,t,{motion=true,needsOnly=false}={}) {
   // Presses stop here so the card underneath is not selected or dragged.
   const stop=(_e,cx)=>cx.stop_propagation();
   return div().id(`sf-channel-alerts-wrap-${space.id}`).h(26).flex_none().on_mouse_down('left',stop).on_mouse_up('left',stop)
-    .child(alertPopover({id:space.id,project:space.name,trigger:row,t,hasSlack:!needsOnly&&hasSlackAlerts(space.name),hasLinear:!needsOnly&&hasLinearAlerts(space.name),
-      hasGithub:!needsOnly&&hasGithubAlerts(space.name),hasNeeds:hasNeeds(space.name),only:needsOnly?['needs']:null,onAll:source=>openFor(source,{project:space.name})}));
+    .child(alertPopover({id:space.id,project:space.name,trigger:row,t,hasSlack:hasSlackAlerts(space.name),hasLinear:hasLinearAlerts(space.name),
+      hasGithub:hasGithubAlerts(space.name),hasNeeds:hasNeeds(space.name),onAll:source=>openFor(source,{project:space.name})}));
 }
 // A task card carries its alerts on its meta line when that line can show both
 // sources (a Linear chip, or no Linear alerts) and the space has no GitHub chip (the

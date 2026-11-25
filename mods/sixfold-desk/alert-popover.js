@@ -193,10 +193,10 @@ const arrivedUnread = project => {
 };
 
 // `trigger` is the whole alerts row of the card, so the surface opens beside the card.
-export function alertPopover({id, project, trigger, t, hasSlack, hasLinear, hasGithub = false, hasNeeds = false, only = null, onAll}) {
+export function alertPopover({id, project, trigger, t, hasSlack, hasLinear, hasGithub = false, hasNeeds = false, onAll}) {
   const state = popoverState();
-  // A tab the card no longer has (its last request dismissed) is not open; `only` limits a card to its own tabs.
-  const source = SOURCES.find(name => (!only || only.includes(name)) && (name !== 'needs' || hasNeeds) && popoverOpen(state, project, name, BOOT)) ?? null;
+  // A requests tab the card no longer has (its last request dismissed) is not open.
+  const source = SOURCES.find(name => (name !== 'needs' || hasNeeds) && popoverOpen(state, project, name, BOOT)) ?? null;
   const fallback = hasNeeds ? 'needs' : hasSlack ? 'slack' : hasLinear ? 'linear' : hasGithub ? 'github' : 'slack';
   const popover = Popover.new(`sf-alert-pop-${id}`).anchor('left_center').open(Boolean(source))
     .on_open_change((value, cx) => {

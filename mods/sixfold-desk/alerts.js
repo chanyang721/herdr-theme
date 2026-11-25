@@ -91,7 +91,13 @@ export function watchAlerts(view, cx) {
   const redraw=()=>{if(disposed)return;view.panelRetained?.alertsChanged?.();cx.notify();};
   setNeedsDismisser(item=>{
     view.alerts=(view.alerts??[]).filter(other=>other.id!==item.id);redraw();
-    const done=dismissals.then(()=>dismiss(item.id)).catch(()=>{restoreSpaceNeed(item);view.alerts=[...(view.alerts??[]),item];redraw();});
+    // Only the feed's current copy comes back, and only while it still needs the person: a request the
+    // feed dropped or changed meanwhile is not revived from the copy that was pressed.
+    const done=dismissals.then(()=>dismiss(item.id)).catch(()=>{
+      const latest=(cached.get('legacy')?.value?.items??[]).find(other=>other?.id===item.id&&other.status==='needs-you');
+      if(!latest||(view.alerts??[]).some(other=>other.id===latest.id))return;
+      restoreSpaceNeed(latest);view.alerts=[...(view.alerts??[]),latest];redraw();
+    });
     dismissals=done;return done;
   });
   // Each key is written only when it changed: a health heartbeat no longer rewrites the item arrays.

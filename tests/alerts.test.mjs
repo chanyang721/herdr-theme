@@ -114,10 +114,15 @@ test('needs dismissals from a card write the ledger one after another and a fail
     h.view.alerts=[{id:'a',status:'needs-you'},{id:'b',status:'needs-you'},{id:'c',status:'needs-you'}];
     await Promise.all([dismisser({id:'a'}),dismisser({id:'b'})]);
     assert.deepEqual(nativeParse(files.get('alerts-dismissed.json')),['a','b'],'both kept: the second write saw the first');
+    files.set('alerts.json',JSON.stringify({items:[{id:'c',status:'needs-you',terminal:'new-pane'},{id:'d',status:'needs-you'}]}));await h.refresh();
     h.setWriteHook(()=>{throw Error('disk full');});
-    await dismisser({id:'c',status:'needs-you'});
-    assert.deepEqual(h.view.alerts.map(i=>i.id),['c'],'a failed write puts it back');
-    assert.deepEqual(restored.map(i=>i.id),['c']);
+    await dismisser({id:'c',status:'needs-you',terminal:'old-pane'});
+    assert.equal(h.view.alerts.filter(i=>i.id==='c').length,1,'a failed write puts it back once');
+    assert.deepEqual(restored.map(i=>[i.id,i.terminal]),[['c','new-pane']],'the feed\'s current copy, not the pressed one');
+    files.set('alerts.json',JSON.stringify({items:[]}));await h.refresh();
+    await dismisser({id:'d',status:'needs-you'});
+    assert.deepEqual(restored.map(i=>i.id),['c'],'a request the feed dropped meanwhile is not revived');
+    assert.deepEqual(h.view.alerts,[]);
   }finally{h.setWriteHook(null);h.stop();}
 });
 
