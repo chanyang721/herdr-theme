@@ -6,7 +6,7 @@ import {readJsonSnapshot,subscribeJsonFile,subscribeFileChanges} from './panel-i
 import {addArrival,hasArrivalHost} from './arrival-store.js';
 import {arrivalTarget,ARRIVAL} from './arrival-model.js';
 import {createRetry,watchRecorder} from './watch-guard.js';
-import {setSpaceMentions,noteArrived,setSpaceNeeds,setNeedsDismisser} from './alert-mentions.js';
+import {setSpaceMentions,noteArrived,setSpaceNeeds,setNeedsDismisser,restoreSpaceNeed} from './alert-mentions.js';
 import {createSharedPublisher,slackHealthView} from './shared-publish.js';
 
 const SHOWN = new Set(['needs-you']);  // Only what a person must decide; the rest stays in the project.
@@ -84,8 +84,16 @@ export function watchAlerts(view, cx) {
   const base=`${appHome()}/data/sixfold`;
   const inputs=[['legacy','alerts.json',()=>({items:[]})],['tracked','project-alerts.json',()=>({items:[]})],['read','slack-alerts-read.json',()=>({})],['mentions','slack-mentions.json',()=>({items:[]})],['health','slack-live-health.json',()=>({})],['workflows','slack-workflows.json',()=>({jobs:{}})]];
   const cached=new Map(),subscriptions=[];
-  let loading=false,loadingAt=0,run=0,previous,disposed=false,scheduled=null,dirty=false,version=0,popupSeen=null,legacyToken=null,mentionsKey=null,needsKey=null;
-  setNeedsDismisser(id=>{view.alerts=(view.alerts??[]).filter(other=>other.id!==id);view.panelRetained?.alertsChanged?.();cx.notify();return dismiss(id);});
+  let loading=false,loadingAt=0,run=0,previous,disposed=false,scheduled=null,dirty=false,version=0,popupSeen=null,legacyToken=null,mentionsKey=null;
+  // Dismissals write the ledger one after another (each compare-and-swap sees the one before); a failed
+  // write puts the request back on its card, so it can be dismissed again.
+  let dismissals=Promise.resolve();
+  const redraw=()=>{if(disposed)return;view.panelRetained?.alertsChanged?.();cx.notify();};
+  setNeedsDismisser(item=>{
+    view.alerts=(view.alerts??[]).filter(other=>other.id!==item.id);redraw();
+    const done=dismissals.then(()=>dismiss(item.id)).catch(()=>{restoreSpaceNeed(item);view.alerts=[...(view.alerts??[]),item];redraw();});
+    dismissals=done;return done;
+  });
   // Each key is written only when it changed: a health heartbeat no longer rewrites the item arrays.
   const publish=createSharedPublisher(setShared);
   const allowed=()=>!disposed&&view.sidebarVisible!==false;
@@ -149,10 +157,8 @@ export function watchAlerts(view, cx) {
         changed=publish('sixfold.alertProjects',feed.projects ?? [],token('tracked'))||changed;
         const names=(spaces?.()??[]).map(s=>s.name),placed=JSON.stringify([token('mentions'),names]);
         if(placed!==mentionsKey){setSpaceMentions(tagged,names);mentionsKey=placed;changed=true;}   // a space's mentions count on its card too (alert-inbox.js; off-sidebar ones on the fallback space); module state, not shared
-        if(token('legacy')!==legacyToken){view.alerts = legacy.items ?? [];legacyToken=token('legacy');changed=true;}
-        // Each request that needs the person shows on its own space's card (the fallback space when none is shown).
-        const needsPlaced=JSON.stringify([token('legacy'),names]);
-        if(needsPlaced!==needsKey){setSpaceNeeds(view.alerts,names);needsKey=needsPlaced;changed=true;}
+        // Each request that needs the person shows on its own space's card (alert-mentions.js places it).
+        if(token('legacy')!==legacyToken){view.alerts = legacy.items ?? [];setSpaceNeeds(view.alerts);legacyToken=token('legacy');changed=true;}
         previous = signature;popupSeen=popupSignature;
         if(changed){
           cx.notify();

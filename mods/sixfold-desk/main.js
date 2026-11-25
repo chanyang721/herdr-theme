@@ -15,7 +15,7 @@ import { workflowNodes, delegationEvents, workflowStatus, sessionChildren, activ
 import { watchDocs, currentDocs } from './docs.js';
 import { docsFinder, docsFinderSignature, setDocsFinderOpen, docsGroup } from './docs-finder.js';
 import { watchAlerts, alertSection, visibleAlerts } from './alerts.js';
-import { workspaceAlertsRow, hasWorkspaceAlerts, hasNeeds, openInbox, cardAlertCounts, slackAlertsChip, alertsOnMetaLine, workspaceUnreadBadge, workspaceUnreadCounts, workspaceNotifications } from './alert-inbox.js';
+import { workspaceAlertsRow, hasWorkspaceAlerts, hasNeeds, setNeedsNames, openInbox, cardAlertCounts, slackAlertsChip, alertsOnMetaLine, workspaceUnreadBadge, workspaceUnreadCounts, workspaceNotifications } from './alert-inbox.js';
 import { startAlertArrivals, alertArrivalLayer, alertCardSignature } from './alert-arrivals.js';
 import { panePet } from './pets.js';
 import { motionEnabled, arrivalMotionEnabled, motionToggled, motionLabel, briefWindow, wakeAtBriefEnd } from './motion.js';
@@ -701,6 +701,8 @@ export default class SixfoldDesk extends View {
       : spaces().find(space => space.id === f?.space)?.machine ?? null;
     const workspaceList = spaces().filter(s => onlySpace ? s.id === onlySpace
       : (role !== 'sidebar' || !discoveryOnly) && (s.machine ?? null) === selectedMachine);
+    // Requests that need the person go to these cards (the fallback space for one whose space is not here).
+    if (role === 'sidebar') setNeedsNames(workspaceList.map(space => space.name));
     const workspaceIds = new Set(workspaceList.map(space => space.id));
     const tabIds = new Set(workspaceList.flatMap(s=>s.tabs.map(tab=>tab.id)));
     const titles = new Map();
@@ -964,6 +966,8 @@ export default class SixfoldDesk extends View {
     const extraHeight=s=>badgeRow(s)?20:0;
     // A task card with a meta line carries Slack and Linear alerts there; the separate alerts row is for other cards.
     // Requests that need the person have no place on the meta line: such a card keeps its alerts row.
+    // A work card's meta line keeps its own counts, so its row carries the requests only.
+    const workMeta=s=>Boolean(taskPanel?.bodyFor(s)&&taskPanel.taskFor(s)?.work);
     const mergedAlerts=s=>!hasNeeds(s.name)&&Boolean(taskPanel?.bodyFor(s)&&(taskPanel.taskFor(s)?.work||alertsOnMetaLine(taskPanel.taskFor(s),s.name)));
     const alertRowHeight=s=>hasWorkspaceAlerts(s.name)&&!mergedAlerts(s)?26:0;
     const positions={};let offset=0;
@@ -1115,7 +1119,7 @@ export default class SixfoldDesk extends View {
       .when(extraHeight(s)>0,e=>e.child(h_flex().id(`sf-space-extras-${s.id}`).h(18).flex_none().px(7).gap(4).items_center().min_w(0)
         .child(workspaceBadges(this,s,t))
       ))
-      .when(alertRowHeight(s)>0,e=>e.child(workspaceAlertsRow(s,t,{motion})))
+      .when(alertRowHeight(s)>0,e=>e.child(workspaceAlertsRow(s,t,{motion,needsOnly:workMeta(s)})))
       .children(taskBody?[taskBody]:members.map(p=>{
         const tab=s.tabs.find(tab=>tab.id===p.tab);
         const records=sessionChildren(this.workflowNodes,p.terminal,true);

@@ -172,14 +172,26 @@ test('requests that need the person sit on their own space card, unmapped ones o
   model.setFallbackSpace('Hub');
   try{
     const before=alertSignature('Hub');
+    needs.setNeedsNames(['Alpha','Hub']);
     needs.setSpaceNeeds([{id:'a',project:'Alpha',status:'needs-you'},{id:'none',project:'',status:'needs-you'},
-      {id:'gone',project:'Closed',status:'needs-you'},{id:'seen',project:'Alpha',status:'new'}],['Alpha','Hub']);
+      {id:'gone',project:'Closed',status:'needs-you'},{id:'seen',project:'Alpha',status:'new'}]);
     assert.deepEqual(needs.spaceNeeds('Alpha').map(i=>i.id),['a'],'only needs-you, on its own space');
     assert.deepEqual(needs.spaceNeeds('Hub').map(i=>i.id),['none','gone'],'no space or one not shown: the fallback space');
     assert.ok(hasNeeds('Hub')&&hasWorkspaceAlerts('Hub'),'the fallback space gets an alerts row for them');
     assert.equal(alertsOnMetaLine({slack:true},'Hub'),false,'the meta line has no room for them: the alerts row stays');
     assert.notEqual(alertSignature('Hub'),before,'the card redraws when they change');
-    needs.dropSpaceNeed('none');
+    const sig=alertSignature('Hub');
+    needs.setSpaceNeeds([{id:'none',project:'',status:'needs-you',title:'new title'},{id:'gone',project:'Closed',status:'needs-you'}]);
+    assert.notEqual(alertSignature('Hub'),sig,'a changed title or target redraws the card, not only a new id');
+    needs.setNeedsNames(['Alpha','Hub','Closed']);
+    assert.deepEqual(needs.spaceNeeds('Hub').map(i=>i.id),['none'],'a space opened on the sidebar takes its requests back');
+    assert.deepEqual(needs.spaceNeeds('Closed').map(i=>i.id),['gone']);
+    needs.setNeedsNames(['Alpha']);
+    assert.deepEqual(needs.spaceNeeds('Alpha').map(i=>i.id),['none','gone'],'fallback not drawn: the first card shown');
+    needs.setNeedsNames(['Alpha','Hub']);
+    const dropped=needs.dropSpaceNeed('none');
     assert.deepEqual(needs.spaceNeeds('Hub').map(i=>i.id),['gone'],'a dismissed one leaves at once');
+    needs.restoreSpaceNeed(dropped);
+    assert.deepEqual(needs.spaceNeeds('Hub').map(i=>i.id).sort(),['gone','none'],'a failed dismissal puts it back');
   }finally{needs.setSpaceNeeds([]);}
 });

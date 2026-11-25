@@ -42,7 +42,8 @@ export const oneLine = text => String(text ?? '').replace(/\s+/g, ' ').trim();
 // an earlier run or an hour ago does not count).
 export const alertPopoverOpen = (now = Date.now()) => {
   const state = popoverState();
-  return Boolean(state?.space) && SOURCES.some(source => popoverOpen(state, state.space, source, BOOT, now));
+  return Boolean(state?.space) && SOURCES.some(source => popoverOpen(state, state.space, source, BOOT, now)
+    && (source !== 'needs' || spaceNeeds(state.space).length > 0));   // the last request dismissed closes its tab
 };
 
 const SOURCES = ['slack', 'linear', 'github', 'needs'];
@@ -142,7 +143,7 @@ function needsRows(project, t) {
         .child(line(short(item.at), t.dim, 10).flex_none())
         .child(div().id(`sf-alert-pop-needs-x-${i}`).px(4).text_size(12).text_color(t.muted).cursor_pointer().tooltip('알림에서 빼기')
           .on_mouse_down('left', (_e, cx) => cx.stop_propagation()).on_mouse_up('left', (_e, cx) => cx.stop_propagation())
-          .on_click((_e, cx) => { cx.stop_propagation(); dismissNeed(item.id)?.catch?.(() => {}); cx.notify(); }).child('×')))
+          .on_click((_e, cx) => { cx.stop_propagation(); dismissNeed(item.id); if (!spaceNeeds(project).length) hidePopover(); cx.notify(); }).child('×')))
       .when(Boolean(body) && body !== oneLine(item.title || ''), e => e.child(line(body, t.muted, 11)));
   })};
 }
@@ -192,9 +193,10 @@ const arrivedUnread = project => {
 };
 
 // `trigger` is the whole alerts row of the card, so the surface opens beside the card.
-export function alertPopover({id, project, trigger, t, hasSlack, hasLinear, hasGithub = false, hasNeeds = false, onAll}) {
+export function alertPopover({id, project, trigger, t, hasSlack, hasLinear, hasGithub = false, hasNeeds = false, only = null, onAll}) {
   const state = popoverState();
-  const source = SOURCES.find(name => popoverOpen(state, project, name, BOOT)) ?? null;
+  // A tab the card no longer has (its last request dismissed) is not open; `only` limits a card to its own tabs.
+  const source = SOURCES.find(name => (!only || only.includes(name)) && (name !== 'needs' || hasNeeds) && popoverOpen(state, project, name, BOOT)) ?? null;
   const fallback = hasNeeds ? 'needs' : hasSlack ? 'slack' : hasLinear ? 'linear' : hasGithub ? 'github' : 'slack';
   const popover = Popover.new(`sf-alert-pop-${id}`).anchor('left_center').open(Boolean(source))
     .on_open_change((value, cx) => {

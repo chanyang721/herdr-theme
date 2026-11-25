@@ -21,7 +21,7 @@ async function alertFixture(files,{lineEnding='\n',opens=[],home='/test',arrived
     subscribeFileChanges:(_cx,name,callback)=>{const listener={path:name,callback};service.add(listener);return()=>service.delete(listener);},
     readJsonSnapshot:async name=>{const value=snapshot(name);await typedHook?.(name,value);return value;},
     readTextFile:async name=>files.get(name.split('/').at(-1))??null,
-    createRetry:guardModule.createRetry,watchRecorder:guardModule.watchRecorder,setSpaceMentions:items=>shared.set('spaceMentions',items),setSpaceNeeds:(items,names)=>shared.set('spaceNeeds',[items,names]),setNeedsDismisser:fn=>shared.set('needsDismisser',fn),noteArrived:(space,item)=>noted.push([space,item?.id]),
+    createRetry:guardModule.createRetry,watchRecorder:guardModule.watchRecorder,setSpaceMentions:items=>shared.set('spaceMentions',items),setSpaceNeeds:(items,names)=>shared.set('spaceNeeds',[items,names]),setNeedsDismisser:fn=>shared.set('needsDismisser',fn),restoreSpaceNeed:item=>shared.get('restore')?.push(item),noteArrived:(space,item)=>noted.push([space,item?.id]),
     ...sharedPublish,
     writeTextFile:async(name,value,expected)=>{const key=name.split('/').at(-1),old=files.get(key)??null;if(old!==expected)throw Error('compare-and-swap conflict');writes.push({name,value,expected});files.set(key,value);change(name);await writeHook?.(name,value);},
   };
@@ -104,6 +104,21 @@ test('dismissal ledger uses typed data and exact raw hash before its compare-and
     assert.deepEqual(nativeParse(files.get('alerts-dismissed.json')),['competing']);
     assert.equal(h.writes.length,1);
   }finally{h.stop();}
+});
+
+test('needs dismissals from a card write the ledger one after another and a failed one comes back',async()=>{
+  const files=new Map([['alerts-dismissed.json','[]']]),h=await alertFixture(files);
+  const restored=[];h.shared.set('restore',restored);
+  try{
+    const dismisser=h.shared.get('needsDismisser');
+    h.view.alerts=[{id:'a',status:'needs-you'},{id:'b',status:'needs-you'},{id:'c',status:'needs-you'}];
+    await Promise.all([dismisser({id:'a'}),dismisser({id:'b'})]);
+    assert.deepEqual(nativeParse(files.get('alerts-dismissed.json')),['a','b'],'both kept: the second write saw the first');
+    h.setWriteHook(()=>{throw Error('disk full');});
+    await dismisser({id:'c',status:'needs-you'});
+    assert.deepEqual(h.view.alerts.map(i=>i.id),['c'],'a failed write puts it back');
+    assert.deepEqual(restored.map(i=>i.id),['c']);
+  }finally{h.setWriteHook(null);h.stop();}
 });
 
 test('alerts recover after cold install and partial writes through typed subscriptions', async () => {

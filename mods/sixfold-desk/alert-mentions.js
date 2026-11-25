@@ -1,4 +1,4 @@
-import { projectKey, folded } from './alert-model.js';
+import { projectKey, folded, currentFallbackSpace } from './alert-model.js';
 import { arrivalTarget } from './arrival-model.js';
 
 // Mentions routed to a space (slack-mentions.json: unmapped channels, DMs and thread replies go to the fallback space).
@@ -43,28 +43,49 @@ export const arrivedFor = project => arrivedBySpace.get(projectKey(project)) ?? 
 export const clearArrived = () => { arrivedBySpace = new Map(); };
 
 // Requests that need the person (alerts.json, status needs-you: a pane waiting, a mention to sort).
-// Each belongs to its own space's card; one whose space is not on the sidebar (none named, closed,
-// unmapped) goes to the fallback space, as mentions do. Module state, set by alerts.js on each load.
+// Each belongs to its own space's card; one whose space is not among the cards the sidebar draws (none
+// named, closed, another computer's) goes to the fallback space, as mentions do. alerts.js sets the items
+// on each load and the sidebar sets the names it draws on each render; placement is redone only when the
+// items, those names or the fallback space change. Module state, not a shared value.
 const NEEDS = 'needs-you';
-let needsBySpace = new Map(), needsVersion = 0;
-export function setSpaceNeeds(items, names = []) {
-  const next = new Map(), onScreen = (names ?? []).length > 0;
-  for (const item of items ?? []) {
-    if (!item || typeof item.id !== 'string' || item.status !== NEEDS) continue;
-    const space = onScreen ? arrivalTarget(item.project, names) : item.project || '', key = projectKey(space);
-    if (!next.has(key)) next.set(key, []);
-    next.get(key).push(item);
+let needsItems = [], needsNames = null, needsBySpace = new Map(), needsKey = '', needsVersion = 0;
+function placeNeeds() {
+  const names = needsNames ?? [], key = JSON.stringify([needsVersion, names, currentFallbackSpace()]);
+  if (key === needsKey) return;
+  const next = new Map(), onScreen = names.length > 0;
+  for (const item of needsItems) {
+    const space = onScreen ? arrivalTarget(item.project, names) : item.project || '', group = projectKey(space);
+    if (!next.has(group)) next.set(group, []);
+    next.get(group).push(item);
   }
-  needsBySpace = next; needsVersion++;
+  needsBySpace = next; needsKey = key;
 }
-export const spaceNeeds = project => needsBySpace.get(projectKey(project)) ?? [];
-export const needsEpoch = () => needsVersion;
+export function setSpaceNeeds(items) {
+  needsItems = (items ?? []).filter(item => item && typeof item.id === 'string' && item.status === NEEDS);
+  needsVersion++;
+}
+// The names of the space cards the sidebar draws now (its computer and space filter applied).
+export function setNeedsNames(names) {
+  const next = (names ?? []).filter(name => typeof name === 'string');
+  if (!needsNames || next.length !== needsNames.length || next.some((name, i) => name !== needsNames[i])) needsNames = next;
+}
+export const spaceNeeds = project => { placeNeeds(); return needsBySpace.get(projectKey(project)) ?? []; };
+// What a card draws of its requests and what a press on each does: the card's redraw key.
+export const needsSignature = project => JSON.stringify(spaceNeeds(project).map(i => [i.id, i.title, i.summary, i.text, i.source, i.at, i.terminal, i.link]));
 export function dropSpaceNeed(id) {
-  const next = new Map();
-  for (const [key, list] of needsBySpace) { const kept = list.filter(item => item.id !== id); if (kept.length) next.set(key, kept); }
-  needsBySpace = next; needsVersion++;
+  const item = needsItems.find(other => other.id === id);
+  if (!item) return null;
+  needsItems = needsItems.filter(other => other.id !== id); needsVersion++;
+  return item;
+}
+export function restoreSpaceNeed(item) {
+  if (!item || needsItems.some(other => other.id === item.id)) return;
+  needsItems = [...needsItems, item]; needsVersion++;
 }
 // The dismiss ledger lives with the alerts watcher (alerts.js); the popover only asks for it here.
 let dismisser = null;
 export const setNeedsDismisser = fn => { dismisser = typeof fn === 'function' ? fn : null; };
-export function dismissNeed(id) { dropSpaceNeed(id); return dismisser ? dismisser(id) : Promise.resolve(); }
+export function dismissNeed(id) {
+  const item = dropSpaceNeed(id);
+  return item && dismisser ? dismisser(item) : Promise.resolve();
+}

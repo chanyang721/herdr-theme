@@ -4,7 +4,8 @@ import { shared, openOverlay } from 'herdr';
 import { createHash } from 'crypto';
 import { scopedAlerts, linearScoped, githubScoped, slackCopyDelay, projectKey, workspaceAlertCounts, workspaceAlertTimeline, folded, linkFeedSlack } from './alert-model.js';
 import { alertPopover, showPopover, popoverState, spaceMentions } from './alert-popover.js';
-import { mentionsEpoch, spaceNeeds } from './alert-mentions.js';
+import { mentionsEpoch, spaceNeeds, needsSignature, setNeedsNames } from './alert-mentions.js';
+export { setNeedsNames };
 import { arrivals } from './arrival-store.js';
 import { flyingIds } from './arrival-model.js';
 
@@ -40,7 +41,7 @@ export function alertSignature(name, motion = true) {
   const scope={project:name,motion},open=popoverState();
   // The copy-delay mark (hours shown and the copy's last message) redraws the row when it starts, moves or ends.
   const delay=hasSlackAlerts(name)?slackCopyDelay(shared('sixfold.slackHealth')):null;
-  return [hasSlackAlerts(name),hasLinearAlerts(name),hasGithubAlerts(name),spaceNeeds(name).map(i=>i.id).join(','),slackUnread(scope),linearUnreadNow(scope),hasGithubAlerts(name)?githubUnreadNow(scope):0,
+  return [hasSlackAlerts(name),hasLinearAlerts(name),hasGithubAlerts(name),needsSignature(name),slackUnread(scope),linearUnreadNow(scope),hasGithubAlerts(name)?githubUnreadNow(scope):0,
     open?.space===name?`${open.source}:${open.boot}:${open.at}`:'',
     delay?`${delay.hours}:${delay.at}`:''].join('|');
 }
@@ -67,19 +68,21 @@ export const hasNeeds = name => spaceNeeds(name).length > 0;
 export const hasWorkspaceAlerts = name => hasSlackAlerts(name) || hasLinearAlerts(name) || hasGithubAlerts(name) || hasNeeds(name);
 // The whole row is the popover trigger, so the surface opens beside the card.
 // A badge press picks which source the popover shows first.
-export function workspaceAlertsRow(space,t,{motion=true}={}) {
-  if(!hasWorkspaceAlerts(space.name))return div();
+// `needsOnly`: a card whose meta line already carries its Slack, Linear and GitHub counts draws this row
+// for its requests only (no second copy of those chips, and its popover answers only to that tab).
+export function workspaceAlertsRow(space,t,{motion=true,needsOnly=false}={}) {
+  if(needsOnly?!hasNeeds(space.name):!hasWorkspaceAlerts(space.name))return div();
   const scope={project:space.name,motion};
   const row=h_flex().id(`sf-channel-alerts-${space.id}`).h(26).w_full().px(10).gap(6).items_center().cursor_pointer()
-    .child(alertBadge(`space-${space.id}`,t,{...scope,popover:true}))
-    .child(linearBadge(`space-${space.id}`,t,{...scope,popover:true}))   // same chips as the merged meta line, no separate label
-    .child(githubBadge(`space-${space.id}`,t,{...scope,popover:true}))
+    .when(!needsOnly,e=>e.child(alertBadge(`space-${space.id}`,t,{...scope,popover:true}))
+      .child(linearBadge(`space-${space.id}`,t,{...scope,popover:true}))   // same chips as the merged meta line, no separate label
+      .child(githubBadge(`space-${space.id}`,t,{...scope,popover:true})))
     .child(needsBadge(`space-${space.id}`,t,{...scope,popover:true}));
   // Presses stop here so the card underneath is not selected or dragged.
   const stop=(_e,cx)=>cx.stop_propagation();
   return div().id(`sf-channel-alerts-wrap-${space.id}`).h(26).flex_none().on_mouse_down('left',stop).on_mouse_up('left',stop)
-    .child(alertPopover({id:space.id,project:space.name,trigger:row,t,hasSlack:hasSlackAlerts(space.name),hasLinear:hasLinearAlerts(space.name),
-      hasGithub:hasGithubAlerts(space.name),hasNeeds:hasNeeds(space.name),onAll:source=>openFor(source,{project:space.name})}));
+    .child(alertPopover({id:space.id,project:space.name,trigger:row,t,hasSlack:!needsOnly&&hasSlackAlerts(space.name),hasLinear:!needsOnly&&hasLinearAlerts(space.name),
+      hasGithub:!needsOnly&&hasGithubAlerts(space.name),hasNeeds:hasNeeds(space.name),only:needsOnly?['needs']:null,onAll:source=>openFor(source,{project:space.name})}));
 }
 // A task card carries its alerts on its meta line when that line can show both
 // sources (a Linear chip, or no Linear alerts) and the space has no GitHub chip (the

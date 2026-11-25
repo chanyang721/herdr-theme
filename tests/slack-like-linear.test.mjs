@@ -37,7 +37,7 @@ async function announcers() {
     openOverlay: o => opens.push(o), spaces: () => [{name: 'Alpha'}, {name: 'Hub'}], noteArrived: (space, item) => noted.push([space, item?.id]),
     run() {}, div: element, h_flex: element, v_flex: element, readTextFile: async () => null, writeTextFile: async () => {}, appHome: () => '/h',
     setShared() {}, createHash() {}, readJsonSnapshot() {}, subscribeJsonFile() {}, subscribeFileChanges() {}, createRetry() {}, watchRecorder() {},
-    setSpaceMentions() {}, setSpaceNeeds() {}, setNeedsDismisser() {}, createSharedPublisher() {}, slackHealthView() {}, linearHealthView() {}, placeItems: x => x, alertKind: () => ({}), alertLine: () => '',
+    setSpaceMentions() {}, setSpaceNeeds() {}, setNeedsDismisser() {}, restoreSpaceNeed() {}, createSharedPublisher() {}, slackHealthView() {}, linearHealthView() {}, placeItems: x => x, alertKind: () => ({}), alertLine: () => '',
     withLocalReads: x => x, onReadConfirmed() {}};
   const key = `__slackLikeLinear${Math.random().toString(36).slice(2)}`; globalThis[key] = runtime;
   const load = async name => {
