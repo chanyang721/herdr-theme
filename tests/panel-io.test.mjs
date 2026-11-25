@@ -318,3 +318,26 @@ test('a receiver that never gets its command keeps one entry per callback, and t
   const main=await readFile(new URL('../mods/sixfold-desk/main.js',import.meta.url),'utf8');
   assert.doesNotMatch(main,/fileReceiver\.enqueue\(\(\)=>/,'main.js must not enqueue a new arrow per call');
 });
+
+test('an "unchanged" answer for another hash is read again, also for a hub retained across a reload',async()=>{
+  const f=await fixture(),path=`${f.home}/data/sixfold/cards.json`;
+  f.reader(async(_path,options)=>options?.hash==null?{status:'ok',hash:'new',changed:true,value:{cards:[]}}:{status:'ok',hash:'new',changed:false,value:null});
+  const before=f.io.panelIoDiagnostics().nativeReads;
+  const read=await f.io.checkedRead(path,{hash:'old'});
+  assert.equal(read.status,'ready');assert.deepEqual(read.value,{cards:[]});assert.equal(read.hash,'new');
+  assert.deepEqual(f.reads.map(r=>r.options.hash),['old',null],'both native reads happen');
+  assert.equal(f.io.panelIoDiagnostics().nativeReads-before,2,'and both are counted');
+  f.reader(async()=>({status:'ok',hash:'other',changed:false,value:null}));
+  assert.equal((await f.io.checkedRead(path,{hash:'old'})).status,'invalid','still no value: a failed read, not the old value');
+  f.reader(async()=>({status:'ok',hash:'old',changed:false,value:null}));
+  assert.equal(Object.hasOwn(await f.io.checkedRead(path,{hash:'old'}),'value'),false,'the asked hash may be unchanged');
+  // A hub kept in globalThis by an earlier theme copy only gets a new adapter
+  // on reload: that adapter must carry the check.
+  const registry=globalThis.__sixfoldFileFeedHubsV1??=new Map();let adapter=null;
+  const kept={disposed:false,rebind(next){adapter=next;},subscribe(){return ()=>{};},subscribeChanges(){return ()=>{};}};
+  registry.set(f.home,{generation:'panel-files-v2',hubs:new Map([[f.home,kept]]),hub:kept});
+  try{
+    const stop=f.io.subscribeJsonFile(f.context(),path,()=>{});stop();
+    assert.equal(adapter?.readJson,f.io.checkedRead);
+  }finally{registry.delete(f.home);}
+});

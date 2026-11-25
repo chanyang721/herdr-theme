@@ -88,7 +88,7 @@ export function createFileHub(adapter){
           // A different hash without a value would tag the old cached value with
           // the new hash and hide every later change: read the value instead.
           if(result?.status==='ready'&&!own(result,'value')&&result.hash!==asked){
-            metrics.unchangedMismatches=(metrics.unchangedMismatches??0)+1;
+            metrics.unchangedMismatches=(metrics.unchangedMismatches??0)+1;metrics.nativeReads++;
             result=await adapter.readJson(entry.path,{hash:null});
             if(result?.status==='ready'&&!own(result,'value'))result={status:'invalid',hash:null};
           }

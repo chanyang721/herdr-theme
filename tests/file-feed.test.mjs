@@ -319,6 +319,7 @@ test('an "unchanged" answer for a different hash is read again instead of taggin
   await f.batch(['/demo/views/feed.json']);
   assert.deepEqual(f.reads.slice(1).map(read=>read.options),[{hash:'one'},{hash:null}]);
   assert.equal(rows.length,2);assert.deepEqual(rows[1].value,{spaces:[]});assert.equal(rows[1].hash,'two');
+  assert.equal(hub.diagnostics().nativeReads,f.reads.length,'the second read is counted too');
   // A reader that still gives no value is a failed read, not the old value.
   f.reader(async()=>({status:'ready',hash:'three',changed:false}));
   await f.batch(['/demo/views/feed.json']);

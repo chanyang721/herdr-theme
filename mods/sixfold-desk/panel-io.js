@@ -152,11 +152,26 @@ export function ignoredFolders(){
   const list=native.settings?.()?.['sixfold.watchIgnore'];
   return Array.isArray(list)?list.filter(folder=>typeof folder==='string'&&folder&&!folder.includes('..')):[];
 }
+// The shared hub outlives a theme reload (it stays in globalThis and only its
+// adapter is replaced), so a fix to how reads are trusted must live here, in
+// the adapter this module hands it, not only in the hub's own code.
+// "Unchanged" (no value) holds only for the hash asked about; any other hash
+// would tag the hub's old value with the new hash, so read the value instead.
+export async function checkedRead(path,options={}){
+  const asked=options?.hash??null;
+  let result=await readJson(path,options);
+  if(result?.status==='ready'&&!Object.hasOwn(result,'value')&&(result.hash??null)!==asked){
+    metrics.unchangedMismatches=(metrics.unchangedMismatches??0)+1;
+    result=await readJson(path,{...options,hash:null});
+    if(result?.status==='ready'&&!Object.hasOwn(result,'value'))result={status:'invalid',hash:null,changed:true};
+  }
+  return result;
+}
 function hubFor(root=native.appHome()){
   externalRoot(root); // Never turn a malformed configuration into a volume watch.
   const home=native.appHome();
   return getSharedFileHub({
-    root,appHome:home,readJson,watch:folder=>native.watchFolder(folder),
+    root,appHome:home,readJson:checkedRead,watch:folder=>native.watchFolder(folder),
     ignore:root===home?ignoredFolders().map(folder=>`${home}/${folder}`):[],
     start:(body,options,owner)=>owner.spawn(body,options),
     schedule:(ms,fn,owner)=>owner.timer.after(ms,fn,{owner:null}),
