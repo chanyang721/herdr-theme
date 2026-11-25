@@ -15,7 +15,7 @@ import { workflowNodes, delegationEvents, workflowStatus, sessionChildren, activ
 import { watchDocs, currentDocs } from './docs.js';
 import { docsFinder, docsFinderSignature, setDocsFinderOpen, docsGroup } from './docs-finder.js';
 import { watchAlerts, alertSection, visibleAlerts } from './alerts.js';
-import { workspaceAlertsRow, hasWorkspaceAlerts, openInbox, cardAlertCounts, slackAlertsChip, alertsOnMetaLine, workspaceUnreadBadge, workspaceUnreadCounts, workspaceNotifications } from './alert-inbox.js';
+import { workspaceAlertsRow, hasWorkspaceAlerts, hasNeeds, openInbox, cardAlertCounts, slackAlertsChip, alertsOnMetaLine, workspaceUnreadBadge, workspaceUnreadCounts, workspaceNotifications } from './alert-inbox.js';
 import { startAlertArrivals, alertArrivalLayer, alertCardSignature } from './alert-arrivals.js';
 import { panePet } from './pets.js';
 import { motionEnabled, arrivalMotionEnabled, motionToggled, motionLabel, briefWindow, wakeAtBriefEnd } from './motion.js';
@@ -963,7 +963,8 @@ export default class SixfoldDesk extends View {
     const badgeRow=s=>!metaLine(s)&&lineBadges(spaceBadges(this,s));
     const extraHeight=s=>badgeRow(s)?20:0;
     // A task card with a meta line carries Slack and Linear alerts there; the separate alerts row is for other cards.
-    const mergedAlerts=s=>Boolean(taskPanel?.bodyFor(s)&&(taskPanel.taskFor(s)?.work||alertsOnMetaLine(taskPanel.taskFor(s),s.name)));
+    // Requests that need the person have no place on the meta line: such a card keeps its alerts row.
+    const mergedAlerts=s=>!hasNeeds(s.name)&&Boolean(taskPanel?.bodyFor(s)&&(taskPanel.taskFor(s)?.work||alertsOnMetaLine(taskPanel.taskFor(s),s.name)));
     const alertRowHeight=s=>hasWorkspaceAlerts(s.name)&&!mergedAlerts(s)?26:0;
     const positions={};let offset=0;
     for(const {s,members} of groups){
@@ -1271,7 +1272,6 @@ export default class SixfoldDesk extends View {
         )
       .when(unplacedAsks.length>0, e=>e.child(askSection({asks:unplacedAsks,askErrors:this.askErrors},t,this.lang(),terminal=>{const p=panes().find(x=>x.terminal===terminal);return p?title(p):(terminal||'');})))
       .when((this.sessionReports ?? []).length>0, e=>e.child(reportsSection(this,t)))
-      .when(visibleAlerts(this.alerts).length>0, e=>e.child(alertSection(this,t)))
       .when(routes.length>0,e=>e.child(v_flex().id('sf-transient-flows').flex_none().px(10).py(6).gap(3).bg(t.surface).border_t(1).border_color(t.border)
         .children(routes.slice(0,2).map(flow=>h_flex().id(`sf-transfer-${flow.id}`).gap(5).items_center().text_size(10)
           .tooltip(`${label(flow.source)} → ${label(flow.target)} · ${this.lang()==='ko'?'전송 이벤트 · 읽음 확인 아님':'Send event, not a read receipt'}`)

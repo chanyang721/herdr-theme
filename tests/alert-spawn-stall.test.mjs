@@ -183,6 +183,7 @@ test('Slack alerts: after one refused spawn the next change still publishes', as
     return {status: 'ready', hash: digest(raw), value: JSON.parse(raw)}; };
   const runtime = {appHome: () => '/test', createHash, setShared: (key, value) => shared.set(key, value), openOverlay: () => {},
     spaces: () => [], addArrival: () => {}, hasArrivalHost: () => false, arrivalTarget: () => 'Hub', ARRIVAL: {visible: 3},
+    setSpaceNeeds: () => {}, setNeedsDismisser: () => {},
     subscribeJsonFile: (_cx, name, callback) => { callbacks.set(name, callback); return () => callbacks.delete(name); },
     subscribeFileChanges: () => () => {},
     readJsonSnapshot: async name => snapshot(name),

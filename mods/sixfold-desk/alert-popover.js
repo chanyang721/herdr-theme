@@ -1,11 +1,11 @@
 import { div, image } from 'gpui-kit';
 import { h_flex, v_flex, Popover } from 'gpui-base';
-import { shared, setShared } from 'herdr';
+import { shared, setShared, run } from 'herdr';
 import { scopedAlerts, alertVersion, linearScoped, changeLines, linearCategory, popoverOpen, popoverRows, projectKey, alertKind, alertLine, kindTone, popoverChangeLines,
   githubScoped, githubKind, githubLine, githubRef, githubTone, githubLink, folded } from './alert-model.js';
 import { feedNames, namesFor, alertTitle, readable } from './alert-slack.js';
 import { fileChips, loadFileText, followFileText, localNames } from './alert-files.js';
-import { spaceMentions, setSpaceMentions, arrivedFor } from './alert-mentions.js';
+import { spaceMentions, setSpaceMentions, arrivedFor, spaceNeeds, dismissNeed } from './alert-mentions.js';
 export { spaceMentions, setSpaceMentions };
 
 // A small surface beside a space card: the newest Slack and Linear alerts of that
@@ -45,7 +45,7 @@ export const alertPopoverOpen = (now = Date.now()) => {
   return Boolean(state?.space) && SOURCES.some(source => popoverOpen(state, state.space, source, BOOT, now));
 };
 
-const SOURCES = ['slack', 'linear', 'github'];
+const SOURCES = ['slack', 'linear', 'github', 'needs'];
 const short = at => {
   const d = new Date(at);
   if (Number.isNaN(d.getTime())) return '';
@@ -124,17 +124,40 @@ ${item.title || ''}
   })};
 }
 
+// Requests that need the person: pressing one goes to its pane (or opens its link); × dismisses it.
+function needsRows(project, t) {
+  const items = spaceNeeds(project);
+  return {unread: items.length, rows: items.map((item, i) => {
+    const target = item.terminal || null, link = !target && typeof item.link === 'string' && /^https:\/\//.test(item.link) ? item.link : null;
+    const body = oneLine(item.summary || item.text || item.title || '');
+    return v_flex().id(`sf-alert-pop-needs-${i}`).gap(2).p(8).rounded(6).bg(t.selected)
+      .when(Boolean(target || link), e => e.cursor_pointer().on_click((_e, cx) => {
+        cx.stop_propagation();
+        if (target) run('agent.focus', {terminal: target}); else cx.open_url(link);
+      }))
+      .tooltip(String(item.summary || item.text || item.title || '').slice(0, 400))
+      .child(h_flex().gap(6).items_center()
+        .child(div().px(5).rounded(3).flex_none().text_size(10).font_bold().bg(t.blocked || t.accent).text_color(t.background).child(item.source || '확인'))
+        .child(line(oneLine(item.title || ''), t.foreground, 12).font_bold().flex_1())
+        .child(line(short(item.at), t.dim, 10).flex_none())
+        .child(div().id(`sf-alert-pop-needs-x-${i}`).px(4).text_size(12).text_color(t.muted).cursor_pointer().tooltip('알림에서 빼기')
+          .on_mouse_down('left', (_e, cx) => cx.stop_propagation()).on_mouse_up('left', (_e, cx) => cx.stop_propagation())
+          .on_click((_e, cx) => { cx.stop_propagation(); dismissNeed(item.id)?.catch?.(() => {}); cx.notify(); }).child('×')))
+      .when(Boolean(body) && body !== oneLine(item.title || ''), e => e.child(line(body, t.muted, 11)));
+  })};
+}
+
 // The surface of a card's alert popover: its title, the Slack/Linear tabs, the rows of `source` and
 // 전체 보기. The popover and the new-alert peek both draw it, so a new Slack alert shows in the very
 // popover its chip opens (as a new Linear alert shows the top of its card's issue search).
 // `peek`: drawn by the arrival layer (no focus taken): a 새 알림 mark instead of the close button,
 // and the title or a tab opens the card's popover itself.
-function surface({id, project, source, t, slack, linear, github = null, onAll, onTab, onClose = null, onHead = null, peek = false}) {
-  const current = source === 'linear' ? linear : source === 'github' ? github : slack;
+function surface({id, project, source, t, slack, linear, github = null, needs = null, onAll, onTab, onClose = null, onHead = null, peek = false}) {
+  const current = source === 'linear' ? linear : source === 'github' ? github : source === 'needs' ? needs : slack;
   const tab = (name, label, data) => h_flex().id(`sf-alert-pop-tab-${id}-${name}`).h(28).px(10).gap(5).items_center().rounded(6)
     .bg(source === name ? t.selected : t.chrome).cursor_pointer()
     .on_click((_e, cx) => { cx.stop_propagation(); onTab(name); cx.notify(); })
-    .child(image(`mods/sixfold-desk/icons/${name}.svg`).size(13))
+    .child(name === 'needs' ? line('!', t.blocked || t.accent, 12).font_bold() : image(`mods/sixfold-desk/icons/${name}.svg`).size(13))
     .child(line(label, source === name ? t.foreground : t.muted, 12))
     .child(line(data.unread ? `미확인 ${data.unread}` : '0', data.unread ? t.accent : t.dim, 10));
   const head = h_flex().id(`sf-alert-pop-head-${id}`).gap(8).items_center()
@@ -149,15 +172,16 @@ function surface({id, project, source, t, slack, linear, github = null, onAll, o
     .child(h_flex().gap(4)
       .when(Boolean(slack), e => e.child(tab('slack', 'Slack', slack)))
       .when(Boolean(linear), e => e.child(tab('linear', 'Linear', linear)))
-      .when(Boolean(github), e => e.child(tab('github', 'GitHub', github))))
+      .when(Boolean(github), e => e.child(tab('github', 'GitHub', github)))
+      .when(Boolean(needs), e => e.child(tab('needs', '확인 필요', needs))))
     .child(v_flex().id(`sf-alert-pop-list-${id}`).max_h(420).overflow_y_scroll().gap(4)
       .when(!current || !current.rows.length, e => e.child(line('표시할 알림이 없습니다.', t.muted, 12).p(8)))
       .children(current ? current.rows : []))
     .child(h_flex().gap(6).items_center()
-      .child(line(source === 'slack' ? 'Slack 앱 읽음 상태와 별도' : source === 'github' ? 'GitHub 상태 기준 · 읽기 전용' : '읽음은 Linear 기준', t.dim, 10).flex_1())
-      .child(div().id(`sf-alert-pop-all-${id}`).px(10).py(5).rounded(5).text_size(12).font_semibold()
+      .child(line(source === 'needs' ? '누르면 그 페인이나 링크로 이동 · ×는 목록에서만 뺌' : source === 'slack' ? 'Slack 앱 읽음 상태와 별도' : source === 'github' ? 'GitHub 상태 기준 · 읽기 전용' : '읽음은 Linear 기준', t.dim, 10).flex_1())
+      .when(source !== 'needs', e => e.child(div().id(`sf-alert-pop-all-${id}`).px(10).py(5).rounded(5).text_size(12).font_semibold()
         .bg(t.surface).text_color(t.accent).hover(s => s.bg(t.hover)).cursor_pointer()
-        .on_click((_e, cx) => { cx.stop_propagation(); hidePopover(); onAll?.(source); cx.notify(); }).child('전체 보기')));
+        .on_click((_e, cx) => { cx.stop_propagation(); hidePopover(); onAll?.(source); cx.notify(); }).child('전체 보기'))));
 }
 
 // The Slack mentions that arrived for a space in this run and are still unread: the popover lists
@@ -168,10 +192,10 @@ const arrivedUnread = project => {
 };
 
 // `trigger` is the whole alerts row of the card, so the surface opens beside the card.
-export function alertPopover({id, project, trigger, t, hasSlack, hasLinear, hasGithub = false, onAll}) {
+export function alertPopover({id, project, trigger, t, hasSlack, hasLinear, hasGithub = false, hasNeeds = false, onAll}) {
   const state = popoverState();
   const source = SOURCES.find(name => popoverOpen(state, project, name, BOOT)) ?? null;
-  const fallback = hasSlack ? 'slack' : hasLinear ? 'linear' : hasGithub ? 'github' : 'slack';
+  const fallback = hasNeeds ? 'needs' : hasSlack ? 'slack' : hasLinear ? 'linear' : hasGithub ? 'github' : 'slack';
   const popover = Popover.new(`sf-alert-pop-${id}`).anchor('left_center').open(Boolean(source))
     .on_open_change((value, cx) => {
       // A badge press just chose its source; keep it rather than the fallback.
@@ -182,8 +206,8 @@ export function alertPopover({id, project, trigger, t, hasSlack, hasLinear, hasG
   if (!source) return popover;
   const arrived = hasSlack ? arrivedUnread(project) : [];
   const slack = hasSlack ? slackRows(project, t, new Set(arrived.map(item => item.id)), true, arrived) : null, linear = hasLinear ? linearRows(project, t) : null;
-  const github = hasGithub ? githubRows(project, t) : null;
-  return popover.content(surface({id, project, source, t, slack, linear, github, onAll,
+  const github = hasGithub ? githubRows(project, t) : null, needs = hasNeeds ? needsRows(project, t) : null;
+  return popover.content(surface({id, project, source, t, slack, linear, github, needs, onAll,
     onTab: name => showPopover(project, name), onClose: hidePopover}).ml(14));
 }
 

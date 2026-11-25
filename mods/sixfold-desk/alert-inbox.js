@@ -4,7 +4,7 @@ import { shared, openOverlay } from 'herdr';
 import { createHash } from 'crypto';
 import { scopedAlerts, linearScoped, githubScoped, slackCopyDelay, projectKey, workspaceAlertCounts, workspaceAlertTimeline, folded, linkFeedSlack } from './alert-model.js';
 import { alertPopover, showPopover, popoverState, spaceMentions } from './alert-popover.js';
-import { mentionsEpoch } from './alert-mentions.js';
+import { mentionsEpoch, spaceNeeds } from './alert-mentions.js';
 import { arrivals } from './arrival-store.js';
 import { flyingIds } from './arrival-model.js';
 
@@ -40,7 +40,7 @@ export function alertSignature(name, motion = true) {
   const scope={project:name,motion},open=popoverState();
   // The copy-delay mark (hours shown and the copy's last message) redraws the row when it starts, moves or ends.
   const delay=hasSlackAlerts(name)?slackCopyDelay(shared('sixfold.slackHealth')):null;
-  return [hasSlackAlerts(name),hasLinearAlerts(name),hasGithubAlerts(name),slackUnread(scope),linearUnreadNow(scope),hasGithubAlerts(name)?githubUnreadNow(scope):0,
+  return [hasSlackAlerts(name),hasLinearAlerts(name),hasGithubAlerts(name),spaceNeeds(name).map(i=>i.id).join(','),slackUnread(scope),linearUnreadNow(scope),hasGithubAlerts(name)?githubUnreadNow(scope):0,
     open?.space===name?`${open.source}:${open.boot}:${open.at}`:'',
     delay?`${delay.hours}:${delay.at}`:''].join('|');
 }
@@ -63,7 +63,8 @@ export const hasSlackAlerts = name => named(shared('sixfold.alertProjects'),name
 export const hasLinearAlerts = name => named(shared('sixfold.linearSpaces'),name);
 export const hasGithubAlerts = name => named(shared('sixfold.githubSpaces'),name);
 // The sidebar reserves the alerts row from this (row height), so it covers both sources.
-export const hasWorkspaceAlerts = name => hasSlackAlerts(name) || hasLinearAlerts(name) || hasGithubAlerts(name);
+export const hasNeeds = name => spaceNeeds(name).length > 0;
+export const hasWorkspaceAlerts = name => hasSlackAlerts(name) || hasLinearAlerts(name) || hasGithubAlerts(name) || hasNeeds(name);
 // The whole row is the popover trigger, so the surface opens beside the card.
 // A badge press picks which source the popover shows first.
 export function workspaceAlertsRow(space,t,{motion=true}={}) {
@@ -72,18 +73,19 @@ export function workspaceAlertsRow(space,t,{motion=true}={}) {
   const row=h_flex().id(`sf-channel-alerts-${space.id}`).h(26).w_full().px(10).gap(6).items_center().cursor_pointer()
     .child(alertBadge(`space-${space.id}`,t,{...scope,popover:true}))
     .child(linearBadge(`space-${space.id}`,t,{...scope,popover:true}))   // same chips as the merged meta line, no separate label
-    .child(githubBadge(`space-${space.id}`,t,{...scope,popover:true}));
+    .child(githubBadge(`space-${space.id}`,t,{...scope,popover:true}))
+    .child(needsBadge(`space-${space.id}`,t,{...scope,popover:true}));
   // Presses stop here so the card underneath is not selected or dragged.
   const stop=(_e,cx)=>cx.stop_propagation();
   return div().id(`sf-channel-alerts-wrap-${space.id}`).h(26).flex_none().on_mouse_down('left',stop).on_mouse_up('left',stop)
     .child(alertPopover({id:space.id,project:space.name,trigger:row,t,hasSlack:hasSlackAlerts(space.name),hasLinear:hasLinearAlerts(space.name),
-      hasGithub:hasGithubAlerts(space.name),onAll:source=>openFor(source,{project:space.name})}));
+      hasGithub:hasGithubAlerts(space.name),hasNeeds:hasNeeds(space.name),onAll:source=>openFor(source,{project:space.name})}));
 }
 // A task card carries its alerts on its meta line when that line can show both
 // sources (a Linear chip, or no Linear alerts) and the space has no GitHub chip (the
 // meta line has no room for a third); otherwise the alerts row stays.
 // Exactly one of the two is drawn, so one alerts popover belongs to a card.
-export const alertsOnMetaLine = (task, name) => Boolean(task && (task.slack || task.work) && (task.work?.tool === 'linear' || !hasLinearAlerts(name)) && !hasGithubAlerts(name));
+export const alertsOnMetaLine = (task, name) => Boolean(task && (task.slack || task.work) && (task.work?.tool === 'linear' || !hasLinearAlerts(name)) && !hasGithubAlerts(name) && !hasNeeds(name));
 // A task card shows Slack and Linear on its one meta line: the Slack part opens the
 // Slack alerts, the Linear chip (key · issues · unread) opens the issue search.
 export function cardAlertCounts(name, motion = true) {
@@ -157,6 +159,17 @@ export function linearBadge(id,t,scope={}) {
     .on_click(badgePress(scope,'linear',openLinearInbox))
     .flex().items_center().gap(3).child(image('mods/sixfold-desk/icons/linear.svg').size(13))
     .when(unread>0,e=>e.child(div().child(String(unread))));
+}
+// Requests that need the person (a waiting pane, a mention to sort) placed on this space.
+export function needsBadge(id,t,scope={}) {
+  const items=spaceNeeds(scope.project);
+  if(!items.length)return div();
+  return div().id(`sf-needs-${id}`).flex_none().px(5).py(2).rounded(4).text_size(10).font_bold()
+    .bg(t.blocked||t.accent).text_color(t.background)
+    .tooltip(`확인 필요 ${items.length}건\n${items.slice(0,6).map(i=>String(i.title||i.summary||'').split('\n')[0]).join('\n')}`)
+    .when(!scope.popover,e=>e.on_mouse_down('left',(_e,cx)=>cx.stop_propagation()).on_mouse_up('left',(_e,cx)=>cx.stop_propagation()))
+    .on_click(badgePress(scope,'needs',()=>{}))
+    .child(`! ${items.length}`);
 }
 export function githubBadge(id,t,scope={}) {
   if(!hasGithubAlerts(scope.project))return div();

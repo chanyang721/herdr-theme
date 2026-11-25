@@ -41,3 +41,30 @@ export function noteArrived(space, item) {
 }
 export const arrivedFor = project => arrivedBySpace.get(projectKey(project)) ?? [];
 export const clearArrived = () => { arrivedBySpace = new Map(); };
+
+// Requests that need the person (alerts.json, status needs-you: a pane waiting, a mention to sort).
+// Each belongs to its own space's card; one whose space is not on the sidebar (none named, closed,
+// unmapped) goes to the fallback space, as mentions do. Module state, set by alerts.js on each load.
+const NEEDS = 'needs-you';
+let needsBySpace = new Map(), needsVersion = 0;
+export function setSpaceNeeds(items, names = []) {
+  const next = new Map(), onScreen = (names ?? []).length > 0;
+  for (const item of items ?? []) {
+    if (!item || typeof item.id !== 'string' || item.status !== NEEDS) continue;
+    const space = onScreen ? arrivalTarget(item.project, names) : item.project || '', key = projectKey(space);
+    if (!next.has(key)) next.set(key, []);
+    next.get(key).push(item);
+  }
+  needsBySpace = next; needsVersion++;
+}
+export const spaceNeeds = project => needsBySpace.get(projectKey(project)) ?? [];
+export const needsEpoch = () => needsVersion;
+export function dropSpaceNeed(id) {
+  const next = new Map();
+  for (const [key, list] of needsBySpace) { const kept = list.filter(item => item.id !== id); if (kept.length) next.set(key, kept); }
+  needsBySpace = next; needsVersion++;
+}
+// The dismiss ledger lives with the alerts watcher (alerts.js); the popover only asks for it here.
+let dismisser = null;
+export const setNeedsDismisser = fn => { dismisser = typeof fn === 'function' ? fn : null; };
+export function dismissNeed(id) { dropSpaceNeed(id); return dismisser ? dismisser(id) : Promise.resolve(); }

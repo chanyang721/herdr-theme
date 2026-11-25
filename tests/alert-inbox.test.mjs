@@ -164,3 +164,22 @@ test('folded messages never count on the card, also when they come back through 
   assert.deepEqual(workspaceNotifications('Alpha').rows.map(i=>i.id),['fresh']);
   assert.deepEqual(popover.spaceMentions('Alpha').map(i=>i.id),['old'],'a folded mention is not kept; an unfolded copy of a folded row is deduped by it');
 });
+
+test('requests that need the person sit on their own space card, unmapped ones on the fallback space',async()=>{
+  const {hasNeeds,hasWorkspaceAlerts,alertsOnMetaLine,alertSignature}=await inbox();
+  const needs=await import(new URL('../mods/sixfold-desk/alert-mentions.js',import.meta.url).href);
+  const model=await import(new URL('../mods/sixfold-desk/alert-model.js',import.meta.url).href);
+  model.setFallbackSpace('Hub');
+  try{
+    const before=alertSignature('Hub');
+    needs.setSpaceNeeds([{id:'a',project:'Alpha',status:'needs-you'},{id:'none',project:'',status:'needs-you'},
+      {id:'gone',project:'Closed',status:'needs-you'},{id:'seen',project:'Alpha',status:'new'}],['Alpha','Hub']);
+    assert.deepEqual(needs.spaceNeeds('Alpha').map(i=>i.id),['a'],'only needs-you, on its own space');
+    assert.deepEqual(needs.spaceNeeds('Hub').map(i=>i.id),['none','gone'],'no space or one not shown: the fallback space');
+    assert.ok(hasNeeds('Hub')&&hasWorkspaceAlerts('Hub'),'the fallback space gets an alerts row for them');
+    assert.equal(alertsOnMetaLine({slack:true},'Hub'),false,'the meta line has no room for them: the alerts row stays');
+    assert.notEqual(alertSignature('Hub'),before,'the card redraws when they change');
+    needs.dropSpaceNeed('none');
+    assert.deepEqual(needs.spaceNeeds('Hub').map(i=>i.id),['gone'],'a dismissed one leaves at once');
+  }finally{needs.setSpaceNeeds([]);}
+});

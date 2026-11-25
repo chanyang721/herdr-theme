@@ -21,7 +21,7 @@ async function alertFixture(files,{lineEnding='\n',opens=[],home='/test',arrived
     subscribeFileChanges:(_cx,name,callback)=>{const listener={path:name,callback};service.add(listener);return()=>service.delete(listener);},
     readJsonSnapshot:async name=>{const value=snapshot(name);await typedHook?.(name,value);return value;},
     readTextFile:async name=>files.get(name.split('/').at(-1))??null,
-    createRetry:guardModule.createRetry,watchRecorder:guardModule.watchRecorder,setSpaceMentions:items=>shared.set('spaceMentions',items),noteArrived:(space,item)=>noted.push([space,item?.id]),
+    createRetry:guardModule.createRetry,watchRecorder:guardModule.watchRecorder,setSpaceMentions:items=>shared.set('spaceMentions',items),setSpaceNeeds:(items,names)=>shared.set('spaceNeeds',[items,names]),setNeedsDismisser:fn=>shared.set('needsDismisser',fn),noteArrived:(space,item)=>noted.push([space,item?.id]),
     ...sharedPublish,
     writeTextFile:async(name,value,expected)=>{const key=name.split('/').at(-1),old=files.get(key)??null;if(old!==expected)throw Error('compare-and-swap conflict');writes.push({name,value,expected});files.set(key,value);change(name);await writeHook?.(name,value);},
   };
