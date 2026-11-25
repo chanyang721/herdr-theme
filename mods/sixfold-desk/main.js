@@ -15,7 +15,7 @@ import { workflowNodes, delegationEvents, workflowStatus, sessionChildren, activ
 import { watchDocs, currentDocs } from './docs.js';
 import { docsFinder, docsFinderSignature, setDocsFinderOpen, docsGroup } from './docs-finder.js';
 import { watchAlerts, alertSection, visibleAlerts } from './alerts.js';
-import { workspaceAlertsRow, hasWorkspaceAlerts, hasNeeds, setNeedsNames, openInbox, cardAlertCounts, slackAlertsChip, alertsOnMetaLine, workspaceUnreadBadge, workspaceUnreadCounts, workspaceNotifications } from './alert-inbox.js';
+import { workspaceAlertsRow, hasWorkspaceAlerts, hasNeeds, setNeedsNames, releaseAlertPopover, openInbox, cardAlertCounts, slackAlertsChip, alertsOnMetaLine, workspaceUnreadBadge, workspaceUnreadCounts, workspaceNotifications } from './alert-inbox.js';
 import { startAlertArrivals, alertArrivalLayer, alertCardSignature } from './alert-arrivals.js';
 import { panePet } from './pets.js';
 import { motionEnabled, arrivalMotionEnabled, motionToggled, motionLabel, briefWindow, wakeAtBriefEnd } from './motion.js';
@@ -970,6 +970,8 @@ export default class SixfoldDesk extends View {
     const workMeta=s=>Boolean(taskPanel?.bodyFor(s)&&taskPanel.taskFor(s)?.work);
     const mergedAlerts=s=>!hasNeeds(s.name)&&Boolean(taskPanel?.bodyFor(s)&&(taskPanel.taskFor(s)?.work||alertsOnMetaLine(taskPanel.taskFor(s),s.name)));
     const alertRowHeight=s=>hasWorkspaceAlerts(s.name)&&!mergedAlerts(s)?26:0;
+    // Only the alerts row holds a work card's alert popover: without the row, its open state is released.
+    for(const {s} of groups)if(workMeta(s)&&!hasNeeds(s.name))releaseAlertPopover(s.name);
     const positions={};let offset=0;
     for(const {s,members} of groups){
       const task=taskPanel?.taskFor(s),card=taskPanel?.layout?.cards.find(card=>card.space.id===task?.id);

@@ -195,3 +195,13 @@ test('requests that need the person sit on their own space card, unmapped ones o
     assert.deepEqual(needs.spaceNeeds('Hub').map(i=>i.id).sort(),['gone','none'],'a failed dismissal puts it back');
   }finally{needs.setSpaceNeeds([]);}
 });
+
+test('an open alert popover of a card whose row went away is released, others are kept',async()=>{
+  const {store,releaseAlertPopover,popover}=await inbox();
+  popover.showPopover('Alpha','slack');
+  releaseAlertPopover('Beta');
+  assert.equal(store.get('sixfold.alertPopover').space,'Alpha','another card keeps its popover');
+  releaseAlertPopover('alpha');
+  assert.deepEqual(store.get('sixfold.alertPopover'),{},'released');
+  assert.equal(popover.alertPopoverOpen(),false,'no longer holds back arrival peeks');
+});

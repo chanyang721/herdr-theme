@@ -3,7 +3,7 @@ import { h_flex } from 'gpui-base';
 import { shared, openOverlay } from 'herdr';
 import { createHash } from 'crypto';
 import { scopedAlerts, linearScoped, githubScoped, slackCopyDelay, projectKey, workspaceAlertCounts, workspaceAlertTimeline, folded, linkFeedSlack } from './alert-model.js';
-import { alertPopover, showPopover, popoverState, spaceMentions } from './alert-popover.js';
+import { alertPopover, showPopover, hidePopover, popoverState, spaceMentions } from './alert-popover.js';
 import { mentionsEpoch, spaceNeeds, needsSignature, setNeedsNames } from './alert-mentions.js';
 export { setNeedsNames };
 import { arrivals } from './arrival-store.js';
@@ -68,6 +68,13 @@ export const hasNeeds = name => spaceNeeds(name).length > 0;
 export const hasWorkspaceAlerts = name => hasSlackAlerts(name) || hasLinearAlerts(name) || hasGithubAlerts(name) || hasNeeds(name);
 // The whole row is the popover trigger, so the surface opens beside the card.
 // A badge press picks which source the popover shows first.
+// A card whose alerts row went away (a work card's last request left) draws no alert popover any more:
+// an open state naming it is released, so it neither lingers nor holds back the next arrival peek.
+// Writes only when that state is set, so a render that calls this every time writes nothing.
+export function releaseAlertPopover(name) {
+  const open = popoverState();
+  if (open?.space && String(open.space).toLowerCase() === String(name).toLowerCase()) hidePopover();
+}
 // `needsOnly`: a card whose meta line already carries its Slack, Linear and GitHub counts draws only the
 // requests chip here (no second copy of those counts). Its popover still has every tab, so an arrival peek
 // that opens the card's Slack or GitHub popover lands here.
