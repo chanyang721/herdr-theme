@@ -788,6 +788,10 @@ test('a status image animates for the brief window after a state change, then th
   now+=8000;
   assert.equal(r.briefRows(view,view.panelState.feed,true,now),null,'still working: holds the still image');
   assert(!view.animated.has(agent.id));
+  // Resting and working again is a new change: it plays its brief window again.
+  agent.state='idle';agent.status='idle';now+=1000;r.briefRows(view,view.panelState.feed,true,now);
+  agent.state='working';agent.status='working';now+=1000;
+  r.briefRows(view,view.panelState.feed,true,now);assert(view.animated.has(agent.id),'working again: moves again');
   assert.equal(r.briefRows(view,view.panelState.feed,false,now),null,'motion off: never animated');
  }finally{Date.now=realNow;}
 });
