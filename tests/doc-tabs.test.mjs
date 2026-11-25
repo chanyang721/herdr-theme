@@ -637,3 +637,15 @@ test('a folder no open document needs any more has its watch cancelled; closing 
   h.view.close();
   assert.ok(open.every(pending => pending.cancelled), 'closing the tab releases every watch');
 });
+
+test('a document in the pins file folder still refreshes on its own change', async () => {
+  const h = await localViews({ documents: [document('n', '/app/data/sixfold/note.md')] });
+  h.state.active = true; h.view.choose('n', h.cx); await h.flush();
+  const before = h.calls.length;
+  h.watchers.get('/app/data/sixfold').resolve(['/app/data/sixfold/doc-tabs-install.lock']); await h.flush();
+  h.state.text = () => 'edited note';
+  h.watchers.get('/app/data/sixfold').resolve(['/app/data/sixfold/note.md']); await h.flush();
+  assert.ok(h.calls.length > before, 'the open document there is reread');
+  assert.equal(h.view.bodyText, 'edited note');
+  h.view.close();
+});

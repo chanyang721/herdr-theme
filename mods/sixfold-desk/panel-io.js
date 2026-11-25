@@ -167,6 +167,9 @@ export async function checkedRead(path,options={}){
   }
   return result;
 }
+// The hub's code generation. A hub kept in globalThis by an older theme copy is replaced (disposed),
+// not rebound, when this changes: v3 releases the native watch on stop, which a v2 hub never did.
+export const FILE_HUB_GENERATION='panel-files-v3';
 function hubFor(root=native.appHome()){
   externalRoot(root); // Never turn a malformed configuration into a volume watch.
   const home=native.appHome();
@@ -176,7 +179,7 @@ function hubFor(root=native.appHome()){
     start:(body,options,owner)=>owner.spawn(body,options),
     schedule:(ms,fn,owner)=>owner.timer.after(ms,fn,{owner:null}),
     onError:()=>{metrics.errors++;},
-  },{appHome:home,generation:'panel-files-v2'});
+  },{appHome:home,generation:FILE_HUB_GENERATION});
 }
 
 export const readJsonSnapshot=readJson;

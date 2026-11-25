@@ -210,7 +210,10 @@ export default class ProjectDocuments extends View {
           if (this.closed || this.watchers.get(root) !== entry) return;
           // Ignore our installer lock and unrelated generated data in this
           // folder; otherwise a refresh can trigger its own next refresh.
-          if (root === dirname(this.config) && !changed.some(path => path === root || path.endsWith('/' + this.config.split('/').pop()) || path.endsWith('/' + REQUEST))) continue;
+          // (Only when the folder is watched for the pins file alone: an open document or its images there
+          // must still refresh.)
+          const listOnly = !['doc', 'media'].some(group => this.watchGroups.get(group)?.has(root));
+          if (root === dirname(this.config) && listOnly && !changed.some(path => path === root || path.endsWith('/' + this.config.split('/').pop()) || path.endsWith('/' + REQUEST))) continue;
           if (this.visible()) this.refresh(cx); else this.stale = true;   // a hidden tab refreshes when shown
         }
       } catch { if (this.watchers.get(root) === entry) this.watchers.delete(root); }

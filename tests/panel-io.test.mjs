@@ -335,9 +335,18 @@ test('an "unchanged" answer for another hash is read again, also for a hub retai
   // on reload: that adapter must carry the check.
   const registry=globalThis.__sixfoldFileFeedHubsV1??=new Map();let adapter=null;
   const kept={disposed:false,rebind(next){adapter=next;},subscribe(){return ()=>{};},subscribeChanges(){return ()=>{};}};
-  registry.set(f.home,{generation:'panel-files-v2',hubs:new Map([[f.home,kept]]),hub:kept});
+  registry.set(f.home,{generation:f.io.FILE_HUB_GENERATION,hubs:new Map([[f.home,kept]]),hub:kept});
   try{
     const stop=f.io.subscribeJsonFile(f.context(),path,()=>{});stop();
     assert.equal(adapter?.readJson,f.io.checkedRead);
   }finally{registry.delete(f.home);}
+  // A hub left by the previous generation (which never released its native watch) is disposed and
+  // replaced on reload, so the new stop() that releases it is the one that runs.
+  const old={disposed:false,dispose(){this.disposed=true;},rebind(){assert.fail('an older generation must not be rebound');}};
+  registry.set(f.home,{generation:'panel-files-v2',hubs:new Map([[f.home,old]]),hub:old});
+  try{
+    const stop=f.io.subscribeJsonFile(f.context(),path,()=>{});stop();
+    assert.equal(old.disposed,true);
+    assert.notEqual(registry.get(f.home).hub,old);
+  }finally{registry.get(f.home)?.hub?.dispose?.();registry.delete(f.home);}
 });
