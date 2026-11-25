@@ -413,6 +413,16 @@ test('an activity change never republishes cached cards over a newer header read
   view.stopAsks();
 });
 
+test('a read time ahead of this clock is ignored, so it cannot freeze the summary', async () => {
+  const f = host([]), mod = await load(f.h), view = {}, cx = context();
+  f.store.set(SUMMARY_KEY, {...askSummary([]), at: Date.now() + 3_600_000, g: 'future'});
+  f.setCards([card('a1', 'pane-a')]);
+  mod.watchAsks(view, cx); await Promise.resolve(); await Promise.resolve();
+  assert.equal(summaryFor(f.store.get(SUMMARY_KEY), 'pane-a')?.n, 1);
+  assert.ok(f.store.get(SUMMARY_KEY).at <= Date.now());
+  view.stopAsks();
+});
+
 test('the read poll starts the cards recheck without waiting for it', async () => {
   const source = await readFile(new URL('../mods/sixfold-desk/main.js', import.meta.url), 'utf8');
   const poll = source.slice(source.indexOf('this.readPoll=createPoll(cx,'), source.indexOf('// Optional voice integration'));

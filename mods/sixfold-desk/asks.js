@@ -121,7 +121,9 @@ function popupElsewhere(cards, nameOf) {
 const generationOf = summary => summary && typeof summary === 'object' && typeof summary.g === 'string' ? summary.g : JSON.stringify(summary ?? null);
 // `at` is when the read behind a summary started: a reader with an older read
 // never replaces it.
-const readAtOf = summary => summary && typeof summary === 'object' && Number.isFinite(summary.at) ? summary.at : -Infinity;
+// A time ahead of this clock (another machine's, or a broken value) proves
+// nothing about order and is ignored, so it cannot freeze the summary.
+const readAtOf = (summary, now = Date.now()) => summary && typeof summary === 'object' && Number.isFinite(summary.at) && summary.at <= now ? summary.at : -Infinity;
 function writeSummary(next, at) {
   setShared(SUMMARY_KEY, {...next, at, g: `${Date.now().toString(36)}.${Math.random().toString(36).slice(2, 10)}`});
 }
