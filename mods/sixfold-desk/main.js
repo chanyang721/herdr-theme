@@ -636,7 +636,7 @@ export default class SixfoldDesk extends View {
     const mic = paneMic(p, facts, shared(MIC_KEY));
     const style = paneHeaderStyle(p, t);
     // Agent icon, model, speed, effort and permission of the pane's confirmed session, after the title.
-    const meta = paneMeta(p.terminal, shared), name = title(p), ask = paneAskButton(p, t, this.lang(), name);
+    const meta = paneMeta(p.terminal, shared), name = title(p), ask = paneAskButton(p, t, this.lang(), name, cx);
     // Task-list progress and running sub-agents of the same confirmed session.
     const work = paneWork(p.terminal, shared);
     // The cat moves for a few seconds after a status change, then holds its pose.

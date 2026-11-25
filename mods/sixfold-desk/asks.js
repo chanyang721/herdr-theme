@@ -2,7 +2,7 @@ import { div } from 'gpui-kit';
 import { h_flex, v_flex } from 'gpui-base';
 import { exec, writeTextFile, appHome, shared, setShared, openOverlay, closeOverlay, props, panes, spaces, focused, run } from 'herdr';
 import { KIND_WORDS, ASK_WORDS, SUMMARY_KEY, bridgeFrom, parseAsks, questionsOf, actionsOf, choose, complete, actionRequest, requestPath, acceptedReceipt, detailOf, selectionOf,
-  askSummary, summaryFor, groupAsks, cardsFor, queueFor, pageAfter, spaceAsks, spaceAskLayout, clampPage, reconcile, popupHeight, errorText, autoPopupTarget, prunedOpened } from './ask-model.js';
+  askSummary, summaryFor, unverifiedFor, summaryFromSnapshots, groupAsks, cardsFor, queueFor, pageAfter, spaceAsks, spaceAskLayout, clampPage, reconcile, popupHeight, errorText, autoPopupTarget, prunedOpened } from './ask-model.js';
 
 import {subscribeJsonFile,readJsonSnapshot} from './panel-io.js';
 
@@ -13,12 +13,16 @@ export function watchAsks(view, cx) {
   view.stopAsks?.();
   view.asks = null; view.askChoices = Object.create(null); view.askBusy = Object.create(null); view.askErrors = Object.create(null); view.askBridge = null;
   const directory=`${appHome()}${ROOT}`,inputs=[['bridge',bridgeFrom],['cards',parseAsks]];
-  const cached=new Map(),seen=new Set(),subscriptions=[];
+  // failed: inputs whose latest read was not a valid file (or a confirmed absence).
+  const cached=new Map(),seen=new Set(),failed=new Set(),subscriptions=[];
   let stopped=false,active=true,previous,pendingNotify=false,loading=null,version=0;
   const apply=()=>{
     if(stopped||seen.size!==inputs.length)return;
     const bridge=cached.get('bridge')??null,cards=bridge?(cached.get('cards')?.cards??null):null;
-    const signature=JSON.stringify([bridge,cards]);
+    // The pane summary says what the files say now: an unreadable input is
+    // published as such rather than as the last valid counts.
+    const status=failed.has('bridge')||(bridge&&failed.has('cards'))?'unreadable':cards?'ready':'missing';
+    const signature=JSON.stringify([bridge,cards,status]);
     if(signature!==previous){
       previous=signature;view.askBridge=bridge;
       const live=new Set((cards??[]).map(card=>`${card.id}:${card.revision}`));
@@ -26,20 +30,25 @@ export function watchAsks(view, cx) {
         delete view.askChoices[old.id];delete view.askErrors[old.id];
       }
       view.asks=cards;pendingNotify=true;
-      publishSummary(cards);
+      publishSummary(cards,status);
       popupElsewhere(cards,view.askNameOf);
     }
     if(pendingNotify&&active&&view.sidebarVisible!==false){pendingNotify=false;cx.notify();}
   };
+  const take=(key,parse,snapshot)=>{
+    if(snapshot.status==='missing'){cached.set(key,null);failed.delete(key);}
+    else if(snapshot.status==='ready'&&Object.hasOwn(snapshot,'value')){
+      const value=parse(snapshot.value);
+      if(value!==null){cached.set(key,value);failed.delete(key);}else failed.add(key);
+    }
+    // A ready snapshot without a value is an unchanged file: it keeps its state.
+    else if(snapshot.status!=='ready')failed.add(key);
+  };
   const accept=(key,parse,snapshot)=>{
     if(stopped)return;
     seen.add(key);version++;
-    if(snapshot.status==='missing')cached.set(key,null);
-    else if(snapshot.status==='ready'&&Object.hasOwn(snapshot,'value')){
-      const value=parse(snapshot.value);
-      if(value!==null)cached.set(key,value);
-    }
-    // Invalid or failed reads keep the last valid display. Only a confirmed
+    take(key,parse,snapshot);
+    // Invalid or failed reads keep the last valid sidebar list. Only a confirmed
     // missing bridge disables actions; sendAction rechecks its current bytes.
     apply();
   };
@@ -55,10 +64,7 @@ export function watchAsks(view, cx) {
         // the newly configured command with the previous cards envelope.
         for(let i=0;i<inputs.length;i++){
           const [key,parse]=inputs[i],snapshot=values[i];seen.add(key);
-          if(snapshot.status==='missing')cached.set(key,null);
-          else if(snapshot.status==='ready'&&Object.hasOwn(snapshot,'value')){
-            const value=parse(snapshot.value);if(value!==null)cached.set(key,value);
-          }
+          take(key,parse,snapshot);
         }
         version++;apply();
       }finally{loading=null;}
@@ -93,11 +99,38 @@ function popupElsewhere(cards, nameOf) {
 // Pane headers and the popup are other copies of this mod: they learn about
 // cards only through this summary (counts per terminal and a version), never
 // through the sidebar's objects. An unchanged summary is not rewritten.
-function publishSummary(cards) {
+function publishSummary(cards, status = 'ready') {
   try {
-    const next = askSummary(cards);
-    if (JSON.stringify(shared(SUMMARY_KEY) ?? null) !== JSON.stringify(next)) setShared(SUMMARY_KEY, next);
+    const current = shared(SUMMARY_KEY) ?? null, next = askSummary(cards, status, current);
+    if (JSON.stringify(current) !== JSON.stringify(next)) setShared(SUMMARY_KEY, next);
   } catch { /* Display-only signal; the cards file stays authoritative. */ }
+}
+// The summary is only a copy, rewritten by the sidebar watcher when a file
+// change reaches it. If that delivery stalls (a hidden or reloaded sidebar
+// copy) or the summary outlived its cards (shared.json persists), a header
+// would keep an answered request. So a header that shows a request re-reads
+// the files itself, at most every SUMMARY_CHECK_MS and only from a render,
+// and corrects the shared summary when the files disagree. The write is
+// compare-and-set: a summary the watcher published meanwhile wins.
+const SUMMARY_CHECK_MS = 5000;
+const summaryCheck = {at: 0, busy: false};
+export function checkSummary(cx, now = Date.now()) {
+  if (!cx?.spawn || summaryCheck.busy || now - summaryCheck.at < SUMMARY_CHECK_MS) return false;
+  summaryCheck.busy = true; summaryCheck.at = now;
+  const seen = JSON.stringify(shared(SUMMARY_KEY) ?? null);
+  try {
+    cx.spawn(async () => {
+      try {
+        const [b, c] = await Promise.all([snapshot('bridge'), snapshot('cards')]);
+        const current = shared(SUMMARY_KEY) ?? null;
+        if (JSON.stringify(current) !== seen) return;
+        const next = summaryFromSnapshots(b, c, current);
+        if (JSON.stringify(next) !== seen) setShared(SUMMARY_KEY, next);
+      } catch { /* Display-only; the next render checks again. */ }
+      finally { summaryCheck.busy = false; }
+    });
+  } catch { summaryCheck.busy = false; }
+  return true;
 }
 // Every read here goes through the same typed reader (and size bound) as the
 // sidebar watcher, so a card the sidebar shows is never too big to open.
@@ -162,9 +195,19 @@ export function goToPane(terminal) {
 }
 
 // The pane header's decision button: clearly coloured, with the kind and count.
-export function paneAskButton(p, t, lang, name) {
-  const pane = summaryFor(shared(SUMMARY_KEY), p.terminal);
-  if (!pane) return null;
+// `cx` (the header's render context) lets a shown button confirm itself
+// against the cards file; without it the shared summary is drawn as is.
+export function paneAskButton(p, t, lang, name, cx = null) {
+  const summary = shared(SUMMARY_KEY), pane = summaryFor(summary, p.terminal);
+  const unknown = !pane && unverifiedFor(summary, p.terminal);
+  if (!pane && !unknown) return null;
+  checkSummary(cx);
+  // The cards file could not be read: say so, never the last count.
+  if (unknown) return stop(h_flex().id(`sf-pane-ask-${p.pane}`).flex_none().h(22).px(9).rounded(4).border(1).border_color(t.blocked)
+    .bg(t.chrome).text_color(t.muted).text_size(11).items_center().cursor_pointer()
+    .tooltip(lang === 'ko' ? '확인 요청 파일을 읽지 못했습니다 — 눌러서 다시 읽기' : 'Could not read the requests file — click to read again')
+    .on_click((_e, cx) => { cx.stop_propagation(); openAskPopup(p.terminal, name, null); })
+    .child(lang === 'ko' ? '▲ 확인 불가' : '▲ Unconfirmed'));
   const label = `${kindLabel(lang, pane.kind)}${pane.n > 1 ? ` ${pane.n}` : ''}`;
   return stop(h_flex().id(`sf-pane-ask-${p.pane}`).flex_none().h(22).px(9).rounded(4).bg(t.blocked).text_color(t.background)
     .text_size(11).font_bold().items_center().cursor_pointer()

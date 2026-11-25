@@ -173,20 +173,54 @@ function digest(value) {
   for (let i = 0; i < value.length; i++) { h ^= value.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; }
   return h.toString(36);
 }
-// null cards (no bridge) publish an empty summary: the feature stays hidden.
-export function askSummary(cards) {
+// Where a summary came from: the cards file read as valid ('ready', possibly
+// empty), confirmed absent ('missing': no bridge or no cards file, so nothing
+// waits), or not readable ('unreadable': a failed, oversized or half-written
+// read). Only a 'ready' summary carries counts. An unreadable one names the
+// panes that had requests on the last good read, so their headers can say the
+// state is unconfirmed instead of keeping an old count.
+const SUMMARY_STATES = ['ready', 'missing', 'unreadable'];
+export function askSummary(cards, status = 'ready', previous = null) {
+  if (!SUMMARY_STATES.includes(status)) status = 'unreadable';
+  if (status === 'missing') return {status, v: '', panes: {}};
+  if (status === 'unreadable') {
+    const known = summaryState(previous) === 'ready' ? Object.keys(previous.panes ?? {})
+      : summaryState(previous) === 'unreadable' && Array.isArray(previous.unverified) ? previous.unverified : [];
+    const unverified = [...new Set(known.filter(t => typeof t === 'string'))].sort();
+    return {status, v: `!${digest(JSON.stringify(unverified))}`, panes: {}, unverified};
+  }
   const panes = {};
   for (const group of groupAsks(cards)) panes[group.terminal ?? ''] = {n: group.cards.length, kind: group.cards[0].kind};
   // The owning terminal is part of the version: a card moved to another pane
   // must leave the old pane's popup.
   // So is answerable: a card that now waits in its pane must lose its buttons in the popup.
   const live = (cards ?? []).map(card => JSON.stringify([card.id, card.revision, card.terminal ?? null, card.answerable !== false])).join('|');
-  return {v: live ? digest(live) : '', panes};
+  return {status, v: live ? digest(live) : '', panes};
 }
+// A summary without a known status (an older theme's, or garbage) is not a
+// reading of the cards file and is never drawn.
+export const summaryState = summary => summary && typeof summary === 'object' && SUMMARY_STATES.includes(summary.status) ? summary.status : null;
 export function summaryFor(summary, terminal) {
-  const pane = summary && typeof summary === 'object' && summary.panes && typeof summary.panes === 'object'
+  if (summaryState(summary) !== 'ready') return null;
+  const pane = summary.panes && typeof summary.panes === 'object'
     && Object.hasOwn(summary.panes, terminal ?? '') ? summary.panes[terminal ?? ''] : null;
   return pane && Number.isInteger(pane.n) && pane.n > 0 && ['permission', 'question', 'plan'].includes(pane.kind) ? pane : null;
+}
+// True when the cards file could not be read and this pane had requests on
+// the last good read: its header says "unconfirmed", never the old count.
+export const unverifiedFor = (summary, terminal) => summaryState(summary) === 'unreadable'
+  && Array.isArray(summary.unverified) && summary.unverified.includes(terminal ?? '');
+// The summary of the bridge and cards files as read right now (typed
+// snapshots {status: 'ready'|'missing'|'invalid', value}). A missing bridge or
+// cards file means nothing waits; any other failed read is 'unreadable'.
+export function summaryFromSnapshots(bridgeSnap, cardsSnap, previous = null) {
+  const value = snap => snap?.status === 'ready' && Object.hasOwn(snap, 'value') ? snap.value : undefined;
+  if (bridgeSnap?.status === 'missing') return askSummary(null, 'missing');
+  const bridge = value(bridgeSnap) === undefined ? null : bridgeFrom(value(bridgeSnap));
+  if (!bridge) return askSummary(null, 'unreadable', previous);
+  if (cardsSnap?.status === 'missing') return askSummary(null, 'missing');
+  const parsed = value(cardsSnap) === undefined ? null : parseAsks(value(cardsSnap));
+  return parsed ? askSummary(parsed.cards) : askSummary(null, 'unreadable', previous);
 }
 export const clampPage = (page, length) => length > 0 ? Math.min(Math.max(0, Number.isInteger(page) ? page : 0), length - 1) : 0;
 // Reconciles the popup's displayed cards with a fresh read: choices for a

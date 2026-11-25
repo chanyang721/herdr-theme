@@ -3,7 +3,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
-import {askSummary, groupAsks, summaryFor, cardsFor, spaceAsks, spaceAskLayout, SPACE_ASK_WIDTH, SPACE_ASK_GAP, reconcile, clampPage, popupHeight, SUMMARY_KEY, errorText} from '../mods/sixfold-desk/ask-model.js';
+import {askSummary, groupAsks, summaryFor, unverifiedFor, summaryFromSnapshots, cardsFor, spaceAsks, spaceAskLayout, SPACE_ASK_WIDTH, SPACE_ASK_GAP, reconcile, clampPage, popupHeight, SUMMARY_KEY, errorText} from '../mods/sixfold-desk/ask-model.js';
 
 const bridge = {python: 'python3', script: '/demo/bridge/provider.py', args: ['--local']};
 const card = (id, terminal, extra = {}) => ({id, revision: 'r1', kind: 'permission', terminal, title: `Title ${id}`,
@@ -223,7 +223,7 @@ test('summary groups cards per terminal, versions by id and revision, and hides 
   const summary = askSummary(cards);
   assert.deepEqual(summary.panes, {'pane-a': {n: 2, kind: 'permission'}, 'pane-b': {n: 1, kind: 'question'}, '': {n: 1, kind: 'permission'}});
   assert.notEqual(askSummary([{...cards[0], revision: 'r2'}, ...cards.slice(1)]).v, summary.v, 'a revision change moves the version');
-  assert.deepEqual(askSummary(null), {v: '', panes: {}});
+  assert.deepEqual(askSummary(null), {status: 'ready', v: '', panes: {}});
   assert.deepEqual(groupAsks(cards).map(g => [g.terminal, g.cards.map(c => c.id)]), [['pane-a', ['a1', 'a2']], ['pane-b', ['b1']], [null, ['u1']]]);
   assert.deepEqual(cardsFor(cards, 'pane-b').map(c => c.id), ['b1']);
   assert.deepEqual(cardsFor(cards, null).map(c => c.id), ['u1']);
@@ -252,7 +252,7 @@ test('the sidebar watcher publishes the per-pane summary only when it changes', 
   f.setCards([card('a1', 'pane-a')]); assert.equal(writes(), first, 'same cards do not rewrite shared state');
   f.setCards([card('a1', 'pane-a'), card('b1', 'pane-b')]); assert.equal(f.store.get(SUMMARY_KEY).panes['pane-b'].n, 1);
   f.files.delete('/demo/data/sixfold/bridge.json'); f.emit('/demo/data/sixfold/bridge.json');
-  assert.deepEqual(f.store.get(SUMMARY_KEY), {v: '', panes: {}}, 'no bridge: pane buttons disappear');
+  assert.deepEqual(f.store.get(SUMMARY_KEY), {status: 'missing', v: '', panes: {}}, 'no bridge: pane buttons disappear');
   view.stopAsks();
 });
 
@@ -271,6 +271,86 @@ test('pane header shows a decision button only for its own terminal and opens wi
   assert.equal(f.overlays[0].kind, 'popup'); assert.ok(f.overlays[0].width >= 520);
   assert.deepEqual(f.focus, [], 'no pane.focus/agent.focus');
   assert.ok(nodeOf(a).calls.includes('on_mouse_down'), 'press does not reach the header (which focuses the pane)');
+});
+
+// ---- the summary follows the cards file, not its last copy ----------------
+test('only a summary read from the files draws a header button; failed reads differ from none', () => {
+  assert.equal(summaryFor({v: 'old', panes: {'pane-a': {n: 1, kind: 'permission'}}}, 'pane-a'), null, 'an older-format summary is never drawn');
+  const ready = {status: 'ready', value: {schema: 1, cards: [card('a1', 'pane-a')]}}, bridgeOk = {status: 'ready', value: bridge};
+  assert.equal(summaryFor(summaryFromSnapshots(bridgeOk, ready), 'pane-a').n, 1);
+  assert.deepEqual(summaryFromSnapshots(bridgeOk, {status: 'ready', value: {schema: 1, cards: []}}), {status: 'ready', v: '', panes: {}});
+  assert.deepEqual(summaryFromSnapshots({status: 'missing'}, ready), {status: 'missing', v: '', panes: {}}, 'no bridge: nothing waits');
+  assert.deepEqual(summaryFromSnapshots(bridgeOk, {status: 'missing'}), {status: 'missing', v: '', panes: {}}, 'no cards file: nothing waits');
+  const before = askSummary([card('a1', 'pane-a')]);
+  for (const broken of [{status: 'invalid'}, {status: 'ready', value: {schema: 2}}, {status: 'ready'}]) {
+    const failed = summaryFromSnapshots(bridgeOk, broken, before);
+    assert.equal(failed.status, 'unreadable');
+    assert.equal(summaryFor(failed, 'pane-a'), null, 'no old count after a failed read');
+    assert.equal(unverifiedFor(failed, 'pane-a'), true, 'the pane that had requests says it is unconfirmed');
+    assert.equal(unverifiedFor(failed, 'pane-b'), false);
+  }
+  const twice = summaryFromSnapshots({status: 'invalid'}, ready, summaryFromSnapshots(bridgeOk, {status: 'invalid'}, before));
+  assert.deepEqual(twice.unverified, ['pane-a'], 'a second failed read keeps the unconfirmed panes');
+  assert.equal(unverifiedFor(summaryFromSnapshots(bridgeOk, {status: 'invalid'}, null), 'pane-a'), false, 'nothing known, nothing shown');
+});
+
+test('a header whose request was already answered re-reads the file and clears the stale button', async () => {
+  // The reported case: the shared summary still names a permission for a
+  // pane, the cards file is empty, and no sidebar watcher rewrites it.
+  const f = host([]), mod = await load(f.h), cx = context();
+  f.store.set(SUMMARY_KEY, askSummary([card('a1', 'pane-a')]));
+  let reads = 0; f.impl.readJsonSnapshot = async path => { reads++; return f.snapshot(path); };
+  assert.match(text(mod.paneAskButton({pane: 'p1', terminal: 'pane-a'}, theme, 'ko', 'Alpha', cx)), /권한/, 'drawn until the read returns');
+  await cx.settle();
+  assert.deepEqual(f.store.get(SUMMARY_KEY), {status: 'ready', v: '', panes: {}}, 'the shared summary is corrected for every copy');
+  assert.equal(mod.paneAskButton({pane: 'p1', terminal: 'pane-a'}, theme, 'ko', 'Alpha', cx), null);
+  assert.equal(reads, 2, 'one read of bridge and cards');
+  // A header with nothing to show reads nothing.
+  mod.paneAskButton({pane: 'p2', terminal: 'pane-b'}, theme, 'ko', 'Beta', cx); await cx.settle();
+  assert.equal(reads, 2);
+});
+
+test('header checks are bounded, never overwrite a newer summary, and show unreadable files as unconfirmed', async () => {
+  const f = host([card('a1', 'pane-a')]), mod = await load(f.h), cx = context();
+  f.store.set(SUMMARY_KEY, askSummary([card('a1', 'pane-a')]));
+  let reads = 0; f.impl.readJsonSnapshot = async path => { reads++; return f.snapshot(path); };
+  for (let i = 0; i < 5; i++) mod.paneAskButton({pane: 'p1', terminal: 'pane-a'}, theme, 'ko', 'Alpha', cx);
+  await cx.settle();
+  assert.equal(reads, 2, 'renders within the interval share one read');
+  assert.equal(f.calls.filter(c => c[0] === 'setShared').length, 0, 'an agreeing summary is not rewritten');
+  // The cards file turns unreadable: the count gives way to "unconfirmed".
+  f.files.set('/demo/data/sixfold/cards.json', '{"schema":1,"cards":[');
+  assert.equal(mod.checkSummary(cx, Date.now() + 10_000), true); await cx.settle();
+  assert.equal(f.store.get(SUMMARY_KEY).status, 'unreadable');
+  const unknown = mod.paneAskButton({pane: 'p1', terminal: 'pane-a'}, theme, 'ko', 'Alpha', cx);
+  assert.match(text(unknown), /확인 불가/); assert.doesNotMatch(text(unknown), /권한/);
+  nodeOf(unknown).click(event, context());
+  assert.equal(f.overlays.at(-1).props.terminal, 'pane-a', 'the popup reads again and offers a retry');
+  // Readable again with the request answered: nothing left on the header.
+  f.files.set('/demo/data/sixfold/cards.json', JSON.stringify({schema: 1, cards: []}));
+  mod.checkSummary(cx, Date.now() + 20_000); await cx.settle();
+  assert.equal(mod.paneAskButton({pane: 'p1', terminal: 'pane-a'}, theme, 'ko', 'Alpha', cx), null);
+  // The watcher publishes while a header read is out: the header's older read does not win.
+  const newer = askSummary([card('b1', 'pane-b')]);
+  f.impl.readJsonSnapshot = async path => { f.store.set(SUMMARY_KEY, newer); return f.snapshot(path); };
+  f.store.set(SUMMARY_KEY, askSummary([card('a1', 'pane-a')]));
+  mod.checkSummary(cx, Date.now() + 30_000); await cx.settle();
+  assert.deepEqual(f.store.get(SUMMARY_KEY), newer);
+});
+
+test('the sidebar watcher publishes a failed cards read as unreadable, not as the last counts', async () => {
+  const f = host([card('a1', 'pane-a')]), mod = await load(f.h), view = {}, cx = context();
+  mod.watchAsks(view, cx); await Promise.resolve(); await Promise.resolve();
+  assert.equal(summaryFor(f.store.get(SUMMARY_KEY), 'pane-a').n, 1);
+  f.files.set('/demo/data/sixfold/cards.json', '{"schema":1,"cards":['); f.emit('/demo/data/sixfold/cards.json');
+  assert.equal(f.store.get(SUMMARY_KEY).status, 'unreadable');
+  assert.equal(unverifiedFor(f.store.get(SUMMARY_KEY), 'pane-a'), true);
+  assert.deepEqual(view.asks.map(c => c.id), ['a1'], 'the sidebar list keeps the last valid cards');
+  f.setCards([]);
+  assert.deepEqual(f.store.get(SUMMARY_KEY), {status: 'ready', v: '', panes: {}});
+  f.files.delete('/demo/data/sixfold/cards.json'); f.emit('/demo/data/sixfold/cards.json');
+  assert.equal(f.store.get(SUMMARY_KEY).status, 'missing');
+  view.stopAsks();
 });
 
 // ---- sidebar compact summary ----------------------------------------------
