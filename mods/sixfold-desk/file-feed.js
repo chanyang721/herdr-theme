@@ -82,7 +82,16 @@ export function createFileHub(adapter){
         entry.dirty=false;
         try{
           metrics.nativeReads++;
-          const result=await adapter.readJson(entry.path,{hash:entry.hash});
+          const asked=entry.hash;
+          let result=await adapter.readJson(entry.path,{hash:asked});
+          // "Unchanged" (no value) is only meaningful for the hash asked about.
+          // A different hash without a value would tag the old cached value with
+          // the new hash and hide every later change: read the value instead.
+          if(result?.status==='ready'&&!own(result,'value')&&result.hash!==asked){
+            metrics.unchangedMismatches=(metrics.unchangedMismatches??0)+1;
+            result=await adapter.readJson(entry.path,{hash:null});
+            if(result?.status==='ready'&&!own(result,'value'))result={status:'invalid',hash:null};
+          }
           metrics.readCompletions++;
           if(!disposed&&entry.epoch===epoch&&entries.get(entry.key)===entry)publish(entry,result);
         }catch(error){

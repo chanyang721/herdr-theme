@@ -307,3 +307,21 @@ test('ignored folders never reach file or change subscribers, even a subscribed 
   assert.deepEqual(changes,[['/demo/views/other.json']],'the rest of a mixed batch is delivered');
   hub.dispose();
 });
+
+test('an "unchanged" answer for a different hash is read again instead of tagging the old value',async()=>{
+  // The cards watcher kept an answered card: the old value under a new hash
+  // makes every later read look unchanged. Only the asked hash may be unchanged.
+  const f=fixture(),hub=createFileHub(f.adapter),rows=[];
+  hub.subscribe('/demo/views/feed.json',value=>rows.push(value));await tick();
+  f.reader(async(_path,options)=>options?.hash===null
+    ?{status:'ready',hash:'two',changed:true,value:{spaces:[]}}
+    :{status:'ready',hash:'two',changed:false});
+  await f.batch(['/demo/views/feed.json']);
+  assert.deepEqual(f.reads.slice(1).map(read=>read.options),[{hash:'one'},{hash:null}]);
+  assert.equal(rows.length,2);assert.deepEqual(rows[1].value,{spaces:[]});assert.equal(rows[1].hash,'two');
+  // A reader that still gives no value is a failed read, not the old value.
+  f.reader(async()=>({status:'ready',hash:'three',changed:false}));
+  await f.batch(['/demo/views/feed.json']);
+  assert.equal(rows.at(-1).status,'invalid');assert.deepEqual(rows.at(-1).value,{spaces:[]});
+  hub.dispose();
+});
