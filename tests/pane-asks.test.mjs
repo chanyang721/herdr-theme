@@ -5,8 +5,8 @@ import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {askSummary, groupAsks, summaryFor, unverifiedFor, summaryFromSnapshots, cardsFor, spaceAsks, spaceAskLayout, SPACE_ASK_WIDTH, SPACE_ASK_GAP, reconcile, clampPage, popupHeight, SUMMARY_KEY, errorText} from '../mods/sixfold-desk/ask-model.js';
 
-// The summary as written, without its write generation.
-const plain = summary => { if (!summary || typeof summary !== 'object') return summary; const {g, ...rest} = summary; return rest; };
+// The summary as written, without its write generation and read time.
+const plain = summary => { if (!summary || typeof summary !== 'object') return summary; const {g, at, ...rest} = summary; return rest; };
 const bridge = {python: 'python3', script: '/demo/bridge/provider.py', args: ['--local']};
 const card = (id, terminal, extra = {}) => ({id, revision: 'r1', kind: 'permission', terminal, title: `Title ${id}`,
   actions: [{id: 'approve', label: 'Allow', primary: true}, {id: 'cancel', label: 'Deny'}], ...extra});
@@ -390,6 +390,47 @@ test('a header read never overwrites a summary that changed and changed back mea
   assert.equal(summaryFor(end, 'pane-a')?.n, 1, 'the late empty read does not win');
   assert.notEqual(end.g, start.g, 'every write carries a new generation');
   view.stopAsks();
+});
+
+test('an activity change never republishes cached cards over a newer header read', async () => {
+  const f = host([card('a1', 'pane-a')]), mod = await load(f.h), view = {}, cx = context();
+  mod.watchAsks(view, cx); await Promise.resolve(); await Promise.resolve();
+  // The card is answered but the event never reaches the watcher.
+  f.files.set('/demo/data/sixfold/cards.json', JSON.stringify({schema: 1, cards: []}));
+  mod.checkSummary(cx, Date.now() + 10_000); await cx.settle();
+  assert.equal(summaryFor(f.store.get(SUMMARY_KEY), 'pane-a'), null);
+  view.setAsksActive(false); view.setAsksActive(true);
+  assert.equal(summaryFor(f.store.get(SUMMARY_KEY), 'pane-a'), null, 'no read, no publish');
+  // A delivery from a read older than the header's does not win either.
+  const written = f.store.get(SUMMARY_KEY);
+  f.store.set(SUMMARY_KEY, {...written, at: Date.now() + 60_000});
+  f.files.set('/demo/data/sixfold/cards.json', JSON.stringify({schema: 1, cards: [card('a1', 'pane-a')]})); f.emit('/demo/data/sixfold/cards.json');
+  assert.equal(summaryFor(f.store.get(SUMMARY_KEY), 'pane-a'), null, 'a summary from a later read is kept');
+  view.stopAsks();
+});
+
+test('the read poll recheck finds a missed new card and a recovery to the same file, at most every 10 s', async () => {
+  const f = host([]), mod = await load(f.h), view = {}, cx = context();
+  mod.watchAsks(view, cx); await Promise.resolve(); await Promise.resolve();
+  let reads = 0; f.impl.readJsonSnapshot = async path => { reads++; return f.snapshot(path); };
+  // A new card arrives without an event: the summary says nothing waits.
+  f.files.set('/demo/data/sixfold/cards.json', JSON.stringify({schema: 1, cards: [card('a1', 'pane-a')]}));
+  const now = Date.now();
+  await view.recheckAsks(cx, now); await cx.settle();
+  assert.equal(summaryFor(f.store.get(SUMMARY_KEY), 'pane-a')?.n, 1);
+  assert.equal(view.recheckAsks(cx, now + 5_000), null, 'bounded'); assert.equal(reads, 2);
+  // Someone records "missing"; the file is unchanged, so no hub event follows.
+  f.store.set(SUMMARY_KEY, {...askSummary(null, 'missing'), at: now});
+  await view.recheckAsks(cx, now + 10_000); await cx.settle();
+  assert.equal(summaryFor(f.store.get(SUMMARY_KEY), 'pane-a')?.n, 1, 'compared with shared state, corrected');
+  view.stopAsks();
+});
+
+test('the sidebar read poll carries the cards recheck instead of a timer of its own', async () => {
+  const source = await readFile(new URL('../mods/sixfold-desk/main.js', import.meta.url), 'utf8');
+  const poll = source.slice(source.indexOf('this.readPoll=createPoll(cx,'), source.indexOf('// Optional voice integration'));
+  assert.match(poll, /this\.recheckAsks\?\.\(cx\)/);
+  assert.match(poll, /visible:\(\)=>this\.sidebarVisible!==false,/, 'runs without message events too');
 });
 
 test('the sidebar watcher publishes a failed cards read as unreadable, not as the last counts', async () => {

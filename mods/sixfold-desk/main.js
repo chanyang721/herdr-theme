@@ -365,13 +365,18 @@ export default class SixfoldDesk extends View {
     // events, focus or finished agents change; the 5 s fallback covers reads due by time alone
     // (HANDLED_AFTER_MS) and another copy's write.
     const readInputs=changeGate();
+    // The same poll also re-reads the request cards directly (asks.js recheckAsks, at most every
+    // 10 s), so a pane's request chip converges even when a file event was lost.
     this.readPoll=createPoll(cx,{every:1000,fallback:5000,
-      visible:()=>this.sidebarVisible!==false&&Boolean(this.messageEvents?.length),
+      visible:()=>this.sidebarVisible!==false,
       due:()=>{
+        if(!this.messageEvents?.length)return false;
         const events=this.messageEvents??[],last=events.at(-1);
         return readInputs(`${events.length}|${last?.seq??''}|${last?.at??''}|${focused()?.terminal??''}|${agents().filter(a=>a.status==='idle'||a.status==='done').map(a=>a.address).join(',')}`);
       },
       job:async cx=>{
+        try{await this.recheckAsks?.(cx);}catch{ /* Display-only; the next tick tries again. */ }
+        if(!this.messageEvents?.length)return;
         try{
           const path=`${appHome()}/data/sixfold/messages-read.json`;
           const old=await readTextFile(path).catch(()=>null);

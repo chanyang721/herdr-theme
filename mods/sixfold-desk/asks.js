@@ -7,6 +7,8 @@ import { KIND_WORDS, ASK_WORDS, SUMMARY_KEY, bridgeFrom, parseAsks, questionsOf,
 import {subscribeJsonFile,readJsonSnapshot} from './panel-io.js';
 
 const ROOT = '/data/sixfold';
+// The sidebar's existing read poll calls recheckAsks; a direct re-read runs at most this often.
+const ASKS_RECHECK_MS = 10000;
 let sequence = 0;
 // Space tabs share these cards; their placement does not change automatic popups.
 export function watchAsks(view, cx) {
@@ -15,8 +17,10 @@ export function watchAsks(view, cx) {
   const directory=`${appHome()}${ROOT}`,inputs=[['bridge',bridgeFrom],['cards',parseAsks]];
   // failed: inputs whose latest read was not a valid file (or a confirmed absence).
   const cached=new Map(),seen=new Set(),failed=new Set(),subscriptions=[];
-  let stopped=false,active=true,previous,pendingNotify=false,loading=null,version=0;
-  const apply=()=>{
+  let stopped=false,active=true,previous,pendingNotify=false,loading=null,version=0,lastRecheck=-Infinity;
+  // readAt: when the file read behind this state started, or null when nothing
+  // was read (an activity change). Only a read publishes the pane summary.
+  const apply=(readAt=null)=>{
     if(stopped||seen.size!==inputs.length)return;
     const bridge=cached.get('bridge')??null,cards=bridge?(cached.get('cards')?.cards??null):null;
     // The pane summary says what the files say now: an unreadable input is
@@ -32,10 +36,11 @@ export function watchAsks(view, cx) {
       view.asks=cards;pendingNotify=true;
       popupElsewhere(cards,view.askNameOf);
     }
-    // Compared with the summary in shared state on every event and refresh,
-    // not with this watcher's own last list: another writer (a header check,
-    // an older copy, a persisted shared.json) may have left a different one.
-    publishSummary(cards,status);
+    // Compared with the summary in shared state on every read, not with this
+    // watcher's own last list: another writer (a header check, an older copy,
+    // a persisted shared.json) may have left a different one. A summary from a
+    // read that started later than this one is newer and is kept.
+    if(readAt!==null)publishSummary(cards,status,readAt);
     if(pendingNotify&&active&&view.sidebarVisible!==false){pendingNotify=false;cx.notify();}
   };
   const take=(key,parse,snapshot)=>{
@@ -53,12 +58,14 @@ export function watchAsks(view, cx) {
     take(key,parse,snapshot);
     // Invalid or failed reads keep the last valid sidebar list. Only a confirmed
     // missing bridge disables actions; sendAction rechecks its current bytes.
-    apply();
+    // A delivery is a read that just finished; its start is not known, so it counts as now.
+    apply(Date.now());
   };
   for(const [key,parse] of inputs)subscriptions.push(subscribeJsonFile(cx,`${directory}/${key==='cards'?'cards':'bridge'}.json`,snapshot=>accept(key,parse,snapshot)));
   const refresh=(context=cx)=>{
     apply();if(stopped||loading)return loading;
     const observed=version;
+    const readAt=Date.now();
     loading=(context??cx).spawn(async()=>{
       try{
         const values=await Promise.all(inputs.map(([key])=>readJsonSnapshot(`${directory}/${key}.json`).catch(()=>({status:'invalid'}))));
@@ -69,12 +76,19 @@ export function watchAsks(view, cx) {
           const [key,parse]=inputs[i],snapshot=values[i];seen.add(key);
           take(key,parse,snapshot);
         }
-        version++;apply();
+        version++;apply(readAt);
       }finally{loading=null;}
     });return loading;
   };
   const stop=()=>{if(stopped)return;stopped=true;for(const release of subscriptions.splice(0))release();};
   view.stopAsks=stop;view.refreshAsks=refresh;
+  // Called from the sidebar's existing read poll (no timer of its own here):
+  // a direct re-read that does not go through the shared file hub, so a lost
+  // event, a stale hub cache or a recovery to the same hash still converges.
+  view.recheckAsks=(context=cx,now=Date.now())=>{
+    if(stopped||now-lastRecheck<ASKS_RECHECK_MS)return null;
+    lastRecheck=now;return refresh(context);
+  };
   view.setAsksActive=value=>{active=value!==false;apply();};
   return stop;
 }
@@ -105,13 +119,17 @@ function popupElsewhere(cards, nameOf) {
 // Every write carries a new generation `g`, so a reader can tell "unchanged"
 // from "changed and changed back" (a value-only comparison cannot).
 const generationOf = summary => summary && typeof summary === 'object' && typeof summary.g === 'string' ? summary.g : JSON.stringify(summary ?? null);
-function writeSummary(next) {
-  setShared(SUMMARY_KEY, {...next, g: `${Date.now().toString(36)}.${Math.random().toString(36).slice(2, 10)}`});
+// `at` is when the read behind a summary started: a reader with an older read
+// never replaces it.
+const readAtOf = summary => summary && typeof summary === 'object' && Number.isFinite(summary.at) ? summary.at : -Infinity;
+function writeSummary(next, at) {
+  setShared(SUMMARY_KEY, {...next, at, g: `${Date.now().toString(36)}.${Math.random().toString(36).slice(2, 10)}`});
 }
-function publishSummary(cards, status = 'ready') {
+function publishSummary(cards, status, readAt) {
   try {
     const current = shared(SUMMARY_KEY) ?? null, next = askSummary(cards, status, current);
-    if (!sameSummary(current, next) || summaryState(current) === null) writeSummary(next);
+    if (readAtOf(current) > readAt) return;
+    if (!sameSummary(current, next) || summaryState(current) === null) writeSummary(next, readAt);
   } catch { /* Display-only signal; the cards file stays authoritative. */ }
 }
 // The summary is only a copy, rewritten by the sidebar watcher when a file
@@ -127,7 +145,7 @@ const summaryCheck = {at: 0, busy: false};
 export function checkSummary(cx, now = Date.now()) {
   if (!cx?.spawn || summaryCheck.busy || now - summaryCheck.at < SUMMARY_CHECK_MS) return false;
   summaryCheck.busy = true; summaryCheck.at = now;
-  const seen = generationOf(shared(SUMMARY_KEY));
+  const seen = generationOf(shared(SUMMARY_KEY)), readAt = Date.now();
   try {
     cx.spawn(async () => {
       try {
@@ -135,7 +153,7 @@ export function checkSummary(cx, now = Date.now()) {
         const current = shared(SUMMARY_KEY) ?? null;
         if (generationOf(current) !== seen) return;
         const next = summaryFromSnapshots(b, c, current);
-        if (!sameSummary(next, current) || summaryState(current) === null) writeSummary(next);
+        if (!sameSummary(next, current) || summaryState(current) === null) writeSummary(next, readAt);
       } catch { /* Display-only; the next render checks again. */ }
       finally { summaryCheck.busy = false; }
     });
