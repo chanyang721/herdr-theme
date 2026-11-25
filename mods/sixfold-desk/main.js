@@ -436,58 +436,64 @@ export default class SixfoldDesk extends View {
     cx.spawn(async (cx) => {
       for (;;) {
         const command = await nextCommand();
-        if(command==='window.visibility'){
-          const visible=window()?.visible!==false;
-          if(!visible){
-            this.sidebarVisible=false;this.syncCardActivity?.();this.panelRetained?.setVisible(false);this.updateRepoEvents?.();
-            const resumeEvents=this.previousEvents,resumeDelegations=this.previousDelegations;
-            this.stopLegacyMotion();this.resumeEvents=resumeEvents;this.resumeDelegations=resumeDelegations;this.stopLiveMessages?.();this.stopLiveMessages=null;
-            fileReceiver.flush();
-          }else{
-            // Drain the latest queued data while the retained panel is still
-            // suspended, then resume from that watermark in this copy's scope.
-            fileReceiver.flush();this.sidebarVisible=true;this.syncCardActivity?.();this.updateRepoEvents?.();
-            this.panelRetained?.setVisible(true);this.panelRetained?.preferences();
-            this.startLiveMessages?.();this.refreshLegacy?.(cx);this.refreshAlerts?.(cx);this.refreshLinear?.(cx);this.refreshGithub?.(cx);this.refreshAsks?.(cx);
-            cx.notify();
+        // One failing command must not end this loop: every sixfold-desk key
+        // (computer switch, pane cycling, docs finder) is handled here.
+        try {
+          if(command==='window.visibility'){
+            const visible=window()?.visible!==false;
+            if(!visible){
+              this.sidebarVisible=false;this.syncCardActivity?.();this.panelRetained?.setVisible(false);this.updateRepoEvents?.();
+              const resumeEvents=this.previousEvents,resumeDelegations=this.previousDelegations;
+              this.stopLegacyMotion();this.resumeEvents=resumeEvents;this.resumeDelegations=resumeDelegations;this.stopLiveMessages?.();this.stopLiveMessages=null;
+              fileReceiver.flush();
+            }else{
+              // Drain the latest queued data while the retained panel is still
+              // suspended, then resume from that watermark in this copy's scope.
+              fileReceiver.flush();this.sidebarVisible=true;this.syncCardActivity?.();this.updateRepoEvents?.();
+              this.panelRetained?.setVisible(true);this.panelRetained?.preferences();
+              this.startLiveMessages?.();this.refreshLegacy?.(cx);this.refreshAlerts?.(cx);this.refreshLinear?.(cx);this.refreshGithub?.(cx);this.refreshAsks?.(cx);
+              cx.notify();
+            }
+            continue;
           }
-          continue;
+          if(command===FILE_CHANGED_COMMAND){fileReceiver.flush();continue;}
+          const f = focused();
+          const current = panes().filter(p => p.tab === f?.tab);
+          if (command === 'new-workspace') {
+            const machine = spaces().find(space => space.id === f?.space)?.machine ?? null;
+            this.newWorkspace(machine);
+          } else if (command === 'next-pane' || command === 'prev-pane') {
+            const p = cycle(current, f?.pane, command === 'next-pane' ? 1 : -1);
+            if (p) run('pane.focus', { pane: p.pane });
+          } else if (command.startsWith('pane-')) {
+            const p = current[Number(command.slice(5)) - 1];
+            if (p) run('pane.focus', { pane: p.pane });
+          } else if (/^computer-[1-9]$/.test(command)) {
+            // Same as clicking the sidebar card: list plus that computer's hub space and pane.
+            const machines = typeof herdrNative.machines === 'function' ? herdrNative.machines() : [{ name: null, layout: 'ready' }];
+            const key = computerSlots(machines)[Number(command.slice(9)) - 1];
+            if (key) this.selectComputer(key);
+          } else if (command === 'next-blocked' || command === 'next-done') {
+            const state = command === 'next-blocked' ? 'blocked' : 'done';
+            const machine = spaces().find(space => space.id === f?.space)?.machine ?? null;
+            const scope = new Set(spaces().filter(space => (space.machine ?? null) === machine).map(space => space.id));
+            const list = agents().filter(a => a.status === state && scope.has(a.space));
+            const index = list.findIndex(a => a.address === f?.terminal);
+            const a = list[(index + 1) % list.length];
+            if (a) run('agent.focus', { terminal: a.address });
+          } else if (command === 'find-docs') {
+            const space=spaces().find(s=>s.active);
+            // Opens that space's document finder (the popover on its header's docs button); again closes it.
+            if(space)setDocsFinderOpen(this,space,!this.docsFinders?.get(space.id)?.open,cx);
+          } else if (command === 'language') {
+            setShared('sixfold.language', this.lang() === 'ko' ? 'en' : 'ko');
+          } else if (command.startsWith('inbox-')) {
+            openInbox({project:command.slice(6)});
+          }
+          cx.notify();
+        } catch (error) {
+          console.error('[sixfold-desk] command failed', command, error);
         }
-        if(command===FILE_CHANGED_COMMAND){fileReceiver.flush();continue;}
-        const f = focused();
-        const current = panes().filter(p => p.tab === f?.tab);
-        if (command === 'new-workspace') {
-          const machine = spaces().find(space => space.id === f?.space)?.machine ?? null;
-          this.newWorkspace(machine);
-        } else if (command === 'next-pane' || command === 'prev-pane') {
-          const p = cycle(current, f?.pane, command === 'next-pane' ? 1 : -1);
-          if (p) run('pane.focus', { pane: p.pane });
-        } else if (command.startsWith('pane-')) {
-          const p = current[Number(command.slice(5)) - 1];
-          if (p) run('pane.focus', { pane: p.pane });
-        } else if (/^computer-[1-9]$/.test(command)) {
-          // Same as clicking the sidebar card: list plus that computer's hub space and pane.
-          const machines = typeof herdrNative.machines === 'function' ? herdrNative.machines() : [{ name: null, layout: 'ready' }];
-          const key = computerSlots(machines)[Number(command.slice(9)) - 1];
-          if (key) this.selectComputer(key);
-        } else if (command === 'next-blocked' || command === 'next-done') {
-          const state = command === 'next-blocked' ? 'blocked' : 'done';
-          const machine = spaces().find(space => space.id === f?.space)?.machine ?? null;
-          const scope = new Set(spaces().filter(space => (space.machine ?? null) === machine).map(space => space.id));
-          const list = agents().filter(a => a.status === state && scope.has(a.space));
-          const index = list.findIndex(a => a.address === f?.terminal);
-          const a = list[(index + 1) % list.length];
-          if (a) run('agent.focus', { terminal: a.address });
-        } else if (command === 'find-docs') {
-          const space=spaces().find(s=>s.active);
-          // Opens that space's document finder (the popover on its header's docs button); again closes it.
-          if(space)setDocsFinderOpen(this,space,!this.docsFinders?.get(space.id)?.open,cx);
-        } else if (command === 'language') {
-          setShared('sixfold.language', this.lang() === 'ko' ? 'en' : 'ko');
-        } else if (command.startsWith('inbox-')) {
-          openInbox({project:command.slice(6)});
-        }
-        cx.notify();
       }
     });
   }
