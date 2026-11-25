@@ -50,7 +50,7 @@ export function briefRows(view,feed,motion,now=Date.now()){
     if(motion&&fresh&&SESSION_STATES[state].animated)animated.add(agent.id);
   }
   view.animated=animated;
-  return animated.size?view.statusBrief.nextAt(now):null;
+  return animated.size?view.statusBrief.nextAt(now,animated):null;
 }
 export function panelCounts(feed){
   const counts={working:0,idle:0,blocked:0,done:0,total:0};

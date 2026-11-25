@@ -68,3 +68,10 @@ test('every remaining loop, spin and frame cycle is bounded',async()=>{
   }
   for(const file of Object.keys(allowed))assert.ok(used.has(file),`mods/${file}: this motion allowlist entry no longer matches anything, remove it`);
 });
+
+test('nextAt limited to the moving keys ignores a still key that changed earlier', () => {
+  let now = 0; const brief = briefWindow({ ms: 8000, settleMs: 0, clock: () => now });
+  now = 1; brief.active('idle-row', 'idle'); now = 1000; brief.active('working-row', 'working');
+  assert.equal(brief.nextAt(now), 8001, 'every key: the earliest end');
+  assert.equal(brief.nextAt(now, new Set(['working-row'])), 9000, 'moving rows only');
+});

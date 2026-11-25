@@ -32,9 +32,10 @@ export function briefWindow({ms=BRIEF_MS,settleMs=SETTLE_MS,clock=Date.now}={}){
       return now<entry.until;
     },
     // The earliest end still ahead, for one wake that redraws the still frame.
-    nextAt(now=clock()){
+    // `keys` limits it to those keys (the rows actually moving).
+    nextAt(now=clock(),keys=null){
       let at=null;
-      for(const {until} of seen.values())if(until>now&&(at===null||until<at))at=until;
+      for(const [key,{until}] of seen)if((!keys||keys.has(key))&&until>now&&(at===null||until<at))at=until;
       return at;
     },
   };
