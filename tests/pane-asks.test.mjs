@@ -401,13 +401,30 @@ test('an activity change never republishes cached cards over a newer header read
   assert.equal(summaryFor(f.store.get(SUMMARY_KEY), 'pane-a'), null);
   view.setAsksActive(false); view.setAsksActive(true);
   assert.equal(summaryFor(f.store.get(SUMMARY_KEY), 'pane-a'), null, 'no read, no publish');
-  // A delivery from a read older than the header's does not win either.
-  const written = f.store.get(SUMMARY_KEY);
-  f.store.set(SUMMARY_KEY, {...written, at: Date.now() + 60_000});
-  f.files.set('/demo/data/sixfold/cards.json', JSON.stringify({schema: 1, cards: [card('a1', 'pane-a')]})); f.emit('/demo/data/sixfold/cards.json');
-  assert.equal(summaryFor(f.store.get(SUMMARY_KEY), 'pane-a'), null, 'a summary from a later read is kept');
+  // A refresh whose read started before a header's later read does not win.
+  f.files.set('/demo/data/sixfold/cards.json', JSON.stringify({schema: 1, cards: [card('a1', 'pane-a')]}));
+  f.impl.readJsonSnapshot = async path => {
+    const read = f.snapshot(path);
+    if (path.endsWith('cards.json')) { await new Promise(resolve => setTimeout(resolve, 5)); f.store.set(SUMMARY_KEY, {...askSummary([]), at: Date.now(), g: 'header'}); }
+    return read;
+  };
+  await view.refreshAsks(cx); await cx.settle();
+  assert.equal(f.store.get(SUMMARY_KEY).g, 'header', 'a summary from a later read is kept');
   view.stopAsks();
 });
+
+test('the read poll starts the cards recheck without waiting for it', async () => {
+  const source = await readFile(new URL('../mods/sixfold-desk/main.js', import.meta.url), 'utf8');
+  const poll = source.slice(source.indexOf('this.readPoll=createPoll(cx,'), source.indexOf('// Optional voice integration'));
+  assert.doesNotMatch(poll, /await\s+this\.recheckAsks/, 'a stuck re-read must not hold the message read marks');
+  // The job itself: a recheck that never settles still lets the read marks run.
+  const job = poll.slice(poll.indexOf('job:async cx=>{'), poll.indexOf('if(!this.messageEvents?.length)return;', poll.indexOf('job:async cx=>{')));
+  const view = {recheckAsks: () => new Promise(() => {})};
+  const run = new Function('view', 'cx', `return (async function(cx){${job.slice('job:async cx=>{'.length)}}).call(view, cx);`);
+  const result = await Promise.race([run(view, {}).then(() => 'done'), new Promise(resolve => setTimeout(() => resolve('stuck'), 50))]);
+  assert.equal(result, 'done');
+});
+
 
 test('the read poll recheck finds a missed new card and a recovery to the same file, at most every 10 s', async () => {
   const f = host([]), mod = await load(f.h), view = {}, cx = context();

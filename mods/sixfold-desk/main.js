@@ -375,7 +375,8 @@ export default class SixfoldDesk extends View {
         return readInputs(`${events.length}|${last?.seq??''}|${last?.at??''}|${focused()?.terminal??''}|${agents().filter(a=>a.status==='idle'||a.status==='done').map(a=>a.address).join(',')}`);
       },
       job:async cx=>{
-        try{await this.recheckAsks?.(cx);}catch{ /* Display-only; the next tick tries again. */ }
+        // Started, not awaited: a re-read that never settles must not hold the read marks below.
+        try{const pending=this.recheckAsks?.(cx);pending?.catch?.(()=>{});}catch{ /* Display-only; the next tick tries again. */ }
         if(!this.messageEvents?.length)return;
         try{
           const path=`${appHome()}/data/sixfold/messages-read.json`;
