@@ -385,8 +385,15 @@ export const prunedOpened = (opened, cards) => {
 // stays on its pane header until the pane's prompt ends. `id:revision` keys, so a revised
 // card counts as new. Answerable cards are never hidden.
 export const SEEN_KEY = 'sixfold.asks.seenInPane';
-export const seenKeysOf = cards => (cards ?? []).filter(card => card && card.answerable === false).map(askKey);
+// JSON of [id, revision]: unlike `id:revision`, two different pairs never make the same key.
+export const seenKey = card => JSON.stringify([card?.id ?? null, card?.revision ?? null]);
+export const seenKeysOf = cards => (cards ?? []).filter(card => card && card.answerable === false).map(seenKey);
 export function unseenAsks(cards, seen) {
   const keys = new Set(Array.isArray(seen) ? seen : []);
-  return (cards ?? []).filter(card => !(card && card.answerable === false && keys.has(askKey(card))));
+  return (cards ?? []).filter(card => !(card && card.answerable === false && keys.has(seenKey(card))));
 }
+// Keys of cards still alive only, so the record never grows without bound.
+export const prunedSeen = (seen, cards) => {
+  const live = new Set((cards ?? []).map(seenKey));
+  return [...new Set(Array.isArray(seen) ? seen : [])].filter(key => live.has(key));
+};

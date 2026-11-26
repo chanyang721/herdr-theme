@@ -554,7 +554,7 @@ test('sidebar lists one compact row per pane, including unassigned, and opens th
   assert.equal(ids(tree, 'sf-ask-multi-').length, 0, 'no inline options in the sidebar');
   assert.match(text(tree), /name-pane-a/); assert.match(text(tree), /2건/); assert.match(text(tree), /소속 미확인/);
   click(tree, 'sf-ask-group-2', context()); await tick();
-  assert.deepEqual(f.overlays.at(-1).props, {role: 'ask', terminal: null, name: '소속 미확인'});
+  assert.deepEqual(f.overlays.at(-1).props, {role: 'ask', terminal: null, name: '소속 미확인', hideSeen: true});
   click(tree, 'sf-ask-group-0', context()); await tick();
   assert.equal(f.overlays.at(-1).props.terminal, 'pane-a');
   assert.deepEqual(f.focus, []);
@@ -565,7 +565,7 @@ test('sidebar lists one compact row per pane, including unassigned, and opens th
   assert.ok(area.calls.includes('max_h') && area.calls.includes('overflow_y_scrollbar'), 'bounded and scrollable');
   assert.match(text(list), /100개 페인 · 목록을 스크롤해 모두 보기/);
   click(list, 'sf-ask-group-99', context()); await tick();
-  assert.deepEqual(f.overlays.at(-1).props, {role: 'ask', terminal: null, name: '소속 미확인'});
+  assert.deepEqual(f.overlays.at(-1).props, {role: 'ask', terminal: null, name: '소속 미확인', hideSeen: true});
 });
 
 // ---- popup ----------------------------------------------------------------

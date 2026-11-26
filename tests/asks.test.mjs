@@ -270,18 +270,23 @@ test('explicit refresh is coalesced and disposal ignores pending input snapshots
 });
 
 test('a display-only card the person opened and closed leaves the list; answerable cards never do', async () => {
-  const {SEEN_KEY, seenKeysOf, unseenAsks, prunedOpened} = await import('../mods/sixfold-desk/ask-model.js');
+  const {SEEN_KEY, seenKeysOf, unseenAsks, prunedSeen} = await import('../mods/sixfold-desk/ask-model.js');
   assert.equal(typeof SEEN_KEY, 'string');
   const inPane = {...permission, id: 'in-pane', revision: 'r1', answerable: false};
   const live = {...permission, id: 'live', revision: 'r1', answerable: true};
-  assert.deepEqual(seenKeysOf([inPane, live]), ['in-pane:r1']);
+  assert.equal(seenKeysOf([inPane, live]).length, 1);
   const seen = seenKeysOf([inPane]);
   assert.deepEqual(unseenAsks([inPane, live], seen).map(c => c.id), ['live']);
   // A seen key never hides an answerable card, and a revised card counts as new.
-  assert.deepEqual(unseenAsks([{...live}], ['live:r1']).map(c => c.id), ['live']);
+  assert.deepEqual(unseenAsks([{...live}], seenKeysOf([{...live, answerable: false}])).map(c => c.id), ['live']);
   assert.deepEqual(unseenAsks([{...inPane, revision: 'r2'}], seen).map(c => c.id), ['in-pane']);
   assert.deepEqual(unseenAsks(null, seen), []);
   assert.deepEqual(unseenAsks([inPane], 'not a list').map(c => c.id), ['in-pane']);
+  // Two different (id, revision) pairs that join to the same text stay apart.
+  const a = {...inPane, id: 'a:b', revision: 'c'}, b = {...inPane, id: 'a', revision: 'b:c'};
+  assert.deepEqual(unseenAsks([a, b], seenKeysOf([a])).map(c => c.id), ['a']);
   // Kept only while the card lives.
-  assert.deepEqual(prunedOpened(seen, []), []);
+  assert.deepEqual(prunedSeen(seen, []), []);
+  assert.deepEqual(prunedSeen(seen, [inPane]), seen);
+  assert.deepEqual(prunedSeen('bad', [inPane]), []);
 });

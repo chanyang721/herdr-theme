@@ -2,7 +2,7 @@ import { div } from 'gpui-kit';
 import { h_flex, v_flex, TextareaState, Textarea } from 'gpui-base';
 import { exec, readTextFile, writeTextFile, appHome, shared, setShared, openOverlay, closeOverlay, props, panes, spaces, focused, run, layout, settings, window } from 'herdr';
 import { KIND_WORDS, ASK_WORDS, SUMMARY_KEY, bridgeFrom, parseAsks, questionsOf, actionsOf, choose, complete, actionRequest, requestPath, acceptedReceipt, detailOf, selectionOf,
-  askSummary, summaryFor, unverifiedFor, summaryFromSnapshots, summaryState, sameSummary, groupAsks, cardsFor, queueFor, pageAfter, spaceAsks, spaceAskLayout, clampPage, reconcile, popupHeight, popupSpec, windowPlace, errorText, autoPopupTarget, prunedOpened, SEEN_KEY, seenKeysOf,
+  askSummary, summaryFor, unverifiedFor, summaryFromSnapshots, summaryState, sameSummary, groupAsks, cardsFor, queueFor, pageAfter, spaceAsks, spaceAskLayout, clampPage, reconcile, popupHeight, popupSpec, windowPlace, errorText, autoPopupTarget, prunedOpened, SEEN_KEY, seenKeysOf, unseenAsks, prunedSeen,
   replyText, needsText, receiptError, receiptCode } from './ask-model.js';
 
 import {subscribeJsonFile,readJsonSnapshot} from './panel-io.js';
@@ -37,7 +37,8 @@ export function watchAsks(view, cx) {
       }
       view.asks=cards;pendingNotify=true;
       popupElsewhere(cards,view.askNameOf);
-      pruneSeen(cards);
+      // Only a read of the cards (or their confirmed absence) may forget seen cards; a failed read keeps them.
+      if(status!=='unreadable')pruneSeen(cards);
     }
     // Compared with the summary in shared state on every read, not with this
     // watcher's own last list: another writer (a header check, an older copy,
@@ -119,7 +120,7 @@ function popupElsewhere(cards, nameOf) {
 // Seen display-only cards (ask-model SEEN_KEY) are kept only while their card lives.
 function pruneSeen(cards) {
   try {
-    const seen = shared(SEEN_KEY) ?? [], kept = prunedOpened(seen, cards);
+    const seen = shared(SEEN_KEY) ?? [], kept = prunedSeen(seen, cards);
     if (JSON.stringify(kept) !== JSON.stringify(seen)) setShared(SEEN_KEY, kept);
   } catch { /* Display-only; an unpruned key only names a card that is gone. */ }
 }
@@ -305,8 +306,11 @@ export const hasAsks = view => Array.isArray(view.asks) && view.asks.length > 0;
 export const WINDOW_SETTLE_MS = 450;
 export const POPUP_DEADLINE_MS = 1500;
 const within = (promise, ms) => Promise.race([promise, wait(Math.max(0, ms)).then(() => undefined)]);
-export async function openAskPopup(terminal, name, cards, queue = null) {
+// `hideSeen` (the sidebar list and the space tab): the popup leaves out seen display-only cards, as
+// those rows do. A pane header opens every card of its pane.
+export async function openAskPopup(terminal, name, cards, queue = null, {hideSeen = false} = {}) {
   const own = {role: 'ask', terminal: terminal ?? null, name: name ?? ''};
+  if (hideSeen) own.hideSeen = true;
   if (queue && Array.isArray(queue.terminals)) {
     own.terminals = queue.terminals.map(t => t ?? null);
     own.names = Object.fromEntries(Object.entries(queue.names ?? {}).filter(([, v]) => typeof v === 'string'));
@@ -423,7 +427,7 @@ export function askSection(view, t, lang, nameOf) {
       return stop(h_flex().id(`sf-ask-group-${gi}`).flex_none().gap(5).items_center().px(6).py(3).rounded(4).bg(t.chrome).border(1)
         .border_color(failed ? t.blocked : t.border).cursor_pointer()
         .tooltip(group.cards.map(card => `${kindLabel(lang, card.kind)} · ${card.title}${card.answerable === false ? ` (${more.paneOnly})` : ''}`).join('\n'))
-        .on_click((_e, cx) => { cx.stop_propagation(); openAskPopup(group.terminal, name, group.cards); })
+        .on_click((_e, cx) => { cx.stop_propagation(); openAskPopup(group.terminal, name, group.cards, null, {hideSeen: true}); })
         .child(div().flex_none().px(4).rounded(3).bg(t.blocked).text_color(t.background).text_size(9).child(kindLabel(lang, first.kind)))
         .child(div().flex_none().max_w(110).truncate().text_size(10).text_color(t.foreground).child(name))
         .child(div().flex_1().min_w(0).truncate().text_size(10).text_color(t.dim).child(first.title))
@@ -482,7 +486,8 @@ function loadPopup(view, cx) {
         // valid display and offer a retry.
         if (![b, c].every(x => x.status === 'missing' || x.status === 'ready') || (b.status === 'ready' && !bridge)
           || (bridge && c.status === 'ready' && parsed === null)) { view.askLoadFailed = true; continue; }
-        const next = bridge ? (terminals ? queueFor(parsed?.cards, terminals) : cardsFor(parsed?.cards, terminal)) : [];
+        const all = bridge ? (terminals ? queueFor(parsed?.cards, terminals) : cardsFor(parsed?.cards, terminal)) : [];
+        const next = props()?.hideSeen === true ? unseenAsks(all, shared(SEEN_KEY)) : all;
         // A card that vanished after a send we could not confirm is not an
         // expiry: keep saying the outcome is unconfirmed.
         const unconfirmed = Object.keys(view.askErrors).filter(id => !next.some(card => card.id === id));
@@ -495,6 +500,7 @@ function loadPopup(view, cx) {
         // The card on screen stays while it is open; once it is gone the oldest one shows.
         view.askPage = view.asks === null ? 0 : pageAfter(view.asks, view.askPage, next);
         view.asks = next; view.askBridge = bridge; view.askLoadFailed = false;
+        for (const [id, viewed] of view.askViewed ?? []) if (!next.some(c => c.id === id && c.revision === viewed.revision)) view.askViewed.delete(id);
         view.askPage = clampPage(view.askPage, next.length);
         syncAskInputs(view);
       } while (view.askReload);

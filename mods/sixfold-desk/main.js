@@ -1190,7 +1190,7 @@ export default class SixfoldDesk extends View {
         // One queue for the space: every asking pane's requests, oldest first, one at a time.
         onOpen:()=>{const names={};for(const g of spacePanes){const p=g.terminal?panes().find(x=>x.terminal===g.terminal):null;names[g.terminal??'']=p?title(p):(g.terminal||'');}
           const oldest=spaceCards[0];
-          openAskPopup(oldest?.terminal??null,s.name,spaceCards,{terminals:spacePanes.map(g=>g.terminal),names});}}):null;
+          openAskPopup(oldest?.terminal??null,s.name,spaceCards,{terminals:spacePanes.map(g=>g.terminal),names},{hideSeen:true});}}):null;
       // Only requests the tab can open leave the 확인 대기 list below.
       if(tab)askTabs.push(tab);if(tab)for(const card of spaceCards)placedAsks.add(card.id);
       top+=taskEntries[i].height+12;});}
