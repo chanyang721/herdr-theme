@@ -107,10 +107,9 @@ The popup explains these codes and shows a generic failure for any other:
 | `pane_unavailable` | The terminal was not found (closed, or on another computer). |
 
 A typed draft belongs to one question: it is kept when only the card's title
-changes and dropped when its terminal, detail or actions change.
+changes and dropped when its terminal, detail, questions or actions change.
 
-Authority and one-time credentials stay inAuthority and one-time credentials stay in
-the external consumer.
+Authority and one-time credentials stay in the external consumer.
 
 ## Local document views
 

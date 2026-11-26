@@ -650,10 +650,15 @@ test('a draft is kept for a new title and dropped for another question, never se
   };
   await refresh({...replyCard, revision: 'r2', title: 'Waiting for an answer · 30 min'});
   assert.equal(input.released, false, 'a reminder title keeps the state'); assert.equal(input.value(), 'Answer to the first question');
-  const other = {...replyCard, revision: 'r3', detail: 'Another question entirely'};
-  await refresh(other);
-  assert.equal(input.released, true, 'another question drops the old draft');
+  const asked = {...replyCard, revision: 'r3', questions: [{id: 'q0', title: 'A different line shown to the person'}]};
+  await refresh(asked);
+  assert.equal(input.released, true, 'a changed question line drops the old draft');
   assert.equal(f.inputs.length, 2); assert.equal(f.inputs[1].value(), '');
+  f.inputs[1].type('second draft', p.cx);
+  await refresh({...asked, revision: 'r4', detail: 'Another question entirely'});
+  assert.equal(f.inputs[1].released, true, 'another body drops it too');
+  assert.equal(f.inputs.length, 3); assert.equal(f.inputs[2].value(), '');
+  f.inputs[1] = f.inputs[2];
   // even a draft left on a stale state is never sent to the new question
   const sent = [];
   f.impl.exec = async (_program, args) => { sent.push(JSON.parse(f.files.get(args.at(-1)))); return {code: 0, stdout: ''}; };

@@ -177,11 +177,11 @@ class ActionError extends Error { constructor(code) { super(code); this.code = c
 const inputAlive = input => { if (!input) return false; try { input.value(); return true; } catch { return false; } };
 const releaseInput = input => { try { input?.release?.(); } catch { /* already released */ } };
 export const askText = (view, id) => { const input = view.askInputs?.get(id); return inputAlive(input) ? String(input.value() ?? '') : ''; };
-// What a typed draft answers: the card, its pane, its body and its actions. A
+// What a typed draft answers: the card, its pane, its body, questions and actions. A
 // new title alone (a reminder) keeps the draft; another question drops it, so
 // an answer is never sent to a question it was not written for.
 export const draftKey = card => JSON.stringify([card?.id ?? null, card?.terminal ?? null, detailOf(card),
-  actionsOf(card).map(a => [a.id, Boolean(a.requiresText)])]);
+  questionsOf(card), actionsOf(card)]);
 function ensureAskInput(view, card) {
   view.askInputs ??= new Map();
   view.askInputKeys ??= new Map();
