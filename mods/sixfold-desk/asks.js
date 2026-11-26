@@ -1,8 +1,8 @@
 import { div } from 'gpui-kit';
 import { h_flex, v_flex, TextareaState, Textarea } from 'gpui-base';
-import { exec, writeTextFile, appHome, shared, setShared, openOverlay, closeOverlay, props, panes, spaces, focused, run } from 'herdr';
+import { exec, writeTextFile, appHome, shared, setShared, openOverlay, closeOverlay, props, panes, spaces, focused, run, layout, settings } from 'herdr';
 import { KIND_WORDS, ASK_WORDS, SUMMARY_KEY, bridgeFrom, parseAsks, questionsOf, actionsOf, choose, complete, actionRequest, requestPath, acceptedReceipt, detailOf, selectionOf,
-  askSummary, summaryFor, unverifiedFor, summaryFromSnapshots, summaryState, sameSummary, groupAsks, cardsFor, queueFor, pageAfter, spaceAsks, spaceAskLayout, clampPage, reconcile, popupHeight, errorText, autoPopupTarget, prunedOpened,
+  askSummary, summaryFor, unverifiedFor, summaryFromSnapshots, summaryState, sameSummary, groupAsks, cardsFor, queueFor, pageAfter, spaceAsks, spaceAskLayout, clampPage, reconcile, popupHeight, popupAt, errorText, autoPopupTarget, prunedOpened,
   replyText, needsText, receiptError, receiptCode } from './ask-model.js';
 
 import {subscribeJsonFile,readJsonSnapshot} from './panel-io.js';
@@ -270,7 +270,7 @@ function button(id, text, color, t, action, enabled = true) {
 const kindLabel = (lang, kind) => (KIND_WORDS[lang] ?? KIND_WORDS.en)[kind] ?? kind;
 export const hasAsks = view => Array.isArray(view.asks) && view.asks.length > 0;
 
-// Opens one pane's cards in a popup at the pointer, or with `queue` {terminals, names}
+// Opens one pane's cards in a popup centred on the sidebar (popupAt), or with `queue` {terminals, names}
 // every card of those panes, oldest first (a space tab). Only a click opens it:
 // nothing here moves pane focus, and closing it answers nothing.
 export function openAskPopup(terminal, name, cards, queue = null) {
@@ -279,7 +279,24 @@ export function openAskPopup(terminal, name, cards, queue = null) {
     own.terminals = queue.terminals.map(t => t ?? null);
     own.names = Object.fromEntries(Object.entries(queue.names ?? {}).filter(([, v]) => typeof v === 'string'));
   }
-  return openOverlay({mod: 'sixfold-desk', kind: 'popup', width: 560, height: popupHeight(cards?.[0]), props: own});
+  const width = 560, height = popupHeight(cards?.[0]);
+  let zoom = 1;
+  try { zoom = settings()?.zoom ?? 1; } catch { /* no settings: unzoomed */ }
+  const at = popupAt(shared(SIDEBAR_BOX_KEY), width, height, zoom, sidebarHidden());
+  return openOverlay({mod: 'sixfold-desk', kind: 'popup', width, height, ...(at ? {at} : {}), props: own});
+}
+// The sidebar copy records its size here (main.js) so every copy that opens a
+// card popup — pane headers and space tabs included — can centre it there.
+export const SIDEBAR_BOX_KEY = 'sixfold.asks.sidebarBox';
+export function recordSidebarBox(size) {
+  const w = Number(size?.width), h = Number(size?.height), old = shared(SIDEBAR_BOX_KEY);
+  if (!(w > 0 && h > 0) || (old && Math.abs(old.w - w) < 1 && Math.abs(old.h - h) < 1)) return;
+  setShared(SIDEBAR_BOX_KEY, {w: Math.round(w), h: Math.round(h)});
+}
+function sidebarHidden() {
+  const find = node => !node || typeof node !== 'object' ? null
+    : node.id === 'sidebar' ? node : (Array.isArray(node.children) ? node.children.map(find).find(Boolean) ?? null : null);
+  try { return find(layout())?.hidden === true; } catch { return false; }
 }
 // Only on the person's click: select the pane's tab, then the pane. Returns false when the pane is gone.
 export function goToPane(terminal) {

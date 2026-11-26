@@ -298,15 +298,34 @@ export function reconcile(previous, next, choices, sent) {
   const expired = [...before.keys()].filter(id => !after.has(id) && !(sent ?? new Set()).has(id)).length;
   return {choices: kept, revised, expired};
 }
+// Where a card popup opens: centred on the left sidebar, so it never lands
+// wherever the pointer happens to be. `box` is the sidebar's last measured size
+// in window pixels (unzoomed, as `on_size_change` reports it); the sidebar
+// fills the window's left edge from the top, so its height is the window's.
+// `width`/`height` are the overlay's own size, which the app scales by `zoom`
+// while `at` is not scaled. A hidden sidebar centres the popup on the window's
+// left edge instead. Without a measurement, null: the pointer, as before.
+export const POPUP_MARGIN = 8;
+export function popupAt(box, width, height, zoom = 1, hidden = false) {
+  const w = Number(box?.w), h = Number(box?.h);
+  if (!Number.isFinite(h) || h <= 0 || (!hidden && (!Number.isFinite(w) || w <= 0))) return null;
+  const z = Number(zoom) > 0 ? Number(zoom) : 1;
+  const pw = width * z, ph = height * z;
+  const x = hidden ? POPUP_MARGIN : Math.max(POPUP_MARGIN, Math.round((w - pw) / 2));
+  return {x, y: Math.max(POPUP_MARGIN, Math.round((h - ph) / 2))};
+}
 // Popup height in px for one card: enough for its text and options, bounded
 // so the popup never covers the whole window (the body scrolls beyond it).
+// The detail (for a card that would post text, the text itself) gets most of
+// that room: it is shown whole, never folded, and scrolls past the bound.
+export const POPUP_MAX_HEIGHT = 720;
 export function popupHeight(card) {
   if (!card) return 420; // opened from a pane header: content unknown, the body scrolls
   const lines = text => Math.max(1, Math.ceil(String(text ?? '').length / 70)) + (String(text ?? '').match(/\n/g)?.length ?? 0);
-  let h = 150 + lines(card.title) * 18 + (card.detail ? Math.min(lines(card.detail), 14) * 16 + 18 : 0);
+  let h = 150 + lines(card.title) * 18 + (card.detail ? Math.min(lines(card.detail), 32) * 16 + 18 : 0);
   for (const q of questionsOf(card)) h += 26 + lines(q.title) * 16 + q.options.reduce((sum, o) => sum + 10 + lines(o.label) * 17, 0);
   if (needsText(card)) h += 110;
-  return Math.max(220, Math.min(640, Math.round(h)));
+  return Math.max(220, Math.min(POPUP_MAX_HEIGHT, Math.round(h)));
 }
 
 // A card from a pane outside the focused space is easy to miss in the sidebar

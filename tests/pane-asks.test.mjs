@@ -253,7 +253,7 @@ test('reconcile drops revised choices and counts cards that vanished without our
   assert.deepEqual(Object.keys(result.choices), ['b']); assert.equal(result.revised, true); assert.equal(result.expired, 1);
   assert.equal(reconcile(before, after, {}, new Set(['c'])).expired, 0, 'our own accepted send is not an expiry');
   assert.equal(clampPage(5, 2), 1); assert.equal(clampPage(-1, 2), 0); assert.equal(clampPage(3, 0), 0);
-  assert.ok(popupHeight(multi) > popupHeight(card('p', 't'))); assert.ok(popupHeight({...multi, detail: 'x'.repeat(50000)}) <= 640);
+  assert.ok(popupHeight(multi) > popupHeight(card('p', 't'))); assert.ok(popupHeight({...multi, detail: "x".repeat(50000)}) <= 720);
   assert.equal(errorText('ko', 'nonsense'), errorText('ko', 'failed'));
 });
 
@@ -283,6 +283,10 @@ test('pane header shows a decision button only for its own terminal and opens wi
   assert.equal(f.overlays.length, 1);
   assert.deepEqual(f.overlays[0].props, {role: 'ask', terminal: 'pane-a', name: 'Alpha'});
   assert.equal(f.overlays[0].kind, 'popup'); assert.ok(f.overlays[0].width >= 520);
+  assert.equal(f.overlays[0].at, undefined, 'no sidebar measured yet: at the pointer');
+  mod.recordSidebarBox({width: 900, height: 1200});
+  nodeOf(a).click(event, context());
+  assert.deepEqual(f.overlays[1].at, {x: 170, y: Math.round((1200 - f.overlays[1].height) / 2)}, 'centred on the sidebar');
   assert.deepEqual(f.focus, [], 'no pane.focus/agent.focus');
   assert.ok(nodeOf(a).calls.includes('on_mouse_down'), 'press does not reach the header (which focuses the pane)');
 });
@@ -828,4 +832,20 @@ test('one pane per call, the next one after its cards are recorded', () => {
 test('the opened record keeps only live cards', () => {
   assert.deepEqual(prunedOpened(['a:r1', 'gone:r1', 'a:r1'], [card('a', 't')]), ['a:r1']);
   assert.deepEqual(prunedOpened(undefined, []), []);
+});
+
+test('a card popup opens centred on the sidebar, or on the window left edge when it is hidden', async () => {
+  const {popupAt, POPUP_MARGIN} = await import('../mods/sixfold-desk/ask-model.js');
+  // Sidebar wider than the popup: centred both ways (popup size scaled by zoom, `at` is not).
+  assert.deepEqual(popupAt({w: 800, h: 1000}, 560, 400, 1), {x: 120, y: 300});
+  assert.deepEqual(popupAt({w: 800, h: 1000}, 560, 400, 0.5), {x: 260, y: 400});
+  // Narrower than the popup: pinned to the left margin, still centred vertically.
+  assert.deepEqual(popupAt({w: 288, h: 1251}, 560, 400, 0.9), {x: POPUP_MARGIN, y: 446});
+  // Hidden sidebar: the window's left edge, vertically centred on the last known height.
+  assert.deepEqual(popupAt({w: 800, h: 1000}, 560, 400, 1, true), {x: POPUP_MARGIN, y: 300});
+  // Taller than the window: never above the top margin.
+  assert.equal(popupAt({w: 300, h: 200}, 560, 720, 1).y, POPUP_MARGIN);
+  // Nothing measured yet: no position, the overlay falls back to the pointer.
+  for (const box of [null, undefined, {}, {w: 0, h: 0}, {w: 'x', h: 900}]) assert.equal(popupAt(box, 560, 400, 1), null);
+  assert.deepEqual(popupAt({h: 900}, 560, 400, 1, true), {x: POPUP_MARGIN, y: 250});
 });

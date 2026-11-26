@@ -23,7 +23,7 @@ import { paneUsage } from './session-usage.js';
 import { paneMeta, paneMetaChip, showPaneIndex, showTitle } from './pane-meta.js';
 import { paneWork, paneWorkChip } from './pane-work.js';
 import { watchBadges, workspaceBadges } from './badges.js';
-import { watchAsks, askSection, hasAsks, paneAskButton, askPopup, spaceAskView, openAskPopup } from './asks.js';
+import { watchAsks, askSection, hasAsks, paneAskButton, askPopup, spaceAskView, openAskPopup, recordSidebarBox } from './asks.js';
 import { mountRepoFlow, repoComputerChips, repoFlowHeight } from './repo-flow-view.js';
 import { askFor } from './ask-model.js';
 import { watchReports, reportsSection } from './session-reports.js';
@@ -1218,7 +1218,7 @@ export default class SixfoldDesk extends View {
     return v_flex().id('sixfold-sidebar').size_full().bg(t.chrome).text_color(t.foreground)
       // Width only matters to the task panel's breakpoints; between them the
       // flex layout resizes the cards without a redraw.
-      .on_size_change((size,cx)=>{if(this.panelRetained?.resize(size.width/(settings().zoom||1))){this.invalidateSidebar?this.invalidateSidebar():cx.notify();}})
+      .on_size_change((size,cx)=>{recordSidebarBox(size);if(this.panelRetained?.resize(size.width/(settings().zoom||1))){this.invalidateSidebar?this.invalidateSidebar():cx.notify();}})
       .on_mouse_up('left',(_e,cx)=>{
         if(this.dragSpace){this.dragSpace=null;this.overSpace=null;cx.notify();}
       })
