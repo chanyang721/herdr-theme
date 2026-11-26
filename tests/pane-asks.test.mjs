@@ -607,7 +607,25 @@ test('a card waiting in its pane is shown without buttons and only a click goes 
   click(tree, 'sf-ask-go-w1', p.cx);
   assert.deepEqual(f.focus, [['tab.select', {id: 'tab-a'}], ['pane.focus', {pane: 'p-a'}]]);
   assert.deepEqual(f.calls.filter(c => c[0] === 'exec' || c[0] === 'write'), [], 'going there answers nothing');
+  // Going there marked it seen: it leaves the sidebar list, nothing else is answered.
+  const {SEEN_KEY, seenKeysOf, unseenAsks} = await import('../mods/sixfold-desk/ask-model.js');
+  assert.deepEqual(f.store.get(SEEN_KEY), seenKeysOf([waiting]));
+  assert.deepEqual(unseenAsks(p.view.asks, f.store.get(SEEN_KEY)), []);
   void mod;
+});
+
+test('an outside click closes the popup without its button; the teardown still marks the shown card seen', async () => {
+  const waiting = card('w2', 'pane-a', {answerable: false, title: 'Run it?'}), live = card('l2', 'pane-a');
+  const f = host([waiting, live]); f.h.panes = () => [{terminal: 'pane-a', pane: 'p-a', tab: 'tab-a'}];
+  const mod = await load(f.h), p = await popup(f, mod, 'pane-a');
+  const {SEEN_KEY} = await import('../mods/sixfold-desk/ask-model.js');
+  const shownFirst = p.view.asks[0].id;
+  p.render();
+  assert.equal(f.store.get(SEEN_KEY), undefined, 'showing it alone records nothing');
+  p.view.releaseAskInputs();   // what main.js close() runs when Herdr removes the popup
+  const seen = f.store.get(SEEN_KEY) ?? [];
+  assert.equal(seen.length, shownFirst === 'w2' ? 1 : 0, 'only a display-only card the popup showed');
+  assert.ok(seen.every(key => !key.includes('l2')), 'an answerable card is never recorded');
 });
 
 test('a space queue shows every asking pane oldest first, one at a time, and the next after an answer', async () => {

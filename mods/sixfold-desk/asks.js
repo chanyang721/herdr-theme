@@ -507,12 +507,20 @@ function loadPopup(view, cx) {
     } finally { view.askLoading = false; cx.notify(); }
   });
 }
+// The display-only cards this popup showed that are still in its list (askViewed drops the rest).
+function markViewedSeen(view) {
+  const cards = view.asks ?? [];
+  markSeen([...(view.askViewed?.values() ?? [])].filter(c => cards.some(x => x.id === c.id && x.revision === c.revision)));
+  view.askViewed?.clear();
+}
 export function askPopup(view, t, lang, cx) {
   view.askLang = lang;
   if (!view.askPopupReady) {
     view.askPopupReady = true; view.asks = null; view.askChoices = Object.create(null); view.askBusy = Object.create(null);
     view.askErrors = Object.create(null); view.askSent = new Set(); view.askUnconfirmed = []; view.askPage = 0; view.askExpired = 0;
-    view.askInputs = new Map(); view.releaseAskInputs = () => releaseAskInputs(view);
+    // Herdr closes the popup on an outside click without our close button; its teardown (main.js
+    // close → releaseAskInputs) then marks the viewed display-only cards seen too.
+    view.askInputs = new Map(); view.releaseAskInputs = () => { markViewedSeen(view); releaseAskInputs(view); };
     view.refreshAsks = context => loadPopup(view, context ?? cx);
     loadPopup(view, cx);
   } else if ((shared(SUMMARY_KEY)?.v ?? '') !== view.askLoadedV && !view.askLoading) loadPopup(view, cx);
@@ -524,7 +532,7 @@ export function askPopup(view, t, lang, cx) {
   // The display-only cards this popup put on screen count as seen when the person closes it
   // or goes to their pane: they leave the sidebar list (markSeen); nothing is answered.
   if (card && card.answerable === false) (view.askViewed ??= new Map()).set(card.id, card);
-  const close = () => { markSeen([...(view.askViewed?.values() ?? [])].filter(c => cards.some(x => x.id === c.id && x.revision === c.revision))); if (overlay) closeOverlay(overlay); };
+  const close = () => { markViewedSeen(view); if (overlay) closeOverlay(overlay); };
   const header = h_flex().gap(8).items_center().px(14).py(10).border_b(1).border_color(t.border)
     .when(Boolean(card), e => e.child(div().flex_none().px(6).py(1).rounded(3).bg(t.blocked).text_color(t.background).text_size(11).font_bold()
       .child(kindLabel(lang, card.kind))))
