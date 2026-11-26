@@ -1,5 +1,14 @@
 # Native panel fixture gallery
 
+> **Newer captures.** The README walkthrough now uses 36 native captures of
+> `86c4016` on `main` in [images/walkthrough](images/walkthrough/): issue start,
+> work splitting with job chips, states, messages, per-space alerts, requests
+> beside the card, review/verdict/acceptance, repository stages and install chips,
+> cleanup with the memory badge, pane headers, documents and the week. How they
+> were made and what they leave out: [README media provenance](media/README.md).
+> The gallery below is older and kept for its sharing/tool/Slack matrix; it does
+> not show those newer features.
+
 These are fresh native app screenshots of the current integrated computer navigator, with synthetic Studio/Worker inventory, local task data and simulated tool responses. They show the default computer selection, badges below workspace names and the two-line sidebar header. The [manifest](images/panel-feed/manifest.json) records image hashes. Each image is a lossless rectangular crop with no added UI artwork. Registered interaction handlers were invoked programmatically; physical pointer and keyboard input were not replayed. The isolated demo's files and window state were restored afterward.
 
 These captures use the older host's compatibility reader. Actual Windows native JSON-worker and visibility integration remains pending a compatible executable.

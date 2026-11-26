@@ -4,35 +4,64 @@ A workspace sidebar and terminal layout for Herdr. Follow coding agents, shared 
 
 [한국어](README.ko.md)
 
-![Herdr Theme: nine workflow chapters from issue context to delegation, review, retention and cleanup](preview.gif)
+![Herdr Theme: twelve scenes from starting an issue to review, deployment, cleanup, documents and the week](preview.gif)
 
-A nine-step walkthrough assembled from native demo captures. Synthetic data; not a recording of a real end-to-end task. [Static first chapter](docs/media/workflow-poster.png).
+Twelve scenes in native captures of an isolated demo with synthetic data. Not a recording of a real task. [Static first frame](docs/media/workflow-poster.png).
 
 ## Features
 
-- **Computers and workspaces:** per-computer agent counts, shared-project indicators, unread messages and animated message routes.
-- **Tasks:** optional local feeds add task trees, progress stages, issue groups, review events and seven animated pixel-art states. The feed producer manages the work; the theme displays it. Explicit wait reasons share the existing progress slot in each single-line row; hover for the full reason.
+- **Computers and spaces:** per-computer agent counts, install chips showing which commit each computer runs, shared-project and role-group chips, per-space alerts, and message routes (solid on one computer, dashed across computers).
+- **Repositories:** a REPOS row per repository with PUSH, CI and CD stages and deployment targets, from an optional `repo_flow` feed.
+- **Tasks:** optional local feeds add issue groups, job chips (`LEAD`, `FE`, `QA` …), stage bars, seven agent states, assignment and review events, and cleanup steps with a memory-proposal badge. The feed producer manages the work; the theme displays it. Explicit wait reasons share the existing progress slot in each single-line row; hover for the full reason.
+- **Issues:** an issue popover with week, milestone, all and alerts tabs. With a command configured in `data/sixfold/issue-start.json`, **작업 시작** in the issue detail starts the issue with the chosen agent and level and shows where it went.
+- **Requests:** permission, question and plan cards wait in a tab beside the space that asked; a request from another space opens by itself.
 - **Terminal headers:** agent state, model, effort and session usage, with an animated cat and a motion-off option. Claude panes also show task-list progress (`할 일 2/5`) and running sub-agents, read by Agent Usage from Claude's own records (refreshed every two minutes; hidden when no refresh came for six minutes).
 - **Monitor strip:** CPU/RAM, MCP connections, CLI sign-in state, Claude/Codex plan limits and session tokens, supplied by the pinned [Workspace Mods](https://github.com/chanyang721/herdr-workspace-mods) release.
-- **Documents:** workspace search, pins and a document tab; an optional file viewer previews Markdown beside your terminals.
+- **Documents:** a finder for each space's documents, pins and a **문서** tab per space; an optional file viewer previews Markdown beside your terminals.
+- **This week:** a band above the terminals lists due issues by day; a timeline dialog groups the week by project.
 
 ## Walk through the workflow
 
-The main GIF now covers **issue context → allocation → parallel work → messages → review request → verdict → acceptance → retained context → cleanup**, in nine chapters after a short animated overview, over about 46 seconds. Captions sit beside native captures; they are not new application UI.
+The GIF shows an overview and twelve scenes in 39 frames, about 64 seconds. Each frame is one native capture of the isolated demo app, scaled down. The caption bar and the outline are documentation; the screen inside is unchanged. The demo's events, alerts and requests were written by hand into local feed files, so this is **not a recording of a real task running end to end**. [Sources, outlined regions and timings](docs/media/workflow-manifest.json) · [How the captures were made](docs/media/README.md).
 
-This is an **editorial sequence of existing native screenshots with synthetic data**, not a continuous recording of a real task completing automatically. [Original native overview animation](docs/images/overview-native.gif) · [Source images and timings](docs/media/workflow-manifest.json) · [Full-window still](preview.png).
-
-| 1. Select the issue | 2. Split and assign work |
+| 1. Start from an issue | 2. Split and hand out the work |
 | --- | --- |
-| ![Project issue and milestone popover](docs/images/panel-feed/issues-milestone.png) | ![Five child tasks expanded beneath their parent](docs/images/panel-feed/tree-expanded.png) |
-| Inspect week, milestone and all-issue scopes, including missing or stale cache states. | Follow parent/child tasks and their work titles. Allocation and file ownership belong to an optional external producer. |
+| ![Issue detail after 작업 시작, with the result line](docs/images/walkthrough/issue-sent.png) | ![A new task row under its issue and an assignment label](docs/images/walkthrough/split-3.png) |
+| Choose an agent and a level, press 작업 시작. The line beside it says where the work went. | A spawn adds a placeholder row under its issue; an assignment labels the lead's row. Chips show each job. |
 
-| 3. Exchange messages and request review | 4. Preserve context and clean up |
+| 3. Stages and states | 4. Messages |
 | --- | --- |
-| ![A review request routed between agents](docs/images/panel-feed/event-review_request.png) | ![Saved-context stage in the task panel](docs/images/panel-feed/closing-memory-2.png) |
-| Allocation, messages, review requests, verdicts and acceptance are distinct events. A send is not a read receipt or task success. | Retention and closing stages come from the feed producer. The theme does not itself archive work or close agents. |
+| ![Rows in working, needs-you, result, cleanup-wait, idle and closing states](docs/images/walkthrough/desk.png) | ![A message travelling along a dashed cross-computer line](docs/images/walkthrough/messages-3.png) |
+| Each row has a stage bar and a state mark. A closed row shows 닫힘 before it leaves (scene 9). | Solid lines join spaces on this computer; dashed lines cross to another computer. |
 
-[Completed child rows removed](docs/images/panel-feed/children-completed-removed.png) · [Closed row removed](docs/images/panel-feed/closing-memory-4-hidden.png) · [Full event/state gallery](docs/panel-validation.md).
+| 5. Alerts per space | 6. Requests beside the card |
+| --- | --- |
+| ![The 알림 tab of the issue popover, grouped by time](docs/images/walkthrough/alerts.png) | ![A permission request opened from the tab beside its space](docs/images/walkthrough/ask-popup.png) |
+| Slack, Linear and GitHub alerts stay with their space, grouped by time. | The tab beside a space opens its requests, oldest first. |
+
+| 7. Review, verdict, acceptance | 8. Push, CI and deploy |
+| --- | --- |
+| ![The lead accepting a finished task after a passing verdict](docs/images/walkthrough/accept-1.png) | ![REPOS row with PUSH, CI and CD, and install chips on both computers](docs/images/walkthrough/repos-after.png) |
+| A review request, the verdict and the owner's acceptance are three separate events. | REPOS shows each stage; install chips show which computer runs which commit. |
+
+| 9. Cleanup and memory | 10. Pane headers |
+| --- | --- |
+| ![A row saving its decisions during cleanup, with the memory badge raised](docs/images/walkthrough/cleanup-2.png) | ![Four pane headers with model, effort, usage, to-dos and subagents](docs/images/walkthrough/desk.png) |
+| A finished row reports, saves its decisions, proposes memory and closes. The space's 기억 제안 badge counts proposals. | Model, effort, permission, weekly usage, to-dos and running subagents per pane. |
+
+| 11. Documents | 12. This week |
+| --- | --- |
+| ![A space's 문서 tab with favourites, folders and a rendered document](docs/images/walkthrough/docs-tab.png) | ![The week timeline dialog grouped by project](docs/images/walkthrough/week.png) |
+| Search a space's documents or browse them in its 문서 tab. [Finder](docs/images/walkthrough/docs-finder.png). | The band lists due issues by day; the dialog groups the week by project. |
+
+What the demo does not show:
+
+- The issue detail body says it has not been read yet: the demo has no issue-detail reader.
+- The week band says 수집기 미설정: the demo has no timeline collector and reads a prepared week file.
+- The monitor strip is not part of this layout. Its captures are in the gallery below.
+- Messages and other events come from the demo feed, not from the core's send events. See [message animation compatibility](#message-animation-compatibility).
+
+[Older event and state gallery](docs/panel-validation.md).
 
 ## Feature gallery
 
@@ -43,6 +72,22 @@ This is an **editorial sequence of existing native screenshots with synthetic da
 | ![Shared projects and agent relationships in dark mode](docs/images/collab-multi-dark.png) | ![Shared projects in light mode](docs/images/collab-multi-light.png) |
 
 Select a computer and follow shared projects, supplied Slack/Linear/Jira data and issue-linked agents. Account connections require separate setup. [48 sharing/tool/Slack combinations](docs/panel-validation.md).
+
+### Repositories and deployments
+
+| Before | After |
+| --- | --- |
+| ![CI and the Worker deployment still running](docs/images/walkthrough/repos-before.png) | ![CI passed and both computers run the new commit](docs/images/walkthrough/repos-after.png) |
+
+Each repository row shows PUSH, CI and CD. A company repository shows its provider and its stage and production targets. Install chips under each computer name the commit it runs or say it is still deploying. The data comes from an optional producer. [Repository stages in the feed](docs/panel-feed.md#optional-space-notifications-pending-requests-and-repository-stages).
+
+### Alerts and requests
+
+| A request from another space | Alerts of one space |
+| --- | --- |
+| ![A plan request from the Docs space opening by itself](docs/images/walkthrough/ask-other-space.png) | ![Unread and read alerts grouped by time](docs/images/walkthrough/alerts.png) |
+
+Requests come from a configured card bridge. Closing the popup does not answer or deny it; reopen it from the tab or the pane header. [Cards and a configured command](docs/local-integrations.md#cards-and-a-configured-command).
 
 ### Agent states and terminal headers
 
@@ -73,23 +118,17 @@ These are optional Workspace Mods integrations. Services shown in a screenshot a
 
 ### Project documents
 
-<img src="docs/images/document-viewer.png" width="375" alt="Demo Markdown document opened beside terminals" />
+| Finder | 문서 tab |
+| --- | --- |
+| ![Document finder with type and age filters](docs/images/walkthrough/docs-finder.png) | ![A space's document tab](docs/images/walkthrough/docs-tab.png) |
 
-Search and pin project documents, then use the document tab or optional file viewer. The capture shows the separate file viewer. [Search, pins and document tabs](docs/project-documents.md) · [Viewer setup](extras/preview/README.md).
+Search and pin project documents, then read them in the space's 문서 tab or the optional file viewer. [Search, pins and document tabs](docs/project-documents.md) · [Viewer setup](extras/preview/README.md).
 
-### Weekly chip, timeline and issue detail
+### Weekly band and timeline
 
-The current `week-timeline` opens from a header chip instead of occupying a permanent large strip. This is a **navigation diagram**, not a screenshot.
+![The week band above the terminals and the timeline dialog](docs/images/walkthrough/week.png)
 
-```mermaid
-flowchart LR
-  A[Weekly header chip] --> B[Work grouped by project]
-  B --> C[Full project timeline]
-  B --> D[Issue detail]
-  D --> E[Review changes and explicitly apply to Linear]
-```
-
-Dialogs float over the terminals. Issue edits use a configured command and explicit application step. [Current behavior and configuration](docs/week-timeline.md). A fresh native capture of this feature is not yet included in the gallery.
+The band above the terminals lists this week's due issues by day. The dialog groups the week by project, with overdue, due-today and to-do marks. Issue edits use a configured command and an explicit apply step. [Current behavior and configuration](docs/week-timeline.md).
 
 ## Message animation compatibility
 

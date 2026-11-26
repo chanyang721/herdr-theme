@@ -1,80 +1,531 @@
 {
-  "schema": 1,
-  "kind": "editorial walkthrough of native fixtures",
+  "schema": 2,
+  "kind": "captioned native captures of synthetic demo data",
   "canvas": [
     1280,
+    874
+  ],
+  "capture": [
+    1680,
     1000
   ],
-  "duration_ms": 45600,
-  "intro": {
-    "source": "docs/images/overview-native.gif",
-    "frames": 34,
-    "duration_ms": 5100,
-    "source_sha256": "17053ce3c180d5e71a0a6b4efcc1eaccfa9266634587694b76f5cba38c2f6bfc"
-  },
+  "frames": 39,
+  "duration_ms": 64480,
   "scenes": [
     {
+      "step": "00",
+      "title": "The whole desk",
+      "duration_ms": 2600,
+      "frames": [
+        {
+          "source": "docs/images/walkthrough/desk.png",
+          "source_sha256": "c67876c6136fd8fc7402cd69aed3354a56752f8bfcb67e860e769314459a2385",
+          "duration_ms": 2600,
+          "region": null
+        }
+      ]
+    },
+    {
       "step": "01",
-      "title": "Choose the project",
-      "source": "docs/images/panel-feed/issues-milestone.png",
-      "source_sha256": "17bb8ca21453ed458d93e080422f0e7632e568d810b9ea07c91816d61a4a7ddb",
-      "duration_ms": 4500
+      "title": "Start from an issue",
+      "duration_ms": 7620,
+      "frames": [
+        {
+          "source": "docs/images/walkthrough/issue-list.png",
+          "source_sha256": "608ca5f5ee42adfb06bfac5b6c250e9c6c243b1e16ca91e68b2b38becd6b2587",
+          "duration_ms": 2600,
+          "region": [
+            458,
+            200,
+            898,
+            668
+          ]
+        },
+        {
+          "source": "docs/images/walkthrough/issue-detail.png",
+          "source_sha256": "fd382b9d7f2698eceb6a49a37cdc080c7588a419bad89d0d7ebf806fd2c3d5da",
+          "duration_ms": 2600,
+          "region": [
+            458,
+            290,
+            898,
+            584
+          ]
+        },
+        {
+          "source": "docs/images/walkthrough/issue-sending.png",
+          "source_sha256": "ee2ae3e5eadf7d671b2fd23855593cc8ba49976b525d4e9f4add31c4cd87ea17",
+          "duration_ms": 220,
+          "region": [
+            458,
+            290,
+            898,
+            584
+          ]
+        },
+        {
+          "source": "docs/images/walkthrough/issue-sent.png",
+          "source_sha256": "ed510ba0825e740108fe8504d034a727a50ec95e411b5ee05785ce45f7b0c557",
+          "duration_ms": 2200,
+          "region": [
+            458,
+            290,
+            898,
+            584
+          ]
+        }
+      ]
     },
     {
       "step": "02",
-      "title": "Delegate the work",
-      "source": "docs/images/panel-feed/event-assign-existing.png",
-      "source_sha256": "5f265c64bcf7139ad658e5d76d44b954ebe4772bca5964e05ddf866fcf2d7a02",
-      "duration_ms": 4500
+      "title": "Split and hand out the work",
+      "duration_ms": 3300,
+      "frames": [
+        {
+          "source": "docs/images/walkthrough/split-1.png",
+          "source_sha256": "6c5b0a16776a82faa1fe11230b0c6135f00bf1e1d71b6e574bb4150f2fa49ed0",
+          "duration_ms": 220,
+          "region": [
+            4,
+            384,
+            470,
+            668
+          ]
+        },
+        {
+          "source": "docs/images/walkthrough/split-2.png",
+          "source_sha256": "c09a43ca9f1a28c678855d4dae2771487a0c89f7414cf133acd11945a174767e",
+          "duration_ms": 220,
+          "region": [
+            4,
+            384,
+            470,
+            668
+          ]
+        },
+        {
+          "source": "docs/images/walkthrough/split-3.png",
+          "source_sha256": "12c89eb8d67be3ead7f76bbd9c7481616e06b7d7ffc66e9d3772a57be27d66cd",
+          "duration_ms": 220,
+          "region": [
+            4,
+            384,
+            470,
+            668
+          ]
+        },
+        {
+          "source": "docs/images/walkthrough/split-4.png",
+          "source_sha256": "a4cb7b98253646d9ec9e3229b377676af0de192620c9946086ba0d85cfcd901a",
+          "duration_ms": 220,
+          "region": [
+            4,
+            384,
+            470,
+            668
+          ]
+        },
+        {
+          "source": "docs/images/walkthrough/split-5.png",
+          "source_sha256": "4637ea8e403095759a7ca9e4f3f146b8ff92e5bfbd7f3e552e25d5559364f3cf",
+          "duration_ms": 220,
+          "region": [
+            4,
+            384,
+            470,
+            668
+          ]
+        },
+        {
+          "source": "docs/images/walkthrough/split-6.png",
+          "source_sha256": "012592484651145157b099ef7dc8341892725e37bf0bebd6f170892b407a526d",
+          "duration_ms": 2200,
+          "region": [
+            4,
+            384,
+            470,
+            668
+          ]
+        }
+      ]
     },
     {
       "step": "03",
-      "title": "Work in parallel",
-      "source": "docs/images/panel-feed/tree-expanded.png",
-      "source_sha256": "888e2a6a053cdc9a9d6c48dd14ac874253a904592742db2259b26c7d86494f59",
-      "duration_ms": 4500
+      "title": "Four stages, seven states",
+      "duration_ms": 2600,
+      "frames": [
+        {
+          "source": "docs/images/walkthrough/desk.png",
+          "source_sha256": "c67876c6136fd8fc7402cd69aed3354a56752f8bfcb67e860e769314459a2385",
+          "duration_ms": 2600,
+          "region": [
+            4,
+            384,
+            470,
+            872
+          ]
+        }
+      ]
     },
     {
       "step": "04",
       "title": "Follow messages",
-      "source": "docs/images/panel-feed/local-message.png",
-      "source_sha256": "3328827457fc73702598cb9b07d9d994e500fd417cd8e95b8d4ac64bca1d0c16",
-      "duration_ms": 4500
+      "duration_ms": 3300,
+      "frames": [
+        {
+          "source": "docs/images/walkthrough/messages-1.png",
+          "source_sha256": "1fc88fcc87da2e481ef943423cd6406fe6bf481cd2348d3ca0a0ac2e621b1ea3",
+          "duration_ms": 220,
+          "region": [
+            4,
+            100,
+            470,
+            872
+          ]
+        },
+        {
+          "source": "docs/images/walkthrough/messages-2.png",
+          "source_sha256": "dab28b4b4f7e8c2263ddd71d0b2c2568544e45df006414f699430f0552569d2d",
+          "duration_ms": 220,
+          "region": [
+            4,
+            100,
+            470,
+            872
+          ]
+        },
+        {
+          "source": "docs/images/walkthrough/messages-3.png",
+          "source_sha256": "d1494945891b5d1093d9b6c25a84cce7760a5d008202d34edd4127f708a0651d",
+          "duration_ms": 220,
+          "region": [
+            4,
+            100,
+            470,
+            872
+          ]
+        },
+        {
+          "source": "docs/images/walkthrough/messages-4.png",
+          "source_sha256": "7a5ad1cdda3d0969be0591b57ec4eb15a7ce377c2720be29eb6bc96691f23c01",
+          "duration_ms": 220,
+          "region": [
+            4,
+            100,
+            470,
+            872
+          ]
+        },
+        {
+          "source": "docs/images/walkthrough/messages-5.png",
+          "source_sha256": "630dfafe3754342576573fbca0094dfcbb8ce1292f3c016aeb7334e8252b33e4",
+          "duration_ms": 220,
+          "region": [
+            4,
+            100,
+            470,
+            872
+          ]
+        },
+        {
+          "source": "docs/images/walkthrough/messages-6.png",
+          "source_sha256": "9055e0d76f762eb557cce462723997a42841d7bc538c1a5a7864267def7898a4",
+          "duration_ms": 2200,
+          "region": [
+            4,
+            100,
+            470,
+            872
+          ]
+        }
+      ]
     },
     {
       "step": "05",
-      "title": "Request a review",
-      "source": "docs/images/panel-feed/event-review_request.png",
-      "source_sha256": "4020a86c642f8339a6f6ca053dd4eda2df669a3b57313717698f060b5f9955b1",
-      "duration_ms": 4500
+      "title": "Alerts per space",
+      "duration_ms": 2600,
+      "frames": [
+        {
+          "source": "docs/images/walkthrough/alerts.png",
+          "source_sha256": "520d1e7b49836acad7596848cfa6a9a69716d040bd84e5255c26daaef16f9e86",
+          "duration_ms": 2600,
+          "region": [
+            458,
+            205,
+            898,
+            666
+          ]
+        }
+      ]
     },
     {
       "step": "06",
-      "title": "Inspect the result",
-      "source": "docs/images/panel-feed/event-verdict.png",
-      "source_sha256": "6939c3ec0253a534fc7a2f8ae8b7aea0e08367ba684efe4c3ccd3bce01416687",
-      "duration_ms": 4500
+      "title": "Requests wait beside the card",
+      "duration_ms": 7400,
+      "frames": [
+        {
+          "source": "docs/images/walkthrough/ask-tab.png",
+          "source_sha256": "0c9a338da2943d65f10e6a2504183d9e2553a83808ee9af3f4dc76def2c79f41",
+          "duration_ms": 2600,
+          "region": [
+            420,
+            384,
+            470,
+            768
+          ]
+        },
+        {
+          "source": "docs/images/walkthrough/ask-popup.png",
+          "source_sha256": "8f5c3a17d14e85f00047159fff90f85baadffe30456a79c45b92b23a7496e0c0",
+          "duration_ms": 2600,
+          "region": [
+            6,
+            6,
+            570,
+            242
+          ]
+        },
+        {
+          "source": "docs/images/walkthrough/ask-other-space.png",
+          "source_sha256": "7d767060eab367ec015f0c0bdf3caa32513507325fcb12970cb09708b7476367",
+          "duration_ms": 2200,
+          "region": [
+            6,
+            6,
+            570,
+            242
+          ]
+        }
+      ]
     },
     {
       "step": "07",
-      "title": "Accept the report",
-      "source": "docs/images/panel-feed/event-accept.png",
-      "source_sha256": "8ce86ef834223e9c40554ddb65bf532f4574675a1dbe3aaa80bb988f4aa76c05",
-      "duration_ms": 4500
+      "title": "Review, verdict, acceptance",
+      "duration_ms": 8060,
+      "frames": [
+        {
+          "source": "docs/images/walkthrough/review-request-1.png",
+          "source_sha256": "2642790c7bbf823071fdd72c673aa20182ba0e334253307d0b2715f6a6ca457d",
+          "duration_ms": 220,
+          "region": [
+            4,
+            384,
+            470,
+            668
+          ]
+        },
+        {
+          "source": "docs/images/walkthrough/review-request-2.png",
+          "source_sha256": "440ebc7de26178778a0ea154c54823a36cc94d1bb1d89a225815c4f72430ab72",
+          "duration_ms": 2600,
+          "region": [
+            4,
+            384,
+            470,
+            668
+          ]
+        },
+        {
+          "source": "docs/images/walkthrough/verdict-1.png",
+          "source_sha256": "e42f74f9ac59af2f6e2ded8bf5c700adb9c6f7dcfc1f7357882ceb0ef555cb93",
+          "duration_ms": 220,
+          "region": [
+            4,
+            384,
+            470,
+            668
+          ]
+        },
+        {
+          "source": "docs/images/walkthrough/verdict-2.png",
+          "source_sha256": "93fdfc51130b8434e8a3c635c7ae01fa5970c5e06795c9da67c9deff4cd5f1e8",
+          "duration_ms": 2600,
+          "region": [
+            4,
+            384,
+            470,
+            668
+          ]
+        },
+        {
+          "source": "docs/images/walkthrough/accept-1.png",
+          "source_sha256": "79fab0b41eb88a3981bb0c9c56827c337845c8e659a23226ffaa854606cf4c8b",
+          "duration_ms": 220,
+          "region": [
+            4,
+            384,
+            470,
+            668
+          ]
+        },
+        {
+          "source": "docs/images/walkthrough/accept-2.png",
+          "source_sha256": "03e5bd3a500a84e6ff5b193eb29bf9684c647b5edd60eb5fa05667cb0bedaf43",
+          "duration_ms": 2200,
+          "region": [
+            4,
+            384,
+            470,
+            668
+          ]
+        }
+      ]
     },
     {
       "step": "08",
-      "title": "Preserve the context",
-      "source": "docs/images/panel-feed/closing-memory-2.png",
-      "source_sha256": "a3bd79b5253d34654f2fb7f5180cd3eb4bd0300ea7d0bba221f089103683b2a3",
-      "duration_ms": 4500
+      "title": "Push, CI and deploy",
+      "duration_ms": 4800,
+      "frames": [
+        {
+          "source": "docs/images/walkthrough/repos-before.png",
+          "source_sha256": "9a9aa1bb9d076e404e47d3256382634732528b772ad4eefdfc55046fb3fb5c55",
+          "duration_ms": 2600,
+          "region": [
+            4,
+            132,
+            426,
+            326
+          ]
+        },
+        {
+          "source": "docs/images/walkthrough/repos-after.png",
+          "source_sha256": "ac88500bb98678895ceaf285c9a42969c3346ff6d52f34e50caf9dd81b928cb7",
+          "duration_ms": 2200,
+          "region": [
+            4,
+            132,
+            426,
+            326
+          ]
+        }
+      ]
     },
     {
       "step": "09",
-      "title": "Finish the lifecycle",
-      "source": "docs/images/panel-feed/closing-memory-4-hidden.png",
-      "source_sha256": "1f2e0708519dbd1c13af5a331ca28d14e9cb4ba202457f417810cf5f38af22ac",
-      "duration_ms": 4500
+      "title": "Cleanup and memory",
+      "duration_ms": 10000,
+      "frames": [
+        {
+          "source": "docs/images/walkthrough/cleanup-1.png",
+          "source_sha256": "a08e104013b05475cd5c84be8d00b4b6cf6b907be8b4be0d95a805437af26ab4",
+          "duration_ms": 2600,
+          "region": [
+            4,
+            384,
+            470,
+            668
+          ]
+        },
+        {
+          "source": "docs/images/walkthrough/cleanup-2.png",
+          "source_sha256": "cdb5d1770bd02313b7189480c8fd2a4e1f070f23c0396d61b802af98b238a5b6",
+          "duration_ms": 2600,
+          "region": [
+            4,
+            384,
+            470,
+            668
+          ]
+        },
+        {
+          "source": "docs/images/walkthrough/cleanup-3.png",
+          "source_sha256": "500d094e7b4b57cf0efd711982a4aae308f06a0f35ffa6c53345544f16dd1485",
+          "duration_ms": 2600,
+          "region": [
+            4,
+            384,
+            470,
+            668
+          ]
+        },
+        {
+          "source": "docs/images/walkthrough/cleanup-4.png",
+          "source_sha256": "5b28ef4aa7563e6df84ec17b71c9dcfc5b4e4a3705eaf2fd18180329717fd6bc",
+          "duration_ms": 2200,
+          "region": [
+            4,
+            384,
+            470,
+            668
+          ]
+        }
+      ]
+    },
+    {
+      "step": "10",
+      "title": "Pane header chips",
+      "duration_ms": 2600,
+      "frames": [
+        {
+          "source": "docs/images/walkthrough/desk.png",
+          "source_sha256": "c67876c6136fd8fc7402cd69aed3354a56752f8bfcb67e860e769314459a2385",
+          "duration_ms": 2600,
+          "region": [
+            476,
+            120,
+            1676,
+            164
+          ]
+        }
+      ]
+    },
+    {
+      "step": "11",
+      "title": "Find and read documents",
+      "duration_ms": 4800,
+      "frames": [
+        {
+          "source": "docs/images/walkthrough/docs-finder.png",
+          "source_sha256": "f5efbe863e0461801b4dbb270e0443997b776aba958a1c2cf638e4b2d8331da2",
+          "duration_ms": 2600,
+          "region": [
+            476,
+            210,
+            915,
+            606
+          ]
+        },
+        {
+          "source": "docs/images/walkthrough/docs-tab.png",
+          "source_sha256": "22825a98ca1768967b8caf98f765b9d8028a938e4ceaf5125968dd71ec598434",
+          "duration_ms": 2200,
+          "region": [
+            474,
+            80,
+            1676,
+            996
+          ]
+        }
+      ]
+    },
+    {
+      "step": "12",
+      "title": "This week",
+      "duration_ms": 4800,
+      "frames": [
+        {
+          "source": "docs/images/walkthrough/desk.png",
+          "source_sha256": "c67876c6136fd8fc7402cd69aed3354a56752f8bfcb67e860e769314459a2385",
+          "duration_ms": 2600,
+          "region": [
+            472,
+            0,
+            1680,
+            80
+          ]
+        },
+        {
+          "source": "docs/images/walkthrough/week.png",
+          "source_sha256": "7258449162b5342d75f99205a7b9a84732566140da9229299d75bdacacc18091",
+          "duration_ms": 2200,
+          "region": [
+            40,
+            290,
+            1640,
+            710
+          ]
+        }
+      ]
     }
   ]
 }

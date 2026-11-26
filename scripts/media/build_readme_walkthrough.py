@@ -1,119 +1,111 @@
 #!/usr/bin/env python3
-"""Build an editorial walkthrough from checked-in native demo captures.
+"""Build the README walkthrough GIF from checked-in native demo captures.
 
 Requires Pillow. Never captures a desktop, changes app state or synthesizes UI.
-Source screenshots remain unchanged; text beside them is documentation.
+Every frame is one unchanged capture from docs/images/walkthrough, scaled down,
+with a caption bar above it and an outline around the part the caption names.
+The captions and outlines are documentation; the screen pixels are the app's.
 """
 from pathlib import Path
 import hashlib
 import json
-import textwrap
 from PIL import Image, ImageDraw, ImageFont
 
 ROOT = Path(__file__).resolve().parents[2]
+SRC = ROOT / 'docs/images/walkthrough'
 OUT = ROOT / 'docs/media'
-SIZE = (1280, 1000)
+CAPTURE = (1680, 1000)
+SCALE = 1280 / CAPTURE[0]
+BAR = 112
+SIZE = (1280, BAR + round(CAPTURE[1] * SCALE))
 BG, FG, MUTED, ACCENT = '#101923', '#edf4fa', '#b5c4d2', '#79d1dc'
+HOLD, STEP, LAST = 2600, 220, 2200
+
+# Regions are in capture pixels (1680x1000).
+SIDEBAR = (4, 384, 470, 668)
+SPACES = (4, 384, 470, 872)
+# (number, title, lead, [(source, region, kind)]) where kind is 'hold' or 'step'.
 SCENES = [
- ('01', 'Choose the project', 'issues-milestone.png',
-  'Start with the issue and its context.',
-  ['Inspect project issues, milestones and supplied progress.', 'Cached data is labelled; missing data is not a completed task.'],
-  'The optional producer owns issue data and refresh.'),
- ('02', 'Delegate the work', 'event-assign-existing.png',
-  'Follow allocation to a worker.',
-  ['An allocation event highlights the target agent.', 'Existing workers and new sessions have distinct event states.'],
-  'An optional producer allocates work. The theme displays its feed.'),
- ('03', 'Work in parallel', 'tree-expanded.png',
-  'Keep parent and child work together.',
-  ['Expand independent work beneath its parent.', 'Task titles, issue groups and worker states remain visible.'],
-  'A rendered tree is not proof of automatic task splitting.'),
- ('04', 'Follow messages', 'local-message.png',
-  'See the direction of an observed send.',
-  ['Sender and recipient anchors define the route.', 'Message travel and arrival are different from task completion.'],
-  'Native send events require a compatible app/core build.'),
- ('05', 'Request a review', 'event-review_request.png',
-  'Show the handoff to a reviewer.',
-  ['Review requests are separate from ordinary messages.', 'Work stays attached to its project and issue.'],
-  'The reviewer produces the verdict; the theme does not infer it.'),
- ('06', 'Inspect the result', 'event-verdict.png',
-  'Distinguish review from acceptance.',
-  ['A verdict is its own event.', 'Acceptance, delivery ACK and successful work are separate facts.'],
-  'PASS in this demo is supplied fixture data, not a live review.'),
- ('07', 'Accept the report', 'event-accept.png',
-  'Let the owner confirm the result.',
-  ['Acceptance is shown independently of the verdict.', 'Remaining work and decision waits stay with the task.'],
-  'A finished response alone must not mean the task succeeded.'),
- ('08', 'Preserve the context', 'closing-memory-2.png',
-  'Show the saved-result stage.',
-  ['Cleanup progresses through reporting and retained context.', 'Stored outcomes may include HOLD, failure and remaining work.'],
-  'The producer owns storage and policy; this is a rendered state.'),
- ('09', 'Finish the lifecycle', 'closing-memory-4-hidden.png',
-  'Remove the closed row from the sidebar.',
-  ['Closed work no longer fills the active list.', 'Pinned spaces and active work follow the producer policy.'],
-  'This fixture shows row removal, not a live terminal-kill test.'),
+ ('00', 'The whole desk', 'Computers, repositories, spaces, agents, panes and the week in one window.',
+  [('desk.png', None, 'hold')]),
+ ('01', 'Start from an issue', 'Pick an issue, choose an agent and level, press 작업 시작. The result line says where it went.',
+  [('issue-list.png', (458, 200, 898, 668), 'hold'), ('issue-detail.png', (458, 290, 898, 584), 'hold'),
+   ('issue-sending.png', (458, 290, 898, 584), 'step'), ('issue-sent.png', (458, 290, 898, 584), 'hold')]),
+ ('02', 'Split and hand out the work', 'A spawn adds a placeholder row under its issue; an assignment labels the lead row. Chips show the job.',
+  [(f'split-{i}.png', SIDEBAR, 'step') for i in range(1, 6)] + [('split-6.png', SIDEBAR, 'hold')]),
+ ('03', 'Four stages, seven states', 'Each row shows its stage bar and state: working, needs you, result to check, cleanup wait, idle, closing.',
+  [('desk.png', SPACES, 'hold')]),
+ ('04', 'Follow messages', 'Solid lines join spaces on this computer; dashed lines cross to another computer.',
+  [(f'messages-{i}.png', (4, 100, 470, 872), 'step') for i in range(1, 6)] + [('messages-6.png', (4, 100, 470, 872), 'hold')]),
+ ('05', 'Alerts per space', 'Each space keeps its own Slack, Linear and GitHub alerts, grouped by time in the 알림 tab.',
+  [('alerts.png', (458, 205, 898, 666), 'hold')]),
+ ('06', 'Requests wait beside the card', 'A tab beside the space opens its requests; a request from another space opens by itself.',
+  [('ask-tab.png', (420, 384, 470, 768), 'hold'), ('ask-popup.png', (6, 6, 570, 242), 'hold'),
+   ('ask-other-space.png', (6, 6, 570, 242), 'hold')]),
+ ('07', 'Review, verdict, acceptance', 'A review request, the reviewer\'s verdict and the owner\'s acceptance are three separate events.',
+  [('review-request-1.png', SIDEBAR, 'step'), ('review-request-2.png', SIDEBAR, 'hold'),
+   ('verdict-1.png', SIDEBAR, 'step'), ('verdict-2.png', SIDEBAR, 'hold'),
+   ('accept-1.png', SIDEBAR, 'step'), ('accept-2.png', SIDEBAR, 'hold')]),
+ ('08', 'Push, CI and deploy', 'REPOS shows PUSH, CI and CD per repository; install chips show which computer runs which commit.',
+  [('repos-before.png', (4, 132, 426, 326), 'hold'), ('repos-after.png', (4, 132, 426, 326), 'hold')]),
+ ('09', 'Cleanup and memory', 'A finished row reports, saves its decisions, proposes memory (기억 제안 badge) and closes.',
+  [(f'cleanup-{i}.png', SIDEBAR, 'hold') for i in range(1, 5)]),
+ ('10', 'Pane header chips', 'Model, effort, permission, weekly usage, to-dos and running subagents, per pane.',
+  [('desk.png', (476, 120, 1676, 164), 'hold')]),
+ ('11', 'Find and read documents', 'Search a space\'s documents, or browse them in that space\'s 문서 tab.',
+  [('docs-finder.png', (476, 210, 915, 606), 'hold'), ('docs-tab.png', (474, 80, 1676, 996), 'hold')]),
+ ('12', 'This week', 'The band lists due issues by day; the timeline opens the week by project.',
+  [('desk.png', (472, 0, 1680, 80), 'hold'), ('week.png', (40, 290, 1640, 710), 'hold')]),
 ]
 
 def font(size, bold=False):
+ # Captions quote Korean UI labels, so the font must cover Hangul.
  candidates = [
-  Path('/System/Library/Fonts/Supplemental/Arial Bold.ttf' if bold else '/System/Library/Fonts/Supplemental/Arial.ttf'),
-  Path('/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf' if bold else '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf'),
-  Path('C:/Windows/Fonts/arialbd.ttf' if bold else 'C:/Windows/Fonts/arial.ttf'),
+  Path('C:/Windows/Fonts/malgunbd.ttf' if bold else 'C:/Windows/Fonts/malgun.ttf'),
+  Path('/System/Library/Fonts/AppleSDGothicNeo.ttc'),
+  Path('/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc' if bold else '/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc'),
  ]
  for p in candidates:
   if p.exists(): return ImageFont.truetype(str(p), size)
  return ImageFont.load_default(size=size)
 
-def wrapped(draw, text, xy, width=41, size=26, color=FG):
- x,y=xy
- for line in textwrap.wrap(text, width=width):
-  draw.text((x,y),line,font=font(size),fill=color);y+=size+12
- return y
+def frame(number, title, lead, source, region):
+ im = Image.new('RGB', SIZE, BG); d = ImageDraw.Draw(im)
+ d.text((32, 20), f'{number} / {len(SCENES) - 1:02d}', font=font(20, True), fill=ACCENT)
+ d.text((112, 16), title, font=font(30, True), fill=FG)
+ d.text((32, 64), lead, font=font(20), fill=MUTED)
+ d.text((SIZE[0] - 32, 22), 'Native capture · synthetic data', font=font(15), fill=MUTED, anchor='ra')
+ screen = Image.open(SRC / source).convert('RGB').resize((SIZE[0], SIZE[1] - BAR), Image.Resampling.LANCZOS)
+ im.paste(screen, (0, BAR))
+ if region:
+  x0, y0, x1, y1 = (round(v * SCALE) for v in region)
+  d.rounded_rectangle((x0 - 2, BAR + y0 - 2, x1 + 2, BAR + y1 + 2), radius=6, outline=ACCENT, width=3)
+ return im
 
-def slide(scene):
- number,title,name,lead,points,note=scene
- im=Image.new('RGB',SIZE,BG);d=ImageDraw.Draw(im)
- d.text((56,48),'HERDR THEME / WORKFLOW WALKTHROUGH',font=font(17,True),fill=ACCENT)
- d.text((56,132),number+' / 09',font=font(24,True),fill=ACCENT)
- d.text((56,192),title,font=font(44,True),fill=FG)
- y=wrapped(d,lead,(56,280),size=29)
- for point in points:
-  y=wrapped(d,point,(72,y+48),width=36,size=25,color=MUTED)
- y=wrapped(d,note,(56,730),width=46,size=20,color=ACCENT)
- d.text((56,918),'Native demo capture + editorial captions',font=font(18),fill=MUTED)
- d.text((56,947),'Synthetic data. Not a continuous live E2E recording.',font=font(17),fill=MUTED)
- path=ROOT/'docs/images/panel-feed'/name
- screen=Image.open(path).convert('RGB')
- screen.thumbnail((510,880),Image.Resampling.LANCZOS)
- x=SIZE[0]-56-screen.width;y=56
- im.paste(screen,(x,y))
- return im,path
+def palette(images):
+ strip = Image.new('RGB', (SIZE[0], SIZE[1] * len(images)))
+ for i, im in enumerate(images): strip.paste(im, (0, SIZE[1] * i))
+ return strip.resize((SIZE[0] // 2, SIZE[1] * len(images) // 2)).quantize(255, method=Image.Quantize.MEDIANCUT)
 
 def build():
- OUT.mkdir(parents=True,exist_ok=True)
- frames=[];durations=[];manifest=[]
- overview_path=ROOT/'docs/images/overview-native.gif'
- overview=Image.open(overview_path)
- intro_ms=0
- for i in range(min(34,overview.n_frames)):
-  overview.seek(i)
-  frame=Image.new('RGB',SIZE,BG);d=ImageDraw.Draw(frame)
-  d.text((48,36),'HERDR THEME / NATIVE DEMO',font=font(28,True),fill=ACCENT)
-  d.text((48,90),'Watch the workspace, then follow nine workflow chapters.',font=font(24),fill=FG)
-  frame.paste(overview.convert('RGB'),(0,160))
-  d.text((48,960),'Synthetic data. Workflow chapters use separate native captures.',font=font(18),fill=MUTED)
-  duration=overview.info.get('duration',150)
-  frames.append(frame);durations.append(duration);intro_ms+=duration
- poster=None
- for scene in SCENES:
-  im,path=slide(scene);frames.append(im);durations.append(4500)
-  if poster is None:poster=im
-  manifest.append({'step':scene[0],'title':scene[1],'source':str(path.relative_to(ROOT)),
-                   'source_sha256':hashlib.sha256(path.read_bytes()).hexdigest(),'duration_ms':4500})
- frames[0].save(ROOT/'preview.gif',save_all=True,append_images=frames[1:],duration=durations,
-                loop=0,optimize=True,disposal=2)
- poster.save(OUT/'workflow-poster.png')
- (OUT/'workflow-manifest.json').write_text(json.dumps({'schema':1,'kind':'editorial walkthrough of native fixtures',
-  'canvas':SIZE,'duration_ms':sum(durations),'intro':{'source':str(overview_path.relative_to(ROOT)),'frames':34,'duration_ms':intro_ms,'source_sha256':hashlib.sha256(overview_path.read_bytes()).hexdigest()},'scenes':manifest},indent=2)+'\n')
- print(f'{len(SCENES)} chapters; {sum(durations)/1000}s; {(ROOT/"preview.gif").stat().st_size} bytes')
+ OUT.mkdir(parents=True, exist_ok=True)
+ frames, durations, manifest = [], [], []
+ for number, title, lead, shots in SCENES:
+  scene_ms, sources = 0, []
+  for i, (source, region, kind) in enumerate(shots):
+   frames.append(frame(number, title, lead, source, region))
+   ms = STEP if kind == 'step' else (LAST if i == len(shots) - 1 and len(shots) > 1 else HOLD)
+   durations.append(ms); scene_ms += ms
+   path = SRC / source
+   sources.append({'source': path.relative_to(ROOT).as_posix(), 'source_sha256': hashlib.sha256(path.read_bytes()).hexdigest(),
+                   'duration_ms': ms, 'region': list(region) if region else None})
+  manifest.append({'step': number, 'title': title, 'duration_ms': scene_ms, 'frames': sources})
+ pal = palette(frames[::3])
+ gif = [im.quantize(palette=pal, dither=Image.Dither.NONE) for im in frames]
+ gif[0].save(ROOT / 'preview.gif', save_all=True, append_images=gif[1:], duration=durations, loop=0, optimize=False, disposal=1)
+ frames[0].save(OUT / 'workflow-poster.png', optimize=True)
+ (OUT / 'workflow-manifest.json').write_text(json.dumps({'schema': 2, 'kind': 'captioned native captures of synthetic demo data',
+  'canvas': list(SIZE), 'capture': list(CAPTURE), 'frames': len(frames), 'duration_ms': sum(durations), 'scenes': manifest}, indent=2, ensure_ascii=False) + '\n', encoding='utf-8')
+ print(f'{len(SCENES)} scenes; {len(frames)} frames; {sum(durations) / 1000}s; {(ROOT / "preview.gif").stat().st_size} bytes')
 
-if __name__=='__main__':build()
+if __name__ == '__main__': build()
