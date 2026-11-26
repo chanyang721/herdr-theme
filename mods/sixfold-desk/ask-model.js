@@ -322,8 +322,17 @@ export function windowPlace(source) {
   const w = positive(b[2]), h = positive(b[3]);
   return w && h ? {w: Math.round(w), h: Math.round(h), windowed: data.state === 'windowed'} : null;
 }
-export function popupSpec(box, place, width, height, zoom = 1, hidden = false) {
+// `framed` (maximized or full screen, from the host's live window flags): the
+// window's size is unknown to mods, so with the sidebar hidden the popup opens
+// at the top-left margin at a fixed bounded size (FRAMED_MAX); the host keeps a
+// popup inside the window. A known limit: it is not centred then.
+export const FRAMED_MAX = {width: 560, height: 640};
+export function popupSpec(box, place, width, height, zoom = 1, hidden = false, framed = false) {
   const z = positive(zoom) ?? 1, M = POPUP_MARGIN;
+  if (hidden && framed) {
+    return {at: {x: M, y: M}, width: Math.min(width, FRAMED_MAX.width), height: Math.min(height, FRAMED_MAX.height)};
+  }
+  if (framed) place = null;   // window.json keeps the restore size then
   const sideW = hidden ? null : positive(box?.w), sideH = positive(box?.h);
   const live = sideW && sideH ? sideH : null;
   const winH = live ?? (place?.windowed ? positive(place.h) : null) ?? sideH ?? positive(place?.h) ?? FALLBACK_WINDOW_HEIGHT;

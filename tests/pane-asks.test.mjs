@@ -275,6 +275,8 @@ test('the sidebar watcher publishes the per-pane summary only when it changes', 
 test('pane header shows a decision button only for its own terminal and opens without moving focus', async () => {
   const f = host([]), sidebar = {id: 'sidebar'};
   f.h.layout = () => ({id: 'root', children: [sidebar]});
+  const winState = {maximized: false, fullscreen: false};
+  f.h.window = () => winState;
   const mod = await load(f.h);
   f.store.set(SUMMARY_KEY, askSummary([card('a1', 'pane-a'), card('a2', 'pane-a'), card('b1', 'pane-b', {kind: 'question'})]));
   assert.equal(mod.paneAskButton({pane: 'p9', terminal: 'pane-z'}, theme, 'ko', 'Z'), null);
@@ -312,10 +314,26 @@ test('pane header shows a decision button only for its own terminal and opens wi
   f.files.set('/demo/window.json', '{broken');
   nodeOf(a).click(event, context()); await settle();
   assert.equal(f.overlays[4].width, 420 - 16);
+  // A read that never answers is given up by the deadline: the popup opens on the last good read.
+  const slow = f.impl.readTextFile;
+  f.impl.readTextFile = () => new Promise(() => {});
+  const started = Date.now();
+  nodeOf(a).click(event, context());
+  await new Promise(resolve => setTimeout(resolve, mod.POPUP_DEADLINE_MS + 150));
+  assert.equal(f.overlays.length, 6, 'opened despite the stuck read');
+  assert.ok(Date.now() - started < 2000);
+  assert.equal(f.overlays[5].width, 420 - 16, 'on the last good read');
+  f.impl.readTextFile = slow;
+  // Maximized with the sidebar hidden: the window size is unknown, so the top-left margin at a bounded size, no wait.
+  winState.maximized = true;
+  nodeOf(a).click(event, context()); await tick();
+  assert.deepEqual({at: f.overlays[6].at, width: f.overlays[6].width}, {at: {x: 8, y: 8}, width: 560});
+  assert.ok(f.overlays[6].height <= 640);
+  winState.maximized = false;
   // A shown sidebar gives a live height: no wait.
   sidebar.hidden = false;
   nodeOf(a).click(event, context()); await tick();
-  assert.equal(f.overlays.length, 6);
+  assert.equal(f.overlays.length, 8);
   assert.deepEqual(f.focus, [], 'no pane.focus/agent.focus');
   assert.ok(nodeOf(a).calls.includes('on_mouse_down'), 'press does not reach the header (which focuses the pane)');
 });
@@ -891,4 +909,13 @@ test('a card popup opens centred on the sidebar, or on the window left edge when
   assert.deepEqual(windowPlace('{"state":"windowed","bounds":[0,30,2540,1390]}'), {w: 2540, h: 1390, windowed: true});
   assert.deepEqual(windowPlace({state: 'maximized', bounds: [0, 0, 800, 600]}), {w: 800, h: 600, windowed: false});
   for (const bad of ['{', null, '{}', '{"bounds":[0,0,0,10]}']) assert.equal(windowPlace(bad), null);
+});
+
+test('maximized or full screen with the sidebar hidden: top-left margin at a fixed bounded size', async () => {
+  const {popupSpec, FRAMED_MAX} = await import('../mods/sixfold-desk/ask-model.js');
+  assert.deepEqual(popupSpec({w: 320, h: 1390}, {w: 900, h: 600, windowed: false}, 560, 720, 0.9, true, true),
+    {at: {x: 8, y: 8}, width: FRAMED_MAX.width, height: FRAMED_MAX.height});
+  // Sidebar shown while maximized: its live height still centres it; the restore size never cuts it.
+  const shown = popupSpec({w: 320, h: 1390}, {w: 300, h: 200, windowed: true}, 560, 400, 1, false, true);
+  assert.deepEqual(shown, {at: {x: 8, y: 495}, width: 560, height: 400});
 });

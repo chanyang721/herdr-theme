@@ -1,6 +1,6 @@
 import { div } from 'gpui-kit';
 import { h_flex, v_flex, TextareaState, Textarea } from 'gpui-base';
-import { exec, readTextFile, writeTextFile, appHome, shared, setShared, openOverlay, closeOverlay, props, panes, spaces, focused, run, layout, settings } from 'herdr';
+import { exec, readTextFile, writeTextFile, appHome, shared, setShared, openOverlay, closeOverlay, props, panes, spaces, focused, run, layout, settings, window } from 'herdr';
 import { KIND_WORDS, ASK_WORDS, SUMMARY_KEY, bridgeFrom, parseAsks, questionsOf, actionsOf, choose, complete, actionRequest, requestPath, acceptedReceipt, detailOf, selectionOf,
   askSummary, summaryFor, unverifiedFor, summaryFromSnapshots, summaryState, sameSummary, groupAsks, cardsFor, queueFor, pageAfter, spaceAsks, spaceAskLayout, clampPage, reconcile, popupHeight, popupSpec, windowPlace, errorText, autoPopupTarget, prunedOpened,
   replyText, needsText, receiptError, receiptCode } from './ask-model.js';
@@ -278,19 +278,34 @@ export const hasAsks = view => Array.isArray(view.asks) && view.asks.length > 0;
 // and opened. The app writes that file only WINDOW_SETTLE_MS after a resize
 // stops (herdr-app place.rs SETTLE = 400 ms), so with the sidebar hidden (no
 // live height) the popup waits that long and reads it again before it opens:
-// a popup right after a resize uses the new size. Resolves to the overlay id.
+// a popup right after a resize uses the new size. All of that is bounded by
+// POPUP_DEADLINE_MS: a read that has not answered by then is given up and the
+// popup opens on what is known (the last read, else the fallback). Maximized
+// or full screen, window.json holds only the restore size and the host tells
+// mods no window size (herdr-app mods.rs window(): flags only), so with the
+// sidebar hidden the popup opens at the top-left margin at its own bounded size
+// (the host keeps it inside the window). Resolves to the overlay id.
 export const WINDOW_SETTLE_MS = 450;
+export const POPUP_DEADLINE_MS = 1500;
+const within = (promise, ms) => Promise.race([promise, wait(Math.max(0, ms)).then(() => undefined)]);
 export async function openAskPopup(terminal, name, cards, queue = null) {
   const own = {role: 'ask', terminal: terminal ?? null, name: name ?? ''};
   if (queue && Array.isArray(queue.terminals)) {
     own.terminals = queue.terminals.map(t => t ?? null);
     own.names = Object.fromEntries(Object.entries(queue.names ?? {}).filter(([, v]) => typeof v === 'string'));
   }
-  let place = await readWindowPlace();
-  if (sidebarHidden()) { await wait(WINDOW_SETTLE_MS); place = await readWindowPlace(); }
+  const deadline = Date.now() + POPUP_DEADLINE_MS, left = () => deadline - Date.now();
+  let state = null;
+  try { state = typeof window === 'function' ? window() : null; } catch { /* unknown: treated as windowed */ }
+  const hidden = sidebarHidden(), framed = Boolean(state?.maximized || state?.fullscreen);
+  let place = (await within(readWindowPlace(), left())) ?? shared(WINDOW_PLACE_KEY) ?? null;
+  if (hidden && !framed && left() > 0) {
+    await wait(Math.min(WINDOW_SETTLE_MS, left()));
+    place = (await within(readWindowPlace(), left())) ?? place;
+  }
   let zoom = 1;
   try { zoom = settings()?.zoom ?? 1; } catch { /* no settings: unzoomed */ }
-  const spec = popupSpec(shared(SIDEBAR_BOX_KEY), place, 560, popupHeight(cards?.[0]), zoom, sidebarHidden());
+  const spec = popupSpec(shared(SIDEBAR_BOX_KEY), place, 560, popupHeight(cards?.[0]), zoom, hidden, framed);
   return openOverlay({mod: 'sixfold-desk', kind: 'popup', ...spec, props: own});
 }
 // The sidebar copy records its size here (main.js) so every copy that opens a
