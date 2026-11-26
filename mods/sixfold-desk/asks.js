@@ -2,7 +2,7 @@ import { div } from 'gpui-kit';
 import { h_flex, v_flex, TextareaState, Textarea } from 'gpui-base';
 import { exec, readTextFile, writeTextFile, appHome, shared, setShared, openOverlay, closeOverlay, props, panes, spaces, focused, run, layout, settings, window } from 'herdr';
 import { KIND_WORDS, ASK_WORDS, SUMMARY_KEY, bridgeFrom, parseAsks, questionsOf, actionsOf, choose, complete, actionRequest, requestPath, acceptedReceipt, detailOf, selectionOf,
-  askSummary, summaryFor, unverifiedFor, summaryFromSnapshots, summaryState, sameSummary, groupAsks, cardsFor, queueFor, pageAfter, spaceAsks, spaceAskLayout, clampPage, reconcile, popupHeight, popupSpec, windowPlace, errorText, autoPopupTarget, prunedOpened,
+  askSummary, summaryFor, unverifiedFor, summaryFromSnapshots, summaryState, sameSummary, groupAsks, cardsFor, queueFor, pageAfter, spaceAsks, spaceAskLayout, clampPage, reconcile, popupHeight, popupSpec, windowPlace, errorText, autoPopupTarget, prunedOpened, SEEN_KEY, seenKeysOf,
   replyText, needsText, receiptError, receiptCode } from './ask-model.js';
 
 import {subscribeJsonFile,readJsonSnapshot} from './panel-io.js';
@@ -37,6 +37,7 @@ export function watchAsks(view, cx) {
       }
       view.asks=cards;pendingNotify=true;
       popupElsewhere(cards,view.askNameOf);
+      pruneSeen(cards);
     }
     // Compared with the summary in shared state on every read, not with this
     // watcher's own last list: another writer (a header check, an older copy,
@@ -113,6 +114,22 @@ function popupElsewhere(cards, nameOf) {
     setShared(OPENED_KEY, [...new Set([...opened, ...target.keys])]);
     openAskPopup(target.terminal, nameOf?.(target.terminal) ?? target.terminal, target.cards);
   } catch { /* Display-only; the sidebar list still holds every card. */ }
+}
+
+// Seen display-only cards (ask-model SEEN_KEY) are kept only while their card lives.
+function pruneSeen(cards) {
+  try {
+    const seen = shared(SEEN_KEY) ?? [], kept = prunedOpened(seen, cards);
+    if (JSON.stringify(kept) !== JSON.stringify(seen)) setShared(SEEN_KEY, kept);
+  } catch { /* Display-only; an unpruned key only names a card that is gone. */ }
+}
+function markSeen(cards) {
+  try {
+    const keys = seenKeysOf(cards);
+    if (!keys.length) return;
+    const seen = Array.isArray(shared(SEEN_KEY)) ? shared(SEEN_KEY) : [], next = [...new Set([...seen, ...keys])];
+    if (next.length !== seen.length) setShared(SEEN_KEY, next);
+  } catch { /* Display-only; the card simply stays in the list. */ }
 }
 
 // Pane headers and the popup are other copies of this mod: they learn about
@@ -498,7 +515,10 @@ export function askPopup(view, t, lang, cx) {
   const names = props()?.names ?? {}, queued = Array.isArray(props()?.terminals);
   const paneName = card && queued ? (names[card.terminal ?? ''] || card.terminal || more.unassigned) : null;
   const name = [props()?.name || props()?.terminal || more.unassigned, paneName].filter(Boolean).join(' · '), overlay = props()?.overlay;
-  const close = () => { if (overlay) closeOverlay(overlay); };
+  // The display-only cards this popup put on screen count as seen when the person closes it
+  // or goes to their pane: they leave the sidebar list (markSeen); nothing is answered.
+  if (card && card.answerable === false) (view.askViewed ??= new Map()).set(card.id, card);
+  const close = () => { markSeen([...(view.askViewed?.values() ?? [])].filter(c => cards.some(x => x.id === c.id && x.revision === c.revision))); if (overlay) closeOverlay(overlay); };
   const header = h_flex().gap(8).items_center().px(14).py(10).border_b(1).border_color(t.border)
     .when(Boolean(card), e => e.child(div().flex_none().px(6).py(1).rounded(3).bg(t.blocked).text_color(t.background).text_size(11).font_bold()
       .child(kindLabel(lang, card.kind))))
@@ -563,5 +583,5 @@ export function askPopup(view, t, lang, cx) {
   }
   return v_flex().id('sf-ask-popup').size_full().bg(t.popover ?? t.chrome).text_color(t.foreground)
     .child(header).child(notices).child(body)
-    .child(div().px(14).py(8).border_t(1).border_color(t.border).text_size(10).text_color(t.dim).child(more.closeHint));
+    .child(div().px(14).py(8).border_t(1).border_color(t.border).text_size(10).text_color(t.dim).child(card?.answerable === false ? more.closeHintInPane : more.closeHint));
 }

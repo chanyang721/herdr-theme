@@ -135,7 +135,7 @@ export function touchesCards(paths, directory) {
 // and the popup re-reads the neutral cards file itself when the version moves.
 export const SUMMARY_KEY = 'sixfold.asks.summary';
 export const ASK_WORDS = {
-  ko: {open: '열기', close: '닫기', inPane: '대기 시간이 지나 이 카드로는 답할 수 없습니다. 그 페인의 Claude 창에서 직접 답하세요. 답하면 이 카드는 사라지고 다음 요청이 열립니다.', goPane: '페인으로 이동', paneOnly: '페인에서 답하기', queue: (i, n) => `${i}/${n} · 오래된 순`, closeHint: '닫아도 거절·답변되지 않습니다. 머리줄 버튼이나 왼쪽 목록에서 다시 열 수 있습니다.',
+  ko: {open: '열기', close: '닫기', inPane: '대기 시간이 지나 이 카드로는 답할 수 없습니다. 그 페인의 Claude 창에서 직접 답하세요. 답하면 이 카드는 사라지고 다음 요청이 열립니다.', goPane: '페인으로 이동', paneOnly: '페인에서 답하기', queue: (i, n) => `${i}/${n} · 오래된 순`, closeHint: '닫아도 거절·답변되지 않습니다. 머리줄 버튼이나 왼쪽 목록에서 다시 열 수 있습니다.', closeHintInPane: '닫으면 확인한 것으로 보고 왼쪽 목록에서 뺍니다. 답은 그 페인에서 하고, 페인 머리줄 버튼으로 다시 열 수 있습니다.',
     none: '이 페인에 남은 확인 요청이 없습니다.', loading: '불러오는 중…', loadFailed: '카드를 읽지 못했습니다.', refreshFailed: '최신 내용을 읽지 못했습니다 — 아래는 마지막으로 읽은 내용입니다.', retry: '다시 읽기', sending: '전송 중…', sent: '응답을 접수했습니다.',
     expired: '처리되었거나 만료된 요청', unconfirmed: '응답 접수를 확인하지 못함 — 에이전트 페인에서 결과를 확인하세요', revised: '요청 내용이 바뀌어 선택을 초기화했습니다.', unassigned: '소속 미확인',
     placeholder: '그 칸에 보낼 답을 적으세요', textOpen: '눌러서 답 쓰기',
@@ -149,7 +149,7 @@ export const ASK_WORDS = {
       duplicate_text: '그 칸에 전에 보낸 글과 똑같아 다시 보내지 않았습니다. 글을 조금 바꿔 보내세요.',
       not_checked: '보내기 전에 그 칸 상태를 읽지 못해 보내지 않았습니다. 다시 보내도 됩니다.'},
     count: n => `${n}건`, more: n => `${n}개 페인 · 목록을 스크롤해 모두 보기`},
-  en: {open: 'Open', close: 'Close', inPane: 'This card waited too long and can no longer answer. Answer it in that pane\'s own Claude prompt; the card then goes and the next request opens.', goPane: 'Go to pane', paneOnly: 'Answer in pane', queue: (i, n) => `${i}/${n} · oldest first`, closeHint: 'Closing does not deny or answer. Reopen it from the pane header or the sidebar.',
+  en: {open: 'Open', close: 'Close', inPane: 'This card waited too long and can no longer answer. Answer it in that pane\'s own Claude prompt; the card then goes and the next request opens.', goPane: 'Go to pane', paneOnly: 'Answer in pane', queue: (i, n) => `${i}/${n} · oldest first`, closeHint: 'Closing does not deny or answer. Reopen it from the pane header or the sidebar.', closeHintInPane: 'Closing marks it seen and takes it off the sidebar list. Answer it in its pane; reopen it from the pane header.',
     none: 'No requests left for this pane.', loading: 'Loading…', loadFailed: 'Could not read the cards.', refreshFailed: 'Could not read the latest — showing the last read.', retry: 'Retry', sending: 'Sending…', sent: 'Response accepted.',
     expired: 'Handled or expired', unconfirmed: 'Response not confirmed — check the agent pane', revised: 'The request changed; choices were reset.', unassigned: 'Unassigned',
     placeholder: 'Type the answer to send to that pane', textOpen: 'Click to type an answer',
@@ -380,3 +380,13 @@ export const prunedOpened = (opened, cards) => {
   const live = new Set((cards ?? []).map(askKey));
   return [...new Set(opened ?? [])].filter(key => live.has(key));
 };
+// A display-only card (answerable: false, answered only in its own pane) that the person
+// opened and then closed has been seen: it leaves the sidebar list and the space tab, and
+// stays on its pane header until the pane's prompt ends. `id:revision` keys, so a revised
+// card counts as new. Answerable cards are never hidden.
+export const SEEN_KEY = 'sixfold.asks.seenInPane';
+export const seenKeysOf = cards => (cards ?? []).filter(card => card && card.answerable === false).map(askKey);
+export function unseenAsks(cards, seen) {
+  const keys = new Set(Array.isArray(seen) ? seen : []);
+  return (cards ?? []).filter(card => !(card && card.answerable === false && keys.has(askKey(card))));
+}

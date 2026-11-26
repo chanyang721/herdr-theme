@@ -25,7 +25,7 @@ import { paneWork, paneWorkChip } from './pane-work.js';
 import { watchBadges, workspaceBadges } from './badges.js';
 import { watchAsks, askSection, hasAsks, paneAskButton, askPopup, spaceAskView, openAskPopup, recordSidebarBox } from './asks.js';
 import { mountRepoFlow, repoComputerChips, repoFlowHeight } from './repo-flow-view.js';
-import { askFor } from './ask-model.js';
+import { askFor, SEEN_KEY, unseenAsks } from './ask-model.js';
 import { watchReports, reportsSection } from './session-reports.js';
 import {reconcilePanelFeed,panelSpacePartners,repositorySection,repositoryLayout,repositoryFlowLayer,createRepositoryController,projectRepositoryGraph} from './panel-model.js';
 import {panelCounts,panelHeaderMetrics} from './panel-view.js';
@@ -1178,10 +1178,13 @@ export default class SixfoldDesk extends View {
     const repoFlowView=this.panelState?.feed?.repo_flow?mountRepoFlow(this,this.panelState.feed.repo_flow,t,cx):null;
     const repoBlockHeight=repoFlowView?(this.repoFlowBlockHeight??repoFlowHeight(this.panelState.feed.repo_flow,this.repoFlowExpanded===true)+6):0;
     // A request waits as a tab right beside the card of the space that asked (bounds in this list).
-    const feedAsks=this.panelState?.feed?.asks??[],placedAsks=new Set();
+    // Display-only cards the person already opened and closed leave the list and the space tabs (ask-model unseenAsks).
+    const shownAsks=unseenAsks(this.asks,shared(SEEN_KEY)),shownIds=new Set(shownAsks.map(card=>card.id));
+    const hiddenIds=new Set((this.asks??[]).filter(card=>!shownIds.has(card.id)).map(card=>card.id));
+    const feedAsks=(this.panelState?.feed?.asks??[]).filter(ask=>!hiddenIds.has(ask?.id)),placedAsks=new Set();
     const askTabs=[];{let top=0;groups.forEach(({s},i)=>{const task=taskPanel?.taskFor(s),size=this.boxSizes?.[s.id];
       const spaceIds=new Set(task?feedAsks.filter(ask=>ask?.space===task.id).map(ask=>ask.id):[]);
-      const spaceCards=(this.asks??[]).filter(card=>spaceIds.has(card.id)),spacePanes=[];for(const card of spaceCards){const terminal=card.terminal??null,group=spacePanes.find(g=>g.terminal===terminal);if(group)group.cards.push(card);else spacePanes.push({terminal,cards:[card]});}
+      const spaceCards=shownAsks.filter(card=>spaceIds.has(card.id)),spacePanes=[];for(const card of spaceCards){const terminal=card.terminal??null,group=spacePanes.find(g=>g.terminal===terminal);if(group)group.cards.push(card);else spacePanes.push({terminal,cards:[card]});}
       const tab=task&&size&&spacePanes.length?spaceAskView(feedAsks,task.id,t,this.lang(),{bounds:{x:7,y:top,w:size.w,h:size.h},
         panes:spacePanes.length,
         // One queue for the space: every asking pane's requests, oldest first, one at a time.
@@ -1191,7 +1194,7 @@ export default class SixfoldDesk extends View {
       // Only requests the tab can open leave the 확인 대기 list below.
       if(tab)askTabs.push(tab);if(tab)for(const card of spaceCards)placedAsks.add(card.id);
       top+=taskEntries[i].height+12;});}
-    const unplacedAsks=(this.asks??[]).filter(card=>!placedAsks.has(card.id));
+    const unplacedAsks=shownAsks.filter(card=>!placedAsks.has(card.id));
     // New-alert arrivals: a popup on the card's spot, then a pixel block steps into its badge.
     const arrivalCards=[];{let top=0;groups.forEach(({s},i)=>{arrivalCards.push({s,top,extra:extraHeight(s),merged:mergedAlerts(s),width:this.boxSizes?.[s.id]?.w||0});top+=taskEntries[i].height+12;});}
     const arrivalViews=alertArrivalLayer(this,cx,{cards:arrivalCards,motion:arrivalMotion,t,right:LINK_MARGIN+4});
