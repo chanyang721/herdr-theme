@@ -28,9 +28,20 @@ export function questionsOf(card) {
 export function actionsOf(card) {
   return (Array.isArray(card?.actions) ? card.actions : []).filter(a => a && key(a.id) && text(a.label)).map(a => ({
     id: a.id, label: a.label, requiresAnswers: a.requiresAnswers === true,
-    autoSubmit: a.autoSubmit === true, primary: a.primary === true,
+    autoSubmit: a.autoSubmit === true, primary: a.primary === true, requiresText: a.requiresText === true,
   }));
 }
+// A typed answer for a `requiresText` action: trailing whitespace is dropped,
+// and what is left must be nonempty, at most TEXT_LIMIT characters (code
+// points) and free of NUL. Returns the text to send, or null.
+export const TEXT_LIMIT = 4000;
+export function replyText(value) {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.replace(/\s+$/u, '');
+  return trimmed.length > 0 && !trimmed.includes('\0') && [...trimmed].length <= TEXT_LIMIT ? trimmed : null;
+}
+// An answerable card with at least one `requiresText` action shows a text box.
+export const needsText = card => card?.answerable !== false && actionsOf(card).some(a => a.requiresText);
 // `answerable: false` is display only: the request waits in its own pane (the card can no
 // longer answer it) and stays until that pane's prompt ends. A missing field (an older
 // producer) reads as true. Cards are kept oldest first; ties keep the producer's order.
@@ -66,15 +77,16 @@ export function choose(selected, question, option) {
   if (!now[question.id].length) delete now[question.id];
   return now;
 }
+// A question without options only explains what to type; it has nothing to choose.
 export function complete(card, selected) {
-  const questions = questionsOf(card);
+  const questions = questionsOf(card).filter(q => q.options.length > 0);
   return questions.length > 0 && questions.every(q => {
     const choices = selectionOf(selected, q.id);
     return Array.isArray(choices) && choices.length > 0 && (q.multi || choices.length === 1)
       && choices.every(id => q.options.some(o => o.id === id));
   });
 }
-export function actionRequest(card, actionId, selected, requestId, createdAt) {
+export function actionRequest(card, actionId, selected, requestId, createdAt, typed) {
   if (typeof requestId !== 'string' || !REQUEST.test(requestId) || !key(card?.id) || !text(card?.revision)) throw Error('Invalid local action');
   const action = actionsOf(card).find(a => a.id === actionId);
   if (!action || (action.requiresAnswers && !complete(card, selected))) throw Error('Complete the card before sending');
@@ -85,18 +97,32 @@ export function actionRequest(card, actionId, selected, requestId, createdAt) {
       || choices.some(id => !q.options.some(o => o.id === id))) throw Error('Invalid option');
     if (choices.length) answers[q.id] = q.options.filter(o => choices.includes(o.id)).map(o => o.id);
   }
-  return {schema: 1, id: requestId, cardId: card.id, revision: card.revision, action: actionId, answers, createdAt};
+  if (!action.requiresText) return {schema: 1, id: requestId, cardId: card.id, revision: card.revision, action: actionId, answers, createdAt};
+  const reply = replyText(typed);
+  if (reply === null) throw Error('Invalid text');
+  return {schema: 1, id: requestId, cardId: card.id, revision: card.revision, action: actionId, answers, text: reply, createdAt};
 }
 export function requestPath(home, id) {
   if (typeof id !== 'string' || !REQUEST.test(id)) throw Error('Invalid request id');
   return `${home.replace(/[\\/]+$/, '')}/data/sixfold/bridge-actions/${id}.json`;
 }
-export function acceptedReceipt(stdout, id) {
+function receiptOf(stdout, id) {
   try {
     const receipt = JSON.parse(String(stdout ?? '').trim().split(/\r?\n/).filter(Boolean).at(-1) || 'null');
-    return receipt?.schema === 1 && receipt.id === id && ['accepted', 'duplicate'].includes(receipt.status);
-  } catch { return false; }
+    return receipt?.schema === 1 && receipt.id === id ? receipt : null;
+  } catch { return null; }
 }
+export const acceptedReceipt = (stdout, id) => ['accepted', 'duplicate'].includes(receiptOf(stdout, id)?.status);
+// The `error` code of a matching receipt that did not succeed, or null.
+export function receiptError(stdout, id) {
+  const receipt = receiptOf(stdout, id);
+  if (!receipt || ['accepted', 'duplicate'].includes(receipt.status)) return null;
+  return typeof receipt.error === 'string' && /^[a-z][a-z0-9_]{0,63}$/.test(receipt.error) ? receipt.error : null;
+}
+// Receipt error codes the popup explains; any other code reads as a plain failure.
+const RECEIPT_CODES = {pane_busy: 'pane_busy', pane_moved: 'stale', card_closed: 'stale', card_changed: 'stale',
+  unconfirmed: 'unconfirmed', invalid_text: 'invalid_text', pane_unavailable: 'pane_unavailable'};
+export const receiptCode = code => typeof code === 'string' && Object.hasOwn(RECEIPT_CODES, code) ? RECEIPT_CODES[code] : 'failed';
 export function touchesCards(paths, directory) {
   const normalized = path => String(path).replace(/\\/g, '/').replace(/\/+$/, '');
   return (paths ?? []).some(path => normalized(path) === normalized(directory)
@@ -111,12 +137,22 @@ export const ASK_WORDS = {
   ko: {open: '열기', close: '닫기', inPane: '대기 시간이 지나 이 카드로는 답할 수 없습니다. 그 페인의 Claude 창에서 직접 답하세요. 답하면 이 카드는 사라지고 다음 요청이 열립니다.', goPane: '페인으로 이동', paneOnly: '페인에서 답하기', queue: (i, n) => `${i}/${n} · 오래된 순`, closeHint: '닫아도 거절·답변되지 않습니다. 머리줄 버튼이나 왼쪽 목록에서 다시 열 수 있습니다.',
     none: '이 페인에 남은 확인 요청이 없습니다.', loading: '불러오는 중…', loadFailed: '카드를 읽지 못했습니다.', refreshFailed: '최신 내용을 읽지 못했습니다 — 아래는 마지막으로 읽은 내용입니다.', retry: '다시 읽기', sending: '전송 중…', sent: '응답을 접수했습니다.',
     expired: '처리되었거나 만료된 요청', unconfirmed: '응답 접수를 확인하지 못함 — 에이전트 페인에서 결과를 확인하세요', revised: '요청 내용이 바뀌어 선택을 초기화했습니다.', unassigned: '소속 미확인',
-    errors: {failed: '전송 실패 — 다시 시도하세요', changed: '연결 설정이 바뀌었습니다 — 다시 열어 주세요', stale: '요청이 바뀌었거나 만료되었습니다 — 최신 내용을 확인하세요', incomplete: '모든 질문에 답한 뒤 보내세요'},
+    placeholder: '그 칸에 보낼 답을 적으세요', textOpen: '눌러서 답 쓰기',
+    errors: {failed: '전송 실패 — 다시 시도하세요', changed: '연결 설정이 바뀌었습니다 — 다시 열어 주세요', stale: '요청이 바뀌었거나 만료되었습니다 — 최신 내용을 확인하세요', incomplete: '모든 질문에 답한 뒤 보내세요',
+      pane_busy: '그 칸 입력창에 쓰던 글이 있거나 선택창이 열려 있어 보내지 않았습니다. 그 칸을 확인한 뒤 다시 보내세요.',
+      unconfirmed: '보냈지만 제출됐는지 확인하지 못했습니다. 그 칸에서 확인하세요 — 다시 보내지 마세요.',
+      invalid_text: '보낼 답이 비었거나 너무 깁니다(4000자까지).',
+      pane_unavailable: '그 칸을 찾지 못했습니다(닫혔거나 다른 컴퓨터의 칸).'},
     count: n => `${n}건`, more: n => `${n}개 페인 · 목록을 스크롤해 모두 보기`},
   en: {open: 'Open', close: 'Close', inPane: 'This card waited too long and can no longer answer. Answer it in that pane\'s own Claude prompt; the card then goes and the next request opens.', goPane: 'Go to pane', paneOnly: 'Answer in pane', queue: (i, n) => `${i}/${n} · oldest first`, closeHint: 'Closing does not deny or answer. Reopen it from the pane header or the sidebar.',
     none: 'No requests left for this pane.', loading: 'Loading…', loadFailed: 'Could not read the cards.', refreshFailed: 'Could not read the latest — showing the last read.', retry: 'Retry', sending: 'Sending…', sent: 'Response accepted.',
     expired: 'Handled or expired', unconfirmed: 'Response not confirmed — check the agent pane', revised: 'The request changed; choices were reset.', unassigned: 'Unassigned',
-    errors: {failed: 'Send failed — try again', changed: 'Connection changed — reopen the card', stale: 'The request changed or expired — check the latest', incomplete: 'Answer every question before sending'},
+    placeholder: 'Type the answer to send to that pane', textOpen: 'Click to type an answer',
+    errors: {failed: 'Send failed — try again', changed: 'Connection changed — reopen the card', stale: 'The request changed or expired — check the latest', incomplete: 'Answer every question before sending',
+      pane_busy: 'Not sent: that pane has unsent text in its prompt or a picker open. Check the pane, then send again.',
+      unconfirmed: 'Sent, but submission could not be confirmed. Check that pane — do not send again.',
+      invalid_text: 'The answer is empty or too long (4000 characters at most).',
+      pane_unavailable: 'That pane was not found (closed, or on another computer).'},
     count: n => `${n}`, more: n => `${n} panes · scroll the list for all`},
 };
 export const errorText = (lang, code) => {
@@ -260,6 +296,7 @@ export function popupHeight(card) {
   const lines = text => Math.max(1, Math.ceil(String(text ?? '').length / 70)) + (String(text ?? '').match(/\n/g)?.length ?? 0);
   let h = 150 + lines(card.title) * 18 + (card.detail ? Math.min(lines(card.detail), 14) * 16 + 18 : 0);
   for (const q of questionsOf(card)) h += 26 + lines(q.title) * 16 + q.options.reduce((sum, o) => sum + 10 + lines(o.label) * 17, 0);
+  if (needsText(card)) h += 110;
   return Math.max(220, Math.min(640, Math.round(h)));
 }
 

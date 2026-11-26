@@ -1,8 +1,9 @@
 import { div } from 'gpui-kit';
-import { h_flex, v_flex } from 'gpui-base';
+import { h_flex, v_flex, TextareaState, Textarea } from 'gpui-base';
 import { exec, writeTextFile, appHome, shared, setShared, openOverlay, closeOverlay, props, panes, spaces, focused, run } from 'herdr';
 import { KIND_WORDS, ASK_WORDS, SUMMARY_KEY, bridgeFrom, parseAsks, questionsOf, actionsOf, choose, complete, actionRequest, requestPath, acceptedReceipt, detailOf, selectionOf,
-  askSummary, summaryFor, unverifiedFor, summaryFromSnapshots, summaryState, sameSummary, groupAsks, cardsFor, queueFor, pageAfter, spaceAsks, spaceAskLayout, clampPage, reconcile, popupHeight, errorText, autoPopupTarget, prunedOpened } from './ask-model.js';
+  askSummary, summaryFor, unverifiedFor, summaryFromSnapshots, summaryState, sameSummary, groupAsks, cardsFor, queueFor, pageAfter, spaceAsks, spaceAskLayout, clampPage, reconcile, popupHeight, errorText, autoPopupTarget, prunedOpened,
+  replyText, needsText, receiptError, receiptCode } from './ask-model.js';
 
 import {subscribeJsonFile,readJsonSnapshot} from './panel-io.js';
 
@@ -167,10 +168,60 @@ export function checkSummary(cx, now = Date.now()) {
 const snapshot = name => readJsonSnapshot(`${appHome()}${ROOT}/${name}.json`).catch(() => ({status: 'invalid'}));
 const valueOf = snap => snap?.status === 'ready' && Object.hasOwn(snap, 'value') ? snap.value : null;
 class ActionError extends Error { constructor(code) { super(code); this.code = code; } }
+
+// Typed answers. Each card that takes one owns a retained text state, kept on
+// the popup view by card id. States are made only outside render (after a
+// read, or on a click) and released when their card goes or the popup closes.
+// A released state throws on every use, and drawing one breaks the whole
+// render, so every use checks it first.
+const inputAlive = input => { if (!input) return false; try { input.value(); return true; } catch { return false; } };
+const releaseInput = input => { try { input?.release?.(); } catch { /* already released */ } };
+export const askText = (view, id) => { const input = view.askInputs?.get(id); return inputAlive(input) ? String(input.value() ?? '') : ''; };
+function ensureAskInput(view, card) {
+  view.askInputs ??= new Map();
+  const old = view.askInputs.get(card.id);
+  if (inputAlive(old)) return old;
+  let input = null;
+  try {
+    input = TextareaState.new({placeholder: (ASK_WORDS[view.askLang] ?? ASK_WORDS.ko).placeholder, rows: 4});
+    // Redraw so the send button follows the text; the secondary Enter sends.
+    input.on('change', (_event, cx) => cx?.notify?.());
+    input.on('submit', (event, cx) => {
+      if (!event?.secondary) return;
+      const live = (view.asks ?? []).find(item => item.id === card.id), action = live && textAction(live);
+      if (action && !view.askBusy?.[live.id] && replyText(askText(view, live.id)) !== null) sendAction(view, live, action.id, cx);
+    });
+  } catch { releaseInput(input); view.askInputs.delete(card.id); return null; }
+  view.askInputs.set(card.id, input);
+  return input;
+}
+const textAction = card => { const all = actionsOf(card).filter(a => a.requiresText); return all.find(a => a.primary) ?? all[0] ?? null; };
+// After a read: a state for every card that takes text, none for cards that left.
+function syncAskInputs(view) {
+  const wanted = new Set((view.asks ?? []).filter(needsText).map(card => card.id));
+  for (const [id, input] of view.askInputs ?? []) if (!wanted.has(id)) { releaseInput(input); view.askInputs.delete(id); }
+  for (const card of view.asks ?? []) if (wanted.has(card.id)) ensureAskInput(view, card);
+}
+export function releaseAskInputs(view) {
+  for (const input of view.askInputs?.values() ?? []) releaseInput(input);
+  view.askInputs?.clear();
+}
+function askTextBox(view, card, t, more) {
+  const input = view.askInputs?.get(card.id);
+  if (inputAlive(input)) try {
+    return div().id(`sf-ask-text-${card.id}`).rounded(4).border(1).border_color(t.border).bg(t.background).child(Textarea.new(input).text_size(12));
+  } catch { /* drawn below as a click target that makes a fresh state */ }
+  return div().id(`sf-ask-text-${card.id}`).px(10).py(8).rounded(4).border(1).border_color(t.border).bg(t.background)
+    .text_size(12).text_color(t.dim).cursor_pointer().child(more.textOpen)
+    .on_click((_e, cx) => { cx.stop_propagation(); const made = ensureAskInput(view, card); try { made?.focus(); } catch {} cx.notify(); });
+}
+
 // Error codes, not messages: command output never reaches the card.
 export function sendAction(view, card, action, cx) {
   const bridge = view.askBridge;
   if (!bridge || view.askBusy[card.id]) return;
+  // The text is read now, at the press: what was on screen is what is sent.
+  const spec = actionsOf(card).find(a => a.id === action), typed = spec?.requiresText ? askText(view, card.id) : undefined;
   view.askBusy[card.id] = true; delete view.askErrors[card.id]; cx.notify();
   cx.spawn(async cx => {
     try {
@@ -183,11 +234,15 @@ export function sendAction(view, card, action, cx) {
         && (item.terminal ?? null) === (card.terminal ?? null))) throw new ActionError('stale');
       const id = `${Date.now().toString(36)}-${(++sequence).toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
       let request;
-      try { request = actionRequest(card, action, view.askChoices[card.id], id, new Date().toISOString()); } catch { throw new ActionError('incomplete'); }
+      try { request = actionRequest(card, action, view.askChoices[card.id], id, new Date().toISOString(), typed); } catch {
+        throw new ActionError(spec?.requiresText && replyText(typed) === null ? 'invalid_text' : 'incomplete');
+      }
       const path = requestPath(appHome(), id);
       await writeTextFile(path, JSON.stringify(request), null);
       const result = await exec(bridge.python, [bridge.script, ...bridge.args, path]);
-      if (result.code !== 0 || !acceptedReceipt(result.stdout, id)) throw new ActionError('failed');
+      if (result.code !== 0 || !acceptedReceipt(result.stdout, id)) throw new ActionError(receiptCode(receiptError(result.stdout, id)));
+      // Accepted: the typed answer has gone; a failure above keeps it for another try.
+      if (spec?.requiresText) { const input = view.askInputs?.get(card.id); if (inputAlive(input)) try { input.set_value(''); } catch {} }
       view.asks = (view.asks ?? []).filter(item => item.id !== card.id || item.revision !== card.revision);
       view.askPage = 0;   // one answer, then the oldest request left
       view.askSent?.add(card.id);
@@ -339,14 +394,17 @@ function loadPopup(view, cx) {
         view.askPage = view.asks === null ? 0 : pageAfter(view.asks, view.askPage, next);
         view.asks = next; view.askBridge = bridge; view.askLoadFailed = false;
         view.askPage = clampPage(view.askPage, next.length);
+        syncAskInputs(view);
       } while (view.askReload);
     } finally { view.askLoading = false; cx.notify(); }
   });
 }
 export function askPopup(view, t, lang, cx) {
+  view.askLang = lang;
   if (!view.askPopupReady) {
     view.askPopupReady = true; view.asks = null; view.askChoices = Object.create(null); view.askBusy = Object.create(null);
     view.askErrors = Object.create(null); view.askSent = new Set(); view.askUnconfirmed = []; view.askPage = 0; view.askExpired = 0;
+    view.askInputs = new Map(); view.releaseAskInputs = () => releaseAskInputs(view);
     view.refreshAsks = context => loadPopup(view, context ?? cx);
     loadPopup(view, cx);
   } else if ((shared(SUMMARY_KEY)?.v ?? '') !== view.askLoadedV && !view.askLoading) loadPopup(view, cx);
@@ -409,8 +467,11 @@ export function askPopup(view, t, lang, cx) {
         .child(div().text_size(12).text_color(t.blocked).child(more.inPane))
         .when(Boolean(card.terminal && panes().some(p => p.terminal === card.terminal)), row => row.child(h_flex().child(
           button(`sf-ask-go-${card.id}`, more.goPane, t.working, t, () => { if (goToPane(card.terminal)) close(); }))))))
+      // A typed answer, below the questions (a question there may only say what to type).
+      .when(needsText(card), e => e.child(askTextBox(view, card, t, more)))
       .child(h_flex().flex_wrap().gap(6).items_center().pt(2).children(actions.map((action, i) => button(`sf-ask-${card.id}-action-${i}`, action.label,
-        action.primary ? t.working : t.foreground, t, cx => sendAction(view, card, action.id, cx), !busy && (!action.requiresAnswers || complete(card, selected)))))
+        action.primary ? t.working : t.foreground, t, cx => sendAction(view, card, action.id, cx),
+        !busy && (!action.requiresAnswers || complete(card, selected)) && (!action.requiresText || replyText(askText(view, card.id)) !== null))))
         .when(busy, e => e.child(div().text_size(11).text_color(t.muted).child(more.sending))))
       .when(Boolean(error), e => e.child(div().px(10).py(6).rounded(4).border(1).border_color(t.blocked)
         .text_size(11).text_color(t.blocked).child(`${words.failed}: ${errorText(lang, error)}`)));

@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
-import {bridgeFrom, parseAsks, askFor, questionsOf, actionsOf, choose, complete, actionRequest, requestPath, acceptedReceipt, touchesCards} from '../mods/sixfold-desk/ask-model.js';
+import {bridgeFrom, parseAsks, askFor, questionsOf, actionsOf, choose, complete, actionRequest, requestPath, acceptedReceipt, touchesCards,
+  receiptError, receiptCode, replyText, needsText, errorText, popupHeight, TEXT_LIMIT} from '../mods/sixfold-desk/ask-model.js';
 
 const bridge = {python: 'python3', script: '/demo/bridge/provider.py', args: ['--local']};
 const question = {id: 'demo-question', revision: 'rev-1', kind: 'question', terminal: 'demo-terminal', title: 'Which color?',
@@ -85,6 +86,59 @@ test('only a matching accepted or duplicate receipt completes a request', () => 
   }
   assert.equal(touchesCards(['C:\\demo\\cards.json'], 'C:/demo'), true);
   assert.equal(touchesCards(['/demo/card.tmp'], '/demo'), false);
+});
+
+// A card whose answer is typed: one question that only says what to type, and a text action.
+const reply = {id: `n-${'0123456789abcdef'.repeat(2)}`, revision: 'rev-3', kind: 'question', terminal: 'demo-terminal', title: 'Waiting for an answer',
+  questions: [{id: 'q0', title: 'Type what to send to that pane'}],
+  actions: [{id: 'reply', label: 'Send', requiresText: true, primary: true}]};
+test('a reply card parses with an option-less question and keeps requiresText on its action', () => {
+  const [parsed] = parseAsks(JSON.stringify({schema: 1, cards: [reply]})).cards;
+  assert.equal(parsed.id, reply.id, 'n-<32 hex> is a valid card id');
+  assert.deepEqual(parsed.questions, [{id: 'q0', title: 'Type what to send to that pane', multi: false, options: []}]);
+  assert.deepEqual(parsed.actions, [{id: 'reply', label: 'Send', requiresAnswers: false, autoSubmit: false, primary: true, requiresText: true}]);
+  assert.equal(actionsOf(question)[0].requiresText, false, 'other actions default to false');
+  assert.equal(actionsOf({actions: [{id: 'a', label: 'A', requiresText: 'yes'}]})[0].requiresText, false, 'only true counts');
+  assert.equal(needsText(parsed), true); assert.equal(needsText(question), false);
+  assert.equal(needsText(parseAsks({schema: 1, cards: [{...reply, answerable: false}]}).cards[0]), false, 'display-only cards take no text');
+  assert.ok(popupHeight(parsed) > popupHeight({...parsed, actions: []}), 'room for the text box');
+  // The option-less question never gates: nothing to choose, and it does not block other questions.
+  assert.equal(complete(parsed, {}), false);
+  assert.equal(actionRequest(parsed, 'reply', {}, 'demo-request', 'now', 'hi').action, 'reply');
+  const mixed = {...question, questions: [...question.questions, {id: 'note', title: 'Anything else?'}]};
+  assert.equal(complete(mixed, {color: ['red']}), true);
+});
+test('only a text action carries the typed text, trimmed at the end and bounded', () => {
+  const [parsed] = parseAsks({schema: 1, cards: [reply]}).cards;
+  assert.deepEqual(actionRequest(parsed, 'reply', {}, 'demo-request', '2026-01-01T00:00:00Z', '  keep the lead\nline two \n\t '),
+    {schema: 1, id: 'demo-request', cardId: reply.id, revision: 'rev-3', action: 'reply', answers: {}, text: '  keep the lead\nline two', createdAt: '2026-01-01T00:00:00Z'});
+  for (const bad of [undefined, null, '', ' \n\t', 'a\0b', 'x'.repeat(TEXT_LIMIT + 1), 7]) {
+    assert.throws(() => actionRequest(parsed, 'reply', {}, 'demo-request', 'now', bad), /Invalid text/);
+  }
+  assert.equal(actionRequest(parsed, 'reply', {}, 'demo-request', 'now', 'x'.repeat(TEXT_LIMIT)).text.length, TEXT_LIMIT);
+  assert.equal(actionRequest(parsed, 'reply', {}, 'demo-request', 'now', `${'x'.repeat(TEXT_LIMIT)}   `).text.length, TEXT_LIMIT, 'trailing space does not count');
+  assert.equal(replyText('😀'.repeat(TEXT_LIMIT)), '😀'.repeat(TEXT_LIMIT), 'the limit counts characters, not UTF-16 units');
+  const plain = actionRequest(permission, 'approve', {}, 'demo-request', 'now', 'ignored');
+  assert.equal(Object.hasOwn(plain, 'text'), false, 'no text on other actions');
+  assert.equal(Object.hasOwn(actionRequest(question, 'submit', {color: ['red']}, 'demo-request', 'now'), 'text'), false);
+});
+test('a failed receipt names its error code; only known codes get their own message', () => {
+  const receipt = value => JSON.stringify({schema: 1, id: 'demo-request', ...value});
+  assert.equal(receiptError(receipt({status: 'rejected', error: 'pane_busy'}), 'demo-request'), 'pane_busy');
+  assert.equal(receiptError(`log line\n${receipt({status: 'rejected', error: 'unconfirmed'})}\n`, 'demo-request'), 'unconfirmed');
+  for (const output of ['', 'not json', receipt({status: 'accepted', error: 'pane_busy'}), receipt({status: 'duplicate'}), receipt({status: 'rejected'}),
+    receipt({status: 'rejected', error: 'Not A Code'}), receipt({status: 'rejected', error: 3}),
+    JSON.stringify({schema: 1, id: 'other', status: 'rejected', error: 'pane_busy'}), JSON.stringify({schema: 2, id: 'demo-request', status: 'rejected', error: 'pane_busy'})]) {
+    assert.equal(receiptError(output, 'demo-request'), null, output);
+  }
+  assert.deepEqual(['pane_busy', 'pane_moved', 'card_closed', 'card_changed', 'unconfirmed', 'invalid_text', 'pane_unavailable', 'constructor', 'other', null].map(receiptCode),
+    ['pane_busy', 'stale', 'stale', 'stale', 'unconfirmed', 'invalid_text', 'pane_unavailable', 'failed', 'failed', 'failed']);
+  assert.match(errorText('ko', 'pane_busy'), /쓰던 글이 있거나 선택창이 열려/);
+  assert.match(errorText('ko', 'unconfirmed'), /다시 보내지 마세요/);
+  assert.match(errorText('ko', 'invalid_text'), /4000자까지/);
+  assert.match(errorText('ko', 'pane_unavailable'), /그 칸을 찾지 못했습니다/);
+  for (const code of ['pane_busy', 'unconfirmed', 'invalid_text', 'pane_unavailable']) assert.notEqual(errorText('en', code), errorText('en', 'failed'));
+  assert.equal(errorText('ko', 'failed'), errorText('ko', 'unknown'));
 });
 
 let loads = 0;

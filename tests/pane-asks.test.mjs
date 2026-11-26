@@ -54,7 +54,7 @@ async function load(host) {
   globalThis.__paneAskRuntime = host;
   let source = (await readFile(new URL('../mods/sixfold-desk/asks.js', import.meta.url), 'utf8')).replace(/\r\n/g, '\n');
   source = source.replace(/^import .* from 'gpui-kit';\n/m, 'const {div} = globalThis.__paneAskRuntime;\n')
-    .replace(/^import .* from 'gpui-base';\n/m, 'const {h_flex,v_flex} = globalThis.__paneAskRuntime;\n')
+    .replace(/^import \{(.*)\} from 'gpui-base';\n/m, (_m, names) => `const {${names}} = globalThis.__paneAskRuntime;\n`)
     .replace(/^import \{(.*)\} from 'herdr';/m, (_m, names) => `const {${names}} = globalThis.__paneAskRuntime;`)
     .replace(/^import .* from '.\/panel-io.js';/m, 'const {subscribeJsonFile,readJsonSnapshot}=globalThis.__paneAskRuntime;')
     .replace("from './ask-model.js'", `from ${JSON.stringify(new URL('../mods/sixfold-desk/ask-model.js', import.meta.url).href)}`);
@@ -71,9 +71,21 @@ function host(cards) {
   const files = new Map([['/demo/data/sixfold/bridge.json', JSON.stringify(bridge)], ['/demo/data/sixfold/cards.json', JSON.stringify({schema: 1, cards})]]);
   const store = new Map(), calls = [], overlays = [], closed = [], focus = [], listeners = new Map();
   let currentProps = {};
+  // Retained text states, as the host gives them: usable until released, then every use throws.
+  const inputs = [];
+  const TextareaState = {new: options => {
+    let value = options?.value ?? '', released = false;
+    const live = () => { if (released) throw Error('released'); };
+    const state = {options, handlers: {}, focused: 0, get released() { return released; },
+      value() { live(); return value; }, set_value(next) { live(); value = next; }, on(name, fn) { live(); state.handlers[name] = fn; return true; },
+      focus() { live(); state.focused++; }, release() { released = true; return true; },
+      type(next, cx) { value = next; state.handlers.change?.({}, cx); }, peek: () => value};
+    inputs.push(state); return state;
+  }};
+  const Textarea = {new: state => { state.value(); const node = el('textarea'); nodeOf(node).state = state; return node; }};
   const snapshot = path => { const raw = files.get(path); if (raw === undefined) return {status: 'missing'}; try { return {status: 'ready', value: JSON.parse(raw)}; } catch { return {status: 'invalid'}; } };
   const h = {
-    div: () => el('div'), h_flex: () => el('h_flex'), v_flex: () => el('v_flex'),
+    div: () => el('div'), h_flex: () => el('h_flex'), v_flex: () => el('v_flex'), TextareaState, Textarea,
     appHome: () => '/demo', props: () => currentProps,
     run: (name, args) => focus.push([name, args]),
     shared: key => store.has(key) ? structuredClone(store.get(key)) : undefined,
@@ -100,7 +112,7 @@ function host(cards) {
   };
   const emit = path => { for (const cb of listeners.get(path) ?? []) cb(snapshot(path)); };
   const setCards = next => { files.set('/demo/data/sixfold/cards.json', JSON.stringify({schema: 1, cards: next})); emit('/demo/data/sixfold/cards.json'); };
-  return {h, impl, snapshot, files, store, calls, overlays, closed, focus, setCards, emit, setProps: p => { currentProps = p; }};
+  return {h, impl, snapshot, files, store, calls, overlays, closed, focus, setCards, emit, inputs, setProps: p => { currentProps = p; }};
 }
 const theme = new Proxy({}, {get: (_t, k) => `#${String(k).length.toString(16).padStart(6, '0')}`});
 
@@ -578,6 +590,62 @@ test('send failure keeps the card, shows a generic error and never exposes outpu
   click(p.render(), 'sf-ask-a1-action-0', p.cx); await p.cx.settle();
   const tree = p.render();
   assert.equal(p.view.asks.length, 1); assert.match(text(tree), /응답 실패: 전송 실패/); assert.doesNotMatch(text(tree), /secret/);
+});
+const replyId = `n-${'0123456789abcdef'.repeat(2)}`;
+const replyCard = card(replyId, 'pane-a', {kind: 'question', title: 'Waiting for an answer',
+  questions: [{id: 'q0', title: 'Type what to send to that pane'}],
+  actions: [{id: 'reply', label: 'Reply', requiresText: true, primary: true}]});
+test('a text card shows a text box, sends only valid text, and clears it after an accepted send', async () => {
+  const f = host([replyCard]), mod = await load(f.h), p = await popup(f, mod, 'pane-a');
+  assert.equal(f.inputs.length, 1, 'one state for the one text card, made after the read');
+  const [input] = f.inputs;
+  assert.equal(input.options.placeholder, '그 칸에 보낼 답을 적으세요');
+  let tree = p.render();
+  assert.equal(find(tree, `sf-ask-text-${replyId}`).children.length, 1); assert.match(text(tree), /Type what to send to that pane/);
+  click(tree, `sf-ask-${replyId}-action-0`, p.cx); await p.cx.settle();
+  assert.deepEqual(f.calls.filter(c => c[0] !== 'setShared'), [], 'empty text cannot send');
+  input.type(' \n ', p.cx); click(p.render(), `sf-ask-${replyId}-action-0`, p.cx); await p.cx.settle();
+  assert.deepEqual(f.calls.filter(c => c[0] !== 'setShared'), [], 'blank text cannot send');
+  const before = p.cx.notifications; input.type('Use the second option.\n', p.cx); assert.ok(p.cx.notifications > before, 'typing redraws the button');
+  input.handlers.submit({secondary: false}, p.cx); await p.cx.settle();
+  assert.equal(f.calls.filter(c => c[0] === 'exec').length, 0, 'a plain Enter is a new line, not a send');
+  click(p.render(), `sf-ask-${replyId}-action-0`, p.cx); await p.cx.settle();
+  const exec = f.calls.filter(c => c[0] === 'exec'); assert.equal(exec.length, 1);
+  const request = JSON.parse(f.files.get(exec[0][2].at(-1)));
+  assert.deepEqual({action: request.action, answers: request.answers, text: request.text, cardId: request.cardId},
+    {action: 'reply', answers: {}, text: 'Use the second option.', cardId: replyId});
+  assert.equal(input.peek(), '', 'accepted: the text box is cleared');
+  f.store.set(SUMMARY_KEY, askSummary([])); p.render(); await p.cx.settle();
+  assert.equal(input.released, true, 'the card left, so its state is released');
+  assert.match(text(p.render()), /응답을 접수했습니다/);
+});
+test('a failed text send names the reason from the receipt and keeps the typed text', async () => {
+  const f = host([replyCard]), mod = await load(f.h), p = await popup(f, mod, 'pane-a');
+  const [input] = f.inputs;
+  for (const [error, shown] of [['pane_busy', /쓰던 글이 있거나 선택창이 열려 있어 보내지 않았습니다/], ['unconfirmed', /다시 보내지 마세요/],
+    ['card_changed', /요청이 바뀌었거나 만료되었습니다/], ['pane_unavailable', /그 칸을 찾지 못했습니다/], ['invalid_text', /4000자까지/], ['private-detail', /전송 실패/]]) {
+    f.impl.exec = async (_program, args) => ({code: 1, stdout: JSON.stringify({schema: 1, id: JSON.parse(f.files.get(args.at(-1))).id, status: 'rejected', error})});
+    input.type('An answer', p.cx);
+    click(p.render(), `sf-ask-${replyId}-action-0`, p.cx); await p.cx.settle();
+    const tree = p.render();
+    assert.match(text(tree), shown, error); assert.doesNotMatch(text(tree), /private-detail/);
+    assert.equal(input.value(), 'An answer', 'the text stays for another try'); assert.equal(p.view.asks.length, 1);
+  }
+  // A released state is never drawn: the box becomes a click target that makes a fresh one.
+  input.release();
+  let tree = p.render();
+  assert.equal(find(tree, `sf-ask-text-${replyId}`).children.includes('눌러서 답 쓰기'), true);
+  click(tree, `sf-ask-text-${replyId}`, p.cx);
+  assert.equal(f.inputs.length, 2); assert.equal(f.inputs[1].focused, 1);
+  tree = p.render(); assert.equal(nodeOf(find(tree, `sf-ask-text-${replyId}`).children[0]).state, f.inputs[1]);
+  p.view.releaseAskInputs(); assert.equal(f.inputs[1].released, true, 'closing the popup releases its states');
+});
+test('option and display-only cards make no text state', async () => {
+  const f = host([card('a1', 'pane-a'), multi, card('w1', 'pane-a', {answerable: false, actions: [{id: 'reply', label: 'Reply', requiresText: true}]})]);
+  f.h.panes = () => [];
+  const mod = await load(f.h), p = await popup(f, mod, 'pane-a');
+  assert.equal(p.view.asks.length, 3); assert.equal(f.inputs.length, 0);
+  for (let i = 0; i < 3; i++) { assert.equal(ids(p.render(), 'sf-ask-text-').length, 0); click(p.render(), 'sf-ask-next', p.cx); }
 });
 test('a revision that moved on disk is refused before writing, and the popup resets its choices', async () => {
   const q = card('q', 'pane-a', {kind: 'question', questions: [{id: 'c', title: 'C', options: [{id: 'x', label: 'X'}, {id: 'y', label: 'Y'}]}],

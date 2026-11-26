@@ -509,7 +509,7 @@ export default class SixfoldDesk extends View {
   close(){
     this.repoActivity?.dispose();
     this.stopLegacyMotion();
-    this.stopAsks?.();this.stopReports?.();
+    this.stopAsks?.();this.stopReports?.();this.releaseAskInputs?.();
     this.classicCards?.dispose();
     this.stopArrivals?.();
     this.linkFlowTimer?.cancel();this.linkWakeTimer?.cancel();this.cometTimer?.cancel();

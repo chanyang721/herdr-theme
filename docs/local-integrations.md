@@ -40,6 +40,21 @@ file. The theme shows it without buttons (any `actions` are ignored), says to
 answer it in that terminal, and offers to go there only on the person's click.
 A missing `answerable` reads as true.
 
+An action may take a typed answer instead of a choice: optional
+`"requiresText": true` (default false). An answerable card with at least one
+such action shows a multi-line text box below its questions; Enter adds a new
+line and the action's button sends. The button stays disabled until the text,
+with trailing whitespace removed, is nonempty, at most 4000 characters (code
+points) and free of NUL. Such a card may carry one question with no `options`
+whose `title` says what to type; a question without options is never required
+by `requiresAnswers`, so a text action normally leaves `requiresAnswers`
+false. After a failed send the text stays in the box; after an accepted one it
+is cleared.
+
+```json
+{"id":"demo-reply","revision":"v1","kind":"question","terminal":"demo-terminal","title":"Waiting for an answer","questions":[{"id":"q0","title":"Type what to send"}],"actions":[{"id":"reply","label":"Send","requiresText":true,"primary":true}]}
+```
+
 A popup shows one card at a time. Opened from a space tab it is one queue over
 every asking terminal of that space, oldest first; after an accepted answer the
 oldest card left is shown. One action answers exactly one card.
@@ -49,6 +64,13 @@ then explicitly invokes the configured command:
 
 ```json
 {"schema":1,"id":"demo-request","cardId":"demo-card","revision":"v1","action":"submit","answers":{"color":["blue"]},"createdAt":"2026-01-01T00:00:00Z"}
+```
+
+A `requiresText` action's request also carries the typed answer, trailing
+whitespace removed, in `text`; no other request has that field:
+
+```json
+{"schema":1,"id":"demo-request","cardId":"demo-reply","revision":"v1","action":"reply","answers":{},"text":"Use the second option.","createdAt":"2026-01-01T00:00:00Z"}
 ```
 
 The request ID prevents accidental filename collisions; it is not authority to
@@ -66,7 +88,19 @@ Success requires exit code zero and a final stdout JSON receipt:
 `duplicate` also acknowledges success. `stale`, `rejected`, nonzero exit,
 missing/malformed receipts or mismatched IDs retain the card and refresh it.
 The theme never automatically resends. Output must contain no secrets; raw
-process output is not displayed. Authority and one-time credentials stay in
+process output is not displayed.
+
+A failing receipt may name why in `error`, a lowercase code
+(`{"schema":1,"id":"demo-request","status":"rejected","error":"pane_busy"}`).
+The popup explains these codes and shows a generic failure for any other:
+
+| `error` | Meaning shown |
+| --- | --- |
+| `pane_busy` | The terminal's prompt holds unsent text or a picker is open; nothing was sent. Check it, then send again. |
+| `pane_moved`, `card_closed`, `card_changed` | The request changed or expired (the same text as a stale card). |
+| `unconfirmed` | Sent, but submission could not be confirmed. Check the terminal; do not send again. |
+| `invalid_text` | The answer is empty or too long. |
+| `pane_unavailable` | The terminal was not found (closed, or on another computer). | Authority and one-time credentials stay in
 the external consumer.
 
 ## Local document views
