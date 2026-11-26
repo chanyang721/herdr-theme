@@ -13,6 +13,7 @@ const ASKS_RECHECK_MS = 10000;
 let sequence = 0;
 // Space tabs share these cards; their placement does not change automatic popups.
 export function watchAsks(view, cx) {
+  rememberTimer(cx);
   view.stopAsks?.();
   view.asks = null; view.askChoices = Object.create(null); view.askBusy = Object.create(null); view.askErrors = Object.create(null); view.askBridge = null;
   const directory=`${appHome()}${ROOT}`,inputs=[['bridge',bridgeFrom],['cards',parseAsks]];
@@ -274,15 +275,19 @@ export const hasAsks = view => Array.isArray(view.asks) && view.asks.length > 0;
 // every card of those panes, oldest first (a space tab). Only a click opens it:
 // nothing here moves pane focus, and closing it answers nothing.
 // The window's size is read from window.json first, then the popup is placed
-// and opened: a popup right after a resize uses the new size, not a cached one.
-// Resolves to the overlay id.
+// and opened. The app writes that file only WINDOW_SETTLE_MS after a resize
+// stops (herdr-app place.rs SETTLE = 400 ms), so with the sidebar hidden (no
+// live height) the popup waits that long and reads it again before it opens:
+// a popup right after a resize uses the new size. Resolves to the overlay id.
+export const WINDOW_SETTLE_MS = 450;
 export async function openAskPopup(terminal, name, cards, queue = null) {
   const own = {role: 'ask', terminal: terminal ?? null, name: name ?? ''};
   if (queue && Array.isArray(queue.terminals)) {
     own.terminals = queue.terminals.map(t => t ?? null);
     own.names = Object.fromEntries(Object.entries(queue.names ?? {}).filter(([, v]) => typeof v === 'string'));
   }
-  const place = await readWindowPlace();
+  let place = await readWindowPlace();
+  if (sidebarHidden()) { await wait(WINDOW_SETTLE_MS); place = await readWindowPlace(); }
   let zoom = 1;
   try { zoom = settings()?.zoom ?? 1; } catch { /* no settings: unzoomed */ }
   const spec = popupSpec(shared(SIDEBAR_BOX_KEY), place, 560, popupHeight(cards?.[0]), zoom, sidebarHidden());
@@ -295,6 +300,19 @@ export const SIDEBAR_BOX_KEY = 'sixfold.asks.sidebarBox';
 // (it measures nothing then). Read before each popup; the last good read is kept
 // for when a read fails. The app writes the file once a resize settles (~0.4 s).
 export const WINDOW_PLACE_KEY = 'sixfold.asks.windowPlace';
+// A timer from the last render or watch context this copy was given (the
+// host's), else the platform's; without either, no wait.
+let timerContext = null;
+export function rememberTimer(cx) { if (cx?.timer?.after) timerContext = cx; }
+function wait(ms) {
+  return new Promise(resolve => {
+    try {
+      if (timerContext) { timerContext.timer.after(ms, () => resolve()); return; }
+      if (typeof globalThis.setTimeout === 'function') { globalThis.setTimeout(resolve, ms); return; }
+    } catch { /* fall through */ }
+    resolve();
+  });
+}
 export async function readWindowPlace() {
   try {
     const next = windowPlace(await readTextFile(`${appHome()}/window.json`));
@@ -328,6 +346,7 @@ export function goToPane(terminal) {
 // `cx` (the header's render context) lets a shown button confirm itself
 // against the cards file; without it the shared summary is drawn as is.
 export function paneAskButton(p, t, lang, name, cx = null) {
+  rememberTimer(cx);
   const summary = shared(SUMMARY_KEY), pane = summaryFor(summary, p.terminal);
   const unknown = !pane && unverifiedFor(summary, p.terminal);
   if (!pane && !unknown) return null;

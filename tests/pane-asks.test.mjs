@@ -294,18 +294,28 @@ test('pane header shows a decision button only for its own terminal and opens wi
   // Sidebar hidden, window large, then resized small: the very first popup after the resize
   // reads the new window.json before it is placed (no stale cached size).
   sidebar.hidden = true;
+  const settle = () => new Promise(resolve => setTimeout(resolve, mod.WINDOW_SETTLE_MS + 60));
   f.files.set('/demo/window.json', JSON.stringify({state: 'windowed', bounds: [0, 30, 2540, 1390]}));
-  nodeOf(a).click(event, context()); await tick();
+  nodeOf(a).click(event, context()); await settle();
   assert.deepEqual(f.overlays[2].at, {x: 8, y: Math.round((1390 - f.overlays[2].height) / 2)});
   assert.equal(f.overlays[2].width, 560);
-  f.files.set('/demo/window.json', JSON.stringify({state: 'windowed', bounds: [0, 30, 420, 300]}));
-  nodeOf(a).click(event, context()); await tick();
+  // Resized small just before the click: the app writes window.json ~400 ms later. The popup waits
+  // for that write and reads again, so the first popup after the resize fits the new window.
+  nodeOf(a).click(event, context());
+  await new Promise(resolve => setTimeout(resolve, 100));
+  assert.equal(f.overlays.length, 3, 'not opened on the old size');
+  setTimeout(() => f.files.set('/demo/window.json', JSON.stringify({state: 'windowed', bounds: [0, 30, 420, 300]})), 300);
+  await settle();
   const small = f.overlays[3];
   assert.deepEqual(small, {...small, at: {x: 8, y: 8}, width: 420 - 16, height: 300 - 16}, 'first popup after the resize fits the new window');
   // An unreadable window.json keeps the last good read.
   f.files.set('/demo/window.json', '{broken');
-  nodeOf(a).click(event, context()); await tick();
+  nodeOf(a).click(event, context()); await settle();
   assert.equal(f.overlays[4].width, 420 - 16);
+  // A shown sidebar gives a live height: no wait.
+  sidebar.hidden = false;
+  nodeOf(a).click(event, context()); await tick();
+  assert.equal(f.overlays.length, 6);
   assert.deepEqual(f.focus, [], 'no pane.focus/agent.focus');
   assert.ok(nodeOf(a).calls.includes('on_mouse_down'), 'press does not reach the header (which focuses the pane)');
 });
