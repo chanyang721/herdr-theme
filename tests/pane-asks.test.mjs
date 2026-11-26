@@ -283,10 +283,15 @@ test('pane header shows a decision button only for its own terminal and opens wi
   assert.equal(f.overlays.length, 1);
   assert.deepEqual(f.overlays[0].props, {role: 'ask', terminal: 'pane-a', name: 'Alpha'});
   assert.equal(f.overlays[0].kind, 'popup'); assert.ok(f.overlays[0].width >= 520);
-  assert.equal(f.overlays[0].at, undefined, 'no sidebar measured yet: at the pointer');
+  // Nothing measured or read yet: still never at the pointer, the window's left edge at the fallback height.
+  assert.deepEqual(f.overlays[0].at, {x: 8, y: Math.round((820 - f.overlays[0].height) / 2)});
   mod.recordSidebarBox({width: 900, height: 1200});
   nodeOf(a).click(event, context());
   assert.deepEqual(f.overlays[1].at, {x: 170, y: Math.round((1200 - f.overlays[1].height) / 2)}, 'centred on the sidebar');
+  // The popup read window.json in the background for the next one.
+  f.files.set('/demo/window.json', JSON.stringify({state: 'windowed', bounds: [0, 30, 1000, 700]}));
+  mod.refreshWindowPlace(true); await new Promise(r => setTimeout(r, 0));
+  assert.deepEqual(f.store.get('sixfold.asks.windowPlace'), {w: 1000, h: 700, windowed: true});
   assert.deepEqual(f.focus, [], 'no pane.focus/agent.focus');
   assert.ok(nodeOf(a).calls.includes('on_mouse_down'), 'press does not reach the header (which focuses the pane)');
 });
@@ -835,17 +840,31 @@ test('the opened record keeps only live cards', () => {
 });
 
 test('a card popup opens centred on the sidebar, or on the window left edge when it is hidden', async () => {
-  const {popupAt, POPUP_MARGIN} = await import('../mods/sixfold-desk/ask-model.js');
+  const {popupSpec, windowPlace, POPUP_MARGIN: M, FALLBACK_WINDOW_HEIGHT} = await import('../mods/sixfold-desk/ask-model.js');
+  const big = {w: 2540, h: 1390, windowed: true};
   // Sidebar wider than the popup: centred both ways (popup size scaled by zoom, `at` is not).
-  assert.deepEqual(popupAt({w: 800, h: 1000}, 560, 400, 1), {x: 120, y: 300});
-  assert.deepEqual(popupAt({w: 800, h: 1000}, 560, 400, 0.5), {x: 260, y: 400});
-  // Narrower than the popup: pinned to the left margin, still centred vertically.
-  assert.deepEqual(popupAt({w: 288, h: 1251}, 560, 400, 0.9), {x: POPUP_MARGIN, y: 446});
-  // Hidden sidebar: the window's left edge, vertically centred on the last known height.
-  assert.deepEqual(popupAt({w: 800, h: 1000}, 560, 400, 1, true), {x: POPUP_MARGIN, y: 300});
-  // Taller than the window: never above the top margin.
-  assert.equal(popupAt({w: 300, h: 200}, 560, 720, 1).y, POPUP_MARGIN);
-  // Nothing measured yet: no position, the overlay falls back to the pointer.
-  for (const box of [null, undefined, {}, {w: 0, h: 0}, {w: 'x', h: 900}]) assert.equal(popupAt(box, 560, 400, 1), null);
-  assert.deepEqual(popupAt({h: 900}, 560, 400, 1, true), {x: POPUP_MARGIN, y: 250});
+  assert.deepEqual(popupSpec({w: 800, h: 1000}, big, 560, 400, 1), {at: {x: 120, y: 300}, width: 560, height: 400});
+  assert.deepEqual(popupSpec({w: 800, h: 1000}, big, 560, 400, 0.5).at, {x: 260, y: 400});
+  // Narrower than the popup: pinned to the left margin, still centred vertically on the live sidebar height.
+  assert.deepEqual(popupSpec({w: 288, h: 1251}, big, 560, 400, 0.9).at, {x: M, y: 446});
+  // Started with the sidebar hidden (never measured): window.json gives the height, not the pointer.
+  assert.deepEqual(popupSpec(undefined, {w: 1600, h: 1000, windowed: true}, 560, 400, 1, true).at, {x: M, y: 300});
+  // Hidden, then the window resized: window.json's new height wins over the old sidebar measurement.
+  assert.deepEqual(popupSpec({w: 320, h: 1390}, {w: 1600, h: 900, windowed: true}, 560, 400, 1, true).at, {x: M, y: 250});
+  // Hidden while maximized: window.json holds the restore size, so the last live measurement is used.
+  assert.deepEqual(popupSpec({w: 320, h: 1390}, {w: 900, h: 600, windowed: false}, 560, 400, 1, true).at, {x: M, y: 495});
+  // Nothing known at all: the left edge at the app's first-start height.
+  assert.deepEqual(popupSpec(null, null, 560, 400, 1, true).at, {x: M, y: Math.round((FALLBACK_WINDOW_HEIGHT - 400) / 2)});
+  for (const box of [null, {}, {w: 0, h: 0}, {w: 'x', h: 900}]) assert.equal(popupSpec(box, null, 560, 400, 1).at.x, M);
+  // A narrow, short window: the popup shrinks to fit inside the margins, both ways, zoom included.
+  const narrow = popupSpec({w: 300, h: 380}, {w: 420, h: 380, windowed: true}, 560, 640, 0.9);
+  assert.deepEqual(narrow, {at: {x: M, y: M}, width: Math.floor((420 - 2 * M) / 0.9), height: Math.floor((380 - 2 * M) / 0.9)});
+  assert.ok(narrow.at.x + narrow.width * 0.9 <= 420 - M && narrow.at.y + narrow.height * 0.9 <= 380 - M);
+  // A wide sidebar in a window just wider than it: the right edge stays inside the window.
+  const wide = popupSpec({w: 600, h: 800}, {w: 620, h: 800, windowed: true}, 560, 400, 1);
+  assert.ok(wide.at.x + wide.width <= 620 - M);
+  // window.json: only a well-formed size counts.
+  assert.deepEqual(windowPlace('{"state":"windowed","bounds":[0,30,2540,1390]}'), {w: 2540, h: 1390, windowed: true});
+  assert.deepEqual(windowPlace({state: 'maximized', bounds: [0, 0, 800, 600]}), {w: 800, h: 600, windowed: false});
+  for (const bad of ['{', null, '{}', '{"bounds":[0,0,0,10]}']) assert.equal(windowPlace(bad), null);
 });

@@ -1,8 +1,8 @@
 import { div } from 'gpui-kit';
 import { h_flex, v_flex, TextareaState, Textarea } from 'gpui-base';
-import { exec, writeTextFile, appHome, shared, setShared, openOverlay, closeOverlay, props, panes, spaces, focused, run, layout, settings } from 'herdr';
+import { exec, readTextFile, writeTextFile, appHome, shared, setShared, openOverlay, closeOverlay, props, panes, spaces, focused, run, layout, settings } from 'herdr';
 import { KIND_WORDS, ASK_WORDS, SUMMARY_KEY, bridgeFrom, parseAsks, questionsOf, actionsOf, choose, complete, actionRequest, requestPath, acceptedReceipt, detailOf, selectionOf,
-  askSummary, summaryFor, unverifiedFor, summaryFromSnapshots, summaryState, sameSummary, groupAsks, cardsFor, queueFor, pageAfter, spaceAsks, spaceAskLayout, clampPage, reconcile, popupHeight, popupAt, errorText, autoPopupTarget, prunedOpened,
+  askSummary, summaryFor, unverifiedFor, summaryFromSnapshots, summaryState, sameSummary, groupAsks, cardsFor, queueFor, pageAfter, spaceAsks, spaceAskLayout, clampPage, reconcile, popupHeight, popupSpec, windowPlace, errorText, autoPopupTarget, prunedOpened,
   replyText, needsText, receiptError, receiptCode } from './ask-model.js';
 
 import {subscribeJsonFile,readJsonSnapshot} from './panel-io.js';
@@ -270,7 +270,7 @@ function button(id, text, color, t, action, enabled = true) {
 const kindLabel = (lang, kind) => (KIND_WORDS[lang] ?? KIND_WORDS.en)[kind] ?? kind;
 export const hasAsks = view => Array.isArray(view.asks) && view.asks.length > 0;
 
-// Opens one pane's cards in a popup centred on the sidebar (popupAt), or with `queue` {terminals, names}
+// Opens one pane's cards in a popup centred on the sidebar (popupSpec), or with `queue` {terminals, names}
 // every card of those panes, oldest first (a space tab). Only a click opens it:
 // nothing here moves pane focus, and closing it answers nothing.
 export function openAskPopup(terminal, name, cards, queue = null) {
@@ -279,15 +279,32 @@ export function openAskPopup(terminal, name, cards, queue = null) {
     own.terminals = queue.terminals.map(t => t ?? null);
     own.names = Object.fromEntries(Object.entries(queue.names ?? {}).filter(([, v]) => typeof v === 'string'));
   }
-  const width = 560, height = popupHeight(cards?.[0]);
   let zoom = 1;
   try { zoom = settings()?.zoom ?? 1; } catch { /* no settings: unzoomed */ }
-  const at = popupAt(shared(SIDEBAR_BOX_KEY), width, height, zoom, sidebarHidden());
-  return openOverlay({mod: 'sixfold-desk', kind: 'popup', width, height, ...(at ? {at} : {}), props: own});
+  const spec = popupSpec(shared(SIDEBAR_BOX_KEY), shared(WINDOW_PLACE_KEY), 560, popupHeight(cards?.[0]), zoom, sidebarHidden());
+  refreshWindowPlace(true);
+  return openOverlay({mod: 'sixfold-desk', kind: 'popup', ...spec, props: own});
 }
 // The sidebar copy records its size here (main.js) so every copy that opens a
 // card popup — pane headers and space tabs included — can centre it there.
 export const SIDEBAR_BOX_KEY = 'sixfold.asks.sidebarBox';
+// The window's size from the app's window.json, for when the sidebar is hidden
+// (it measures nothing then). Read in the background by every copy, at most
+// every WINDOW_PLACE_MS, and before each popup for the next one.
+export const WINDOW_PLACE_KEY = 'sixfold.asks.windowPlace';
+const WINDOW_PLACE_MS = 2000;
+let windowPlaceAt = -Infinity;
+export function refreshWindowPlace(force = false) {
+  const now = Date.now();
+  if (!force && now - windowPlaceAt < WINDOW_PLACE_MS) return;
+  windowPlaceAt = now;
+  try {
+    Promise.resolve(readTextFile(`${appHome()}/window.json`)).then(text => {
+      const next = windowPlace(text), old = shared(WINDOW_PLACE_KEY);
+      if (next && JSON.stringify(next) !== JSON.stringify(old ?? null)) setShared(WINDOW_PLACE_KEY, next);
+    }).catch(() => {});
+  } catch { /* Display-only: the last place (or the fallback height) stays. */ }
+}
 export function recordSidebarBox(size) {
   const w = Number(size?.width), h = Number(size?.height), old = shared(SIDEBAR_BOX_KEY);
   if (!(w > 0 && h > 0) || (old && Math.abs(old.w - w) < 1 && Math.abs(old.h - h) < 1)) return;
@@ -311,6 +328,7 @@ export function goToPane(terminal) {
 // `cx` (the header's render context) lets a shown button confirm itself
 // against the cards file; without it the shared summary is drawn as is.
 export function paneAskButton(p, t, lang, name, cx = null) {
+  refreshWindowPlace();
   const summary = shared(SUMMARY_KEY), pane = summaryFor(summary, p.terminal);
   const unknown = !pane && unverifiedFor(summary, p.terminal);
   if (!pane && !unknown) return null;

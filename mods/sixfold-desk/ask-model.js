@@ -298,21 +298,41 @@ export function reconcile(previous, next, choices, sent) {
   const expired = [...before.keys()].filter(id => !after.has(id) && !(sent ?? new Set()).has(id)).length;
   return {choices: kept, revised, expired};
 }
-// Where a card popup opens: centred on the left sidebar, so it never lands
-// wherever the pointer happens to be. `box` is the sidebar's last measured size
-// in window pixels (unzoomed, as `on_size_change` reports it); the sidebar
-// fills the window's left edge from the top, so its height is the window's.
-// `width`/`height` are the overlay's own size, which the app scales by `zoom`
-// while `at` is not scaled. A hidden sidebar centres the popup on the window's
-// left edge instead. Without a measurement, null: the pointer, as before.
+// Where a card popup opens and how big: centred on the left sidebar, never
+// wherever the pointer happens to be.
+// - `box`: the sidebar's last measured size in window pixels (unzoomed, as
+//   `on_size_change` reports it). The sidebar fills the window's left edge from
+//   the top, so while it shows its height is the window's, live.
+// - `place`: the app's window.json ({w, h, windowed}); its size is the window's
+//   only while windowed (maximized or full screen it keeps the restore size).
+// - `width`/`height`: the overlay's own size, which the app scales by `zoom`
+//   while `at` is not scaled.
+// A hidden (or never measured) sidebar centres the popup vertically on the
+// window's left edge. The window height comes from the live sidebar when shown,
+// else from window.json when windowed, else the last measurement, else the
+// app's first-start height. The size is cut to fit the window, so a narrow or
+// short window never pushes an edge out.
 export const POPUP_MARGIN = 8;
-export function popupAt(box, width, height, zoom = 1, hidden = false) {
-  const w = Number(box?.w), h = Number(box?.h);
-  if (!Number.isFinite(h) || h <= 0 || (!hidden && (!Number.isFinite(w) || w <= 0))) return null;
-  const z = Number(zoom) > 0 ? Number(zoom) : 1;
-  const pw = width * z, ph = height * z;
-  const x = hidden ? POPUP_MARGIN : Math.max(POPUP_MARGIN, Math.round((w - pw) / 2));
-  return {x, y: Math.max(POPUP_MARGIN, Math.round((h - ph) / 2))};
+export const FALLBACK_WINDOW_HEIGHT = 820;
+const positive = value => Number.isFinite(Number(value)) && Number(value) > 0 ? Number(value) : null;
+export function windowPlace(source) {
+  let data;
+  try { data = typeof source === 'string' ? JSON.parse(source) : source; } catch { return null; }
+  const b = Array.isArray(data?.bounds) ? data.bounds : [];
+  const w = positive(b[2]), h = positive(b[3]);
+  return w && h ? {w: Math.round(w), h: Math.round(h), windowed: data.state === 'windowed'} : null;
+}
+export function popupSpec(box, place, width, height, zoom = 1, hidden = false) {
+  const z = positive(zoom) ?? 1, M = POPUP_MARGIN;
+  const sideW = hidden ? null : positive(box?.w), sideH = positive(box?.h);
+  const live = sideW && sideH ? sideH : null;
+  const winH = live ?? (place?.windowed ? positive(place.h) : null) ?? sideH ?? positive(place?.h) ?? FALLBACK_WINDOW_HEIGHT;
+  const winW = place?.windowed ? positive(place.w) : null;
+  const w = Math.max(1, Math.min(width, winW ? Math.floor((winW - 2 * M) / z) : width));
+  const h = Math.max(1, Math.min(height, Math.floor((winH - 2 * M) / z)));
+  let x = sideW ? Math.round((sideW - w * z) / 2) : M;
+  if (winW) x = Math.min(x, Math.floor(winW - M - w * z));
+  return {at: {x: Math.max(M, x), y: Math.max(M, Math.round((winH - h * z) / 2))}, width: w, height: h};
 }
 // Popup height in px for one card: enough for its text and options, bounded
 // so the popup never covers the whole window (the body scrolls beyond it).
