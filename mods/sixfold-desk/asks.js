@@ -295,18 +295,24 @@ export async function openAskPopup(terminal, name, cards, queue = null) {
     own.names = Object.fromEntries(Object.entries(queue.names ?? {}).filter(([, v]) => typeof v === 'string'));
   }
   const deadline = Date.now() + POPUP_DEADLINE_MS, left = () => deadline - Date.now();
-  let state = null;
-  try { state = typeof window === 'function' ? window() : null; } catch { /* unknown: treated as windowed */ }
-  const hidden = sidebarHidden(), framed = Boolean(state?.maximized || state?.fullscreen);
   let place = (await within(readWindowPlace(), left())) ?? shared(WINDOW_PLACE_KEY) ?? null;
-  if (hidden && !framed && left() > 0) {
+  const before = windowShape();
+  if (before.hidden && !before.framed && left() > 0) {
     await wait(Math.min(WINDOW_SETTLE_MS, left()));
     place = (await within(readWindowPlace(), left())) ?? place;
   }
   let zoom = 1;
   try { zoom = settings()?.zoom ?? 1; } catch { /* no settings: unzoomed */ }
+  // Read again right before opening: the window may have been maximized, or the sidebar shown or
+  // hidden, while this waited.
+  const {hidden, framed} = windowShape();
   const spec = popupSpec(shared(SIDEBAR_BOX_KEY), place, 560, popupHeight(cards?.[0]), zoom, hidden, framed);
   return openOverlay({mod: 'sixfold-desk', kind: 'popup', ...spec, props: own});
+}
+function windowShape() {
+  let state = null;
+  try { state = typeof window === 'function' ? window() : null; } catch { /* unknown: treated as windowed */ }
+  return {hidden: sidebarHidden(), framed: Boolean(state?.maximized || state?.fullscreen)};
 }
 // The sidebar copy records its size here (main.js) so every copy that opens a
 // card popup — pane headers and space tabs included — can centre it there.

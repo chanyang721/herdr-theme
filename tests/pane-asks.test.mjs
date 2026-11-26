@@ -330,10 +330,17 @@ test('pane header shows a decision button only for its own terminal and opens wi
   assert.deepEqual({at: f.overlays[6].at, width: f.overlays[6].width}, {at: {x: 8, y: 8}, width: 560});
   assert.ok(f.overlays[6].height <= 640);
   winState.maximized = false;
+  // Maximized while the popup waited for window.json: placed on the state at opening, not at the click.
+  nodeOf(a).click(event, context());
+  await new Promise(resolve => setTimeout(resolve, 100));
+  winState.maximized = true;
+  await settle();
+  assert.deepEqual(f.overlays[7].at, {x: 8, y: 8}, 'the state read right before opening wins');
+  winState.maximized = false;
   // A shown sidebar gives a live height: no wait.
   sidebar.hidden = false;
   nodeOf(a).click(event, context()); await tick();
-  assert.equal(f.overlays.length, 8);
+  assert.equal(f.overlays.length, 9);
   assert.deepEqual(f.focus, [], 'no pane.focus/agent.focus');
   assert.ok(nodeOf(a).calls.includes('on_mouse_down'), 'press does not reach the header (which focuses the pane)');
 });
