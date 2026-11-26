@@ -131,13 +131,16 @@ test('a failed receipt names its error code; only known codes get their own mess
     JSON.stringify({schema: 1, id: 'other', status: 'rejected', error: 'pane_busy'}), JSON.stringify({schema: 2, id: 'demo-request', status: 'rejected', error: 'pane_busy'})]) {
     assert.equal(receiptError(output, 'demo-request'), null, output);
   }
-  assert.deepEqual(['pane_busy', 'pane_moved', 'card_closed', 'card_changed', 'unconfirmed', 'invalid_text', 'pane_unavailable', 'constructor', 'other', null].map(receiptCode),
-    ['pane_busy', 'stale', 'stale', 'stale', 'unconfirmed', 'invalid_text', 'pane_unavailable', 'failed', 'failed', 'failed']);
+  assert.deepEqual(['pane_busy', 'pane_moved', 'card_closed', 'card_changed', 'unconfirmed', 'invalid_text', 'pane_unavailable', 'command_text', 'duplicate_text', 'constructor', 'other', null].map(receiptCode),
+    ['pane_busy', 'pane_moved', 'stale', 'stale', 'unconfirmed', 'invalid_text', 'pane_unavailable', 'command_text', 'duplicate_text', 'failed', 'failed', 'failed']);
+  assert.match(errorText('ko', 'command_text'), /명령으로 실행/);
+  assert.match(errorText('ko', 'duplicate_text'), /똑같아/);
+  assert.match(errorText('ko', 'pane_moved'), /질문한 세션이 아니라/);
   assert.match(errorText('ko', 'pane_busy'), /쓰던 글이 있거나 선택창이 열려/);
   assert.match(errorText('ko', 'unconfirmed'), /다시 보내지 마세요/);
   assert.match(errorText('ko', 'invalid_text'), /4000자까지/);
   assert.match(errorText('ko', 'pane_unavailable'), /그 칸을 찾지 못했습니다/);
-  for (const code of ['pane_busy', 'unconfirmed', 'invalid_text', 'pane_unavailable']) assert.notEqual(errorText('en', code), errorText('en', 'failed'));
+  for (const code of ['pane_busy', 'unconfirmed', 'invalid_text', 'pane_unavailable', 'pane_moved', 'command_text', 'duplicate_text']) assert.notEqual(errorText('en', code), errorText('en', 'failed'));
   assert.equal(errorText('ko', 'failed'), errorText('ko', 'unknown'));
 });
 
