@@ -46,6 +46,7 @@ function find(tree, id) { let found = null; walk(tree, node => { if (node.id ===
 function ids(tree, prefix) { const out = []; walk(tree, node => { if (node.id?.startsWith(prefix)) out.push(node.id); }); return out; }
 function text(tree) { const out = []; const go = v => { if (typeof v === 'string') out.push(v); const n = nodeOf(v); if (n) n.children.forEach(go); }; go(tree); return out.join(' '); }
 const event = {};
+const tick = () => new Promise(resolve => setTimeout(resolve, 0));
 function click(tree, id, cx) { const node = find(tree, id); assert.ok(node, `missing ${id}`); assert.ok(node.click, `${id} not clickable`); node.click(event, cx); }
 
 // ---- module loader with a fake host ------------------------------------
@@ -211,17 +212,17 @@ test('space tabs coexist with automatic foreign popups without responding or mov
     Object.assign(f.h, {panes: () => [{terminal: 'pane-a', tab: 'tab-a'}],
       spaces: () => [{id: 'native-a', tabs: [{id: 'tab-a'}]}], focused: () => ({space: 'native-b'})});
     const mod = await load(f.h), view = {}, cx = context();
-    mod.watchAsks(view, cx, {spaceAnchored}); await Promise.resolve(); await Promise.resolve();
+    mod.watchAsks(view, cx, {spaceAnchored}); await Promise.resolve(); await Promise.resolve(); await tick();
     assert.equal(view.asks.length, 1); assert.equal(f.overlays.length, 1);
     assert.equal(f.overlays[0].props.terminal, 'pane-a');
     const render = () => mod.spaceAskView(view.asks.map(item => ({...item, space: 's-a'})), 's-a', theme, 'ko', {bounds});
     assert.ok(render(), 'the space tab stays visible alongside the automatic popup');
     assert.equal(f.store.get(SUMMARY_KEY).panes['pane-a'].n, 1, 'manual response UI still receives card summaries');
     f.h.closeOverlay('ov-1');
-    f.setCards([card('a1', 'pane-a')]);
+    f.setCards([card('a1', 'pane-a')]); await tick();
     assert.equal(f.overlays.length, 1, 'the same request does not reopen a dismissed popup');
     assert.ok(render(), 'closing a popup leaves the unresolved space tab visible');
-    f.setCards([card('a1', 'pane-a', {revision: 'r2'})]);
+    f.setCards([card('a1', 'pane-a', {revision: 'r2'})]); await tick();
     assert.equal(f.overlays.length, 2, 'a revised foreign request still opens automatically');
     assert.deepEqual(f.focus, []);
     assert.deepEqual(f.calls.filter(([kind]) => kind === 'write' || kind === 'exec'), []);
@@ -272,26 +273,39 @@ test('the sidebar watcher publishes the per-pane summary only when it changes', 
 
 // ---- pane header button --------------------------------------------------
 test('pane header shows a decision button only for its own terminal and opens without moving focus', async () => {
-  const f = host([]), mod = await load(f.h);
+  const f = host([]), sidebar = {id: 'sidebar'};
+  f.h.layout = () => ({id: 'root', children: [sidebar]});
+  const mod = await load(f.h);
   f.store.set(SUMMARY_KEY, askSummary([card('a1', 'pane-a'), card('a2', 'pane-a'), card('b1', 'pane-b', {kind: 'question'})]));
   assert.equal(mod.paneAskButton({pane: 'p9', terminal: 'pane-z'}, theme, 'ko', 'Z'), null);
   const a = mod.paneAskButton({pane: 'p1', terminal: 'pane-a'}, theme, 'ko', 'Alpha');
   assert.match(text(a), /권한 2/);
   const b = mod.paneAskButton({pane: 'p2', terminal: 'pane-b'}, theme, 'ko', 'Beta');
   assert.match(text(b), /질문/); assert.doesNotMatch(text(b), /\d/);
-  nodeOf(a).click(event, context());
+  nodeOf(a).click(event, context()); await tick();
   assert.equal(f.overlays.length, 1);
   assert.deepEqual(f.overlays[0].props, {role: 'ask', terminal: 'pane-a', name: 'Alpha'});
   assert.equal(f.overlays[0].kind, 'popup'); assert.ok(f.overlays[0].width >= 520);
   // Nothing measured or read yet: still never at the pointer, the window's left edge at the fallback height.
   assert.deepEqual(f.overlays[0].at, {x: 8, y: Math.round((820 - f.overlays[0].height) / 2)});
   mod.recordSidebarBox({width: 900, height: 1200});
-  nodeOf(a).click(event, context());
+  nodeOf(a).click(event, context()); await tick();
   assert.deepEqual(f.overlays[1].at, {x: 170, y: Math.round((1200 - f.overlays[1].height) / 2)}, 'centred on the sidebar');
-  // The popup read window.json in the background for the next one.
-  f.files.set('/demo/window.json', JSON.stringify({state: 'windowed', bounds: [0, 30, 1000, 700]}));
-  mod.refreshWindowPlace(true); await new Promise(r => setTimeout(r, 0));
-  assert.deepEqual(f.store.get('sixfold.asks.windowPlace'), {w: 1000, h: 700, windowed: true});
+  // Sidebar hidden, window large, then resized small: the very first popup after the resize
+  // reads the new window.json before it is placed (no stale cached size).
+  sidebar.hidden = true;
+  f.files.set('/demo/window.json', JSON.stringify({state: 'windowed', bounds: [0, 30, 2540, 1390]}));
+  nodeOf(a).click(event, context()); await tick();
+  assert.deepEqual(f.overlays[2].at, {x: 8, y: Math.round((1390 - f.overlays[2].height) / 2)});
+  assert.equal(f.overlays[2].width, 560);
+  f.files.set('/demo/window.json', JSON.stringify({state: 'windowed', bounds: [0, 30, 420, 300]}));
+  nodeOf(a).click(event, context()); await tick();
+  const small = f.overlays[3];
+  assert.deepEqual(small, {...small, at: {x: 8, y: 8}, width: 420 - 16, height: 300 - 16}, 'first popup after the resize fits the new window');
+  // An unreadable window.json keeps the last good read.
+  f.files.set('/demo/window.json', '{broken');
+  nodeOf(a).click(event, context()); await tick();
+  assert.equal(f.overlays[4].width, 420 - 16);
   assert.deepEqual(f.focus, [], 'no pane.focus/agent.focus');
   assert.ok(nodeOf(a).calls.includes('on_mouse_down'), 'press does not reach the header (which focuses the pane)');
 });
@@ -347,7 +361,7 @@ test('header checks are bounded, never overwrite a newer summary, and show unrea
   assert.equal(f.store.get(SUMMARY_KEY).status, 'unreadable');
   const unknown = mod.paneAskButton({pane: 'p1', terminal: 'pane-a'}, theme, 'ko', 'Alpha', cx);
   assert.match(text(unknown), /확인 불가/); assert.doesNotMatch(text(unknown), /권한/);
-  nodeOf(unknown).click(event, context());
+  nodeOf(unknown).click(event, context()); await tick();
   assert.equal(f.overlays.at(-1).props.terminal, 'pane-a', 'the popup reads again and offers a retry');
   // Readable again with the request answered: nothing left on the header.
   f.files.set('/demo/data/sixfold/cards.json', JSON.stringify({schema: 1, cards: []}));
@@ -504,9 +518,9 @@ test('sidebar lists one compact row per pane, including unassigned, and opens th
   assert.deepEqual(ids(tree, 'sf-ask-group-'), ['sf-ask-group-0', 'sf-ask-group-1', 'sf-ask-group-2']);
   assert.equal(ids(tree, 'sf-ask-multi-').length, 0, 'no inline options in the sidebar');
   assert.match(text(tree), /name-pane-a/); assert.match(text(tree), /2건/); assert.match(text(tree), /소속 미확인/);
-  click(tree, 'sf-ask-group-2', context());
+  click(tree, 'sf-ask-group-2', context()); await tick();
   assert.deepEqual(f.overlays.at(-1).props, {role: 'ask', terminal: null, name: '소속 미확인'});
-  click(tree, 'sf-ask-group-0', context());
+  click(tree, 'sf-ask-group-0', context()); await tick();
   assert.equal(f.overlays.at(-1).props.terminal, 'pane-a');
   assert.deepEqual(f.focus, []);
   // Every group is listed in a bounded, scrolling area: a late unassigned card stays reachable.
@@ -515,7 +529,7 @@ test('sidebar lists one compact row per pane, including unassigned, and opens th
   assert.equal(ids(list, 'sf-ask-group-').length, 100);
   assert.ok(area.calls.includes('max_h') && area.calls.includes('overflow_y_scrollbar'), 'bounded and scrollable');
   assert.match(text(list), /100개 페인 · 목록을 스크롤해 모두 보기/);
-  click(list, 'sf-ask-group-99', context());
+  click(list, 'sf-ask-group-99', context()); await tick();
   assert.deepEqual(f.overlays.at(-1).props, {role: 'ask', terminal: null, name: '소속 미확인'});
 });
 

@@ -64,7 +64,7 @@ test('a space tab opens one oldest-first queue of its asking panes; requests it 
     assert(!byId(tree,`sf-space-ask-${other.id}`),'a space that did not ask has none');
     assert(tab.calls.find(call=>call[0]==='tooltip')[1].includes('2개 페인 · 오래된 요청부터 하나씩'),'the tab says it holds two panes in one queue');
     const press=()=>desk.render(cx)&&byId(desk.render(cx),`sf-space-ask-${local.id}`).calls.find(call=>call[0]==='on_click')[1](null,{stop_propagation(){}});
-    press();press();
+    press();press();await new Promise(resolve=>setTimeout(resolve,0));
     assert.deepEqual(overlays.map(spec=>spec.props.terminals),[['term-a','term-b'],['term-a','term-b']],'every press opens the same queue; req-b is reachable');
     assert.deepEqual(overlays.map(spec=>spec.props.terminal),['term-a','term-a'],'the oldest request leads');
     // The bottom list keeps only what no tab can open (another space's request).
