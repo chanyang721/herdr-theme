@@ -177,10 +177,17 @@ class ActionError extends Error { constructor(code) { super(code); this.code = c
 const inputAlive = input => { if (!input) return false; try { input.value(); return true; } catch { return false; } };
 const releaseInput = input => { try { input?.release?.(); } catch { /* already released */ } };
 export const askText = (view, id) => { const input = view.askInputs?.get(id); return inputAlive(input) ? String(input.value() ?? '') : ''; };
+// What a typed draft answers: the card, its pane, its body and its actions. A
+// new title alone (a reminder) keeps the draft; another question drops it, so
+// an answer is never sent to a question it was not written for.
+export const draftKey = card => JSON.stringify([card?.id ?? null, card?.terminal ?? null, detailOf(card),
+  actionsOf(card).map(a => [a.id, Boolean(a.requiresText)])]);
 function ensureAskInput(view, card) {
   view.askInputs ??= new Map();
+  view.askInputKeys ??= new Map();
   const old = view.askInputs.get(card.id);
-  if (inputAlive(old)) return old;
+  if (inputAlive(old) && view.askInputKeys.get(card.id) === draftKey(card)) return old;
+  if (old) { releaseInput(old); view.askInputs.delete(card.id); }
   let input = null;
   try {
     input = TextareaState.new({placeholder: (ASK_WORDS[view.askLang] ?? ASK_WORDS.ko).placeholder, rows: 4});
@@ -193,18 +200,20 @@ function ensureAskInput(view, card) {
     });
   } catch { releaseInput(input); view.askInputs.delete(card.id); return null; }
   view.askInputs.set(card.id, input);
+  view.askInputKeys.set(card.id, draftKey(card));
   return input;
 }
 const textAction = card => { const all = actionsOf(card).filter(a => a.requiresText); return all.find(a => a.primary) ?? all[0] ?? null; };
 // After a read: a state for every card that takes text, none for cards that left.
 function syncAskInputs(view) {
   const wanted = new Set((view.asks ?? []).filter(needsText).map(card => card.id));
-  for (const [id, input] of view.askInputs ?? []) if (!wanted.has(id)) { releaseInput(input); view.askInputs.delete(id); }
+  for (const [id, input] of view.askInputs ?? []) if (!wanted.has(id)) { releaseInput(input); view.askInputs.delete(id); view.askInputKeys?.delete(id); }
   for (const card of view.asks ?? []) if (wanted.has(card.id)) ensureAskInput(view, card);
 }
 export function releaseAskInputs(view) {
   for (const input of view.askInputs?.values() ?? []) releaseInput(input);
   view.askInputs?.clear();
+  view.askInputKeys?.clear();
 }
 function askTextBox(view, card, t, more) {
   const input = view.askInputs?.get(card.id);
@@ -221,7 +230,9 @@ export function sendAction(view, card, action, cx) {
   const bridge = view.askBridge;
   if (!bridge || view.askBusy[card.id]) return;
   // The text is read now, at the press: what was on screen is what is sent.
-  const spec = actionsOf(card).find(a => a.id === action), typed = spec?.requiresText ? askText(view, card.id) : undefined;
+  const spec = actionsOf(card).find(a => a.id === action);
+  // A draft written for another question of this card is never sent (draftKey).
+  const typed = spec?.requiresText ? (view.askInputKeys?.get(card.id) === draftKey(card) ? askText(view, card.id) : '') : undefined;
   view.askBusy[card.id] = true; delete view.askErrors[card.id]; cx.notify();
   cx.spawn(async cx => {
     try {

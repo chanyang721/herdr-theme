@@ -97,10 +97,19 @@ The popup explains these codes and shows a generic failure for any other:
 | `error` | Meaning shown |
 | --- | --- |
 | `pane_busy` | The terminal's prompt holds unsent text or a picker is open; nothing was sent. Check it, then send again. |
-| `pane_moved`, `card_closed`, `card_changed` | The request changed or expired (the same text as a stale card). |
+| `pane_moved` | The terminal now runs another session than the one that asked; nothing was sent. |
+| `card_closed`, `card_changed` | The request changed or expired (the same text as a stale card). |
 | `unconfirmed` | Sent, but submission could not be confirmed. Check the terminal; do not send again. |
-| `invalid_text` | The answer is empty or too long. |
-| `pane_unavailable` | The terminal was not found (closed, or on another computer). | Authority and one-time credentials stay in
+| `not_checked` | The terminal could not be read before sending; nothing was sent. Send again. |
+| `invalid_text` | The answer is empty, too long, or holds a control character. |
+| `command_text` | The answer starts with `/`, `!` or `#`, which the terminal's prompt would run as a command; nothing was sent. |
+| `duplicate_text` | The same text was already sent to that terminal's session; nothing was sent. Change it and send again. |
+| `pane_unavailable` | The terminal was not found (closed, or on another computer). |
+
+A typed draft belongs to one question: it is kept when only the card's title
+changes and dropped when its terminal, detail or actions change.
+
+Authority and one-time credentials stay inAuthority and one-time credentials stay in
 the external consumer.
 
 ## Local document views

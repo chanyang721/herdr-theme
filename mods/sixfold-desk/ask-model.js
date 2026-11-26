@@ -122,7 +122,7 @@ export function receiptError(stdout, id) {
 // Receipt error codes the popup explains; any other code reads as a plain failure.
 const RECEIPT_CODES = {pane_busy: 'pane_busy', pane_moved: 'pane_moved', card_closed: 'stale', card_changed: 'stale',
   unconfirmed: 'unconfirmed', invalid_text: 'invalid_text', pane_unavailable: 'pane_unavailable',
-  command_text: 'command_text', duplicate_text: 'duplicate_text'};
+  command_text: 'command_text', duplicate_text: 'duplicate_text', not_checked: 'not_checked'};
 export const receiptCode = code => typeof code === 'string' && Object.hasOwn(RECEIPT_CODES, code) ? RECEIPT_CODES[code] : 'failed';
 export function touchesCards(paths, directory) {
   const normalized = path => String(path).replace(/\\/g, '/').replace(/\/+$/, '');
@@ -142,11 +142,12 @@ export const ASK_WORDS = {
     errors: {failed: '전송 실패 — 다시 시도하세요', changed: '연결 설정이 바뀌었습니다 — 다시 열어 주세요', stale: '요청이 바뀌었거나 만료되었습니다 — 최신 내용을 확인하세요', incomplete: '모든 질문에 답한 뒤 보내세요',
       pane_busy: '그 칸 입력창에 쓰던 글이 있거나 선택창이 열려 있어 보내지 않았습니다. 그 칸을 확인한 뒤 다시 보내세요.',
       unconfirmed: '보냈지만 제출됐는지 확인하지 못했습니다. 그 칸에서 확인하세요 — 다시 보내지 마세요.',
-      invalid_text: '보낼 답이 비었거나 너무 깁니다(4000자까지).',
+      invalid_text: '보낼 답이 비었거나 너무 길거나(4000자까지) 제어문자가 들어 있습니다.',
       pane_unavailable: '그 칸을 찾지 못했습니다(닫혔거나 다른 컴퓨터의 칸).',
       pane_moved: '그 칸에서 지금 도는 세션이 질문한 세션이 아니라 보내지 않았습니다.',
       command_text: '/ · ! · # 로 시작하면 그 칸에서 명령으로 실행되어 보내지 않았습니다. 앞에 다른 글자를 붙여 주세요.',
-      duplicate_text: '그 칸에 전에 보낸 글과 똑같아 다시 보내지 않았습니다. 글을 조금 바꿔 보내세요.'},
+      duplicate_text: '그 칸에 전에 보낸 글과 똑같아 다시 보내지 않았습니다. 글을 조금 바꿔 보내세요.',
+      not_checked: '보내기 전에 그 칸 상태를 읽지 못해 보내지 않았습니다. 다시 보내도 됩니다.'},
     count: n => `${n}건`, more: n => `${n}개 페인 · 목록을 스크롤해 모두 보기`},
   en: {open: 'Open', close: 'Close', inPane: 'This card waited too long and can no longer answer. Answer it in that pane\'s own Claude prompt; the card then goes and the next request opens.', goPane: 'Go to pane', paneOnly: 'Answer in pane', queue: (i, n) => `${i}/${n} · oldest first`, closeHint: 'Closing does not deny or answer. Reopen it from the pane header or the sidebar.',
     none: 'No requests left for this pane.', loading: 'Loading…', loadFailed: 'Could not read the cards.', refreshFailed: 'Could not read the latest — showing the last read.', retry: 'Retry', sending: 'Sending…', sent: 'Response accepted.',
@@ -155,11 +156,12 @@ export const ASK_WORDS = {
     errors: {failed: 'Send failed — try again', changed: 'Connection changed — reopen the card', stale: 'The request changed or expired — check the latest', incomplete: 'Answer every question before sending',
       pane_busy: 'Not sent: that pane has unsent text in its prompt or a picker open. Check the pane, then send again.',
       unconfirmed: 'Sent, but submission could not be confirmed. Check that pane — do not send again.',
-      invalid_text: 'The answer is empty or too long (4000 characters at most).',
+      invalid_text: 'The answer is empty, too long (4000 characters at most) or holds a control character.',
       pane_unavailable: 'That pane was not found (closed, or on another computer).',
       pane_moved: 'Not sent: that pane now runs another session than the one that asked.',
       command_text: 'Not sent: text starting with / ! or # runs as a command there. Start it with something else.',
-      duplicate_text: 'Not sent: it is the same text sent to that pane before. Change it a little and send again.'},
+      duplicate_text: 'Not sent: it is the same text sent to that pane before. Change it a little and send again.',
+      not_checked: 'Not sent: that pane could not be read before sending. You may send again.'},
     count: n => `${n}`, more: n => `${n} panes · scroll the list for all`},
 };
 export const errorText = (lang, code) => {

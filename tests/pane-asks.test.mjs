@@ -640,6 +640,28 @@ test('a failed text send names the reason from the receipt and keeps the typed t
   tree = p.render(); assert.equal(nodeOf(find(tree, `sf-ask-text-${replyId}`).children[0]).state, f.inputs[1]);
   p.view.releaseAskInputs(); assert.equal(f.inputs[1].released, true, 'closing the popup releases its states');
 });
+test('a draft is kept for a new title and dropped for another question, never sent to it', async () => {
+  const f = host([replyCard]), mod = await load(f.h), p = await popup(f, mod, 'pane-a');
+  const [input] = f.inputs;
+  input.type('Answer to the first question', p.cx);
+  const refresh = async next => {
+    f.files.set('/demo/data/sixfold/cards.json', JSON.stringify({schema: 1, cards: [next]}));
+    f.store.set(SUMMARY_KEY, askSummary([next])); p.render(); await p.cx.settle();
+  };
+  await refresh({...replyCard, revision: 'r2', title: 'Waiting for an answer · 30 min'});
+  assert.equal(input.released, false, 'a reminder title keeps the state'); assert.equal(input.value(), 'Answer to the first question');
+  const other = {...replyCard, revision: 'r3', detail: 'Another question entirely'};
+  await refresh(other);
+  assert.equal(input.released, true, 'another question drops the old draft');
+  assert.equal(f.inputs.length, 2); assert.equal(f.inputs[1].value(), '');
+  // even a draft left on a stale state is never sent to the new question
+  const sent = [];
+  f.impl.exec = async (_program, args) => { sent.push(JSON.parse(f.files.get(args.at(-1)))); return {code: 0, stdout: ''}; };
+  p.view.askInputKeys.set(replyId, 'stale-key');
+  f.inputs[1].type('typed before the change', p.cx);
+  click(p.render(), `sf-ask-${replyId}-action-0`, p.cx); await p.cx.settle();
+  assert.deepEqual(sent, [], 'a draft for another question cannot send');
+});
 test('option and display-only cards make no text state', async () => {
   const f = host([card('a1', 'pane-a'), multi, card('w1', 'pane-a', {answerable: false, actions: [{id: 'reply', label: 'Reply', requiresText: true}]})]);
   f.h.panes = () => [];
